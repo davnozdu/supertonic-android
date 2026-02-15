@@ -263,7 +263,7 @@ class LexiconActivity : ComponentActivity() {
             return
         }
 
-        val voiceFile = prefs.getString("selected_voice", "M1.json") ?: "M1.json"
+        val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         
         // Ensure we point to the correct versioned directory
         val stylePath = File(filesDir, "$version/voice_styles/$voiceFile").absolutePath

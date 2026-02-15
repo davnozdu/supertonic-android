@@ -18,6 +18,14 @@ struct Args {
     #[arg(long, default_value = "false")]
     use_gpu: bool,
 
+    /// Use XNNPACK for inference (default: false)
+    #[arg(long, default_value = "false")]
+    use_xnnpack: bool,
+
+    /// Number of intra-threads for ONNX Runtime (default: 1)
+    #[arg(long, default_value = "1")]
+    intra_threads: usize,
+
     /// Path to ONNX model directory
     #[arg(long, default_value = "assets/onnx")]
     onnx_dir: String,
@@ -89,7 +97,7 @@ fn main() -> Result<()> {
     let bsz = voice_style_paths.len();
 
     // --- 2. Load TTS components --- //
-    let mut text_to_speech = load_text_to_speech(&args.onnx_dir, args.use_gpu)?;
+    let mut text_to_speech = load_text_to_speech(&args.onnx_dir, args.use_gpu, args.use_xnnpack, args.intra_threads)?;
 
     // --- 3. Load voice styles --- //
     let style = load_voice_style(voice_style_paths, true)?;
@@ -106,8 +114,16 @@ fn main() -> Result<()> {
             })?
         } else {
             let (w, d) = timer("Generating speech from text", || {
-                text_to_speech.call(&text_list[0], &lang_list[0], &style, total_step, speed, 0.3)
+                text_to_speech.call(&text_list[0], &lang_list[0], &style, total_step, speed, 0.3, |curr, total, _| {
+                    if curr % 10 == 0 || curr == total {
+                        print!("\rProgress: {}/{}", curr, total);
+                        use std::io::{self, Write};
+                        io::stdout().flush().unwrap();
+                    }
+                    true
+                })
             })?;
+            println!(); // New line after progress
             (w, vec![d])
         };
 

@@ -52,11 +52,12 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             val prefs = getSharedPreferences("SupertonicPrefs", android.content.Context.MODE_PRIVATE)
             val savedLang = prefs.getString("selected_lang", "en") ?: "en"
             val modelVersion = if (savedLang == "en") "v1" else "v2"
+            val threads = prefs.getInt("intra_threads", 4)
 
             val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
 
-            SupertonicTTS.initialize(modelPath, libPath)
+            SupertonicTTS.initialize(modelPath, libPath, threads)
         }
     }
 
@@ -120,7 +121,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onGetDefaultVoiceNameFor(lang: String?, country: String?, variant: String?): String {
         val prefs = getSharedPreferences("SupertonicPrefs", android.content.Context.MODE_PRIVATE)
-        val selected = prefs.getString("selected_voice", "M1.json") ?: "M1.json"
+        val selected = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         val voiceName = if (selected.endsWith(".json")) selected.substringBeforeLast(".") else selected
         
         val language = lang?.lowercase(Locale.ROOT) ?: "en"
@@ -201,7 +202,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         var voiceFile = if (requestedVoice != null && requestedVoice.contains("-supertonic-")) {
             requestedVoice.substringAfter("-supertonic-") + ".json"
         } else {
-            prefs.getString("selected_voice", "M1.json") ?: "M1.json"
+            prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         }
 
         val savedLang = prefs.getString("selected_lang", "en") ?: "en"
@@ -226,7 +227,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (SupertonicTTS.getSoC() == -1) {
              val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
              val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-             SupertonicTTS.initialize(modelPath, libPath)
+             val threads = prefs.getInt("intra_threads", 4)
+             SupertonicTTS.initialize(modelPath, libPath, threads)
         }
         
         try {

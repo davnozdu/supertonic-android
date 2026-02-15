@@ -307,6 +307,16 @@ class MainActivity : ComponentActivity() {
                             viewModel.currentSteps.value = it
                             getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).edit().putInt("diffusion_steps", it).apply()
                         },
+                        intraThreads = viewModel.intraThreads.intValue,
+                        showThreadsDialog = viewModel.showThreadsDialog.value,
+                        onShowThreadsDialogChange = { viewModel.showThreadsDialog.value = it },
+                        onIntraThreadsChange = {
+                            viewModel.intraThreads.intValue = it
+                            getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).edit().putInt("intra_threads", it).apply()
+                            // Re-initialize engine with new thread count
+                            initializeEngine(currentModelVersion)
+                        },
+                        engineType = viewModel.engineType.value,
 
                         onResetClick = {
                             viewModel.inputText.value = ""
@@ -344,12 +354,13 @@ class MainActivity : ComponentActivity() {
     private fun loadPreferences() {
         val prefs = getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
         viewModel.currentLang.value = prefs.getString("selected_lang", "en") ?: "en"
-        viewModel.selectedVoiceFile.value = prefs.getString("selected_voice", "M1.json") ?: "M1.json"
+        viewModel.selectedVoiceFile.value = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         viewModel.selectedVoiceFile2.value = prefs.getString("selected_voice_2", "M2.json") ?: "M2.json"
         viewModel.isMixingEnabled.value = prefs.getBoolean("is_mixing_enabled", false)
         viewModel.mixAlpha.value = prefs.getFloat("mix_alpha", 0.5f)
         viewModel.currentSpeed.value = prefs.getFloat("speed", 1.1f)
         viewModel.currentSteps.value = prefs.getInt("diffusion_steps", 5)
+        viewModel.intraThreads.intValue = prefs.getInt("intra_threads", 4)
     }
 
     private fun checkNotificationPermission() {
@@ -423,10 +434,13 @@ class MainActivity : ComponentActivity() {
             
             val modelPath = File(filesDir, "$version/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
+            val threads = viewModel.intraThreads.intValue
 
-            if (SupertonicTTS.initialize(modelPath, libPath)) {
+            if (SupertonicTTS.initialize(modelPath, libPath, threads)) {
                 withContext(Dispatchers.Main) {
                     viewModel.isInitializing.value = false
+                    val type = if (SupertonicTTS.isXnnpackSupported()) "XNNPACK" else "CPU"
+                    viewModel.engineType.value = "$type : $threads"
                 }
             }
         }

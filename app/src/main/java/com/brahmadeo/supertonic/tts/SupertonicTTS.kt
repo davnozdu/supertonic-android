@@ -14,15 +14,16 @@ object SupertonicTTS {
         }
     }
 
-    private external fun init(modelPath: String, libPath: String): Long
+    private external fun init(modelPath: String, libPath: String, intraThreads: Int): Long
     private external fun synthesize(ptr: Long, text: String, lang: String, stylePath: String, speed: Float, bufferSeconds: Float, steps: Int): ByteArray
     private external fun getSocClass(ptr: Long): Int
     private external fun getSampleRate(ptr: Long): Int
+    private external fun isXnnpackEnabled(): Boolean
     private external fun close(ptr: Long)
     private external fun reset(ptr: Long)
 
     @Synchronized
-    fun initialize(modelPath: String, libPath: String): Boolean {
+    fun initialize(modelPath: String, libPath: String, intraThreads: Int = 1): Boolean {
         if (nativePtr != 0L) {
             // Health check: Can we still talk to the engine?
             if (getSocClass(nativePtr) != -1) {
@@ -34,10 +35,10 @@ object SupertonicTTS {
             }
         }
         
-        nativePtr = init(modelPath, libPath)
+        nativePtr = init(modelPath, libPath, intraThreads)
         val success = nativePtr != 0L
         if (success) {
-            Log.i("SupertonicTTS", "Engine initialized successfully: $nativePtr")
+            Log.i("SupertonicTTS", "Engine initialized successfully with $intraThreads threads: $nativePtr")
         } else {
             Log.e("SupertonicTTS", "Engine initialization FAILED")
         }
@@ -132,6 +133,14 @@ object SupertonicTTS {
     fun getAudioSampleRate(): Int {
         if (nativePtr == 0L) return 44100
         return getSampleRate(nativePtr)
+    }
+
+    fun isXnnpackSupported(): Boolean {
+        return try {
+            isXnnpackEnabled()
+        } catch (e: Exception) {
+            false
+        }
     }
 
     @Synchronized

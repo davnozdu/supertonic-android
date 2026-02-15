@@ -537,9 +537,13 @@ pub fn sanitize_filename(text: &str, max_len: usize) -> String {
 // ============================================================================ 
 
 use ort::{
-    session::Session,
+    execution_providers::CPUExecutionProvider,
+    session::{builder::GraphOptimizationLevel, Session},
     value::Value,
 };
+
+#[cfg(feature = "xnnpack")]
+use ort::execution_providers::XNNPACKExecutionProvider;
 
 pub struct Style {
     pub ttl: Array3<f32>,
@@ -841,12 +845,50 @@ pub fn load_and_mix_voice_styles(path1: &str, path2: &str, alpha: f32) -> Result
     Ok(Style { ttl, dp })
 }
 
+/// Create an ONNX session with the specified execution providers
+fn create_session(model_path: &str, use_xnnpack: bool, intra_threads: usize) -> Result<Session> {
+    let mut builder = Session::builder()?
+        .with_optimization_level(GraphOptimizationLevel::Level3)?
+        // OPTIMIZATION: Disable spinning to save battery and reduce heat on Android.
+        // This ensures that when one thread pool is idle (e.g., ORT pool while XNNPACK is working),
+        // it doesn't consume any CPU cycles.
+        .with_config_entry("session.intra_op.allow_spinning", "0")?
+        .with_config_entry("session.inter_op.allow_spinning", "0")?
+        // Set the session-level intra_threads. This serves as the pool for the CPU Execution Provider
+        // and any operators not handled by XNNPACK.
+        .with_intra_threads(intra_threads)?;
+
+    if use_xnnpack {
+        #[cfg(feature = "xnnpack")]
+        {
+            // Set XNNPACK's internal thread pool to the same count.
+            // Since we use Sequential execution, these pools won't fight for CPU; 
+            // one will be idle (and not spinning) while the other works.
+            let xnn_threads = std::num::NonZeroUsize::new(intra_threads).unwrap_or(std::num::NonZeroUsize::new(1).unwrap());
+            builder = builder
+                .with_execution_providers([
+                    XNNPACKExecutionProvider::default()
+                        .with_intra_op_num_threads(xnn_threads)
+                        .build(),
+                    CPUExecutionProvider::default().build(),
+                ])?;
+        }
+    }
+
+    builder.commit_from_file(model_path).context(format!("Failed to load model: {}", model_path))
+}
+
 /// Load TTS components
-pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech> {
+pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool, use_xnnpack: bool, intra_threads: usize) -> Result<TextToSpeech> {
     if use_gpu {
         anyhow::bail!("GPU mode is not supported yet");
     }
-    println!("Using CPU for inference\n");
+    
+    if use_xnnpack {
+        println!("Using XNNPACK for inference with {} threads\n", intra_threads);
+    } else {
+        println!("Using CPU for inference with {} threads\n", intra_threads);
+    }
 
     let cfgs = load_cfgs(onnx_dir)?;
 
@@ -855,14 +897,10 @@ pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech
     let vector_est_path = format!("{}/vector_estimator.onnx", onnx_dir);
     let vocoder_path = format!("{}/vocoder.onnx", onnx_dir);
 
-    let dp_ort = Session::builder()? 
-        .commit_from_file(&dp_path)?;
-    let text_enc_ort = Session::builder()? 
-        .commit_from_file(&text_enc_path)?;
-    let vector_est_ort = Session::builder()? 
-        .commit_from_file(&vector_est_path)?;
-    let vocoder_ort = Session::builder()? 
-        .commit_from_file(&vocoder_path)?;
+    let dp_ort = create_session(&dp_path, use_xnnpack, intra_threads)?;
+    let text_enc_ort = create_session(&text_enc_path, use_xnnpack, intra_threads)?;
+    let vector_est_ort = create_session(&vector_est_path, use_xnnpack, intra_threads)?;
+    let vocoder_ort = create_session(&vocoder_path, use_xnnpack, intra_threads)?;
 
     let unicode_indexer_path = format!("{}/unicode_indexer.json", onnx_dir);
     let text_processor = UnicodeProcessor::new(&unicode_indexer_path)?;

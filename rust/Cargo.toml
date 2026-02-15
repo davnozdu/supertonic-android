@@ -45,6 +45,11 @@ log = "0.4"
 name = "supertonic_tts"
 crate-type = ["cdylib"]
 
-#[[bin]]
-#name = "example_onnx"
-#path = "src/example_onnx.rs"
+[[bin]]
+name = "example_onnx"
+path = "src/example_onnx.rs"
+
+[features]
+default = ["cpu"]
+cpu = []
+xnnpack = ["ort/xnnpack"]

@@ -16,6 +16,7 @@ cargo {
     targets = ["arm64"]
     profile = "release"
     pythonCommand = "python3"
+    features = ["xnnpack"]
 
     // F-Droid Fix: Robustly find rustc/cargo
     def home = System.getenv("HOME")
@@ -90,7 +91,7 @@ android {
 
     sourceSets {
         main {
-            // Overridden in afterEvaluate
+            jniLibs.srcDirs = ['src/main/jniLibs']
         }
     }
 
@@ -124,7 +125,7 @@ android {
         aidl true
     }
     
-    packagingOptions {
+    packaging {
         jniLibs {
             useLegacyPackaging = true
             pickFirst 'lib/arm64-v8a/libonnxruntime.so'
@@ -132,12 +133,6 @@ android {
         }
     }
 }
-
-/*
-afterEvaluate {
-    android.sourceSets.main.jniLibs.setSrcDirs(["src/main/jniLibs", "${project.buildDir}/finalJniLibs"])
-}
-*/
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.12.0'

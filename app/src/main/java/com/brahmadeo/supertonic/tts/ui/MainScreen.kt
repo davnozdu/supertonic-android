@@ -3,6 +3,7 @@ package com.brahmadeo.supertonic.tts.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
@@ -52,6 +53,11 @@ fun MainScreen(
     onSpeedChange: (Float) -> Unit,
     steps: Int,
     onStepsChange: (Int) -> Unit,
+    intraThreads: Int,
+    showThreadsDialog: Boolean,
+    onShowThreadsDialogChange: (Boolean) -> Unit,
+    onIntraThreadsChange: (Int) -> Unit,
+    engineType: String,
 
     // Menu Actions
     onResetClick: () -> Unit,
@@ -74,7 +80,16 @@ fun MainScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Supertonic TTS") },
+                title = { 
+                    Column {
+                        Text("Supertonic TTS")
+                        Text(
+                            text = engineType,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Menu")
@@ -92,7 +107,17 @@ fun MainScreen(
                             onClick = { showMenu = false; onLexiconClick() },
                             enabled = currentLangCode == "en"
                         )
+                        
+                        DropdownMenuItem(
+                            text = { Text("Inference Threads") },
+                            onClick = { 
+                                showMenu = false
+                                onShowThreadsDialogChange(true)
+                            }
+                        )
+
                         if (isV2Ready && currentLangCode == "en") {
+                            HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Delete Multilingual Models", color = MaterialTheme.colorScheme.error) },
                                 onClick = { showMenu = false; onDeleteV2Click() }
@@ -172,7 +197,7 @@ fun MainScreen(
                             label = "Voice Style",
                             options = voices.keys.toList().sorted(),
                             selectedOption = voices.entries.find { it.value == selectedVoiceFile }?.key ?: "",
-                            onOptionSelected = { name -> onVoiceChange(voices[name] ?: "M1.json") }
+                            onOptionSelected = { name -> onVoiceChange(voices[name] ?: "F3.json") }
                         )
 
                         // Mix Switch
@@ -285,6 +310,70 @@ fun MainScreen(
             }
         }
     }
+
+    if (showThreadsDialog) {
+        ThreadSelectionDialog(
+            currentThreads = intraThreads,
+            onDismiss = { onShowThreadsDialogChange(false) },
+            onSave = { 
+                onIntraThreadsChange(it)
+                onShowThreadsDialogChange(false)
+            }
+        )
+    }
+}
+
+@Composable
+fun ThreadSelectionDialog(
+    currentThreads: Int,
+    onDismiss: () -> Unit,
+    onSave: (Int) -> Unit
+) {
+    var selectedThreads by remember { mutableIntStateOf(currentThreads) }
+    val options = listOf(1, 2, 4, 5, 8)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Inference Threads") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Higher thread counts increase speed but use more battery and generate more heat. 4-5 is recommended for most devices.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(Modifier.height(8.dp))
+                options.forEach { count ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = selectedThreads == count,
+                                onClick = { selectedThreads = count }
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedThreads == count,
+                            onClick = { selectedThreads = count }
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(text = "$count Threads")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(selectedThreads) }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

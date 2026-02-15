@@ -150,9 +150,10 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
         val savedLang = getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getString("selected_lang", "en") ?: "en"
         val modelVersion = if (savedLang == "en") "v1" else "v2"
+        val threads = getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getInt("intra_threads", 4)
         val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-        SupertonicTTS.initialize(modelPath, libPath)
+        SupertonicTTS.initialize(modelPath, libPath, threads)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -160,11 +161,13 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             stopPlayback()
         } else if (intent?.action == "RESET_ENGINE") {
             SupertonicTTS.release()
-            val savedLang = getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getString("selected_lang", "en") ?: "en"
+            val prefs = getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
+            val savedLang = prefs.getString("selected_lang", "en") ?: "en"
             val modelVersion = if (savedLang == "en") "v1" else "v2"
+            val threads = prefs.getInt("intra_threads", 4)
             val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            SupertonicTTS.initialize(modelPath, libPath)
+            SupertonicTTS.initialize(modelPath, libPath, threads)
         }
         return START_NOT_STICKY
     }

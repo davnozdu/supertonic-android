@@ -14,12 +14,14 @@ class MainViewModel : ViewModel() {
 
     // Settings State
     var currentLang = mutableStateOf("en")
-    var selectedVoiceFile = mutableStateOf("M1.json")
+    var selectedVoiceFile = mutableStateOf("F3.json")
     var selectedVoiceFile2 = mutableStateOf("M2.json")
     var isMixingEnabled = mutableStateOf(false)
     var mixAlpha = mutableFloatStateOf(0.5f)
     var currentSpeed = mutableFloatStateOf(1.1f)
     var currentSteps = mutableIntStateOf(5)
+    var intraThreads = mutableIntStateOf(4)
+    var engineType = mutableStateOf("Detecting...")
 
     // Mini Player State
     var showMiniPlayer = mutableStateOf(false)
@@ -38,6 +40,7 @@ class MainViewModel : ViewModel() {
     var queueDialogText = ""
     var showV2ConfirmDialog = mutableStateOf(false)
     var showV2DeleteDialog = mutableStateOf(false)
+    var showThreadsDialog = mutableStateOf(false)
     var pendingLangCode = ""
 
     // Data
