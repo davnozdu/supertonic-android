@@ -440,7 +440,7 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.Main) {
                     viewModel.isInitializing.value = false
                     val type = if (SupertonicTTS.isXnnpackSupported()) "XNNPACK" else "CPU"
-                    viewModel.engineType.value = "$type : $threads"
+                    viewModel.engineType.value = "$type : $threads Cores"
                 }
             }
         }

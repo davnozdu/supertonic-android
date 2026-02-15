@@ -109,7 +109,7 @@ fun MainScreen(
                         )
                         
                         DropdownMenuItem(
-                            text = { Text("Inference Threads") },
+                            text = { Text("Performance Cores") },
                             onClick = { 
                                 showMenu = false
                                 onShowThreadsDialogChange(true)
@@ -330,15 +330,15 @@ fun ThreadSelectionDialog(
     onSave: (Int) -> Unit
 ) {
     var selectedThreads by remember { mutableIntStateOf(currentThreads) }
-    val options = listOf(1, 2, 4, 5, 8)
+    val options = listOf(1, 3, 4, 5, 8)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Inference Threads") },
+        title = { Text("Performance Cores") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Higher thread counts increase speed but use more battery and generate more heat. 4-5 is recommended for most devices.",
+                    "Controls the XNNPACK thread pool for compute-heavy operations. Higher counts increase speed but use more battery. 4-5 is recommended for most devices.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(Modifier.height(8.dp))
@@ -358,7 +358,7 @@ fun ThreadSelectionDialog(
                             onClick = { selectedThreads = count }
                         )
                         Spacer(Modifier.width(16.dp))
-                        Text(text = "$count Threads")
+                        Text(text = "$count Cores")
                     }
                 }
             }

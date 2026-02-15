@@ -853,26 +853,27 @@ fn create_session(model_path: &str, use_xnnpack: bool, intra_threads: usize) -> 
         // This ensures that when one thread pool is idle (e.g., ORT pool while XNNPACK is working),
         // it doesn't consume any CPU cycles.
         .with_config_entry("session.intra_op.allow_spinning", "0")?
-        .with_config_entry("session.inter_op.allow_spinning", "0")?
-        // Set the session-level intra_threads. This serves as the pool for the CPU Execution Provider
-        // and any operators not handled by XNNPACK.
-        .with_intra_threads(intra_threads)?;
+        .with_config_entry("session.inter_op.allow_spinning", "0")?;
 
     if use_xnnpack {
         #[cfg(feature = "xnnpack")]
         {
-            // Set XNNPACK's internal thread pool to the same count.
-            // Since we use Sequential execution, these pools won't fight for CPU; 
-            // one will be idle (and not spinning) while the other works.
-            let xnn_threads = std::num::NonZeroUsize::new(intra_threads).unwrap_or(std::num::NonZeroUsize::new(1).unwrap());
+            // XNNPACK gets user's thread selection.
+            let xnn_threads = std::num::NonZeroUsize::new(intra_threads).unwrap_or(std::num::NonZeroUsize::new(4).unwrap());
             builder = builder
                 .with_execution_providers([
                     XNNPACKExecutionProvider::default()
                         .with_intra_op_num_threads(xnn_threads)
                         .build(),
                     CPUExecutionProvider::default().build(),
-                ])?;
+                ])?
+                // ORT always gets 1 thread (not user-configurable) when XNNPACK is active.
+                // It handles cheap CPU fallback ops like Add, Mul, Transpose.
+                .with_intra_threads(1)?;
         }
+    } else {
+        // Without XNNPACK, ORT needs user's thread selection.
+        builder = builder.with_intra_threads(intra_threads)?;
     }
 
     builder.commit_from_file(model_path).context(format!("Failed to load model: {}", model_path))
