@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -52,7 +52,7 @@ fun PlaybackScreen(
                 title = { Text("Now Playing") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -100,6 +100,14 @@ fun PlaybackScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     if (isServiceActive || isPlaying) {
+                        if (!isPlaying && !isExporting) {
+                            Text(
+                                text = if (sentences.size > 1) "Pre-buffering for continuous play..." else "Buffering...",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 8.dp).align(Alignment.CenterHorizontally)
+                            )
+                        }
                         LinearProgressIndicator(
                             progress = {
                                 if (sentences.isNotEmpty()) (currentIndex + 1).toFloat() / sentences.size else 0f

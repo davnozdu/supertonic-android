@@ -139,7 +139,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Supertonic:PlaybackWakeLock")
         
         mediaSession = MediaSessionCompat(this, "SupertonicMediaSession").apply {
-            setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() { this@PlaybackService.play() }
                 override fun onPause() { this@PlaybackService.pause() }
@@ -222,12 +221,16 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     validStartIndex = 0
                 }
 
-                val channel = kotlinx.coroutines.channels.Channel<PlaybackItem>(2)
+                // Channel size 10 to allow producer to stay ahead
+                val channel = kotlinx.coroutines.channels.Channel<PlaybackItem>(10)
+                val preBufferComplete = CompletableDeferred<Unit>()
 
                 // Producer
                 launch {
+                    var producedCount = 0
                     for (index in validStartIndex until totalSentences) {
                         if (SupertonicTTS.isCancelled() || !isActive) break
+                        
                         while (!isPlaying && isSynthesizing && isActive) {
                             delay(100)
                         }
@@ -239,25 +242,50 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         val sentenceLang = lang // Strict enforcement as per requirement
                         val normalizedText = textNormalizer.normalize(sentence, sentenceLang)
 
-                        val audioData = SupertonicTTS.generateAudio(normalizedText, sentenceLang, stylePath, speed, 0.0f, steps, null)
+                        val audioData = SupertonicTTS.generateAudio(
+                            normalizedText, sentenceLang, stylePath, speed, 0.0f, steps, null
+                        )
                         
                         if (audioData != null && audioData.isNotEmpty()) {
                             val boostedData = applyVolumeBoost(audioData, VOLUME_BOOST_FACTOR)
+                            
                             channel.send(PlaybackItem(index, boostedData))
+                            producedCount++
+                            
+                            // Signal pre-buffer complete when 3 chunks are ready (2 in buffer)
+                            if (producedCount >= 3 && !preBufferComplete.isCompleted) {
+                                preBufferComplete.complete(Unit)
+                                Log.d(TAG, "Pre-buffer complete: 3 chunks ready")
+                            }
                         }
                     }
+                    
+                    // If we finish generating before reaching 3, complete anyway
+                    if (!preBufferComplete.isCompleted) {
+                        preBufferComplete.complete(Unit)
+                    }
                     channel.close()
+                }
+
+                // Wait for pre-buffer (3 chunks ready)
+                preBufferComplete.await()
+                
+                withContext(Dispatchers.Main) {
+                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                    notifyListenerState(true)
                 }
 
                 // Consumer
                 for (item in channel) {
                     if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break
+                    
                     withContext(Dispatchers.Main) {
                         currentSentenceIndex = item.index
                         try {
                             listener?.onProgress(item.index, totalSentences)
                         } catch (e: RemoteException) { listener = null }
                     }
+                    
                     playAudioDataBlocking(item.data)
                 }
                 
@@ -364,7 +392,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 listener?.onPlaybackStopped()
             } catch (e: RemoteException) { listener = null }
             updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
-            stopForeground(true)
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         }
     }
 
@@ -459,18 +487,18 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     if (success && outputStream.size() > 0) {
                         WavUtils.saveWav(outputFile, outputStream.toByteArray(), SupertonicTTS.getAudioSampleRate())
                         withContext(Dispatchers.Main) {
-                            stopForeground(true)
+                            ServiceCompat.stopForeground(this@PlaybackService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                             try { listener?.onExportComplete(true, outputFile.absolutePath) } catch(e: RemoteException){}
                         }
                     } else {
                         withContext(Dispatchers.Main) {
-                            stopForeground(true)
+                            ServiceCompat.stopForeground(this@PlaybackService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                             try { listener?.onExportComplete(false, outputFile.absolutePath) } catch(e: RemoteException){}
                         }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        stopForeground(true)
+                        ServiceCompat.stopForeground(this@PlaybackService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                         try { listener?.onExportComplete(false, outputFile.absolutePath) } catch(e: RemoteException){}
                     }
                 }

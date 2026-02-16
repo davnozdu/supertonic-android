@@ -288,9 +288,9 @@ fun MainScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Now Playing",
+                                text = if (isSynthesizing && !miniPlayerIsPlaying) "Pre-buffering..." else "Now Playing",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isSynthesizing && !miniPlayerIsPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = miniPlayerTitle,
