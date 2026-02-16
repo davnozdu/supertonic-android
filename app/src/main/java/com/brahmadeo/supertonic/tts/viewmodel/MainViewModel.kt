@@ -18,7 +18,7 @@ class MainViewModel : ViewModel() {
     var selectedVoiceFile2 = mutableStateOf("M2.json")
     var isMixingEnabled = mutableStateOf(false)
     var mixAlpha = mutableFloatStateOf(0.5f)
-    var currentSpeed = mutableFloatStateOf(1.1f)
+    var currentSpeed = mutableFloatStateOf(1.0f)
     var currentSteps = mutableIntStateOf(5)
     var intraThreads = mutableIntStateOf(4)
     var engineType = mutableStateOf("Detecting...")

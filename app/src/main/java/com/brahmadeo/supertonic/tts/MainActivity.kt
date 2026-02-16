@@ -358,7 +358,7 @@ class MainActivity : ComponentActivity() {
         viewModel.selectedVoiceFile2.value = prefs.getString("selected_voice_2", "M2.json") ?: "M2.json"
         viewModel.isMixingEnabled.value = prefs.getBoolean("is_mixing_enabled", false)
         viewModel.mixAlpha.value = prefs.getFloat("mix_alpha", 0.5f)
-        viewModel.currentSpeed.value = prefs.getFloat("speed", 1.1f)
+        viewModel.currentSpeed.value = prefs.getFloat("speed", 1.0f)
         viewModel.currentSteps.value = prefs.getInt("diffusion_steps", 5)
         viewModel.intraThreads.intValue = prefs.getInt("intra_threads", 4)
     }
