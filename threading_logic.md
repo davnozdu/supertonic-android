@@ -41,12 +41,13 @@ fn create_session(model_path: &str, use_xnnpack: bool, intra_threads: usize) -> 
         {
             let xnn_threads = std::num::NonZeroUsize::new(intra_threads)
                 .unwrap_or(std::num::NonZeroUsize::new(1).unwrap());
-            builder = builder.with_execution_providers([
-                XNNPACKExecutionProvider::default()
-                    .with_intra_op_num_threads(xnn_threads)
-                    .build(),
-                CPUExecutionProvider::default().build(),
-            ])?;
+            builder = builder
+                .with_execution_providers([
+                    XNNPACKExecutionProvider::default()
+                        .with_intra_op_num_threads(xnn_threads)
+                        .build(),
+                    CPUExecutionProvider::default().build(),
+                ])?;
         }
     }
     builder.commit_from_file(model_path)
@@ -56,5 +57,6 @@ fn create_session(model_path: &str, use_xnnpack: bool, intra_threads: usize) -> 
 ## 4. User Control
 
 *   **Default Behavior:** The app defaults to **4 threads** on first launch to target high-performance cores.
-*   **Manual Override:** Users can select 1, 2, 4, 5, or 8 threads from the settings menu (3-dot menu in the top right).
+*   **Manual Override:** Users can select 1, 3, 4, 5, or 8 threads from the settings menu (3-dot menu in the top right).
 *   **Targeting Performance Cores:** On typical Android 8-core CPUs (Big.LITTLE), selecting **4 or 5 threads** is recommended to target the high-performance cores without involving the slower efficiency cores.
+*   **CPU Fallback:** When XNNPACK is active, the thread count for non-optimized CPU operators is left to the system's default management to ensure optimal resource utilization.

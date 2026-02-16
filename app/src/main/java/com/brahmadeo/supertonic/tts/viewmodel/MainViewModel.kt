@@ -20,7 +20,8 @@ class MainViewModel : ViewModel() {
     var mixAlpha = mutableFloatStateOf(0.5f)
     var currentSpeed = mutableFloatStateOf(1.0f)
     var currentSteps = mutableIntStateOf(5)
-    var intraThreads = mutableIntStateOf(4)
+    var ortThreads = mutableIntStateOf(4)
+    var xnnThreads = mutableIntStateOf(1)
     var engineType = mutableStateOf("Detecting...")
 
     // Mini Player State

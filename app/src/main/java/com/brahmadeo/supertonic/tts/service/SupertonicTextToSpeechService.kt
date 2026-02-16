@@ -52,12 +52,13 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             val prefs = getSharedPreferences("SupertonicPrefs", android.content.Context.MODE_PRIVATE)
             val savedLang = prefs.getString("selected_lang", "en") ?: "en"
             val modelVersion = if (savedLang == "en") "v1" else "v2"
-            val threads = prefs.getInt("intra_threads", 4)
+            val ortThreads = prefs.getInt("ort_threads", 4)
+            val xnnThreads = prefs.getInt("xnn_threads", 1)
 
             val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
 
-            SupertonicTTS.initialize(modelPath, libPath, threads)
+            SupertonicTTS.initialize(modelPath, libPath, ortThreads, xnnThreads)
         }
     }
 
@@ -227,8 +228,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (SupertonicTTS.getSoC() == -1) {
              val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
              val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-             val threads = prefs.getInt("intra_threads", 4)
-             SupertonicTTS.initialize(modelPath, libPath, threads)
+             val ortThreads = prefs.getInt("ort_threads", 4)
+             val xnnThreads = prefs.getInt("xnn_threads", 1)
+             SupertonicTTS.initialize(modelPath, libPath, ortThreads, xnnThreads)
         }
         
         try {

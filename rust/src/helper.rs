@@ -846,49 +846,43 @@ pub fn load_and_mix_voice_styles(path1: &str, path2: &str, alpha: f32) -> Result
 }
 
 /// Create an ONNX session with the specified execution providers
-fn create_session(model_path: &str, use_xnnpack: bool, intra_threads: usize) -> Result<Session> {
+fn create_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, xnn_threads: usize) -> Result<Session> {
     let mut builder = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)?
         // OPTIMIZATION: Disable spinning to save battery and reduce heat on Android.
         // This ensures that when one thread pool is idle (e.g., ORT pool while XNNPACK is working),
         // it doesn't consume any CPU cycles.
         .with_config_entry("session.intra_op.allow_spinning", "0")?
-        .with_config_entry("session.inter_op.allow_spinning", "0")?;
+        .with_config_entry("session.inter_op.allow_spinning", "0")?
+        .with_intra_threads(ort_threads)?;
 
     if use_xnnpack {
         #[cfg(feature = "xnnpack")]
         {
-            // XNNPACK gets user's thread selection.
-            let xnn_threads = std::num::NonZeroUsize::new(intra_threads).unwrap_or(std::num::NonZeroUsize::new(4).unwrap());
+            let xnn_threads_nz = std::num::NonZeroUsize::new(xnn_threads).unwrap_or(std::num::NonZeroUsize::new(1).unwrap());
             builder = builder
                 .with_execution_providers([
                     XNNPACKExecutionProvider::default()
-                        .with_intra_op_num_threads(xnn_threads)
+                        .with_intra_op_num_threads(xnn_threads_nz)
                         .build(),
                     CPUExecutionProvider::default().build(),
-                ])?
-                // ORT always gets 1 thread (not user-configurable) when XNNPACK is active.
-                // It handles cheap CPU fallback ops like Add, Mul, Transpose.
-                .with_intra_threads(1)?;
+                ])?;
         }
-    } else {
-        // Without XNNPACK, ORT needs user's thread selection.
-        builder = builder.with_intra_threads(intra_threads)?;
     }
 
     builder.commit_from_file(model_path).context(format!("Failed to load model: {}", model_path))
 }
 
 /// Load TTS components
-pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool, use_xnnpack: bool, intra_threads: usize) -> Result<TextToSpeech> {
+pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool, use_xnnpack: bool, ort_threads: usize, xnn_threads: usize) -> Result<TextToSpeech> {
     if use_gpu {
         anyhow::bail!("GPU mode is not supported yet");
     }
     
     if use_xnnpack {
-        println!("Using XNNPACK for inference with {} threads\n", intra_threads);
+        println!("Using XNNPACK ({}) with ORT ({}) threads\n", xnn_threads, ort_threads);
     } else {
-        println!("Using CPU for inference with {} threads\n", intra_threads);
+        println!("Using CPU for inference with {} threads\n", ort_threads);
     }
 
     let cfgs = load_cfgs(onnx_dir)?;
@@ -898,10 +892,10 @@ pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool, use_xnnpack: bool, int
     let vector_est_path = format!("{}/vector_estimator.onnx", onnx_dir);
     let vocoder_path = format!("{}/vocoder.onnx", onnx_dir);
 
-    let dp_ort = create_session(&dp_path, use_xnnpack, intra_threads)?;
-    let text_enc_ort = create_session(&text_enc_path, use_xnnpack, intra_threads)?;
-    let vector_est_ort = create_session(&vector_est_path, use_xnnpack, intra_threads)?;
-    let vocoder_ort = create_session(&vocoder_path, use_xnnpack, intra_threads)?;
+    let dp_ort = create_session(&dp_path, use_xnnpack, ort_threads, xnn_threads)?;
+    let text_enc_ort = create_session(&text_enc_path, use_xnnpack, ort_threads, xnn_threads)?;
+    let vector_est_ort = create_session(&vector_est_path, use_xnnpack, ort_threads, xnn_threads)?;
+    let vocoder_ort = create_session(&vocoder_path, use_xnnpack, ort_threads, xnn_threads)?;
 
     let unicode_indexer_path = format!("{}/unicode_indexer.json", onnx_dir);
     let text_processor = UnicodeProcessor::new(&unicode_indexer_path)?;

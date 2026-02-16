@@ -25,7 +25,8 @@ pub extern "system" fn Java_com_brahmadeo_supertonic_tts_SupertonicTTS_init(
     _class: JClass,
     model_path: JString,
     _lib_path: JString, // Kept for signature compatibility
-    intra_threads: jint,
+    ort_threads: jint,
+    xnn_threads: jint,
 ) -> jlong {
     android_logger::init_once(
         Config::default().with_max_level(LevelFilter::Info),
@@ -38,13 +39,13 @@ pub extern "system" fn Java_com_brahmadeo_supertonic_tts_SupertonicTTS_init(
 
     let model_path: String = env.get_string(&model_path).expect("Couldn't get java string!").into();
     
-    log::info!("Initializing Supertonic Engine (threads: {}) with model path: {}", intra_threads, model_path);
+    log::info!("Initializing Supertonic Engine (ORT: {}, XNN: {}) with model path: {}", ort_threads, xnn_threads, model_path);
 
     if !ort::init().with_name("supertonic-tts").commit() {
         log::warn!("ORT environment already initialized");
     }
 
-    let tts = match load_text_to_speech(&model_path, false, true, intra_threads as usize) {
+    let tts = match load_text_to_speech(&model_path, false, true, ort_threads as usize, xnn_threads as usize) {
         Ok(t) => t,
         Err(e) => {
             log::error!("Failed to load TTS: {:?}", e);

@@ -307,13 +307,18 @@ class MainActivity : ComponentActivity() {
                             viewModel.currentSteps.value = it
                             getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).edit().putInt("diffusion_steps", it).apply()
                         },
-                        intraThreads = viewModel.intraThreads.intValue,
+                        ortThreads = viewModel.ortThreads.intValue,
+                        xnnThreads = viewModel.xnnThreads.intValue,
                         showThreadsDialog = viewModel.showThreadsDialog.value,
                         onShowThreadsDialogChange = { viewModel.showThreadsDialog.value = it },
-                        onIntraThreadsChange = {
-                            viewModel.intraThreads.intValue = it
-                            getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).edit().putInt("intra_threads", it).apply()
-                            // Re-initialize engine with new thread count
+                        onThreadsChange = { ort, xnn ->
+                            viewModel.ortThreads.intValue = ort
+                            viewModel.xnnThreads.intValue = xnn
+                            getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).edit()
+                                .putInt("ort_threads", ort)
+                                .putInt("xnn_threads", xnn)
+                                .apply()
+                            // Re-initialize engine with new thread counts
                             initializeEngine(currentModelVersion)
                         },
                         engineType = viewModel.engineType.value,
@@ -360,7 +365,8 @@ class MainActivity : ComponentActivity() {
         viewModel.mixAlpha.value = prefs.getFloat("mix_alpha", 0.5f)
         viewModel.currentSpeed.value = prefs.getFloat("speed", 1.0f)
         viewModel.currentSteps.value = prefs.getInt("diffusion_steps", 5)
-        viewModel.intraThreads.intValue = prefs.getInt("intra_threads", 4)
+        viewModel.ortThreads.intValue = prefs.getInt("ort_threads", 4)
+        viewModel.xnnThreads.intValue = prefs.getInt("xnn_threads", 1)
     }
 
     private fun checkNotificationPermission() {
@@ -434,13 +440,14 @@ class MainActivity : ComponentActivity() {
             
             val modelPath = File(filesDir, "$version/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            val threads = viewModel.intraThreads.intValue
+            val ortThreads = viewModel.ortThreads.intValue
+            val xnnThreads = viewModel.xnnThreads.intValue
 
-            if (SupertonicTTS.initialize(modelPath, libPath, threads)) {
+            if (SupertonicTTS.initialize(modelPath, libPath, ortThreads, xnnThreads)) {
                 withContext(Dispatchers.Main) {
                     viewModel.isInitializing.value = false
                     val type = if (SupertonicTTS.isXnnpackSupported()) "XNNPACK" else "CPU"
-                    viewModel.engineType.value = "$type : $threads Cores"
+                    viewModel.engineType.value = "$type : $ortThreads|$xnnThreads Cores"
                 }
             }
         }

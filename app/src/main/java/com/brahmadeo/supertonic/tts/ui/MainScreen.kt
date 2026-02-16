@@ -53,10 +53,11 @@ fun MainScreen(
     onSpeedChange: (Float) -> Unit,
     steps: Int,
     onStepsChange: (Int) -> Unit,
-    intraThreads: Int,
+    ortThreads: Int,
+    xnnThreads: Int,
     showThreadsDialog: Boolean,
     onShowThreadsDialogChange: (Boolean) -> Unit,
-    onIntraThreadsChange: (Int) -> Unit,
+    onThreadsChange: (Int, Int) -> Unit,
     engineType: String,
 
     // Menu Actions
@@ -313,10 +314,11 @@ fun MainScreen(
 
     if (showThreadsDialog) {
         ThreadSelectionDialog(
-            currentThreads = intraThreads,
+            currentOrtThreads = ortThreads,
+            currentXnnThreads = xnnThreads,
             onDismiss = { onShowThreadsDialogChange(false) },
-            onSave = { 
-                onIntraThreadsChange(it)
+            onSave = { ort, xnn ->
+                onThreadsChange(ort, xnn)
                 onShowThreadsDialogChange(false)
             }
         )
@@ -325,46 +327,64 @@ fun MainScreen(
 
 @Composable
 fun ThreadSelectionDialog(
-    currentThreads: Int,
+    currentOrtThreads: Int,
+    currentXnnThreads: Int,
     onDismiss: () -> Unit,
-    onSave: (Int) -> Unit
+    onSave: (Int, Int) -> Unit
 ) {
-    var selectedThreads by remember { mutableIntStateOf(currentThreads) }
-    val options = listOf(1, 3, 4, 5, 8)
+    var selectedOrt by remember { mutableIntStateOf(currentOrtThreads) }
+    var selectedXnn by remember { mutableIntStateOf(currentXnnThreads) }
+    val options = listOf(1, 2, 4, 5, 8)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Performance Cores") },
+        title = { Text("Compute Configuration") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    "Controls the XNNPACK thread pool for compute-heavy operations. Higher counts increase speed but use more battery. 4-5 is recommended for most devices.",
+                    "Configure thread pools for ONNX Runtime (CPU) and XNNPACK (ARM Optimization).",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Spacer(Modifier.height(8.dp))
-                options.forEach { count ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = selectedThreads == count,
-                                onClick = { selectedThreads = count }
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedThreads == count,
-                            onClick = { selectedThreads = count }
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Text(text = "$count Cores")
+                
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    // ORT Column
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("ORT (CPU)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        options.forEach { count ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(selected = selectedOrt == count, onClick = { selectedOrt = count })
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = selectedOrt == count, onClick = { selectedOrt = count })
+                                Text(text = "$count", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    
+                    // XNNPACK Column
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("XNNPACK", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        options.forEach { count ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(selected = selectedXnn == count, onClick = { selectedXnn = count })
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = selectedXnn == count, onClick = { selectedXnn = count })
+                                Text(text = "$count", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(selectedThreads) }) {
+            TextButton(onClick = { onSave(selectedOrt, selectedXnn) }) {
                 Text("Save")
             }
         },

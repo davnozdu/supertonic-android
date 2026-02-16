@@ -14,7 +14,7 @@ object SupertonicTTS {
         }
     }
 
-    private external fun init(modelPath: String, libPath: String, intraThreads: Int): Long
+    private external fun init(modelPath: String, libPath: String, ortThreads: Int, xnnThreads: Int): Long
     private external fun synthesize(ptr: Long, text: String, lang: String, stylePath: String, speed: Float, bufferSeconds: Float, steps: Int): ByteArray
     private external fun getSocClass(ptr: Long): Int
     private external fun getSampleRate(ptr: Long): Int
@@ -23,7 +23,7 @@ object SupertonicTTS {
     private external fun reset(ptr: Long)
 
     @Synchronized
-    fun initialize(modelPath: String, libPath: String, intraThreads: Int = 1): Boolean {
+    fun initialize(modelPath: String, libPath: String, ortThreads: Int = 4, xnnThreads: Int = 1): Boolean {
         if (nativePtr != 0L) {
             // Health check: Can we still talk to the engine?
             if (getSocClass(nativePtr) != -1) {
@@ -35,10 +35,10 @@ object SupertonicTTS {
             }
         }
         
-        nativePtr = init(modelPath, libPath, intraThreads)
+        nativePtr = init(modelPath, libPath, ortThreads, xnnThreads)
         val success = nativePtr != 0L
         if (success) {
-            Log.i("SupertonicTTS", "Engine initialized successfully with $intraThreads threads: $nativePtr")
+            Log.i("SupertonicTTS", "Engine initialized successfully (ORT: $ortThreads, XNN: $xnnThreads): $nativePtr")
         } else {
             Log.e("SupertonicTTS", "Engine initialization FAILED")
         }

@@ -22,9 +22,13 @@ struct Args {
     #[arg(long, default_value = "false")]
     use_xnnpack: bool,
 
-    /// Number of intra-threads for ONNX Runtime (default: 1)
+    /// Number of ORT (CPU) intra-threads (default: 4)
+    #[arg(long, default_value = "4")]
+    ort_threads: usize,
+
+    /// Number of XNNPACK intra-threads (default: 1)
     #[arg(long, default_value = "1")]
-    intra_threads: usize,
+    xnn_threads: usize,
 
     /// Path to ONNX model directory
     #[arg(long, default_value = "assets/onnx")]
@@ -97,7 +101,7 @@ fn main() -> Result<()> {
     let bsz = voice_style_paths.len();
 
     // --- 2. Load TTS components --- //
-    let mut text_to_speech = load_text_to_speech(&args.onnx_dir, args.use_gpu, args.use_xnnpack, args.intra_threads)?;
+    let mut text_to_speech = load_text_to_speech(&args.onnx_dir, args.use_gpu, args.use_xnnpack, args.ort_threads, args.xnn_threads)?;
 
     // --- 3. Load voice styles --- //
     let style = load_voice_style(voice_style_paths, true)?;
