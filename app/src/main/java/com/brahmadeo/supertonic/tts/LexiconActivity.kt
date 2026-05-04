@@ -254,19 +254,17 @@ class LexiconActivity : ComponentActivity() {
 
         val prefs = getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
         val selectedLang = prefs.getString("selected_lang", "en") ?: "en"
-        val version = if (selectedLang == "en") "v1" else "v2"
 
         // Check if assets are ready
-        val isReady = if (version == "v1") AssetManager.isV1Ready(this) else AssetManager.isV2Ready(this)
-        if (!isReady) {
+        if (!AssetManager.isReady(this)) {
             Toast.makeText(this, "Assets not ready. Please download them on the main screen.", Toast.LENGTH_LONG).show()
             return
         }
 
         val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         
-        // Ensure we point to the correct versioned directory
-        val stylePath = File(filesDir, "$version/voice_styles/$voiceFile").absolutePath
+        // Ensure we point to the correct v2 directory
+        val stylePath = File(filesDir, "v2/voice_styles/$voiceFile").absolutePath
         val steps = prefs.getInt("diffusion_steps", 5)
 
         // Use higher steps (10) for test to ensure short words are audible and clear

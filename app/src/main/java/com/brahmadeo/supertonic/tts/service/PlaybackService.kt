@@ -163,9 +163,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             isActive = true
         }
 
-        val savedLang = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getString("selected_lang", "en") ?: "en"
-        val modelVersion = if (savedLang == "en") "v1" else "v2"
-        val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
+        val modelPath = File(filesDir, "v2/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
         SupertonicTTS.initialize(modelPath, libPath)
     }
@@ -175,9 +173,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             stopPlayback()
         } else if (intent?.action == "RESET_ENGINE") {
             SupertonicTTS.release()
-            val savedLang = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getString("selected_lang", "en") ?: "en"
-            val modelVersion = if (savedLang == "en") "v1" else "v2"
-            val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
+            val modelPath = File(filesDir, "v2/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
             SupertonicTTS.initialize(modelPath, libPath)
         }

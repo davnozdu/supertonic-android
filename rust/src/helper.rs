@@ -197,10 +197,8 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
     }
     }
 
-    // Wrap text with language tags - V2 needs tags, V1 (English) does not
-    if lang != "en" {
-        text = format!("<{}>{}</{}>", lang, text, lang);
-    }
+    // Wrap text with language tags - V2 needs tags for all languages
+    text = format!("<{}>{}</{}>", lang, text, lang);
 
     Ok(text)
 }
