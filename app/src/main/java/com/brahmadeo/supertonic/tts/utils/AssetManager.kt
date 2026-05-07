@@ -10,7 +10,7 @@ import java.net.URL
 
 object AssetManager {
     private const val TAG = "AssetManager"
-    private const val BASE_URL = "https://huggingface.co/Supertone/supertonic-2/resolve/main"
+    private const val BASE_URL = "https://huggingface.co/Supertone/supertonic-3/resolve/main"
     
     private val FILES = listOf(
         "onnx/duration_predictor.onnx",
@@ -19,26 +19,26 @@ object AssetManager {
         "onnx/vocoder.onnx",
         "onnx/tts.json",
         "onnx/unicode_indexer.json",
-        // V2 voices (same names, different files)
+        // V3 voices (same names, different files)
         "voice_styles/M1.json", "voice_styles/M2.json", "voice_styles/M3.json", "voice_styles/M4.json", "voice_styles/M5.json",
         "voice_styles/F1.json", "voice_styles/F2.json", "voice_styles/F3.json", "voice_styles/F4.json", "voice_styles/F5.json"
     )
 
     fun isReady(context: Context): Boolean {
-        val baseDir = File(context.filesDir, "v2")
+        val baseDir = File(context.filesDir, "v3")
         if (!baseDir.exists()) return false
         return FILES.all { File(baseDir, it).exists() }
     }
 
     suspend fun download(context: Context, onProgress: (String, Float) -> Unit) {
         withContext(Dispatchers.IO) {
-            val baseDir = File(context.filesDir, "v2")
+            val baseDir = File(context.filesDir, "v3")
             if (!baseDir.exists()) baseDir.mkdirs()
 
             FILES.forEachIndexed { index, relativePath ->
                 val targetFile = File(baseDir, relativePath)
                 if (targetFile.exists()) {
-                    onProgress("Checking v2/$relativePath...", (index.toFloat() / FILES.size))
+                    onProgress("Checking v3/$relativePath...", (index.toFloat() / FILES.size))
                     return@forEachIndexed
                 }
 
@@ -48,7 +48,7 @@ object AssetManager {
 
                 val url = "$BASE_URL/$relativePath"
                 try {
-                    onProgress("Downloading v2/$relativePath...", (index.toFloat() / FILES.size))
+                    onProgress("Downloading v3/$relativePath...", (index.toFloat() / FILES.size))
                     Log.d(TAG, "Downloading $url to ${targetFile.absolutePath}")
                     
                     URL(url).openStream().use { input ->
@@ -66,10 +66,4 @@ object AssetManager {
         }
     }
 
-    fun delete(context: Context) {
-        val baseDir = File(context.filesDir, "v2")
-        if (baseDir.exists()) {
-            baseDir.deleteRecursively()
-        }
-    }
 }

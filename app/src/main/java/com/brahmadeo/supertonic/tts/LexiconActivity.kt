@@ -263,8 +263,8 @@ class LexiconActivity : ComponentActivity() {
 
         val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         
-        // Ensure we point to the correct v2 directory
-        val stylePath = File(filesDir, "v2/voice_styles/$voiceFile").absolutePath
+        // Ensure we point to the correct v3 directory
+        val stylePath = File(filesDir, "v3/voice_styles/$voiceFile").absolutePath
         val steps = prefs.getInt("diffusion_steps", 5)
 
         // Use higher steps (10) for test to ensure short words are audible and clear

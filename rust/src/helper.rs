@@ -8,11 +8,18 @@ use serde_json;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, bail};
 use unicode_normalization::UnicodeNormalization;
 use hound::{WavWriter, WavSpec, SampleFormat};
 use rand_distr::{Distribution, Normal};
 use regex::Regex;
+
+// Available languages for multilingual TTS
+pub const AVAILABLE_LANGS: &[&str] = &["en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es", "et", "fi", "fr", "hi", "hr", "hu", "id", "it", "lt", "lv", "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "tr", "uk", "vi"];
+
+pub fn is_valid_lang(lang: &str) -> bool {
+    AVAILABLE_LANGS.contains(&lang)
+}
 
 // ============================================================================ 
 // Configuration Structures
@@ -114,6 +121,11 @@ impl UnicodeProcessor {
 }
 
 pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
+    // Validate language
+    if !is_valid_lang(lang) {
+        bail!("Invalid language: {}. Available: {:?}", lang, AVAILABLE_LANGS);
+    }
+
     // Revert to NFKD normalization as required for Korean Jamo decomposition
     let mut text: String = text.nfkd().collect();
 
@@ -197,7 +209,7 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
     }
     }
 
-    // Wrap text with language tags - V2 needs tags for all languages
+    // Wrap text with language tags - V3 needs tags for all languages
     text = format!("<{}>{}</{}>", lang, text, lang);
 
     Ok(text)
@@ -534,9 +546,6 @@ use ort::{
     value::Value,
 };
 
-#[cfg(feature = "xnnpack")]
-use ort::execution_providers::{CPUExecutionProvider, XNNPACKExecutionProvider};
-
 pub struct Style {
     pub ttl: Array3<f32>,
     pub dp: Array3<f32>,
@@ -693,7 +702,8 @@ impl TextToSpeech {
         mut callback: F,
     ) -> Result<(Vec<f32>, f32)> 
     where F: FnMut(usize, usize, Option<&[f32]>) -> bool {
-        let max_len = if lang == "ko" { 120 } else { 300 };
+        let max_len = if lang == "ko" || lang == "ja" { 120 } else { 300 };
+
         let chunks = chunk_text(text, Some(max_len));
         let num_chunks = chunks.len();
         
@@ -839,53 +849,43 @@ pub fn load_and_mix_voice_styles(path1: &str, path2: &str, alpha: f32) -> Result
     Ok(Style { ttl, dp })
 }
 
-/// Create an ONNX session with the specified execution providers
-fn create_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_threads: usize) -> Result<Session> {
-    #[allow(unused_mut)]
+/// Create an ONNX session with the specified execution providers (testing for s7+g3)
+/// Create an ONNX session optimized for Snapdragon 7+ Gen 3 (1+4+3 cluster)
+/// logical_processor_ids: 0-2 (Efficiency), 3-6 (Performance), 7 (Prime)
+fn create_session(model_path: &str, ort_threads: usize) -> Result<Session> {
     let mut builder = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)?
-        // OPTIMIZATION: Disable spinning to save battery and reduce heat on Android.
-        // This ensures that when one thread pool is idle (e.g., ORT pool while XNNPACK is working),
-        // it doesn't consume any CPU cycles.
-        .with_config_entry("session.intra_op.allow_spinning", "0")?
-        .with_config_entry("session.inter_op.allow_spinning", "0")?
         .with_intra_threads(ort_threads)?;
 
-    if use_xnnpack {
-        #[cfg(feature = "xnnpack")]
-        {
-            if let Some(xnn_threads_nz) = std::num::NonZeroUsize::new(_xnn_threads) {
-                builder = builder.with_execution_providers([
-                    XNNPACKExecutionProvider::default()
-                        .with_intra_op_num_threads(xnn_threads_nz)
-                        .build(),
-                    CPUExecutionProvider::default().build(),
-                ])?;
-            } else {
-                builder = builder.with_execution_providers([
-                    XNNPACKExecutionProvider::default()
-                        .with_intra_op_num_threads(std::num::NonZeroUsize::MIN)
-                        .build(),
-                    CPUExecutionProvider::default().build(),
-                ])?;
-            }
-        }
+    // 1. PINNING: Workers (4) pinned to Performance cores (3, 4, 5, 6)
+    // The main thread (calling thread) is unmanaged and will likely stay on the Prime core.
+    if ort_threads == 5 {
+        builder = builder.with_config_entry("session.intra_op.thread_affinities", "3;4;5;6")?;
     }
 
-    builder.commit_from_file(model_path).context(format!("Failed to load model: {}", model_path))
+    // 2. THERMAL: Time-bounded spinning (1ms)
+    // Allows the v3 model to stay fast while letting the CPU rest between operators.
+    builder = builder.with_config_entry("session.intra_op.allow_spinning", "1")?
+        .with_config_entry("session.intra_op.spin_duration_us", "1000")?;
+
+    // 3. EFFICIENCY: Exponential backoff
+    // Reduces power consumption during the spin window—vital for the high-frequency A720 cores.
+    builder = builder.with_config_entry("session.intra_op.spin_backoff_max", "8")?;
+
+    // 4. INTER-OP: Disable spinning to save battery
+    builder = builder.with_config_entry("session.inter_op.allow_spinning", "0")?;
+
+    builder.commit_from_file(model_path)
+        .context(format!("Failed to load model: {}", model_path))
 }
 
 /// Load TTS components
-pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool, use_xnnpack: bool, ort_threads: usize, xnn_threads: usize) -> Result<TextToSpeech> {
+pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool, ort_threads: usize) -> Result<TextToSpeech> {
     if use_gpu {
         anyhow::bail!("GPU mode is not supported yet");
     }
     
-    if use_xnnpack {
-        log::info!("Using XNNPACK ({}) with ORT ({}) threads", xnn_threads, ort_threads);
-    } else {
-        log::info!("Using CPU for inference with {} threads", ort_threads);
-    }
+    log::info!("Using CPU for inference with {} threads", ort_threads);
 
     let cfgs = load_cfgs(onnx_dir)?;
 
@@ -894,10 +894,10 @@ pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool, use_xnnpack: bool, ort
     let vector_est_path = format!("{}/vector_estimator.onnx", onnx_dir);
     let vocoder_path = format!("{}/vocoder.onnx", onnx_dir);
 
-    let dp_ort = create_session(&dp_path, use_xnnpack, ort_threads, xnn_threads)?;
-    let text_enc_ort = create_session(&text_enc_path, use_xnnpack, ort_threads, xnn_threads)?;
-    let vector_est_ort = create_session(&vector_est_path, use_xnnpack, ort_threads, xnn_threads)?;
-    let vocoder_ort = create_session(&vocoder_path, use_xnnpack, ort_threads, xnn_threads)?;
+    let dp_ort = create_session(&dp_path, ort_threads)?;
+    let text_enc_ort = create_session(&text_enc_path, ort_threads)?;
+    let vector_est_ort = create_session(&vector_est_path, ort_threads)?;
+    let vocoder_ort = create_session(&vocoder_path, ort_threads)?;
 
     let unicode_indexer_path = format!("{}/unicode_indexer.json", onnx_dir);
     let text_processor = UnicodeProcessor::new(&unicode_indexer_path)?;

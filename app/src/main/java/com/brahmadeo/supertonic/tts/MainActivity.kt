@@ -200,7 +200,7 @@ class MainActivity : ComponentActivity() {
                 DownloadScreen(
                     status = viewModel.downloadStatus.value,
                     progress = viewModel.downloadProgress.floatValue,
-                    version = "v2",
+                    version = "v3",
                     error = viewModel.downloadError.value,
                     onRetry = { startDownload() }
                 )
@@ -221,31 +221,6 @@ class MainActivity : ComponentActivity() {
                                 playNow(viewModel.queueDialogText)
                                 viewModel.showQueueDialog.value = false
                             }) { Text(getString(R.string.play_now)) }
-                        }
-                    )
-                }
-
-                if (viewModel.showV2DeleteDialog.value) {
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { viewModel.showV2DeleteDialog.value = false },
-                        title = { Text(getString(R.string.v2_delete_title)) },
-                        text = { Text(getString(R.string.v2_delete_message)) },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    AssetManager.delete(this@MainActivity)
-                                    viewModel.showV2DeleteDialog.value = false
-                                    // Trigger re-download
-                                    startDownload()
-                                    val resetIntent = Intent(this@MainActivity, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
-                                    startService(resetIntent)
-                                    Toast.makeText(this@MainActivity, getString(R.string.v2_deleted_msg), Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                            ) { Text(getString(R.string.delete)) }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { viewModel.showV2DeleteDialog.value = false }) { Text(getString(R.string.cancel)) }
                         }
                     )
                 }
@@ -348,7 +323,6 @@ class MainActivity : ComponentActivity() {
                     onHistoryClick = { historyLauncher.launch(Intent(this, HistoryActivity::class.java)) },
                     onQueueClick = { startActivity(Intent(this, QueueActivity::class.java)) },
                     onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
-                    onDeleteV2Click = { viewModel.showV2DeleteDialog.value = true },
                     onOpenEbookClick = { 
                         try {
                             if (EbookManager.getRecentBooks(this).isEmpty()) {
@@ -362,7 +336,7 @@ class MainActivity : ComponentActivity() {
                             ebookLauncher.launch(arrayOf("application/epub+zip", "application/pdf"))
                         }
                     },
-                    isV2Ready = AssetManager.isReady(this),
+                    isV3Ready = AssetManager.isReady(this),
 
                     showMiniPlayer = viewModel.showMiniPlayer.value,
                     miniPlayerTitle = viewModel.miniPlayerTitle.value,
@@ -426,7 +400,7 @@ private fun saveStringPref(key: String, value: String) {
 
 private fun startDownload() {
     viewModel.isDownloading.value = true
-    viewModel.downloadingVersion.value = "v2"
+    viewModel.downloadingVersion.value = "v3"
     viewModel.downloadError.value = null
     CoroutineScope(Dispatchers.IO).launch {
         try {
@@ -461,7 +435,7 @@ private fun initializeEngine() {
         // Force release of any existing engine to ensure we load the new model path
         SupertonicTTS.release()
         
-        val modelPath = File(filesDir, "v2/onnx").absolutePath
+        val modelPath = File(filesDir, "v3/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
 
         if (SupertonicTTS.initialize(modelPath, libPath)) {
@@ -492,7 +466,7 @@ private fun setupVoicesMap(lang: String) {
     }
 
     // Check dynamic dir for default listing
-    val voiceDir = File(filesDir, "v2/voice_styles")
+    val voiceDir = File(filesDir, "v3/voice_styles")
     if (voiceDir.exists()) {
         val files = voiceDir.listFiles { _, name -> name.endsWith(".json") }
         files?.forEach { file ->
@@ -512,22 +486,22 @@ private fun generateAndPlay(text: String) {
 
     if (viewModel.isInitializing.value) return
 
-    var stylePath = File(filesDir, "v2/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
+    var stylePath = File(filesDir, "v3/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
     if (!File(stylePath).exists()) {
          startDownload()
          return
     }
 
     if (viewModel.isMixingEnabled.value) {
-        val stylePath2 = File(filesDir, "v2/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
+        val stylePath2 = File(filesDir, "v3/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
         if (File(stylePath2).exists()) {
             stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
         }
     }
     
     val v1Name = viewModel.voiceFiles.entries.find { it.value == viewModel.selectedVoiceFile.value }?.key ?: "Voice 1"
-    val v2Name = viewModel.voiceFiles.entries.find { it.value == viewModel.selectedVoiceFile2.value }?.key ?: "Voice 2"
-    val voiceName = if (viewModel.isMixingEnabled.value) "Mixed: $v1Name + $v2Name" else v1Name
+    val v3Name = viewModel.voiceFiles.entries.find { it.value == viewModel.selectedVoiceFile2.value }?.key ?: "Voice 2"
+    val voiceName = if (viewModel.isMixingEnabled.value) "Mixed: $v1Name + $v3Name" else v1Name
 
     HistoryManager.saveItem(this, text, voiceName)
 
@@ -551,9 +525,9 @@ private fun addToQueue(text: String) {
 
     if (viewModel.isInitializing.value) return
 
-    var stylePath = File(filesDir, "v2/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
+    var stylePath = File(filesDir, "v3/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
     if (viewModel.isMixingEnabled.value) {
-        val stylePath2 = File(filesDir, "v2/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
+        val stylePath2 = File(filesDir, "v3/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
         stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
     }
 
@@ -580,9 +554,9 @@ private fun playNow(text: String) {
 
     if (viewModel.isInitializing.value) return
 
-    var stylePath = File(filesDir, "v2/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
+    var stylePath = File(filesDir, "v3/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
     if (viewModel.isMixingEnabled.value) {
-        val stylePath2 = File(filesDir, "v2/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
+        val stylePath2 = File(filesDir, "v3/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
         stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
     }
     launchPlaybackActivity(text, stylePath)

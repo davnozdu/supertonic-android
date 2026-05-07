@@ -68,9 +68,8 @@ fun MainScreen(
     onHistoryClick: () -> Unit,
     onQueueClick: () -> Unit,
     onLexiconClick: () -> Unit,
-    onDeleteV2Click: () -> Unit,
     onOpenEbookClick: () -> Unit,
-    isV2Ready: Boolean,
+    isV3Ready: Boolean,
 
     // Mini Player
     showMiniPlayer: Boolean,
@@ -103,12 +102,6 @@ fun MainScreen(
                         onClick = { showMenu = false; onLexiconClick() },
                         enabled = currentLangCode != "ko"
                     )
-                    if (isV2Ready && currentLangCode == "en") {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_delete_v2), color = MaterialTheme.colorScheme.error) },
-                            onClick = { showMenu = false; onDeleteV2Click() }
-                        )
-                    }
                     }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

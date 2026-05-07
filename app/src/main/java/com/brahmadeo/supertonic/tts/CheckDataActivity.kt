@@ -18,7 +18,7 @@ class CheckDataActivity : Activity() {
 
         val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
         val savedLang = prefs.getString("selected_lang", "en") ?: "en"
-        val modelVersion = if (savedLang == "en") "v1" else "v2"
+        val modelVersion = if (savedLang == "en") "v1" else "v3"
 
         val availableVoices = ArrayList<String>()
         val unavailableVoices = ArrayList<String>()
@@ -27,9 +27,9 @@ class CheckDataActivity : Activity() {
             // English (v1) is bundled with the app and copied on first run
             availableVoices.add("eng-USA")
         } else {
-            // Check if multilingual models (v2) are present
-            val v2Dir = File(filesDir, "v2/onnx")
-            if (v2Dir.exists()) {
+            // Check if multilingual models (v3) are present
+            val v3Dir = File(filesDir, "v3/onnx")
+            if (v3Dir.exists()) {
                 availableVoices.add("kor-KOR")
                 availableVoices.add("spa-ESP")
                 availableVoices.add("por-PRT")
