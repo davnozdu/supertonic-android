@@ -853,29 +853,39 @@ pub fn load_and_mix_voice_styles(path1: &str, path2: &str, alpha: f32) -> Result
 /// Create an ONNX session optimized for Snapdragon 7+ Gen 3 (1+4+3 cluster)
 /// logical_processor_ids: 0-2 (Efficiency), 3-6 (Performance), 7 (Prime)
 fn create_session(model_path: &str, ort_threads: usize) -> Result<Session> {
+    // Performance cores on S7+G3 (logical processor IDs)
+    const PERF_CORES: &[usize] = &[3, 4, 5, 6];
+
     let mut builder = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)?
         .with_intra_threads(ort_threads)?;
 
-    // 1. PINNING: Workers (4) pinned to Performance cores (3, 4, 5, 6)
-    // The main thread (calling thread) is unmanaged and will likely stay on the Prime core.
-    if ort_threads == 5 {
-        builder = builder.with_config_entry("session.intra_op.thread_affinities", "3;4;5;6")?;
+    // 1. PINNING: Pin (ort_threads - 1) workers to Performance cores (3,4,5,6).
+    //    Main thread is unmanaged by ORT and will likely stay on the Prime core (7).
+    //    Requires ort_threads >= 2 and <= PERF_CORES.len() + 1 (i.e. max 5).
+    if ort_threads >= 2 && ort_threads - 1 <= PERF_CORES.len() {
+        let affinities = PERF_CORES[..ort_threads - 1]
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(";");
+        builder = builder
+            .with_config_entry("session.intra_op_thread_affinities", &affinities)?;
     }
 
     // 2. THERMAL: Time-bounded spinning (1ms)
-    // Allows the v3 model to stay fast while letting the CPU rest between operators.
-    builder = builder.with_config_entry("session.intra_op.allow_spinning", "1")?
+    builder = builder
+        .with_config_entry("session.intra_op.allow_spinning", "1")?
         .with_config_entry("session.intra_op.spin_duration_us", "1000")?;
 
-    // 3. EFFICIENCY: Exponential backoff
-    // Reduces power consumption during the spin window—vital for the high-frequency A720 cores.
+    // 3. EFFICIENCY: Exponential backoff, reduces pause density on A720 cores
     builder = builder.with_config_entry("session.intra_op.spin_backoff_max", "8")?;
 
-    // 4. INTER-OP: Disable spinning to save battery
+    // 4. INTER-OP: Disable spinning to save battery (sequential mode, no inter-op pool)
     builder = builder.with_config_entry("session.inter_op.allow_spinning", "0")?;
 
-    builder.commit_from_file(model_path)
+    builder
+        .commit_from_file(model_path)
         .context(format!("Failed to load model: {}", model_path))
 }
 
