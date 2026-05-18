@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 data class LexiconItem(
@@ -85,9 +86,17 @@ object LexiconManager {
         
         for (item in cachedRules) {
             if (item.term.isBlank()) continue
-            
-            val flags = if (item.ignoreCase) Pattern.CASE_INSENSITIVE else 0
-            
+
+            // UNICODE_CHARACTER_CLASS is critical for non-Latin scripts: without
+            // it Java's `\b` (and `\w`) only match ASCII word characters, so a
+            // whole-word rule like `\bзамок\b` would silently fail to match
+            // inside Cyrillic text. UNICODE_CASE makes case-insensitive
+            // matching fold Russian capitals as well.
+            var flags = Pattern.UNICODE_CHARACTER_CLASS
+            if (item.ignoreCase) {
+                flags = flags or Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
+            }
+
             try {
                 val pattern = if (item.isRegex) {
                     Pattern.compile(item.term, flags)
@@ -95,7 +104,10 @@ object LexiconManager {
                     // Whole word matching with quoting
                     Pattern.compile("\\b${Pattern.quote(item.term)}\\b", flags)
                 }
-                processed = pattern.matcher(processed).replaceAll(item.replacement)
+                // Escape $ and \ in the replacement so user input doesn't get
+                // interpreted as Matcher backreferences.
+                val safeReplacement = Matcher.quoteReplacement(item.replacement)
+                processed = pattern.matcher(processed).replaceAll(safeReplacement)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
