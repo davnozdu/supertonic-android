@@ -54,6 +54,8 @@ Expected accent dictionary shape:
 
 Stress is marked with the combining acute accent **U+0301** placed *after* the stressed vowel. Whether the model actually pronounces the marked syllable as stressed depends on its training data — try a short test through Lexicon first before importing a large file.
 
+Ready-to-import Russian dictionaries (962 K and 615 K entries) live under [`dictionaries/`](dictionaries/) — download the JSON from the release assets, import via the menu.
+
 ## Build
 
 CI builds (`.github/workflows/ci.yml`) reproduce locally:
