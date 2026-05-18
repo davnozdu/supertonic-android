@@ -5,6 +5,8 @@ import android.net.Uri
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
 import java.util.regex.Pattern
 
 /**
@@ -34,6 +36,17 @@ object AccentDictionaryManager {
     private const val TAG = "AccentDict"
     private const val FILE_NAME = "accent_dictionary.json"
     private const val MAX_FILE_BYTES = 50 * 1024 * 1024 // 50 MB sanity cap
+
+    /**
+     * Pre-built dictionaries published as release assets on the upstream
+     * GitHub fork. Keyed by language code so we can extend to more languages
+     * later without churn in the UI.
+     */
+    private val PREBUILT_URLS: Map<String, String> = mapOf(
+        "ru" to "https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents.json"
+    )
+
+    fun hasPrebuiltFor(lang: String): Boolean = PREBUILT_URLS.containsKey(lang.lowercase().substringBefore('-'))
 
     @Volatile private var entries: Map<String, String> = emptyMap()
     @Volatile private var isLoaded = false
@@ -112,6 +125,67 @@ object AccentDictionaryManager {
         entries = emptyMap()
         isLoaded = true
         File(context.filesDir, FILE_NAME).delete()
+    }
+
+    /**
+     * Downloads and installs the pre-built dictionary for [lang] (currently only "ru").
+     * Streams bytes to a temp file with progress callbacks so the UI can show a bar
+     * instead of freezing for ~10 s on a 36 MB file. Reports byte counts; the caller
+     * decides whether to translate them into a percentage.
+     *
+     * Returns the number of entries loaded, or -1 on any failure.
+     */
+    fun downloadPrebuilt(
+        context: Context,
+        lang: String,
+        onProgress: (bytesDownloaded: Long, totalBytes: Long) -> Unit
+    ): Int {
+        val urlStr = PREBUILT_URLS[lang.lowercase().substringBefore('-')] ?: run {
+            Log.w(TAG, "No prebuilt accent dictionary published for lang=$lang")
+            return -1
+        }
+        val tmp = File(context.cacheDir, "accent_download.tmp")
+        try {
+            val conn = URL(urlStr).openConnection().apply {
+                connectTimeout = 30_000
+                readTimeout = 60_000
+            }
+            val total = conn.contentLengthLong.let { if (it > 0) it else -1L }
+            conn.getInputStream().use { input ->
+                FileOutputStream(tmp).use { output ->
+                    val buf = ByteArray(64 * 1024)
+                    var read: Int
+                    var soFar = 0L
+                    var lastReport = 0L
+                    while (true) {
+                        read = input.read(buf)
+                        if (read < 0) break
+                        output.write(buf, 0, read)
+                        soFar += read
+                        // Throttle UI updates to every 200 KB to keep logcat sane.
+                        if (soFar - lastReport >= 200 * 1024 || total > 0 && soFar >= total) {
+                            onProgress(soFar, total)
+                            lastReport = soFar
+                        }
+                    }
+                    onProgress(soFar, soFar)
+                }
+            }
+            if (tmp.length() > MAX_FILE_BYTES) {
+                Log.w(TAG, "Downloaded dict ${tmp.length()} bytes exceeds cap")
+                tmp.delete()
+                return -1
+            }
+            val parsed = parseJsonToMap(tmp.readText(Charsets.UTF_8))
+            tmp.delete()
+            if (parsed.isEmpty()) return 0
+            saveAndCache(context, parsed)
+            return parsed.size
+        } catch (e: Exception) {
+            Log.e(TAG, "downloadPrebuilt failed for $lang", e)
+            tmp.delete()
+            return -1
+        }
     }
 
     private fun saveAndCache(context: Context, map: Map<String, String>) {

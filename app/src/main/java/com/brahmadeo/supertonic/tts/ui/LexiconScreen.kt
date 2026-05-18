@@ -22,10 +22,12 @@ import com.brahmadeo.supertonic.tts.utils.LexiconItem
 fun LexiconScreen(
     rules: List<LexiconItem>,
     accentDictSize: Int,
+    canDownloadAccentDict: Boolean,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
     onImportAccentDictClick: () -> Unit,
+    onDownloadAccentDictClick: () -> Unit,
     onClearAccentDictClick: () -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
@@ -65,8 +67,17 @@ fun LexiconScreen(
                             }
                         )
                         HorizontalDivider()
+                        if (canDownloadAccentDict) {
+                            DropdownMenuItem(
+                                text = { Text("Download accent dictionary…") },
+                                onClick = {
+                                    showMenu = false
+                                    onDownloadAccentDictClick()
+                                }
+                            )
+                        }
                         DropdownMenuItem(
-                            text = { Text("Import accent dictionary…") },
+                            text = { Text("Import accent dictionary from file…") },
                             onClick = {
                                 showMenu = false
                                 onImportAccentDictClick()
