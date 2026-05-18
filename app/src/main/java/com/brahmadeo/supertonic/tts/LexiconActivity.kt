@@ -20,12 +20,16 @@ import com.brahmadeo.supertonic.tts.service.PlaybackService
 import com.brahmadeo.supertonic.tts.ui.LexiconEditDialog
 import com.brahmadeo.supertonic.tts.ui.LexiconScreen
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager
@@ -106,6 +110,72 @@ class LexiconActivity : ComponentActivity() {
                 var showProgress by remember { mutableStateOf(false) }
                 var progressLabel by remember { mutableStateOf("") }
                 var progressFraction by remember { mutableFloatStateOf(0f) }
+                var showChooser by remember { mutableStateOf(false) }
+
+                fun startDownload(url: String) {
+                    showProgress = true
+                    progressLabel = "Connecting…"
+                    progressFraction = 0f
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val count = AccentDictionaryManager.downloadPrebuilt(
+                            this@LexiconActivity, url
+                        ) { soFar, total ->
+                            runOnUiThread {
+                                progressFraction = if (total > 0) (soFar.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+                                progressLabel = if (total > 0) {
+                                    "%.1f / %.1f MB".format(soFar / 1_048_576.0, total / 1_048_576.0)
+                                } else {
+                                    "%.1f MB".format(soFar / 1_048_576.0)
+                                }
+                            }
+                        }
+                        withContext(Dispatchers.Main) {
+                            showProgress = false
+                            if (count > 0) {
+                                accentDictSizeState.value = AccentDictionaryManager.size()
+                                Toast.makeText(this@LexiconActivity,
+                                    "Loaded $count entries", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(this@LexiconActivity,
+                                    "Failed to download accent dictionary", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+
+                if (showChooser) {
+                    val options = remember { AccentDictionaryManager.prebuiltOptionsFor(selectedLang) }
+                    AlertDialog(
+                        onDismissRequest = { showChooser = false },
+                        title = { Text("Choose dictionary size") },
+                        text = {
+                            Column {
+                                options.forEach { opt ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                showChooser = false
+                                                startDownload(opt.url)
+                                            }
+                                            .padding(vertical = 8.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(end = 12.dp)) {
+                                            Text(opt.displayName, style = MaterialTheme.typography.titleMedium)
+                                            Text(opt.subtitle, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showChooser = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
 
                 if (showProgress) {
                     AlertDialog(
@@ -134,36 +204,7 @@ class LexiconActivity : ComponentActivity() {
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
                     onImportAccentDictClick = { importAccentDictLauncher.launch("application/json") },
-                    onDownloadAccentDictClick = {
-                        showProgress = true
-                        progressLabel = "Connecting…"
-                        progressFraction = 0f
-                        CoroutineScope(Dispatchers.IO).launch {
-                            val count = AccentDictionaryManager.downloadPrebuilt(
-                                this@LexiconActivity, selectedLang
-                            ) { soFar, total ->
-                                runOnUiThread {
-                                    progressFraction = if (total > 0) (soFar.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
-                                    progressLabel = if (total > 0) {
-                                        "%.1f / %.1f MB".format(soFar / 1_048_576.0, total / 1_048_576.0)
-                                    } else {
-                                        "%.1f MB".format(soFar / 1_048_576.0)
-                                    }
-                                }
-                            }
-                            withContext(Dispatchers.Main) {
-                                showProgress = false
-                                if (count > 0) {
-                                    accentDictSizeState.value = AccentDictionaryManager.size()
-                                    Toast.makeText(this@LexiconActivity,
-                                        "Loaded $count entries", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(this@LexiconActivity,
-                                        "Failed to download accent dictionary", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        }
-                    },
+                    onDownloadAccentDictClick = { showChooser = true },
                     onClearAccentDictClick = { clearAccentDict() },
                     onAddClick = {
                         editingItem = null

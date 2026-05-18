@@ -41,19 +41,55 @@ object AccentDictionaryManager {
     // still import russian_accents.json (36 MB) via the file picker.
     private const val MAX_FILE_BYTES = 250L * 1024 * 1024
 
-    /**
-     * Pre-built dictionaries published as release assets on the upstream
-     * GitHub fork. Keyed by language code so we can extend to more languages
-     * later without churn in the UI.
-     */
-    private val PREBUILT_URLS: Map<String, String> = mapOf(
-        // Full 3.26M-entry Russian dictionary: all Zaliznyak inflected forms,
-        // homographs picked by ruaccent's default, ё-substitution baked in,
-        // proper names included. ~165 MB on disk / ~500 MB RAM.
-        "ru" to "https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents_full.json"
+    data class PrebuiltDict(
+        val id: String,
+        val displayName: String,
+        val subtitle: String,
+        val sizeBytes: Long,
+        val entries: Int,
+        val url: String
     )
 
-    fun hasPrebuiltFor(lang: String): Boolean = PREBUILT_URLS.containsKey(lang.lowercase().substringBefore('-'))
+    /**
+     * Pre-built dictionaries published in the davnozdu/supertonic-dictionaries
+     * GitHub repository (separate from the app for independent versioning).
+     * Keyed by language code; each language can offer several sizes so the
+     * user picks based on phone RAM.
+     */
+    private val PREBUILT_DICTS: Map<String, List<PrebuiltDict>> = mapOf(
+        "ru" to listOf(
+            PrebuiltDict(
+                id = "ru-full",
+                displayName = "Full",
+                subtitle = "165 MB · 3.26M entries · ~500 MB RAM · names, homographs, ё",
+                sizeBytes = 165L * 1024 * 1024,
+                entries = 3_263_003,
+                url = "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0/russian_accents_full.json"
+            ),
+            PrebuiltDict(
+                id = "ru-standard",
+                displayName = "Standard",
+                subtitle = "36 MB · 962K entries · ~150 MB RAM · words ≤ 9 chars, no homographs",
+                sizeBytes = 36L * 1024 * 1024,
+                entries = 961_968,
+                url = "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0/russian_accents.json"
+            ),
+            PrebuiltDict(
+                id = "ru-compact",
+                displayName = "Compact",
+                subtitle = "21 MB · 615K entries · ~85 MB RAM · words ≤ 8 chars",
+                sizeBytes = 21L * 1024 * 1024,
+                entries = 615_365,
+                url = "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0/russian_accents_compact.json"
+            )
+        )
+    )
+
+    fun hasPrebuiltFor(lang: String): Boolean = PREBUILT_DICTS.containsKey(lang.lowercase().substringBefore('-'))
+
+    fun prebuiltOptionsFor(lang: String): List<PrebuiltDict> {
+        return PREBUILT_DICTS[lang.lowercase().substringBefore('-')] ?: emptyList()
+    }
 
     @Volatile private var entries: Map<String, String> = emptyMap()
     @Volatile private var isLoaded = false
@@ -144,13 +180,9 @@ object AccentDictionaryManager {
      */
     fun downloadPrebuilt(
         context: Context,
-        lang: String,
+        urlStr: String,
         onProgress: (bytesDownloaded: Long, totalBytes: Long) -> Unit
     ): Int {
-        val urlStr = PREBUILT_URLS[lang.lowercase().substringBefore('-')] ?: run {
-            Log.w(TAG, "No prebuilt accent dictionary published for lang=$lang")
-            return -1
-        }
         val tmp = File(context.cacheDir, "accent_download.tmp")
         try {
             val conn = URL(urlStr).openConnection().apply {
