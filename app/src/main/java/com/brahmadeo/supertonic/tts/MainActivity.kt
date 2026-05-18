@@ -462,6 +462,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun openSystemTtsSettings() {
+        // Android exposes the dedicated TTS settings screen via an
+        // undocumented action. If the device's launcher activity isn't
+        // present (some custom OEM ROMs), fall back to the generic
+        // Accessibility settings — the user can navigate to TTS from there.
+        val candidates = listOf(
+            Intent("com.android.settings.TTS_SETTINGS"),
+            Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        )
+        for (intent in candidates) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+                return
+            }
+        }
+        Toast.makeText(this, getString(R.string.tts_settings_unavailable), Toast.LENGTH_LONG).show()
+    }
+
     private fun startDownload() {
         viewModel.isDownloading.value = true
         viewModel.downloadError.value = null

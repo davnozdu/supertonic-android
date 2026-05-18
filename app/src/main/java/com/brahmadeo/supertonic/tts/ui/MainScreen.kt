@@ -76,6 +76,7 @@ fun MainScreen(
     onHistoryClick: () -> Unit,
     onQueueClick: () -> Unit,
     onLexiconClick: () -> Unit,
+    onTtsSettingsClick: () -> Unit,
     onDeleteModelClick: () -> Unit,
     onOpenEbookClick: () -> Unit,
 
@@ -133,6 +134,10 @@ fun MainScreen(
                             text = { Text(stringResource(AppR.string.action_lexicon)) },
                             onClick = { showMenu = false; onLexiconClick() },
                             enabled = currentLangCode != "ko"
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(AppR.string.action_tts_settings)) },
+                            onClick = { showMenu = false; onTtsSettingsClick() }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_delete_model), color = MaterialTheme.colorScheme.error) },
@@ -566,6 +571,7 @@ fun MainScreenPreview() {
             onHistoryClick = {},
             onQueueClick = {},
             onLexiconClick = {},
+            onTtsSettingsClick = {},
             onDeleteModelClick = {},
             onOpenEbookClick = {},
             canResume = true,

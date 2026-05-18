@@ -87,6 +87,8 @@
     <string name="action_history">History</string>
     <string name="action_queue">Queue</string>
     <string name="action_lexicon">Lexicon</string>
+    <string name="action_tts_settings">System TTS Settings</string>
+    <string name="tts_settings_unavailable">Could not open TTS settings on this device</string>
     <string name="action_delete_model">Delete TTS Models</string>
     <string name="action_import">Import JSON</string>
     <string name="action_export">Export JSON</string>

@@ -117,22 +117,39 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
     // Revert to NFKD normalization as required for Korean Jamo decomposition
     let mut text: String = text.nfkd().collect();
 
+    // ---- Safe-for-all-languages normalization ----
+    // Dashes & typographic quotes confuse the multilingual model regardless of
+    // language; in particular, an em-dash inside Russian or other Slavic text
+    // is often pronounced as "и" because the raw U+2014 codepoint has no
+    // pause semantics in unicode_indexer. Mapping it to a comma forces a
+    // natural pause.
+    let universal_replacements = [
+        ("–", "-"),              // en dash
+        ("‑", "-"),              // non-breaking hyphen
+        ("—", ", "),             // em dash -> comma + space (natural pause)
+        ("\u{2013}", "-"),       // explicit en dash (same as – above, kept for clarity)
+        ("\u{2014}", ", "),      // explicit em dash
+        ("\u{201C}", "\""),      // left double quote
+        ("\u{201D}", "\""),      // right double quote
+        ("\u{2018}", "'"),       // left single quote
+        ("\u{2019}", "'"),       // right single quote (NB: also used as Cyrillic-Latin apostrophe)
+        ("«", "\""),             // guillemet open
+        ("»", "\""),             // guillemet close
+    ];
+    for (from, to) in &universal_replacements {
+        text = text.replace(from, to);
+    }
+
     if lang == "en" {
         // Remove emojis (wide Unicode range)
     let emoji_pattern = Regex::new(r"[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F800}-\x{1F8FF}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{1F1E6}-\x{1F1FF}]+").unwrap();
     text = emoji_pattern.replace_all(&text, "").to_string();
 
-    // Replace various dashes and symbols
+    // English-specific symbol replacements. Kept narrow so we don't drop
+    // characters that might be meaningful in other scripts.
     let replacements = [
-        ("–", "-"),      // en dash
-        ("‑", "-"),      // non-breaking hyphen
-        ("—", ", "),     // em dash -> comma (Natural pause)
         ("_", " "),      // underscore
-        ("\u{201C}", "\""),     // left double quote
-        ("\u{201D}", "\""),     // right double quote
-        ("\u{2018}", "'"),      // left single quote
-        ("\u{2019}", "'"),      // right single quote
-        ("´", "'"),      // acute accent
+        ("´", "'"),      // acute accent (free-standing only — combining U+0301 over a vowel is left intact to convey stress)
         ("`", "'"),      // grave accent
         ("[", " "),      // left bracket
         ("]", " "),      // right bracket
@@ -195,6 +212,12 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
             text.push('.');
         }
     }
+    } else {
+        // For non-English languages: just collapse whitespace. We deliberately
+        // leave the combining acute accent U+0301 alone so users can mark
+        // stress (e.g. "замо́к" vs "за́мок") via the lexicon.
+        text = Regex::new(r"\s+").unwrap().replace_all(&text, " ").to_string();
+        text = text.trim().to_string();
     }
 
     // Supertonic 3 is fully multilingual: language is conveyed only via
