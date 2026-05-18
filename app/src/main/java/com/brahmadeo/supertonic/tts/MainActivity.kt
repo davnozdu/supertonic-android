@@ -49,16 +49,41 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private lateinit var ebookParser: EbookParser
 
-    // Data
+    // Data — Supertonic 3 supports 31 languages + an "na" fallback for unknown.
     private val languages = mapOf(
         R.string.lang_english to "en",
-        R.string.lang_french to "fr",
-        R.string.lang_portuguese to "pt",
+        R.string.lang_korean to "ko",
+        R.string.lang_japanese to "ja",
+        R.string.lang_arabic to "ar",
+        R.string.lang_bulgarian to "bg",
+        R.string.lang_czech to "cs",
+        R.string.lang_danish to "da",
+        R.string.lang_german to "de",
+        R.string.lang_greek to "el",
         R.string.lang_spanish to "es",
-        R.string.lang_korean to "ko"
+        R.string.lang_estonian to "et",
+        R.string.lang_finnish to "fi",
+        R.string.lang_french to "fr",
+        R.string.lang_hindi to "hi",
+        R.string.lang_croatian to "hr",
+        R.string.lang_hungarian to "hu",
+        R.string.lang_indonesian to "id",
+        R.string.lang_italian to "it",
+        R.string.lang_lithuanian to "lt",
+        R.string.lang_latvian to "lv",
+        R.string.lang_dutch to "nl",
+        R.string.lang_polish to "pl",
+        R.string.lang_portuguese to "pt",
+        R.string.lang_romanian to "ro",
+        R.string.lang_russian to "ru",
+        R.string.lang_slovak to "sk",
+        R.string.lang_slovenian to "sl",
+        R.string.lang_swedish to "sv",
+        R.string.lang_turkish to "tr",
+        R.string.lang_ukrainian to "uk",
+        R.string.lang_vietnamese to "vi",
+        R.string.lang_other to "na"
     )
-
-    private var currentModelVersion = "v1" // "v1" or "v2"
 
     // Service
     private var playbackService: IPlaybackService? = null
@@ -186,25 +211,14 @@ class MainActivity : ComponentActivity() {
         LexiconManager.load(this)
         QueueManager.initialize(this)
 
-        // Initial setup based on saved language
-        val savedLang = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getString("selected_lang", MainViewModel.DEFAULT_LANG) ?: MainViewModel.DEFAULT_LANG
-        currentModelVersion = if (savedLang == "en") "v1" else "v2"
+        // Wipe v1/v2 leftovers from prior versions of the app so we don't waste storage.
+        AssetManager.cleanupOldVersions(this)
 
-        // On FIRST LAUNCH, we check/download the required version.
-        // If English (default), we ensure V1 is ready.
-        // If they managed to switch language before assets were ready (unlikely), we check that version.
-        if (currentModelVersion == "v1") {
-            if (!AssetManager.isV1Ready(this)) {
-                startDownload("v1")
-            } else {
-                initializeEngine("v1")
-            }
+        // Single unified model (Supertonic 3): download on first launch, initialize otherwise.
+        if (!AssetManager.isReady(this)) {
+            startDownload()
         } else {
-            if (!AssetManager.isV2Ready(this)) {
-                startDownload("v2")
-            } else {
-                initializeEngine("v2")
-            }
+            initializeEngine()
         }
 
         handleIntent(intent)
@@ -215,9 +229,8 @@ class MainActivity : ComponentActivity() {
                     DownloadScreen(
                         status = viewModel.downloadStatus.value,
                         progress = viewModel.downloadProgress.floatValue,
-                        version = viewModel.downloadingVersion.value,
                         error = viewModel.downloadError.value,
-                        onRetry = { startDownload(viewModel.downloadingVersion.value) }
+                        onRetry = { startDownload() }
                     )
                 } else {
                     if (viewModel.showQueueDialog.value) {
@@ -240,61 +253,25 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    if (viewModel.showV2ConfirmDialog.value) {
+                    if (viewModel.showModelDeleteDialog.value) {
                         androidx.compose.material3.AlertDialog(
-                            onDismissRequest = { 
-                                viewModel.showV2ConfirmDialog.value = false
-                                viewModel.currentLang.value = "en"
-                                saveStringPref("selected_lang", "en")
-                                switchModel("v1")
-                            },
-                            title = { Text(getString(R.string.v2_download_title)) },
-                            text = { Text(getString(R.string.v2_download_message)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    val lang = viewModel.pendingLangCode
-                                    viewModel.currentLang.value = lang
-                                    saveStringPref("selected_lang", lang)
-                                    viewModel.showV2ConfirmDialog.value = false
-                                    switchModel("v2")
-                                    val resetIntent = Intent(this@MainActivity, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
-                                    startService(resetIntent)
-                                }) { Text(getString(R.string.v2_download_button)) }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = {
-                                    viewModel.showV2ConfirmDialog.value = false
-                                    viewModel.currentLang.value = "en"
-                                    saveStringPref("selected_lang", "en")
-                                    switchModel("v1")
-                                }) { Text(getString(R.string.cancel)) }
-                            }
-                        )
-                    }
-
-                    if (viewModel.showV2DeleteDialog.value) {
-                        androidx.compose.material3.AlertDialog(
-                            onDismissRequest = { viewModel.showV2DeleteDialog.value = false },
-                            title = { Text(getString(R.string.v2_delete_title)) },
-                            text = { Text(getString(R.string.v2_delete_message)) },
+                            onDismissRequest = { viewModel.showModelDeleteDialog.value = false },
+                            title = { Text(getString(R.string.model_delete_title)) },
+                            text = { Text(getString(R.string.model_delete_message)) },
                             confirmButton = {
                                 TextButton(
                                     onClick = {
-                                        AssetManager.deleteVersion(this@MainActivity, "v2")
-                                        viewModel.showV2DeleteDialog.value = false
-                                        // Ensure we are on English/V1
-                                        viewModel.currentLang.value = "en"
-                                        saveStringPref("selected_lang", "en")
-                                        switchModel("v1")
-                                        val resetIntent = Intent(this@MainActivity, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
-                                        startService(resetIntent)
-                                        Toast.makeText(this@MainActivity, getString(R.string.v2_deleted_msg), Toast.LENGTH_SHORT).show()
+                                        AssetManager.delete(this@MainActivity)
+                                        viewModel.showModelDeleteDialog.value = false
+                                        Toast.makeText(this@MainActivity, getString(R.string.model_deleted_msg), Toast.LENGTH_SHORT).show()
+                                        // Restart download flow so the app remains usable.
+                                        startDownload()
                                     },
                                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                                 ) { Text(getString(R.string.delete)) }
                             },
                             dismissButton = {
-                                TextButton(onClick = { viewModel.showV2DeleteDialog.value = false }) { Text(getString(R.string.cancel)) }
+                                TextButton(onClick = { viewModel.showModelDeleteDialog.value = false }) { Text(getString(R.string.cancel)) }
                             }
                         )
                     }
@@ -324,24 +301,10 @@ class MainActivity : ComponentActivity() {
                         languages = localizedLanguages,
                         currentLangCode = viewModel.currentLang.value,
                         onLangChange = {
-                            if (it == "en") {
-                                viewModel.currentLang.value = it
-                                saveStringPref("selected_lang", it)
-                                switchModel("v1")
-                                val resetIntent = Intent(this, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
-                                startService(resetIntent)
-                            } else {
-                                if (AssetManager.isV2Ready(this@MainActivity)) {
-                                    viewModel.currentLang.value = it
-                                    saveStringPref("selected_lang", it)
-                                    switchModel("v2")
-                                    val resetIntent = Intent(this, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
-                                    startService(resetIntent)
-                                } else {
-                                    viewModel.pendingLangCode = it
-                                    viewModel.showV2ConfirmDialog.value = true
-                                }
-                            }
+                            viewModel.currentLang.value = it
+                            saveStringPref("selected_lang", it)
+                            val resetIntent = Intent(this, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
+                            startService(resetIntent)
                         },
 
                         voices = viewModel.voiceFiles,
@@ -414,8 +377,8 @@ class MainActivity : ComponentActivity() {
                         onHistoryClick = { historyLauncher.launch(Intent(this, HistoryActivity::class.java)) },
                         onQueueClick = { startActivity(Intent(this, QueueActivity::class.java)) },
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
-                        onDeleteV2Click = { viewModel.showV2DeleteDialog.value = true },
-                        onOpenEbookClick = { 
+                        onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
+                        onOpenEbookClick = {
                             try {
                                 if (EbookManager.getRecentBooks(this).isEmpty()) {
                                     ebookLauncher.launch(arrayOf("application/epub+zip", "application/pdf"))
@@ -428,7 +391,6 @@ class MainActivity : ComponentActivity() {
                                 ebookLauncher.launch(arrayOf("application/epub+zip", "application/pdf"))
                             }
                         },
-                        isV2Ready = AssetManager.isV2Ready(this),
 
                         canResume = viewModel.canResume.value,
                         onResumeClick = {
@@ -500,31 +462,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startDownload(version: String) {
+    private fun startDownload() {
         viewModel.isDownloading.value = true
-        viewModel.downloadingVersion.value = version
         viewModel.downloadError.value = null
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                if (version == "v1") {
-                    AssetManager.downloadV1(this@MainActivity) { status, progress ->
-                        runOnUiThread {
-                            viewModel.downloadStatus.value = status
-                            viewModel.downloadProgress.floatValue = progress
-                        }
-                    }
-                } else {
-                    AssetManager.downloadV2(this@MainActivity) { status, progress ->
-                        runOnUiThread {
-                            viewModel.downloadStatus.value = status
-                            viewModel.downloadProgress.floatValue = progress
-                        }
+                AssetManager.download(this@MainActivity) { status, progress ->
+                    runOnUiThread {
+                        viewModel.downloadStatus.value = status
+                        viewModel.downloadProgress.floatValue = progress
                     }
                 }
-                
                 withContext(Dispatchers.Main) {
                     viewModel.isDownloading.value = false
-                    initializeEngine(version)
+                    initializeEngine()
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -535,26 +486,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun initializeEngine(version: String) {
-        val modelPath = File(filesDir, "$version/onnx").absolutePath
+    private fun initializeEngine() {
+        val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
 
         if (SupertonicTTS.isInitialized(modelPath)) {
-            Log.i("MainActivity", "Engine already initialized for $version, skipping reload")
+            Log.i("MainActivity", "Engine already initialized, skipping reload")
             viewModel.isInitializing.value = false
-            currentModelVersion = version
-            setupVoicesMap(version, viewModel.currentLang.value)
+            setupVoicesMap(viewModel.currentLang.value)
             return
         }
 
-        currentModelVersion = version
         viewModel.isInitializing.value = true
-        
+
         CoroutineScope(Dispatchers.IO).launch {
             withContext(Dispatchers.Main) {
-                setupVoicesMap(version, viewModel.currentLang.value)
+                setupVoicesMap(viewModel.currentLang.value)
             }
-            
+
             if (SupertonicTTS.initialize(modelPath, libPath)) {
                 withContext(Dispatchers.Main) {
                     viewModel.isInitializing.value = false
@@ -563,24 +512,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun switchModel(version: String) {
-        // Even if the version is the same, we might need to re-initialize 
-        // to update the voices map for a new language.
-        
-        // Lazy Check
-        val isReady = if (version == "v1") AssetManager.isV1Ready(this) else AssetManager.isV2Ready(this)
-        
-        if (!isReady) {
-            // Trigger Download
-            startDownload(version)
-        } else {
-            // Instant Switch
-            initializeEngine(version)
-            Toast.makeText(this, "Switched to model $version", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun setupVoicesMap(version: String, lang: String) {
+    private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
         val voiceResources = mapOf(
             "M1.json" to R.string.voice_m1,
@@ -600,7 +532,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // Check dynamic dir for default listing
-        val voiceDir = File(filesDir, "$version/voice_styles")
+        val voiceDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
         if (voiceDir.exists()) {
             val files = voiceDir.listFiles { _, name -> name.endsWith(".json") }
             files?.forEach { file ->
@@ -613,23 +545,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun generateAndPlay(text: String) {
-        val isReady = if (currentModelVersion == "v1") AssetManager.isV1Ready(this) else AssetManager.isV2Ready(this)
-        if (!isReady) {
-            startDownload(currentModelVersion)
+        if (!AssetManager.isReady(this)) {
+            startDownload()
             return
         }
 
         if (viewModel.isInitializing.value) return
 
-        var stylePath = File(filesDir, "$currentModelVersion/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
+        val voiceDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
+        var stylePath = File(voiceDir, viewModel.selectedVoiceFile.value).absolutePath
         if (!File(stylePath).exists()) {
-             // This case should be covered by isReady, but as a fallback:
-             startDownload(currentModelVersion)
+             startDownload()
              return
         }
 
         if (viewModel.isMixingEnabled.value) {
-            val stylePath2 = File(filesDir, "$currentModelVersion/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
+            val stylePath2 = File(voiceDir, viewModel.selectedVoiceFile2.value).absolutePath
             if (File(stylePath2).exists()) {
                 stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
             }
@@ -654,17 +585,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun addToQueue(text: String) {
-        val isReady = if (currentModelVersion == "v1") AssetManager.isV1Ready(this) else AssetManager.isV2Ready(this)
-        if (!isReady) {
-            startDownload(currentModelVersion)
+        if (!AssetManager.isReady(this)) {
+            startDownload()
             return
         }
 
         if (viewModel.isInitializing.value) return
 
-        var stylePath = File(filesDir, "$currentModelVersion/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
+        val voiceDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
+        var stylePath = File(voiceDir, viewModel.selectedVoiceFile.value).absolutePath
         if (viewModel.isMixingEnabled.value) {
-            val stylePath2 = File(filesDir, "$currentModelVersion/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
+            val stylePath2 = File(voiceDir, viewModel.selectedVoiceFile2.value).absolutePath
             stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
         }
 
@@ -684,17 +615,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playNow(text: String) {
-        val isReady = if (currentModelVersion == "v1") AssetManager.isV1Ready(this) else AssetManager.isV2Ready(this)
-        if (!isReady) {
-            startDownload(currentModelVersion)
+        if (!AssetManager.isReady(this)) {
+            startDownload()
             return
         }
 
         if (viewModel.isInitializing.value) return
 
-        var stylePath = File(filesDir, "$currentModelVersion/voice_styles/${viewModel.selectedVoiceFile.value}").absolutePath
+        val voiceDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
+        var stylePath = File(voiceDir, viewModel.selectedVoiceFile.value).absolutePath
         if (viewModel.isMixingEnabled.value) {
-            val stylePath2 = File(filesDir, "$currentModelVersion/voice_styles/${viewModel.selectedVoiceFile2.value}").absolutePath
+            val stylePath2 = File(voiceDir, viewModel.selectedVoiceFile2.value).absolutePath
             stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
         }
         launchPlaybackActivity(text, stylePath)

@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
-import java.io.File
+import com.brahmadeo.supertonic.tts.utils.AssetManager
 import java.util.ArrayList
 
 /**
@@ -16,34 +16,17 @@ class CheckDataActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-        val savedLang = prefs.getString("selected_lang", "en") ?: "en"
-        val modelVersion = if (savedLang == "en") "v1" else "v2"
-
+        val ready = AssetManager.isReady(this)
         val availableVoices = ArrayList<String>()
         val unavailableVoices = ArrayList<String>()
 
-        if (modelVersion == "v1") {
-            // English (v1) is bundled with the app and copied on first run
-            availableVoices.add("eng-USA")
+        if (ready) {
+            SUPPORTED_TTS_LOCALES.forEach { availableVoices.add(it) }
         } else {
-            // Check if multilingual models (v2) are present
-            val v2Dir = File(filesDir, "v2/onnx")
-            if (v2Dir.exists()) {
-                availableVoices.add("kor-KOR")
-                availableVoices.add("spa-ESP")
-                availableVoices.add("por-PRT")
-                availableVoices.add("fra-FRA")
-            } else {
-                // These could be downloaded via the app's UI
-                unavailableVoices.add("kor-KOR")
-                unavailableVoices.add("spa-ESP")
-                unavailableVoices.add("por-PRT")
-                unavailableVoices.add("fra-FRA")
-            }
+            SUPPORTED_TTS_LOCALES.forEach { unavailableVoices.add(it) }
         }
 
-        val result = if (modelVersion == "v1" || availableVoices.isNotEmpty()) {
+        val result = if (availableVoices.isNotEmpty()) {
             TextToSpeech.Engine.CHECK_VOICE_DATA_PASS
         } else {
             TextToSpeech.Engine.CHECK_VOICE_DATA_FAIL
@@ -52,8 +35,22 @@ class CheckDataActivity : Activity() {
         val returnIntent = Intent()
         returnIntent.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES, availableVoices)
         returnIntent.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_UNAVAILABLE_VOICES, unavailableVoices)
-        
+
         setResult(result, returnIntent)
         finish()
+    }
+
+    companion object {
+        // BCP-47 / ISO-639 codes for all languages supported by Supertonic 3.
+        // The country part is intentionally generic; finer locales are advertised by SupertonicTextToSpeechService.
+        private val SUPPORTED_TTS_LOCALES = listOf(
+            "eng-USA", "kor-KOR", "jpn-JPN", "ara-ARA", "bul-BGR",
+            "ces-CZE", "dan-DNK", "deu-DEU", "ell-GRC", "spa-ESP",
+            "est-EST", "fin-FIN", "fra-FRA", "hin-IND", "hrv-HRV",
+            "hun-HUN", "ind-IDN", "ita-ITA", "lit-LTU", "lav-LVA",
+            "nld-NLD", "pol-POL", "por-PRT", "ron-ROU", "rus-RUS",
+            "slk-SVK", "slv-SVN", "swe-SWE", "tur-TUR", "ukr-UKR",
+            "vie-VNM"
+        )
     }
 }

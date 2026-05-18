@@ -30,7 +30,6 @@ class MainViewModel : ViewModel() {
 
     // Asset Download State
     var isDownloading = mutableStateOf(false)
-    var downloadingVersion = mutableStateOf("v1")
     var downloadProgress = mutableFloatStateOf(0f)
     var downloadStatus = mutableStateOf("Checking assets...")
     var downloadError = mutableStateOf<String?>(null)
@@ -38,9 +37,7 @@ class MainViewModel : ViewModel() {
     // Dialog State
     var showQueueDialog = mutableStateOf(false)
     var queueDialogText = ""
-    var showV2ConfirmDialog = mutableStateOf(false)
-    var showV2DeleteDialog = mutableStateOf(false)
-    var pendingLangCode = ""
+    var showModelDeleteDialog = mutableStateOf(false)
 
     // Data
     val voiceFiles = mutableStateMapOf<String, String>()

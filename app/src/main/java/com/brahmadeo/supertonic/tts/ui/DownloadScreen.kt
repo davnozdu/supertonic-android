@@ -12,15 +12,10 @@ import com.brahmadeo.supertonic.tts.ui.components.WavyLinearProgressIndicator
 fun DownloadScreen(
     status: String,
     progress: Float,
-    version: String,
     error: String? = null,
     onRetry: () -> Unit = {}
 ) {
-    val message = if (version == "v2") {
-        "Downloading Multilingual Models (~350MB). This enables support for French, Spanish, Portuguese, and Korean. This specific download happens only once."
-    } else {
-        "Downloading Standard English Models (~350MB). This is a one-time setup for English synthesis."
-    }
+    val message = "Downloading Supertonic 3 TTS models (~400MB). Supports 31 languages — this download happens only once."
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -45,7 +40,7 @@ fun DownloadScreen(
                 color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
-            
+
             if (error == null) {
                 Spacer(modifier = Modifier.height(32.dp))
                 WavyLinearProgressIndicator(

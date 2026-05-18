@@ -197,13 +197,22 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
     }
     }
 
-    // Wrap text with language tags - V2 needs tags, V1 (English) does not
-    if lang != "en" {
-        text = format!("<{}>{}</{}>", lang, text, lang);
-    }
+    // Supertonic 3 is fully multilingual: language is conveyed only via
+    // <lang>...</lang> tags (no separate lang embedding in the ONNX graph),
+    // so every language including English must be wrapped. Unknown codes
+    // fall back to the model's <na> token.
+    let tag = if SUPPORTED_LANGS.contains(&lang) { lang } else { "na" };
+    text = format!("<{}>{}</{}>", tag, text, tag);
 
     Ok(text)
 }
+
+const SUPPORTED_LANGS: &[&str] = &[
+    "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es",
+    "et", "fi", "fr", "hi", "hr", "hu", "id", "it", "lt", "lv",
+    "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "tr", "uk",
+    "vi", "na",
+];
 
 pub fn text_to_unicode_values(text: &str) -> Vec<usize> {
     text.chars().map(|c| c as usize).collect()

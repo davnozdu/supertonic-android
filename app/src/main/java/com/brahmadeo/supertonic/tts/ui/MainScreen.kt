@@ -76,9 +76,8 @@ fun MainScreen(
     onHistoryClick: () -> Unit,
     onQueueClick: () -> Unit,
     onLexiconClick: () -> Unit,
-    onDeleteV2Click: () -> Unit,
+    onDeleteModelClick: () -> Unit,
     onOpenEbookClick: () -> Unit,
-    isV2Ready: Boolean,
 
     canResume: Boolean,
     onResumeClick: () -> Unit,
@@ -135,12 +134,10 @@ fun MainScreen(
                             onClick = { showMenu = false; onLexiconClick() },
                             enabled = currentLangCode != "ko"
                         )
-                        if (isV2Ready && currentLangCode == "en") {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(AppR.string.action_delete_v2), color = MaterialTheme.colorScheme.error) },
-                                onClick = { showMenu = false; onDeleteV2Click() }
-                            )
-                        }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(AppR.string.action_delete_model), color = MaterialTheme.colorScheme.error) },
+                            onClick = { showMenu = false; onDeleteModelClick() }
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -549,12 +546,12 @@ fun MainScreenPreview() {
             languages = mapOf("English" to "en", "Spanish" to "es"),
             currentLangCode = "en",
             onLangChange = {},
-            voices = mapOf("Voice 1" to "v1", "Voice 2" to "v2"),
-            selectedVoiceFile = "v1",
+            voices = mapOf("Voice 1" to "F1.json", "Voice 2" to "M1.json"),
+            selectedVoiceFile = "F1.json",
             onVoiceChange = {},
             isMixingEnabled = true,
             onMixingEnabledChange = {},
-            selectedVoiceFile2 = "v2",
+            selectedVoiceFile2 = "M1.json",
             onVoice2Change = {},
             mixAlpha = 0.5f,
             onMixAlphaChange = {},
@@ -569,9 +566,8 @@ fun MainScreenPreview() {
             onHistoryClick = {},
             onQueueClick = {},
             onLexiconClick = {},
-            onDeleteV2Click = {},
+            onDeleteModelClick = {},
             onOpenEbookClick = {},
-            isV2Ready = true,
             canResume = true,
             onResumeClick = {},
             showMiniPlayer = true,

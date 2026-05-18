@@ -9,6 +9,7 @@ import android.util.Log
 import android.content.Context
 import android.os.Build
 import com.brahmadeo.supertonic.tts.SupertonicTTS
+import com.brahmadeo.supertonic.tts.utils.AssetManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,8 +18,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import java.util.Locale
 
 class SupertonicTextToSpeechService : TextToSpeechService() {
@@ -36,22 +35,86 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     companion object {
         const val VOLUME_BOOST_FACTOR = 2.5f
+
+        // ISO-639-2/3 language codes Android may pass us → our internal 2-letter Supertonic codes.
+        private val LANG_PREFIX_MAP: Map<String, String> = mapOf(
+            "en" to "en", "eng" to "en",
+            "ko" to "ko", "kor" to "ko",
+            "ja" to "ja", "jpn" to "ja",
+            "ar" to "ar", "ara" to "ar",
+            "bg" to "bg", "bul" to "bg",
+            "cs" to "cs", "ces" to "cs", "cze" to "cs",
+            "da" to "da", "dan" to "da",
+            "de" to "de", "deu" to "de", "ger" to "de",
+            "el" to "el", "ell" to "el", "gre" to "el",
+            "es" to "es", "spa" to "es",
+            "et" to "et", "est" to "et",
+            "fi" to "fi", "fin" to "fi",
+            "fr" to "fr", "fra" to "fr", "fre" to "fr",
+            "hi" to "hi", "hin" to "hi",
+            "hr" to "hr", "hrv" to "hr",
+            "hu" to "hu", "hun" to "hu",
+            "id" to "id", "ind" to "id",
+            "it" to "it", "ita" to "it",
+            "lt" to "lt", "lit" to "lt",
+            "lv" to "lv", "lav" to "lv",
+            "nl" to "nl", "nld" to "nl", "dut" to "nl",
+            "pl" to "pl", "pol" to "pl",
+            "pt" to "pt", "por" to "pt",
+            "ro" to "ro", "ron" to "ro", "rum" to "ro",
+            "ru" to "ru", "rus" to "ru",
+            "sk" to "sk", "slk" to "sk", "slo" to "sk",
+            "sl" to "sl", "slv" to "sl",
+            "sv" to "sv", "swe" to "sv",
+            "tr" to "tr", "tur" to "tr",
+            "uk" to "uk", "ukr" to "uk",
+            "vi" to "vi", "vie" to "vi"
+        )
+
+        // Reverse map: our 2-letter codes → preferred ISO-639-3 form to advertise to Android (with country).
+        private val ANDROID_LOCALE_TRIPLES: List<Triple<String, String, String>> = listOf(
+            Triple("en", "eng", "USA"),
+            Triple("ko", "kor", "KOR"),
+            Triple("ja", "jpn", "JPN"),
+            Triple("ar", "ara", "ARA"),
+            Triple("bg", "bul", "BGR"),
+            Triple("cs", "ces", "CZE"),
+            Triple("da", "dan", "DNK"),
+            Triple("de", "deu", "DEU"),
+            Triple("el", "ell", "GRC"),
+            Triple("es", "spa", "ESP"),
+            Triple("et", "est", "EST"),
+            Triple("fi", "fin", "FIN"),
+            Triple("fr", "fra", "FRA"),
+            Triple("hi", "hin", "IND"),
+            Triple("hr", "hrv", "HRV"),
+            Triple("hu", "hun", "HUN"),
+            Triple("id", "ind", "IDN"),
+            Triple("it", "ita", "ITA"),
+            Triple("lt", "lit", "LTU"),
+            Triple("lv", "lav", "LVA"),
+            Triple("nl", "nld", "NLD"),
+            Triple("pl", "pol", "POL"),
+            Triple("pt", "por", "PRT"),
+            Triple("ro", "ron", "ROU"),
+            Triple("ru", "rus", "RUS"),
+            Triple("sk", "slk", "SVK"),
+            Triple("sl", "slv", "SVN"),
+            Triple("sv", "swe", "SWE"),
+            Triple("tr", "tur", "TUR"),
+            Triple("uk", "ukr", "UKR"),
+            Triple("vi", "vie", "VNM")
+        )
     }
 
     override fun onCreate() {
         super.onCreate()
         Log.i("SupertonicTTS", "Service created")
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
-        
+
         initJob = serviceScope.launch(Dispatchers.IO) {
-            copyAssets()
-            val prefs = attributionContext.getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-            val savedLang = prefs.getString("selected_lang", "en") ?: "en"
-            val modelVersion = if (savedLang == "en") "v1" else "v2"
-
-            val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
+            val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-
             SupertonicTTS.initialize(modelPath, libPath)
         }
     }
@@ -61,49 +124,24 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         serviceScope.cancel()
     }
 
-    private fun getCurrentModelVersion(): String {
-        val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-        val savedLang = prefs.getString("selected_lang", "en") ?: "en"
-        return if (savedLang == "en") "v1" else "v2"
-    }
-
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         val language = lang?.lowercase(Locale.ROOT) ?: return TextToSpeech.LANG_NOT_SUPPORTED
-        val modelVersion = getCurrentModelVersion()
-        
-        // 1. English (v1) Path
-        if (modelVersion == "v1") {
-            if (language.startsWith("en") || language.startsWith("eng")) {
-                return if (!country.isNullOrEmpty()) TextToSpeech.LANG_COUNTRY_AVAILABLE else TextToSpeech.LANG_AVAILABLE
-            }
-            return TextToSpeech.LANG_NOT_SUPPORTED
-        }
+        val supported = LANG_PREFIX_MAP.keys.any { language.startsWith(it) }
+        if (!supported) return TextToSpeech.LANG_NOT_SUPPORTED
 
-        // 2. Multilingual (v2) Path
-        val multilingualPrefixes = listOf("ko", "kor", "es", "spa", "pt", "por", "fr", "fra", "fre")
-        if (multilingualPrefixes.any { language.startsWith(it) }) {
-            val v2Dir = File(filesDir, "v2/onnx")
-            return if (v2Dir.exists()) {
-                if (!country.isNullOrEmpty()) TextToSpeech.LANG_COUNTRY_AVAILABLE else TextToSpeech.LANG_AVAILABLE
-            } else {
-                TextToSpeech.LANG_MISSING_DATA
-            }
+        return if (AssetManager.isReady(this)) {
+            if (!country.isNullOrEmpty()) TextToSpeech.LANG_COUNTRY_AVAILABLE else TextToSpeech.LANG_AVAILABLE
+        } else {
+            TextToSpeech.LANG_MISSING_DATA
         }
-
-        return TextToSpeech.LANG_NOT_SUPPORTED
     }
 
     override fun onGetLanguage(): Array<String> {
         val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
         val selectedLang = prefs.getString("selected_lang", "en") ?: "en"
-        
-        return when(selectedLang) {
-            "ko" -> arrayOf("kor", "KOR", "")
-            "es" -> arrayOf("spa", "ESP", "")
-            "pt" -> arrayOf("por", "PRT", "")
-            "fr" -> arrayOf("fra", "FRA", "")
-            else -> arrayOf("eng", "USA", "")
-        }
+        val triple = ANDROID_LOCALE_TRIPLES.find { it.first == selectedLang }
+            ?: ANDROID_LOCALE_TRIPLES.first() // fall back to English
+        return arrayOf(triple.second, triple.third, "")
     }
 
     override fun onLoadLanguage(lang: String?, country: String?, variant: String?): Int {
@@ -112,61 +150,40 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onLoadVoice(voiceName: String?): Int {
         if (voiceName == null) return TextToSpeech.ERROR
-        if (voiceName.contains("-supertonic-")) {
-            val langPrefix = voiceName.substringBefore("-supertonic-")
-            val styleName = voiceName.substringAfter("-supertonic-")
-            val modelVersion = if (langPrefix.startsWith("en")) "v1" else "v2"
-            val file = File(filesDir, "$modelVersion/voice_styles/$styleName.json")
-            if (file.exists()) return TextToSpeech.SUCCESS
-        }
-        return TextToSpeech.ERROR
+        if (!voiceName.contains("-supertonic-")) return TextToSpeech.ERROR
+        val styleName = voiceName.substringAfter("-supertonic-")
+        val file = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles/$styleName.json")
+        return if (file.exists()) TextToSpeech.SUCCESS else TextToSpeech.ERROR
     }
 
     override fun onGetDefaultVoiceNameFor(lang: String?, country: String?, variant: String?): String {
         val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
         val selected = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         val voiceName = if (selected.endsWith(".json")) selected.substringBeforeLast(".") else selected
-        
-        val language = lang?.lowercase(Locale.ROOT) ?: "en"
-        val prefix = when {
-            language.startsWith("ko") || language.startsWith("kor") -> "ko"
-            language.startsWith("es") || language.startsWith("spa") -> "es"
-            language.startsWith("pt") || language.startsWith("por") -> "pt"
-            language.startsWith("fr") || language.startsWith("fra") || language.startsWith("fre") -> "fr"
-            else -> "en"
-        }
+        val prefix = normalizeLanguage(lang)
         return "$prefix-supertonic-$voiceName"
     }
 
     override fun onGetVoices(): List<Voice> {
-        val modelVersion = getCurrentModelVersion()
         val voicesList = mutableListOf<Voice>()
         val voiceNames = listOf("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
+        if (!AssetManager.isReady(this)) return voicesList
 
-        if (modelVersion == "v1") {
-            // Only English Voices
+        ANDROID_LOCALE_TRIPLES.forEach { (twoLetter, _, _) ->
+            val locale = Locale.forLanguageTag(twoLetter)
             voiceNames.forEach { name ->
-                voicesList.add(Voice("en-supertonic-$name", Locale.US, Voice.QUALITY_VERY_HIGH, Voice.LATENCY_NORMAL, false, setOf()))
-            }
-        } else {
-            // Only Multilingual Voices (excluding English as requested)
-            val v2Dir = File(filesDir, "v2/onnx")
-            if (v2Dir.exists()) {
-                val multilingualLocales = listOf(
-                    Locale.KOREA,
-                    Locale.forLanguageTag("es-ES"),
-                    Locale.forLanguageTag("pt-PT"),
-                    Locale.FRANCE
+                voicesList.add(
+                    Voice(
+                        "$twoLetter-supertonic-$name",
+                        locale,
+                        Voice.QUALITY_VERY_HIGH,
+                        Voice.LATENCY_NORMAL,
+                        false,
+                        setOf()
+                    )
                 )
-                multilingualLocales.forEach { locale ->
-                    val langPrefix = locale.language
-                    voiceNames.forEach { name ->
-                        voicesList.add(Voice("$langPrefix-supertonic-$name", locale, Voice.QUALITY_VERY_HIGH, Voice.LATENCY_NORMAL, false, setOf()))
-                    }
-                }
             }
         }
-
         return voicesList
     }
 
@@ -177,19 +194,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
     private fun normalizeLanguage(lang: String?): String {
         if (lang == null) return "en"
         val l = lang.lowercase(Locale.ROOT)
-        return when {
-            l.startsWith("en") -> "en"
-            l.startsWith("ko") -> "ko"
-            l.startsWith("kor") -> "ko"
-            l.startsWith("es") -> "es"
-            l.startsWith("spa") -> "es"
-            l.startsWith("pt") -> "pt"
-            l.startsWith("por") -> "pt"
-            l.startsWith("fr") -> "fr"
-            l.startsWith("fra") -> "fr"
-            l.startsWith("fre") -> "fr"
-            else -> "en"
-        }
+        return LANG_PREFIX_MAP.entries.firstOrNull { l.startsWith(it.key) }?.value ?: "en"
     }
 
     private val textNormalizer = com.brahmadeo.supertonic.tts.utils.TextNormalizer()
@@ -205,18 +210,11 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val rawText = request.charSequenceText?.toString() ?: return
         val effectiveSpeed = (request.speechRate / 100.0f).coerceIn(0.5f, 2.5f)
         callback.start(SupertonicTTS.getAudioSampleRate(), android.media.AudioFormat.ENCODING_PCM_16BIT, 1)
-        
+
         val requestedVoice = request.voiceName
         val requestedLang = normalizeLanguage(request.language)
         val prefs = attributionContext.getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
 
-        val modelVersion = if (requestedVoice != null && requestedVoice.contains("-supertonic-")) {
-             val langPrefix = requestedVoice.substringBefore("-supertonic-")
-             if (langPrefix.startsWith("en")) "v1" else "v2"
-        } else {
-             if (requestedLang == "en") "v1" else "v2"
-        }
-        
         val voiceFile = if (requestedVoice != null && requestedVoice.contains("-supertonic-")) {
             val fileName = requestedVoice.substringAfter("-supertonic-")
             // Sanitize fileName to prevent path traversal
@@ -225,21 +223,19 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         }
 
-        val voiceStyleDir = File(filesDir, "$modelVersion/voice_styles")
+        val voiceStyleDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
         var stylePath = File(voiceStyleDir, voiceFile).absolutePath
-        
+
         // Ensure stylePath is within the intended directory
         if (!File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
             stylePath = File(voiceStyleDir, "F3.json").absolutePath
         }
-        
-        // Handle Voice Mixing (Only if mixing is compatible with modelVersion)
+
         val isMixing = prefs.getBoolean("is_mixing_enabled", false)
         if (isMixing) {
             val voice2 = prefs.getString("selected_voice_2", "M2.json") ?: "M2.json"
-            val stylePath2 = File(filesDir, "$modelVersion/voice_styles/$voice2").absolutePath
+            val stylePath2 = File(voiceStyleDir, voice2).absolutePath
             val alpha = prefs.getFloat("mix_alpha", 0.5f)
-            
             if (File(stylePath).exists() && File(stylePath2).exists()) {
                 stylePath = "$stylePath;$stylePath2;$alpha"
             }
@@ -247,17 +243,12 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
         val steps = prefs.getInt("diffusion_steps", 5)
 
-        // Ensure engine is initialized for the correct model
         if (SupertonicTTS.getSoC() == -1) {
-             val modelPath = File(filesDir, "$modelVersion/onnx").absolutePath
-             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-             SupertonicTTS.initialize(modelPath, libPath)
-        } else {
-            // Check if current engine matches required model version
-            // For now, we assume if SoC is valid, it's okay, but ideally we'd re-init if modelVersion changed
-            // However, JNI initialization is expensive, so we only re-init if really needed.
+            val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
+            val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
+            SupertonicTTS.initialize(modelPath, libPath)
         }
-        
+
         try {
             val sentences = textNormalizer.splitIntoSentences(rawText, requestedLang)
             var success = true
@@ -282,32 +273,5 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         } finally {
             // Isolation handled in SupertonicTTS
         }
-    }
-
-    private fun copyAssets() {
-        val filesDir = filesDir
-        val assetManager = assets
-
-        fun copyDir(assetPath: String, targetDir: File) {
-            if (!targetDir.exists()) targetDir.mkdirs()
-            val files = assetManager.list(assetPath) ?: return
-            for (filename in files) {
-                val fullAssetPath = "$assetPath/$filename"
-                val subFiles = assetManager.list(fullAssetPath)
-                if (!subFiles.isNullOrEmpty()) {
-                    copyDir(fullAssetPath, File(targetDir, filename))
-                } else {
-                    val file = File(targetDir, filename)
-                    try {
-                        assetManager.open(fullAssetPath).use { input ->
-                            FileOutputStream(file).use { output -> input.copyTo(output) }
-                        }
-                    } catch (_: IOException) { }
-                }
-            }
-        }
-
-        copyDir("v1", File(filesDir, "v1"))
-        copyDir("v2", File(filesDir, "v2"))
     }
 }
