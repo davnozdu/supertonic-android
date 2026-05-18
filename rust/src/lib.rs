@@ -119,7 +119,10 @@ pub extern "system" fn Java_com_brahmadeo_supertonic_tts_SupertonicTTS_synthesiz
     
     // Create a progress callback
     let mut last_progress_call = Instant::now();
-    let result = engine.tts.call(&text, &lang, &style, steps as usize, speed, 0.1, |curr, total, audio_chunk| {
+    // 0.02 s silence between within-sentence chunks: just enough to mask the
+    // vocoder boundary, but inaudible as a "pause" to a listener. The old
+    // 0.1 s value was audible as choppy delivery on long Russian paragraphs.
+    let result = engine.tts.call(&text, &lang, &style, steps as usize, speed, 0.02, |curr, total, audio_chunk| {
         // Check for cancellation
         let is_cancelled = env.call_method(&instance, "isCancelled", "()Z", &[]).unwrap().z().unwrap();
         if is_cancelled {

@@ -47,6 +47,6 @@ class MainViewModel : ViewModel() {
         const val DEFAULT_VOICE_2 = "M2.json"
         const val DEFAULT_LANG = "en"
         const val DEFAULT_SPEED = 1.1f
-        const val DEFAULT_STEPS = 5
+        const val DEFAULT_STEPS = 3
     }
 }

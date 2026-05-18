@@ -346,7 +346,7 @@ pub fn write_wav_file<P: AsRef<Path>>(
 // Text Chunking
 // ============================================================================ 
 
-const MAX_CHUNK_LENGTH: usize = 300;
+const MAX_CHUNK_LENGTH: usize = 500;
 
 const ABBREVIATIONS: &[&str] = &[
     "Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Sr.", "Jr.",
@@ -727,7 +727,7 @@ impl TextToSpeech {
         mut callback: F,
     ) -> Result<(Vec<f32>, f32)> 
     where F: FnMut(usize, usize, Option<&[f32]>) -> bool {
-        let max_len = if lang == "ko" { 120 } else { 300 };
+        let max_len = if lang == "ko" { 120 } else { MAX_CHUNK_LENGTH };
         let chunks = chunk_text(text, Some(max_len));
         let num_chunks = chunks.len();
         

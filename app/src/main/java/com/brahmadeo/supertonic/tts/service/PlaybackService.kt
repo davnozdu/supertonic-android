@@ -291,7 +291,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         }
                         // Inter-sentence breath: ~150 ms of silence so paragraphs don't slur together.
                         if (index < totalSentences - 1) {
-                            writeToTrackBlocking(silenceBytes(150))
+                            writeToTrackBlocking(silenceBytes(80))
                         }
                     } else if (SupertonicTTS.isCancelled()) {
                         break
@@ -345,7 +345,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             val minBuf = AudioTrack.getMinBufferSize(
                 rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
             )
-            val bufferBytes = (minBuf * 4).coerceAtLeast(minBuf)
+            // Bigger buffer (~1 s at 44.1 kHz mono 16-bit ≈ 88 KB) — gives the
+            // synthesiser plenty of slack to absorb RTF dips without underrun.
+            val bufferBytes = (minBuf * 8).coerceAtLeast(minBuf)
 
             val builder = AudioTrack.Builder()
                 .setAudioAttributes(AudioAttributes.Builder()
