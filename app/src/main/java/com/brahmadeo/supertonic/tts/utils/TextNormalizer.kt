@@ -209,10 +209,12 @@ class TextNormalizer {
 
     fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false): String {
         val lowerLang = lang.lowercase()
-        
-        // 1. Lexicon applies to all languages except Korean
+
+        // 1. Apply user lexicon first (priority over imported accent dict),
+        //    then the bulk accent dictionary. Both skipped for Korean since
+        //    the model's KO tokens don't behave well with whole-word patches.
         val processedText = if (lowerLang != "ko") {
-            LexiconManager.apply(text)
+            AccentDictionaryManager.apply(LexiconManager.apply(text))
         } else {
             text
         }

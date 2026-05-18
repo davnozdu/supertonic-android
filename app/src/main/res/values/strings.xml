@@ -89,6 +89,13 @@
     <string name="action_lexicon">Lexicon</string>
     <string name="action_tts_settings">System TTS Settings</string>
     <string name="tts_settings_unavailable">Could not open TTS settings on this device</string>
+    <string name="accent_dict_import_title">Accent Dictionary Imported</string>
+    <string name="accent_dict_import_msg_fmt">%1$d entries loaded. They\'ll be applied automatically before each synthesis.</string>
+    <string name="accent_dict_import_failed">Failed to import accent dictionary. Expected a JSON object: { \"word\": \"wórd\" }</string>
+    <string name="accent_dict_empty">No valid entries found in the file</string>
+    <string name="accent_dict_clear_title">Clear accent dictionary?</string>
+    <string name="accent_dict_clear_msg">All imported pronunciation entries will be removed. Your hand-edited rules above are kept.</string>
+    <string name="accent_dict_cleared">Accent dictionary cleared</string>
     <string name="action_delete_model">Delete TTS Models</string>
     <string name="action_import">Import JSON</string>
     <string name="action_export">Export JSON</string>

@@ -21,9 +21,12 @@ import com.brahmadeo.supertonic.tts.utils.LexiconItem
 @Composable
 fun LexiconScreen(
     rules: List<LexiconItem>,
+    accentDictSize: Int,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
+    onImportAccentDictClick: () -> Unit,
+    onClearAccentDictClick: () -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
     onDeleteClick: (LexiconItem) -> Unit
@@ -61,6 +64,23 @@ fun LexiconScreen(
                                 onExportClick()
                             }
                         )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Import accent dictionary…") },
+                            onClick = {
+                                showMenu = false
+                                onImportAccentDictClick()
+                            }
+                        )
+                        if (accentDictSize > 0) {
+                            DropdownMenuItem(
+                                text = { Text("Clear accent dictionary", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    showMenu = false
+                                    onClearAccentDictClick()
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -77,34 +97,53 @@ fun LexiconScreen(
             )
         }
     ) { paddingValues ->
-        if (rules.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No custom rules yet.\nAdd terms to fix pronunciations.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(bottom = 88.dp, top = 16.dp, start = 16.dp, end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(rules) { rule ->
-                    LexiconItemRow(
-                        item = rule,
-                        onEdit = { onEditClick(rule) },
-                        onDelete = { onDeleteClick(rule) }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            if (accentDictSize > 0) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text(
+                        text = "Accent dictionary: %,d entries loaded".format(accentDictSize),
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
+                }
+            }
+
+            if (rules.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No custom rules yet.\nAdd terms to fix pronunciations.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 88.dp, top = 16.dp, start = 16.dp, end = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(rules) { rule ->
+                        LexiconItemRow(
+                            item = rule,
+                            onEdit = { onEditClick(rule) },
+                            onDelete = { onDeleteClick(rule) }
+                        )
+                    }
                 }
             }
         }

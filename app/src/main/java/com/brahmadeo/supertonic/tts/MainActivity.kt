@@ -209,6 +209,7 @@ class MainActivity : ComponentActivity() {
 
         ebookParser = EbookParser(this)
         LexiconManager.load(this)
+        com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
         QueueManager.initialize(this)
 
         // Wipe v1/v2 leftovers from prior versions of the app so we don't waste storage.
@@ -377,6 +378,7 @@ class MainActivity : ComponentActivity() {
                         onHistoryClick = { historyLauncher.launch(Intent(this, HistoryActivity::class.java)) },
                         onQueueClick = { startActivity(Intent(this, QueueActivity::class.java)) },
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
+                        onTtsSettingsClick = { openSystemTtsSettings() },
                         onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
                         onOpenEbookClick = {
                             try {

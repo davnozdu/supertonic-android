@@ -20,6 +20,7 @@ import com.brahmadeo.supertonic.tts.service.PlaybackService
 import com.brahmadeo.supertonic.tts.ui.LexiconEditDialog
 import com.brahmadeo.supertonic.tts.ui.LexiconScreen
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
+import com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager
 import com.brahmadeo.supertonic.tts.utils.LexiconItem
 import com.brahmadeo.supertonic.tts.utils.LexiconManager
 import com.brahmadeo.supertonic.tts.utils.AssetManager
@@ -33,6 +34,7 @@ import java.io.InputStreamReader
 class LexiconActivity : ComponentActivity() {
 
     private val rulesState = mutableStateOf<List<LexiconItem>>(emptyList())
+    private val accentDictSizeState = mutableStateOf(0)
     private var playbackService: IPlaybackService? = null
     private var isBound = false
 
@@ -50,6 +52,10 @@ class LexiconActivity : ComponentActivity() {
 
     private val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { performImport(it) }
+    }
+
+    private val importAccentDictLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { performImportAccentDict(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,9 +89,12 @@ class LexiconActivity : ComponentActivity() {
 
                 LexiconScreen(
                     rules = rulesState.value,
+                    accentDictSize = accentDictSizeState.value,
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
+                    onImportAccentDictClick = { importAccentDictLauncher.launch("application/json") },
+                    onClearAccentDictClick = { clearAccentDict() },
                     onAddClick = {
                         editingItem = null
                         showEditDialog = true
@@ -104,6 +113,41 @@ class LexiconActivity : ComponentActivity() {
 
     private fun refreshRules() {
         rulesState.value = LexiconManager.load(this)
+        AccentDictionaryManager.load(this)
+        accentDictSizeState.value = AccentDictionaryManager.size()
+    }
+
+    private fun performImportAccentDict(uri: Uri) {
+        val count = AccentDictionaryManager.importFromUri(this, uri)
+        when {
+            count > 0 -> {
+                accentDictSizeState.value = AccentDictionaryManager.size()
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(getString(R.string.accent_dict_import_title))
+                    .setMessage(getString(R.string.accent_dict_import_msg_fmt, count))
+                    .setPositiveButton(getString(R.string.ok), null)
+                    .show()
+            }
+            count == 0 -> {
+                Toast.makeText(this, getString(R.string.accent_dict_empty), Toast.LENGTH_SHORT).show()
+            }
+            else -> {
+                Toast.makeText(this, getString(R.string.accent_dict_import_failed), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun clearAccentDict() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.accent_dict_clear_title))
+            .setMessage(getString(R.string.accent_dict_clear_msg))
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
+                AccentDictionaryManager.clear(this)
+                accentDictSizeState.value = 0
+                Toast.makeText(this, getString(R.string.accent_dict_cleared), Toast.LENGTH_SHORT).show()
+            }
+            .show()
     }
 
     private fun saveRule(existingItem: LexiconItem?, term: String, replacement: String, ignoreCase: Boolean, isRegex: Boolean) {
