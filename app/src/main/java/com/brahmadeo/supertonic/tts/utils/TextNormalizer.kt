@@ -211,20 +211,21 @@ class TextNormalizer {
     fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false): String {
         val lowerLang = lang.lowercase()
 
-        // 1. Apply user lexicon first (priority over imported accent dict),
-        //    then the bulk accent dictionary. Both skipped for Korean since
-        //    the model's KO tokens don't behave well with whole-word patches.
+        // Pipeline for everything except Korean (whose tokenisation does not
+        // play nicely with whole-word patches):
+        //   1) user lexicon — highest priority
+        //   2) Russian number-to-words spelling
+        //   3) bulk accent dictionary — applied last so it can stress the
+        //      words that the number normaliser just emitted ("две тысячи
+        //      двадцать четыре" -> "две ты́сячи два́дцать четы́ре").
         var processedText = if (lowerLang != "ko") {
-            AccentDictionaryManager.apply(LexiconManager.apply(text))
+            var t = LexiconManager.apply(text)
+            if (lowerLang.startsWith("ru")) {
+                t = russianNumbers.normalize(t)
+            }
+            AccentDictionaryManager.apply(t, lowerLang)
         } else {
             text
-        }
-
-        // 1a. Russian: spell digits as words BEFORE the model sees them. Otherwise
-        //     "2025" gets read as "два ноль два пять". This runs first so the
-        //     English number rules below never touch a Cyrillic string.
-        if (lowerLang.startsWith("ru")) {
-            processedText = russianNumbers.normalize(processedText)
         }
 
         // 2. Determine if we should apply English-style normalization rules

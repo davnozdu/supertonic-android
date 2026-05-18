@@ -50,7 +50,8 @@ import java.io.InputStreamReader
 class LexiconActivity : ComponentActivity() {
 
     private val rulesState = mutableStateOf<List<LexiconItem>>(emptyList())
-    private val accentDictSizeState = mutableStateOf(0)
+    private val accentDictBannerState = mutableStateOf<com.brahmadeo.supertonic.tts.ui.AccentDictBanner?>(null)
+    private val fallbackState = mutableStateOf(false)
     private var playbackService: IPlaybackService? = null
     private var isBound = false
 
@@ -112,13 +113,13 @@ class LexiconActivity : ComponentActivity() {
                 var progressFraction by remember { mutableFloatStateOf(0f) }
                 var showChooser by remember { mutableStateOf(false) }
 
-                fun startDownload(url: String) {
+                fun startDownload(url: String, source: String) {
                     showProgress = true
                     progressLabel = "Connecting…"
                     progressFraction = 0f
                     CoroutineScope(Dispatchers.IO).launch {
                         val count = AccentDictionaryManager.downloadPrebuilt(
-                            this@LexiconActivity, url
+                            this@LexiconActivity, url, source
                         ) { soFar, total ->
                             runOnUiThread {
                                 progressFraction = if (total > 0) (soFar.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
@@ -132,7 +133,7 @@ class LexiconActivity : ComponentActivity() {
                         withContext(Dispatchers.Main) {
                             showProgress = false
                             if (count > 0) {
-                                accentDictSizeState.value = AccentDictionaryManager.size()
+                                refreshRules()
                                 Toast.makeText(this@LexiconActivity,
                                     "Loaded $count entries", Toast.LENGTH_LONG).show()
                             } else {
@@ -156,7 +157,7 @@ class LexiconActivity : ComponentActivity() {
                                             .fillMaxWidth()
                                             .clickable {
                                                 showChooser = false
-                                                startDownload(opt.url)
+                                                startDownload(opt.url, "Russian — ${opt.displayName}")
                                             }
                                             .padding(vertical = 8.dp)
                                     ) {
@@ -198,14 +199,19 @@ class LexiconActivity : ComponentActivity() {
 
                 LexiconScreen(
                     rules = rulesState.value,
-                    accentDictSize = accentDictSizeState.value,
+                    accentDictBanner = accentDictBannerState.value,
                     canDownloadAccentDict = canDownload,
+                    fallbackEnabled = fallbackState.value,
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
                     onImportAccentDictClick = { importAccentDictLauncher.launch("application/json") },
                     onDownloadAccentDictClick = { showChooser = true },
                     onClearAccentDictClick = { clearAccentDict() },
+                    onFallbackToggle = { enabled ->
+                        AccentDictionaryManager.setFallbackEnabled(this@LexiconActivity, enabled)
+                        fallbackState.value = enabled
+                    },
                     onAddClick = {
                         editingItem = null
                         showEditDialog = true
@@ -225,14 +231,22 @@ class LexiconActivity : ComponentActivity() {
     private fun refreshRules() {
         rulesState.value = LexiconManager.load(this)
         AccentDictionaryManager.load(this)
-        accentDictSizeState.value = AccentDictionaryManager.size()
+        val meta = AccentDictionaryManager.getMetadata(this)
+        accentDictBannerState.value = meta?.let {
+            com.brahmadeo.supertonic.tts.ui.AccentDictBanner(
+                source = it.source,
+                entries = it.entries,
+                sizeBytes = it.sizeBytes
+            )
+        }
+        fallbackState.value = AccentDictionaryManager.isFallbackEnabled()
     }
 
     private fun performImportAccentDict(uri: Uri) {
         val count = AccentDictionaryManager.importFromUri(this, uri)
         when {
             count > 0 -> {
-                accentDictSizeState.value = AccentDictionaryManager.size()
+                refreshRules()
                 MaterialAlertDialogBuilder(this)
                     .setTitle(getString(R.string.accent_dict_import_title))
                     .setMessage(getString(R.string.accent_dict_import_msg_fmt, count))
@@ -255,7 +269,7 @@ class LexiconActivity : ComponentActivity() {
             .setNegativeButton(getString(R.string.cancel), null)
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 AccentDictionaryManager.clear(this)
-                accentDictSizeState.value = 0
+                refreshRules()
                 Toast.makeText(this, getString(R.string.accent_dict_cleared), Toast.LENGTH_SHORT).show()
             }
             .show()

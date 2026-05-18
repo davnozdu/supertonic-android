@@ -17,18 +17,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.utils.LexiconItem
 
+data class AccentDictBanner(
+    val source: String,
+    val entries: Int,
+    val sizeBytes: Long
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LexiconScreen(
     rules: List<LexiconItem>,
-    accentDictSize: Int,
+    accentDictBanner: AccentDictBanner?,
     canDownloadAccentDict: Boolean,
+    fallbackEnabled: Boolean,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
     onImportAccentDictClick: () -> Unit,
     onDownloadAccentDictClick: () -> Unit,
     onClearAccentDictClick: () -> Unit,
+    onFallbackToggle: (Boolean) -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
     onDeleteClick: (LexiconItem) -> Unit
@@ -83,15 +91,7 @@ fun LexiconScreen(
                                 onImportAccentDictClick()
                             }
                         )
-                        if (accentDictSize > 0) {
-                            DropdownMenuItem(
-                                text = { Text("Clear accent dictionary", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    showMenu = false
-                                    onClearAccentDictClick()
-                                }
-                            )
-                        }
+                        // Clear lives on the banner now, not in this menu.
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -113,7 +113,7 @@ fun LexiconScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (accentDictSize > 0) {
+            if (accentDictBanner != null) {
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier
@@ -121,11 +121,64 @@ fun LexiconScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     shape = MaterialTheme.shapes.small
                 ) {
-                    Text(
-                        text = "Accent dictionary: %,d entries loaded".format(accentDictSize),
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = accentDictBanner.source,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "%,d entries · %.1f MB".format(
+                                    accentDictBanner.entries,
+                                    accentDictBanner.sizeBytes / 1_048_576.0
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        IconButton(onClick = onClearAccentDictClick) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete accent dictionary",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Fallback toggle — works without a dictionary too. The hint
+            // explicitly warns this is a heuristic, not a Russian grammar
+            // rule, so users don't enable it expecting magic.
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = MaterialTheme.shapes.small
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Stress fallback (Russian)",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "When a word isn't in the dictionary, put stress on the last vowel. Heuristic — sometimes wrong (e.g. \"ма́кбук\" gets read as \"макбу́к\").",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = fallbackEnabled,
+                        onCheckedChange = onFallbackToggle
                     )
                 }
             }

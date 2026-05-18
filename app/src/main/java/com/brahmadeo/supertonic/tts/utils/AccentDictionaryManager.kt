@@ -91,14 +91,31 @@ object AccentDictionaryManager {
         return PREBUILT_DICTS[lang.lowercase().substringBefore('-')] ?: emptyList()
     }
 
+    data class Metadata(val source: String, val entries: Int, val loadedAtMs: Long, val sizeBytes: Long)
+
     @Volatile private var entries: Map<String, String> = emptyMap()
     @Volatile private var isLoaded = false
+    @Volatile private var fallbackEnabled = false
 
     // Match any letter-only word, including non-ASCII alphabets (Cyrillic, Greek, etc.).
     private val wordPattern: Pattern = Pattern.compile("\\p{L}+")
+    private const val META_PREFS = "AccentDictMeta"
+    private const val META_KEY_SOURCE = "source"
+    private const val META_KEY_ENTRIES = "entries"
+    private const val META_KEY_LOADED_AT = "loaded_at"
+    private const val META_KEY_SIZE_BYTES = "size_bytes"
+    private const val FALLBACK_PREFS_KEY = "accent_fallback_enabled"
+
+    // Russian vowels (lowercase). Used both by the fallback rule and to count
+    // syllables when deciding whether the fallback should kick in at all —
+    // single-syllable words like "и", "за", "не" must not be touched.
+    private const val RU_VOWELS = "аеёиоуыэюя"
+    private val ACUTE = '́'
 
     fun load(context: Context) {
         if (isLoaded) return
+        fallbackEnabled = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(FALLBACK_PREFS_KEY, false)
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
             entries = emptyMap()
@@ -125,20 +142,90 @@ object AccentDictionaryManager {
 
     fun isReady(): Boolean = entries.isNotEmpty()
 
-    fun apply(text: String): String {
-        if (entries.isEmpty()) return text
+    fun apply(text: String, lang: String = ""): String {
+        // No work to do if both the dictionary is empty and fallback is off.
+        if (entries.isEmpty() && !fallbackEnabled) return text
 
+        val applyFallback = fallbackEnabled && lang.startsWith("ru")
         val matcher = wordPattern.matcher(text)
         val sb = StringBuffer()
         while (matcher.find()) {
             val original = matcher.group() ?: continue
-            val replacement = entries[original.lowercase()] ?: continue
-            val cased = applyCasing(original, replacement)
+            val dictHit = entries[original.lowercase()]
+            val cased = when {
+                dictHit != null -> applyCasing(original, dictHit)
+                applyFallback -> fallbackLastVowel(original) ?: continue
+                else -> continue
+            }
             // appendReplacement treats $ and \ specially — escape them.
             matcher.appendReplacement(sb, cased.replace("\\", "\\\\").replace("$", "\\$"))
         }
         matcher.appendTail(sb)
         return sb.toString()
+    }
+
+    /**
+     * Best-effort stress for a word that didn't show up in the dictionary:
+     * put U+0301 after the **last** vowel. This is intentionally a coarse
+     * heuristic — Russian stress is free, not oxytonic — but it's noticeably
+     * better than the model guessing from the consonant skeleton alone for
+     * rare or borrowed words.
+     *
+     * Guard rails:
+     * - returns null (= skip replacement) if the word already has a stress mark,
+     * - returns null for single-vowel words, which always read fine as-is.
+     */
+    private fun fallbackLastVowel(word: String): String? {
+        if (word.any { it == ACUTE }) return null
+        val lower = word.lowercase()
+        var vowelCount = 0
+        var lastVowelIdx = -1
+        for ((i, ch) in lower.withIndex()) {
+            if (ch in RU_VOWELS) {
+                vowelCount++
+                lastVowelIdx = i
+            }
+        }
+        if (vowelCount < 2 || lastVowelIdx < 0) return null
+        return word.substring(0, lastVowelIdx + 1) + ACUTE + word.substring(lastVowelIdx + 1)
+    }
+
+    fun setFallbackEnabled(context: Context, enabled: Boolean) {
+        fallbackEnabled = enabled
+        context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(FALLBACK_PREFS_KEY, enabled)
+            .apply()
+    }
+
+    fun isFallbackEnabled(): Boolean = fallbackEnabled
+
+    fun getMetadata(context: Context): Metadata? {
+        val prefs = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
+        val source = prefs.getString(META_KEY_SOURCE, null) ?: return null
+        return Metadata(
+            source = source,
+            entries = prefs.getInt(META_KEY_ENTRIES, 0),
+            loadedAtMs = prefs.getLong(META_KEY_LOADED_AT, 0L),
+            sizeBytes = prefs.getLong(META_KEY_SIZE_BYTES, 0L)
+        )
+    }
+
+    private fun writeMetadata(context: Context, source: String, entries: Int, sizeBytes: Long) {
+        context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).edit()
+            .putString(META_KEY_SOURCE, source)
+            .putInt(META_KEY_ENTRIES, entries)
+            .putLong(META_KEY_LOADED_AT, System.currentTimeMillis())
+            .putLong(META_KEY_SIZE_BYTES, sizeBytes)
+            .apply()
+    }
+
+    private fun clearMetadata(context: Context) {
+        context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).edit()
+            .remove(META_KEY_SOURCE)
+            .remove(META_KEY_ENTRIES)
+            .remove(META_KEY_LOADED_AT)
+            .remove(META_KEY_SIZE_BYTES)
+            .apply()
     }
 
     /**
@@ -157,6 +244,7 @@ object AccentDictionaryManager {
             val parsed = parseJsonToMap(String(bytes, Charsets.UTF_8))
             if (parsed.isEmpty()) return 0
             saveAndCache(context, parsed)
+            writeMetadata(context, "Imported from file", parsed.size, bytes.size.toLong())
             parsed.size
         } catch (e: Exception) {
             Log.e(TAG, "Import failed", e)
@@ -168,6 +256,7 @@ object AccentDictionaryManager {
         entries = emptyMap()
         isLoaded = true
         File(context.filesDir, FILE_NAME).delete()
+        clearMetadata(context)
     }
 
     /**
@@ -181,6 +270,7 @@ object AccentDictionaryManager {
     fun downloadPrebuilt(
         context: Context,
         urlStr: String,
+        sourceName: String,
         onProgress: (bytesDownloaded: Long, totalBytes: Long) -> Unit
     ): Int {
         val tmp = File(context.cacheDir, "accent_download.tmp")
@@ -216,10 +306,12 @@ object AccentDictionaryManager {
                 return -1
             }
             onProgress(tmp.length(), tmp.length()) // signal "parsing now"
+            val bytesLen = tmp.length()
             val parsed = parseJsonToMap(tmp.readText(Charsets.UTF_8))
             tmp.delete()
             if (parsed.isEmpty()) return 0
             saveAndCache(context, parsed)
+            writeMetadata(context, sourceName, parsed.size, bytesLen)
             return parsed.size
         } catch (e: Exception) {
             Log.e(TAG, "downloadPrebuilt failed from $urlStr", e)
