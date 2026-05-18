@@ -35,7 +35,11 @@ import java.util.regex.Pattern
 object AccentDictionaryManager {
     private const val TAG = "AccentDict"
     private const val FILE_NAME = "accent_dictionary.json"
-    private const val MAX_FILE_BYTES = 50 * 1024 * 1024 // 50 MB sanity cap
+    // 250 MB cap — the full Russian dictionary is ~165 MB. The HashMap that
+    // backs it takes ~500 MB of heap; that's fine on phones with ≥ 4 GB of
+    // RAM but would OOM a budget device. Users who want the smaller dict can
+    // still import russian_accents.json (36 MB) via the file picker.
+    private const val MAX_FILE_BYTES = 250L * 1024 * 1024
 
     /**
      * Pre-built dictionaries published as release assets on the upstream
@@ -43,7 +47,10 @@ object AccentDictionaryManager {
      * later without churn in the UI.
      */
     private val PREBUILT_URLS: Map<String, String> = mapOf(
-        "ru" to "https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents.json"
+        // Full 3.26M-entry Russian dictionary: all Zaliznyak inflected forms,
+        // homographs picked by ruaccent's default, ё-substitution baked in,
+        // proper names included. ~165 MB on disk / ~500 MB RAM.
+        "ru" to "https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents_full.json"
     )
 
     fun hasPrebuiltFor(lang: String): Boolean = PREBUILT_URLS.containsKey(lang.lowercase().substringBefore('-'))
@@ -176,6 +183,7 @@ object AccentDictionaryManager {
                 tmp.delete()
                 return -1
             }
+            onProgress(tmp.length(), tmp.length()) // signal "parsing now"
             val parsed = parseJsonToMap(tmp.readText(Charsets.UTF_8))
             tmp.delete()
             if (parsed.isEmpty()) return 0

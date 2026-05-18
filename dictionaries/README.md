@@ -6,10 +6,11 @@ Ready-to-import dictionaries for the **Lexicon → Import accent dictionary…**
 
 Attached to release [`v3.1.1`](https://github.com/davnozdu/supertonic-android/releases/tag/v3.1.1):
 
-| File | Size | Entries | Word length ≤ | When to use |
+| File | Size | Entries | What's in it | When to use |
 |---|---|---|---|---|
-| [`russian_accents.json`](https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents.json) | 36 MB | 961 968 | 9 chars | **Recommended.** Phone with ≥ 4 GB RAM. |
-| [`russian_accents_compact.json`](https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents_compact.json) | 21 MB | 615 365 | 8 chars | Low-RAM / older devices. |
+| [`russian_accents_full.json`](https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents_full.json) | 165 MB | 3 263 003 | Everything: all inflected forms, homographs, ё-restoration, names | **Phones with ≥ 4 GB RAM (~500 MB heap).** From v3.4.0 onwards the in-app "Download accent dictionary" pulls this one. |
+| [`russian_accents.json`](https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents.json) | 36 MB | 961 968 | Words up to 9 chars, no homographs | Mid-tier devices. ~150 MB heap. |
+| [`russian_accents_compact.json`](https://github.com/davnozdu/supertonic-android/releases/download/v3.1.1/russian_accents_compact.json) | 21 MB | 615 365 | Words up to 8 chars, no homographs | Budget devices. ~85 MB heap. |
 
 ## How to import
 
