@@ -222,7 +222,7 @@ object AccentDictionaryManager {
             saveAndCache(context, parsed)
             return parsed.size
         } catch (e: Exception) {
-            Log.e(TAG, "downloadPrebuilt failed for $lang", e)
+            Log.e(TAG, "downloadPrebuilt failed from $urlStr", e)
             tmp.delete()
             return -1
         }
