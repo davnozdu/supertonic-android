@@ -4,14 +4,22 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name for the release (e.g. v3.0.1)'
+        required: true
 
 jobs:
   build:
-    name: Build & Sign APK
+    name: Build & Sign Release APK
     runs-on: ubuntu-latest
 
-    permissions: 
+    permissions:
       contents: write
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout code
@@ -43,59 +51,101 @@ jobs:
         with:
           targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
 
-      - name: Configure Rust for F-Droid style build
+      - name: Configure cargo linkers for Android targets
         run: |
-          cd rust
-          cargo vendor vendor
-          mkdir -p .cargo
-          cat <<EOF > .cargo/config.toml
+          mkdir -p rust/.cargo
+          cat <<'EOF' > rust/.cargo/config.toml
           [target.aarch64-linux-android]
           linker = "aarch64-linux-android34-clang"
-          [source.crates-io]
-          replace-with = "vendored-sources"
-          [source.vendored-sources]
-          directory = "vendor"
+          [target.armv7-linux-androideabi]
+          linker = "armv7a-linux-androideabi34-clang"
+          [target.i686-linux-android]
+          linker = "i686-linux-android34-clang"
+          [target.x86_64-linux-android]
+          linker = "x86_64-linux-android34-clang"
           EOF
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Release
-        run: ./gradlew assembleRelease bundleRelease
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
 
-      - name: Sign APK
-        id: sign_apk
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "35.0.0"
+      - name: Build unsigned release APK
+        run: ./gradlew assembleRelease --stacktrace
 
-      - name: Sign Bundle
-        id: sign_bundle
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "35.0.0"
-
-      - name: Rename Signed Assets
+      - name: Generate signing keystore
+        id: keystore
         run: |
-          mv ${{ steps.sign_apk.outputs.signedReleaseFile }} app/build/outputs/apk/release/Supertonic-${{ github.ref_name }}.apk
-          mv ${{ steps.sign_bundle.outputs.signedReleaseFile }} app/build/outputs/bundle/release/Supertonic-${{ github.ref_name }}.aab
+          # CI signs every build with an ephemeral RSA-4096 key. Side-effect:
+          # users updating from one release to the next must uninstall first
+          # (a Play Store / F-Droid pipeline with a stable key would avoid this).
+          keytool -genkeypair \
+            -keystore "$RUNNER_TEMP/release.jks" \
+            -storetype JKS \
+            -alias supertonic \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10000 \
+            -storepass supertonic-ci \
+            -keypass supertonic-ci \
+            -dname "CN=Supertonic v3 fork, OU=davnozdu, O=davnozdu, L=NA, S=NA, C=NA"
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
 
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Locate Android build-tools
+        id: buildtools
+        run: |
+          BT_DIR=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -n1)
+          echo "Using build-tools: $BT_DIR"
+          echo "path=$BT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Sign release APK
+        run: |
+          UNSIGNED=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          ALIGNED="${UNSIGNED%.apk}-aligned.apk"
+          SIGNED="${UNSIGNED%-unsigned.apk}.apk"
+          if [ "$SIGNED" = "$UNSIGNED" ]; then
+            SIGNED="${UNSIGNED%.apk}-signed.apk"
+          fi
+          "${{ steps.buildtools.outputs.path }}/zipalign" -v -p 4 "$UNSIGNED" "$ALIGNED"
+          "${{ steps.buildtools.outputs.path }}/apksigner" sign \
+            --ks "${{ steps.keystore.outputs.path }}" \
+            --ks-key-alias supertonic \
+            --ks-pass pass:supertonic-ci \
+            --key-pass pass:supertonic-ci \
+            --out "$SIGNED" \
+            "$ALIGNED"
+          "${{ steps.buildtools.outputs.path }}/apksigner" verify --verbose "$SIGNED"
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          FINAL="app/build/outputs/apk/release/Supertonic-${TAG}.apk"
+          mv "$SIGNED" "$FINAL"
+          echo "FINAL_APK=$FINAL" >> "$GITHUB_ENV"
+
+      - name: Upload signed APK as artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: |
-            app/build/outputs/apk/release/Supertonic-${{ github.ref_name }}.apk
-            app/build/outputs/bundle/release/Supertonic-${{ github.ref_name }}.aab
+          name: Supertonic-${{ github.ref_name }}
+          path: ${{ env.FINAL_APK }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.FINAL_APK }}
+          generate_release_notes: true
+          body: |
+            **Supertonic 3 multilingual TTS for Android** — 31-language fork of `DevGitPit/supertonic-android`.
+
+            ### Install
+            1. Download the `.apk` below.
+            2. On the phone: Settings → Apps → Install unknown apps → allow your file manager / browser.
+            3. Tap the APK to install. If `adb install` returns `INSTALL_FAILED_VERIFICATION_FAILURE`, disable `Verify apps over USB` in Developer Options.
+            4. First launch downloads ~400 MB of ONNX models from Hugging Face — needs Wi-Fi once.
+
+            ### Make it the system TTS
+            Settings → Accessibility → Text-to-speech output → Preferred engine → **Supertonic TTS**.
+
+            ### Note on signing
+            This release is signed with an **ephemeral CI keystore** that changes every build. To upgrade you must uninstall the previous version first. For long-term distribution, configure a stable keystore via repository secrets `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`.
