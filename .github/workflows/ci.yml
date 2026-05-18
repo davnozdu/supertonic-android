@@ -12,6 +12,11 @@ jobs:
     name: Build Debug APK
     runs-on: ubuntu-latest
 
+    env:
+      # Opt the JS actions onto Node.js 24 ahead of the Sept 2026 forced
+      # cut-off so the run log stops printing a deprecation warning.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
