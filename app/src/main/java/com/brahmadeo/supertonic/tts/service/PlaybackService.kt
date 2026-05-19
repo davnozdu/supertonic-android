@@ -267,8 +267,16 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 Log.e(TAG, "AudioTrack.play() failed", e)
             }
 
+            // Auto-detect Russian when the in-app language picker disagrees
+            // with the actual text content. Mirrors the same heuristic used
+            // in SupertonicTextToSpeechService for system-TTS calls, so
+            // pasting Russian into an "English"-selected session still routes
+            // through the Russian normalisation path (numbers, accent
+            // dictionary, stress fallback).
+            val effectiveLang = autoDetectRussian(text, lang)
+
             synthesisJob = launch(Dispatchers.IO) {
-                val sentences = textNormalizer.splitIntoSentences(text, lang)
+                val sentences = textNormalizer.splitIntoSentences(text, effectiveLang)
                 val totalSentences = sentences.size
                 val validStartIndex = if (startIndex in 0 until totalSentences) startIndex else 0
 
@@ -312,13 +320,13 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             notifyListenerProgress(index, totalSentences)
                         }
 
-                        val normalizedText = textNormalizer.normalize(sentences[index], lang, isAdvancedEnabled)
+                        val normalizedText = textNormalizer.normalize(sentences[index], effectiveLang, isAdvancedEnabled)
 
                         // Streaming: each finished chunk inside generateAudio is
                         // pushed via streamingListener.onAudioChunk into the
                         // channel, where the consumer above picks it up.
                         val result = SupertonicTTS.generateAudio(
-                            normalizedText, lang, stylePath, speed, 0.0f, steps,
+                            normalizedText, effectiveLang, stylePath, speed, 0.0f, steps,
                             VOLUME_BOOST_FACTOR, streamingListener
                         )
 
@@ -463,6 +471,24 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             offset += written
         }
         return true
+    }
+
+    /**
+     * Cyrillic-content override for the language code: if the text is
+     * predominantly Russian letters, force the "ru" path so we get the
+     * accent dictionary and number-to-words spellout even when the UI
+     * picker is on something else.
+     */
+    private fun autoDetectRussian(text: String, declared: String): String {
+        var cyrillic = 0
+        var latin = 0
+        for (ch in text) {
+            when {
+                ch in 'Ѐ'..'ӿ' -> cyrillic++
+                ch in 'a'..'z' || ch in 'A'..'Z' -> latin++
+            }
+        }
+        return if (cyrillic > latin && cyrillic >= 4) "ru" else declared
     }
 
     /** Returns a zeroed PCM-16 mono buffer of the requested duration (in ms). */

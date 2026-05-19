@@ -97,8 +97,16 @@ object AccentDictionaryManager {
     @Volatile private var isLoaded = false
     @Volatile private var fallbackEnabled = false
 
-    // Match any letter-only word, including non-ASCII alphabets (Cyrillic, Greek, etc.).
-    private val wordPattern: Pattern = Pattern.compile("\\p{L}+")
+    // Match a word as "Unicode letters + any combining marks attached to them".
+    // The \p{M} part is the fix for the double-stress bug: if a previous step
+    // (user Lexicon) already inserted U+0301 into "Москва" -> "Москва́", a
+    // bare \p{L}+ would match only "Москва", we'd replace it from the
+    // dictionary with another stressed form, and appendTail would re-emit
+    // the orphan U+0301 — producing "Москва́́" with two combining accents.
+    // Including \p{M} makes the matcher consume the existing diacritic, so
+    // its lowercased form misses the (unstressed-key) dictionary and the
+    // word is preserved as the user marked it.
+    private val wordPattern: Pattern = Pattern.compile("[\\p{L}\\p{M}]+")
     private const val META_PREFS = "AccentDictMeta"
     private const val META_KEY_SOURCE = "source"
     private const val META_KEY_ENTRIES = "entries"
