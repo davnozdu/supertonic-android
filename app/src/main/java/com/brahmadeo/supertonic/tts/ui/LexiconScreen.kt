@@ -30,6 +30,7 @@ fun LexiconScreen(
     accentDictBanner: AccentDictBanner?,
     canDownloadAccentDict: Boolean,
     fallbackEnabled: Boolean,
+    syncLoadEnabled: Boolean,
     lexiconEnabled: Boolean,
     tightQuestionExclamation: Boolean,
     strengthenIntonation: Boolean,
@@ -42,6 +43,7 @@ fun LexiconScreen(
     onDownloadAccentDictClick: () -> Unit,
     onClearAccentDictClick: () -> Unit,
     onFallbackToggle: (Boolean) -> Unit,
+    onSyncLoadToggle: (Boolean) -> Unit,
     onLexiconToggle: (Boolean) -> Unit,
     onTightQuestionToggle: (Boolean) -> Unit,
     onDoubleMarksToggle: (Boolean) -> Unit,
@@ -233,6 +235,40 @@ fun LexiconScreen(
                     Switch(
                         checked = fallbackEnabled,
                         onCheckedChange = onFallbackToggle
+                    )
+                }
+            }
+
+            // Sync-load toggle. Defaults OFF so the dictionary parses in the
+            // background and the first sentence after a cold start may render
+            // un-stressed; turning it ON makes Service.onCreate block until
+            // the full 165 MB dict is loaded — slower startup, but guaranteed
+            // stresses from the very first word.
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = MaterialTheme.shapes.small
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Block first synthesis until dictionary loads",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "Off: dictionary parses in the background after a cold start; the very first sentence may go without stress marks. On: the service waits ~5-10 s on first launch so every sentence is stressed from the start. Recommended only if the first sentence really matters (short automation TTS, single-word readouts).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = syncLoadEnabled,
+                        onCheckedChange = onSyncLoadToggle
                     )
                 }
             }

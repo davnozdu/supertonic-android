@@ -106,6 +106,10 @@ object AccentDictionaryManager {
     @Volatile private var loadGeneration = 0
     private val loadLock = Object()
     @Volatile private var fallbackEnabled = false
+    // When ON, load() blocks the calling thread until the dictionary is
+    // fully parsed. Used by people who can't tolerate the first sentence
+    // after a cold start going un-stressed (lazy default).
+    @Volatile private var syncLoadEnabled = false
 
     // Match a word as "Unicode letters + any combining marks attached to them".
     // The \p{M} part is the fix for the double-stress bug: if a previous step
@@ -123,6 +127,7 @@ object AccentDictionaryManager {
     private const val META_KEY_LOADED_AT = "loaded_at"
     private const val META_KEY_SIZE_BYTES = "size_bytes"
     private const val FALLBACK_PREFS_KEY = "accent_fallback_enabled"
+    private const val SYNC_LOAD_PREFS_KEY = "accent_sync_load_enabled"
 
     // Russian vowels (lowercase). Used both by the fallback rule and to count
     // syllables when deciding whether the fallback should kick in at all —
@@ -145,8 +150,9 @@ object AccentDictionaryManager {
      */
     fun load(context: Context) {
         if (isLoaded) return
-        fallbackEnabled = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
-            .getBoolean(FALLBACK_PREFS_KEY, false)
+        val prefs = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
+        fallbackEnabled = prefs.getBoolean(FALLBACK_PREFS_KEY, false)
+        syncLoadEnabled = prefs.getBoolean(SYNC_LOAD_PREFS_KEY, false)
 
         val myGen: Int
         synchronized(loadLock) {
@@ -156,51 +162,58 @@ object AccentDictionaryManager {
         }
 
         val appContext = context.applicationContext
-        Thread(
-            {
-                try {
-                    val file = File(appContext.filesDir, FILE_NAME)
-                    val parsed: Map<String, String> = if (!file.exists()) {
-                        emptyMap()
-                    } else {
-                        FileInputStream(file).use { fis ->
-                            parseJsonStream(fis, file.length())
-                        }
-                    }
-                    synchronized(loadLock) {
-                        // Only commit the result if no one (clear / import /
-                        // download) preempted us by bumping the generation.
-                        if (loadGeneration == myGen) {
-                            entries = parsed
-                            isLoaded = true
-                        }
-                    }
-                    if (parsed.isNotEmpty()) {
-                        Log.i(TAG, "Loaded ${parsed.size} accent entries from disk (bg)")
-                    }
-                } catch (e: Throwable) {
-                    Log.e(TAG, "Failed to load accent dictionary in background", e)
-                    synchronized(loadLock) {
-                        if (loadGeneration == myGen) {
-                            entries = emptyMap()
-                            isLoaded = true
-                        }
-                    }
-                } finally {
-                    synchronized(loadLock) {
-                        if (loadGeneration == myGen) {
-                            isLoading = false
-                        }
+        // Shared loader body — runs either on the calling thread (sync mode)
+        // or on the AccentDict-Loader background thread (lazy mode, default).
+        val loader = Runnable {
+            try {
+                val file = File(appContext.filesDir, FILE_NAME)
+                val parsed: Map<String, String> = if (!file.exists()) {
+                    emptyMap()
+                } else {
+                    FileInputStream(file).use { fis ->
+                        parseJsonStream(fis, file.length())
                     }
                 }
-            },
-            "AccentDict-Loader"
-        ).apply {
-            // Lowered priority — the parse is heavy on weak phones and we don't
-            // want to fight ORT initialisation, which is doing the same trick.
-            priority = Thread.NORM_PRIORITY - 1
-            isDaemon = true
-        }.start()
+                synchronized(loadLock) {
+                    // Only commit the result if no one (clear / import /
+                    // download) preempted us by bumping the generation.
+                    if (loadGeneration == myGen) {
+                        entries = parsed
+                        isLoaded = true
+                    }
+                }
+                if (parsed.isNotEmpty()) {
+                    Log.i(TAG, "Loaded ${parsed.size} accent entries from disk")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to load accent dictionary", e)
+                synchronized(loadLock) {
+                    if (loadGeneration == myGen) {
+                        entries = emptyMap()
+                        isLoaded = true
+                    }
+                }
+            } finally {
+                synchronized(loadLock) {
+                    if (loadGeneration == myGen) {
+                        isLoading = false
+                    }
+                }
+            }
+        }
+
+        if (syncLoadEnabled) {
+            // Block the caller. Used by users who can't tolerate the first
+            // sentence after a cold start going un-stressed.
+            loader.run()
+        } else {
+            Thread(loader, "AccentDict-Loader").apply {
+                // Lowered priority — the parse is heavy on weak phones and
+                // we don't want to fight ORT initialisation.
+                priority = Thread.NORM_PRIORITY - 1
+                isDaemon = true
+            }.start()
+        }
     }
 
     /**
@@ -306,6 +319,15 @@ object AccentDictionaryManager {
     }
 
     fun isFallbackEnabled(): Boolean = fallbackEnabled
+
+    fun setSyncLoadEnabled(context: Context, enabled: Boolean) {
+        syncLoadEnabled = enabled
+        context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(SYNC_LOAD_PREFS_KEY, enabled)
+            .apply()
+    }
+
+    fun isSyncLoadEnabled(): Boolean = syncLoadEnabled
 
     fun getMetadata(context: Context): Metadata? {
         val prefs = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
