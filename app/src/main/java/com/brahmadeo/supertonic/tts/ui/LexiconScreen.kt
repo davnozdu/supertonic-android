@@ -443,7 +443,7 @@ private fun ChunkModeRow(
         Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)) {
             Text(text = "Chunk size", style = MaterialTheme.typography.titleSmall)
             Text(
-                text = "Small (120) — quick start, best for short messages. Default (300) — balanced, current behavior. Large (500) — smoother intonation across longer sentences, best for books.",
+                text = "Small (120) — quick start for short messages. Default (300) — balanced, current behavior. Large (500) — smoother intonation, best for books. Huge (1000, experimental) — packs whole short paragraphs into one synthesis call; useful for testing Moon+ Reader-style flows.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 6.dp)
@@ -461,6 +461,7 @@ private fun ChunkModeRow(
                                 PlaybackPrefs.ChunkMode.SMALL -> "Small"
                                 PlaybackPrefs.ChunkMode.DEFAULT -> "Default"
                                 PlaybackPrefs.ChunkMode.LARGE -> "Large"
+                                PlaybackPrefs.ChunkMode.HUGE -> "Huge"
                             }
                         )
                     }

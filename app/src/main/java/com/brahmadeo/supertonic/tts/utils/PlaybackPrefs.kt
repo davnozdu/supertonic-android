@@ -38,9 +38,15 @@ object PlaybackPrefs {
         //   DEFAULT is the legacy 300-char limit, balanced for most prose.
         //   LARGE merges multiple sentences for narration with continuous
         //   intonation arcs — best for audiobooks.
+        //   HUGE (experimental) merges entire short paragraphs into one
+        //   synthesis call. Useful for system-TTS callers like Moon+ Reader
+        //   that ship single-sentence paragraphs — at HUGE we still pack
+        //   them together if they arrive in the same speak() request.
+        //   Cost: bigger model activations, longer first-chunk latency.
         SMALL(120),
         DEFAULT(300),
-        LARGE(500);
+        LARGE(500),
+        HUGE(1000);
 
         companion object {
             fun fromOrdinal(i: Int): ChunkMode = values().getOrNull(i) ?: DEFAULT
