@@ -273,29 +273,60 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             SupertonicTTS.initialize(modelPath, libPath)
         }
 
+        // Streaming + queue pipeline, mirroring PlaybackService.
+        // Producer (Rust callback) -> Channel<ByteArray> -> Consumer (audioAvailable).
+        //
+        // Without this, onSynthesizeText used to wait for an entire sentence
+        // of audio (3-5 s) before handing anything over to Android's TTS
+        // system. With clients like Moon+ Reader that means a multi-second
+        // gap at the start of every block. Now bytes go to audioAvailable
+        // chunk-by-chunk as soon as the vocoder produces them, and the
+        // 50-chunk buffer lets the producer race ahead while Android plays.
+        val ttsChannel = kotlinx.coroutines.channels.Channel<ByteArray>(capacity = 50)
+        val streamingListener = object : SupertonicTTS.ProgressListener {
+            override fun onProgress(sessionId: Long, current: Int, total: Int) {}
+            override fun onAudioChunk(sessionId: Long, data: ByteArray) {
+                while (true) {
+                    val r = ttsChannel.trySend(data)
+                    if (r.isSuccess || r.isClosed) return
+                    if (SupertonicTTS.isCancelled()) return
+                    try { Thread.sleep(20) } catch (_: InterruptedException) { return }
+                }
+            }
+        }
+
+        val consumerJob = serviceScope.launch(Dispatchers.IO) {
+            for (data in ttsChannel) {
+                if (SupertonicTTS.isCancelled()) break
+                var offset = 0
+                while (offset < data.size) {
+                    val length = 4096.coerceAtMost(data.size - offset)
+                    callback.audioAvailable(data, offset, length)
+                    offset += length
+                }
+            }
+        }
+
+        var success = true
         try {
             val sentences = textNormalizer.splitIntoSentences(rawText, requestedLang)
-            var success = true
             for (sentence in sentences) {
                 if (SupertonicTTS.isCancelled()) { success = false; break }
 
                 val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
                 val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled)
 
-                val audioData = SupertonicTTS.generateAudio(normalizedText, requestedLang, stylePath, effectiveSpeed, 0.0f, steps, VOLUME_BOOST_FACTOR, null)
+                SupertonicTTS.generateAudio(
+                    normalizedText, requestedLang, stylePath, effectiveSpeed, 0.0f,
+                    steps, VOLUME_BOOST_FACTOR, streamingListener
+                )
 
-                if (audioData != null && audioData.isNotEmpty()) {
-                    var offset = 0
-                    while (offset < audioData.size) {
-                        val length = 4096.coerceAtMost(audioData.size - offset)
-                        callback.audioAvailable(audioData, offset, length)
-                        offset += length
-                    }
-                }
+                if (SupertonicTTS.isCancelled()) { success = false; break }
             }
-            if (success) callback.done() else callback.error()
         } finally {
-            // Isolation handled in SupertonicTTS
+            ttsChannel.close()
+            runBlocking { consumerJob.join() }
         }
+        if (success) callback.done() else callback.error()
     }
 }
