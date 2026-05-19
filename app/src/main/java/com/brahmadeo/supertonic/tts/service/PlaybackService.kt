@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -128,11 +129,22 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     private var currentSentenceIndex: Int = 0
 
     /**
-     * Streaming listener installed on SupertonicTTS for the duration of one
-     * sentence. Called from the Rust inference thread for each finished
-     * audio chunk; we write straight into the shared AudioTrack, blocking on
-     * backpressure. This is what makes the gap between paragraphs disappear:
-     * we never tear down the AudioTrack between sentences.
+     * Buffer between the Rust inference thread (producer) and the AudioTrack
+     * write loop (consumer). Capacity ~50 chunks gives the inference thread
+     * up to ~5 seconds of look-ahead, which is enough to (a) hide the
+     * per-sentence inference startup cost across paragraph boundaries and
+     * (b) absorb temporary RTF dips (thermal throttle, garbage collection,
+     * a particularly long sentence) without an underrun click.
+     */
+    @Volatile private var currentAudioChannel: Channel<ByteArray>? = null
+
+    /**
+     * Streaming listener installed on SupertonicTTS for the duration of a
+     * synthesis job. Called from the Rust inference thread for each finished
+     * audio chunk; we push the bytes into [currentAudioChannel] using
+     * runBlocking so the Rust thread itself is blocked when the channel is
+     * full — that's our backpressure signal. A separate coroutine drains the
+     * channel into AudioTrack.
      */
     private val streamingListener = object : SupertonicTTS.ProgressListener {
         override fun onProgress(sessionId: Long, current: Int, total: Int) {
@@ -140,7 +152,16 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         }
 
         override fun onAudioChunk(sessionId: Long, data: ByteArray) {
-            writeToTrackBlocking(data)
+            val ch = currentAudioChannel ?: return
+            // Non-blocking send with manual backoff — keeps us off the
+            // coroutine machinery on the Rust JNI thread, while still
+            // applying backpressure when the channel is full.
+            while (true) {
+                val result = ch.trySend(data)
+                if (result.isSuccess || result.isClosed) return
+                if (SupertonicTTS.isCancelled()) return
+                try { Thread.sleep(20) } catch (_: InterruptedException) { return }
+            }
         }
     }
 
@@ -254,51 +275,79 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
                 val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
 
+                // 50 chunks ~ 5 seconds of look-ahead audio. Big enough to hide
+                // the per-sentence inference startup cost; small enough that
+                // cancel still feels responsive (worst case: 5 s of buffered
+                // audio plays out before silence).
+                val channel = Channel<ByteArray>(capacity = 50)
+                currentAudioChannel = channel
+
                 var statePromotedToPlaying = false
                 var sawAnyAudio = false
 
-                for (index in validStartIndex until totalSentences) {
-                    if (SupertonicTTS.isCancelled() || !isActive) break
-
-                    // Honour pause without consuming CPU
-                    while (!isPlaying && isSynthesizing && isActive) {
-                        delay(100)
-                    }
-                    if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break
-
-                    withContext(Dispatchers.Main) {
-                        currentSentenceIndex = index
-                        notifyListenerProgress(index, totalSentences)
-                    }
-
-                    val normalizedText = textNormalizer.normalize(sentences[index], lang, isAdvancedEnabled)
-
-                    // Streaming: each finished chunk inside generateAudio is pushed
-                    // into the AudioTrack via streamingListener.onAudioChunk.
-                    val result = SupertonicTTS.generateAudio(
-                        normalizedText, lang, stylePath, speed, 0.0f, steps,
-                        VOLUME_BOOST_FACTOR, streamingListener
-                    )
-
-                    if (result != null && result.isNotEmpty()) {
-                        sawAnyAudio = true
-                        if (!statePromotedToPlaying) {
-                            statePromotedToPlaying = true
-                            withContext(Dispatchers.Main) {
-                                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                                notifyListenerState(true)
-                            }
-                        }
-                        // Inter-sentence breath: ~150 ms of silence so paragraphs don't slur together.
-                        if (index < totalSentences - 1) {
-                            writeToTrackBlocking(silenceBytes(80))
-                        }
-                    } else if (SupertonicTTS.isCancelled()) {
-                        break
+                // Consumer: drains the channel into AudioTrack. Runs in
+                // parallel with the producer below; pause/cancel polling is
+                // handled inside writeToTrackBlocking.
+                val playerJob = launch(Dispatchers.IO) {
+                    for (data in channel) {
+                        if (!isActive || SupertonicTTS.isCancelled()) break
+                        writeToTrackBlocking(data)
                     }
                 }
 
-                // Wait for the AudioTrack to drain so the user hears the tail before we wind down.
+                try {
+                    for (index in validStartIndex until totalSentences) {
+                        if (SupertonicTTS.isCancelled() || !isActive) break
+
+                        // Honour pause without consuming CPU. Producer can pause
+                        // even though consumer is still draining the buffer —
+                        // the buffer fills up, sends block, all clean.
+                        while (!isPlaying && isSynthesizing && isActive) {
+                            delay(100)
+                        }
+                        if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break
+
+                        withContext(Dispatchers.Main) {
+                            currentSentenceIndex = index
+                            notifyListenerProgress(index, totalSentences)
+                        }
+
+                        val normalizedText = textNormalizer.normalize(sentences[index], lang, isAdvancedEnabled)
+
+                        // Streaming: each finished chunk inside generateAudio is
+                        // pushed via streamingListener.onAudioChunk into the
+                        // channel, where the consumer above picks it up.
+                        val result = SupertonicTTS.generateAudio(
+                            normalizedText, lang, stylePath, speed, 0.0f, steps,
+                            VOLUME_BOOST_FACTOR, streamingListener
+                        )
+
+                        if (result != null && result.isNotEmpty()) {
+                            sawAnyAudio = true
+                            if (!statePromotedToPlaying) {
+                                statePromotedToPlaying = true
+                                withContext(Dispatchers.Main) {
+                                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                                    notifyListenerState(true)
+                                }
+                            }
+                            // Inter-sentence breath. Suspending send — never
+                            // blocks the inference thread itself, just makes
+                            // the producer wait if the buffer is full.
+                            if (index < totalSentences - 1) {
+                                try { channel.send(silenceBytes(80)) } catch (_: Exception) { break }
+                            }
+                        } else if (SupertonicTTS.isCancelled()) {
+                            break
+                        }
+                    }
+                } finally {
+                    channel.close()
+                    currentAudioChannel = null
+                }
+
+                // Consumer drains anything left in the buffer; then AudioTrack itself drains.
+                playerJob.join()
                 if (sawAnyAudio) drainAudioTrack()
 
                 withContext(Dispatchers.Main) {
