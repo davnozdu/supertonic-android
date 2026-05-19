@@ -28,6 +28,18 @@ import java.util.regex.Pattern
  */
 class RussianNumberNormalizer {
 
+    // All regexes used by normalize() compiled once per instance — they used
+    // to be inlined inside the function, costing ~7 fresh compiles per call.
+    // The TTS service hits normalize() once per Russian sentence, so on a
+    // 1000-sentence audiobook we were burning ~7000 redundant compiles.
+    private val rangeRegex = Regex("\\b(\\d+)\\s*[-–—]\\s*(\\d+)\\b")
+    private val percentRegex = Regex("\\b(\\d+(?:[,.]\\d+)?)\\s*%")
+    private val celsiusRegex = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°\\s*[CС]\\b")
+    private val degreesRegex = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°")
+    private val decimalRegex = Regex("(?<![\\p{L}\\d])(-?\\d+),(\\d+)(?!\\d)")
+    private val integerRegex = Regex("(?<![\\p{L}\\d.,])(-?\\d{1,12})(?![\\p{L}\\d.,])")
+    private val whitespaceRegex = Regex("\\s+")
+
     private val units = arrayOf(
         "ноль", "один", "два", "три", "четыре", "пять", "шесть",
         "семь", "восемь", "девять"
@@ -113,7 +125,7 @@ class RussianNumberNormalizer {
             parts.add(spellTriad(units1to999, feminine = false))
         }
 
-        return parts.joinToString(" ").trim().replace(Regex("\\s+"), " ")
+        return whitespaceRegex.replace(parts.joinToString(" ").trim(), " ")
     }
 
     /**
@@ -134,8 +146,8 @@ class RussianNumberNormalizer {
             } else {
                 pluralForm(fracValue, "сотая", "сотых", "сотых")
             }
-            return "$intWordsFem ${pluralForm(integerPart, "целая", "целых", "целых")} $fracWords $denomWord"
-                .replace(Regex("\\s+"), " ")
+            return whitespaceRegex
+                .replace("$intWordsFem ${pluralForm(integerPart, "целая", "целых", "целых")} $fracWords $denomWord", " ")
                 .trim()
         }
         // Fall back: digit-by-digit reading for the fractional tail.
@@ -172,7 +184,7 @@ class RussianNumberNormalizer {
         if (units1to999 > 0) {
             parts.add(spellTriad(units1to999, feminine = true))
         }
-        return parts.joinToString(" ").trim().replace(Regex("\\s+"), " ")
+        return whitespaceRegex.replace(parts.joinToString(" ").trim(), " ")
     }
 
     /**
@@ -185,26 +197,25 @@ class RussianNumberNormalizer {
         var t = text
 
         // Range: "10-15" / "10—15" -> "от 10 до 15" (then numbers spelled out below).
-        t = Regex("\\b(\\d+)\\s*[-–—]\\s*(\\d+)\\b").replace(t) { m ->
+        t = rangeRegex.replace(t) { m ->
             "от ${m.groupValues[1]} до ${m.groupValues[2]}"
         }
 
         // Percent: "15%" or "15 %"
-        t = Regex("\\b(\\d+(?:[,.]\\d+)?)\\s*%").replace(t) { m ->
-            val numStr = m.groupValues[1]
-            "${numStr} процентов"
+        t = percentRegex.replace(t) { m ->
+            "${m.groupValues[1]} процентов"
         }
 
         // Degrees Celsius: "−5°C" or "5 °C"
-        t = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°\\s*[CС]\\b").replace(t) { m ->
+        t = celsiusRegex.replace(t) { m ->
             "${m.groupValues[1]} градусов Цельсия"
         }
-        t = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°").replace(t) { m ->
+        t = degreesRegex.replace(t) { m ->
             "${m.groupValues[1]} градусов"
         }
 
         // Decimals with comma: "3,14"
-        t = Regex("(?<![\\p{L}\\d])(-?\\d+),(\\d+)(?!\\d)").replace(t) { m ->
+        t = decimalRegex.replace(t) { m ->
             val sign = if (m.groupValues[1].startsWith("-")) { "минус " } else ""
             val intPart = m.groupValues[1].trimStart('-').toLongOrNull() ?: return@replace m.value
             val frac = m.groupValues[2]
@@ -213,12 +224,12 @@ class RussianNumberNormalizer {
 
         // Plain integers — last, after compound forms above have already
         // rewritten themselves into "<number> <unit>".
-        t = Regex("(?<![\\p{L}\\d.,])(-?\\d{1,12})(?![\\p{L}\\d.,])").replace(t) { m ->
+        t = integerRegex.replace(t) { m ->
             val raw = m.groupValues[1]
             val n = raw.toLongOrNull() ?: return@replace raw
             spellInteger(n)
         }
 
-        return t.replace(Regex("\\s+"), " ").trim()
+        return whitespaceRegex.replace(t, " ").trim()
     }
 }

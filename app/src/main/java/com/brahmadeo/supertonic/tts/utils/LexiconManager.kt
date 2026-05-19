@@ -21,6 +21,14 @@ object LexiconManager {
     private const val PREFS_KEY_ENABLED = "lexicon_enabled"
 
     private var cachedRules: List<LexiconItem> = emptyList()
+    // Pre-compiled Patterns paired with their replacement, in the same order as
+    // cachedRules. Building these on every apply() call (once per sentence)
+    // was burning measurable CPU on long texts — at 30 rules × 1000 sentences
+    // we were re-parsing the same regexes 30,000 times per book. Now we build
+    // them once in load/save and reuse for the lifetime of the rule set.
+    // null entries correspond to rules that failed to compile (malformed
+    // regex from the user); apply() skips those.
+    private var compiledRules: List<Pair<java.util.regex.Pattern, String>?> = emptyList()
     @Volatile private var isLoaded = false
     // Master switch: when false, apply() is a no-op even if rules exist.
     // Default ON so existing users keep their behavior; persisted per-device.
@@ -70,12 +78,14 @@ object LexiconManager {
             e.printStackTrace()
         }
         cachedRules = items
+        compiledRules = items.map { compileRule(it) }
         isLoaded = true
         return items
     }
 
     fun save(context: Context, items: List<LexiconItem>) {
         cachedRules = items.toList() // Update cache immediately
+        compiledRules = cachedRules.map { compileRule(it) }
         isLoaded = true
         
         try {
@@ -102,41 +112,50 @@ object LexiconManager {
         if (!enabled) return text
         // If not loaded, we can't apply rules safely without context to load them.
         // Consumers must ensure load(context) is called at app start.
-        if (cachedRules.isEmpty()) return text
-        
+        if (compiledRules.isEmpty()) return text
+
         var processed = text
-        
-        for (item in cachedRules) {
-            if (item.term.isBlank()) continue
-
-            // UNICODE_CHARACTER_CLASS is critical for non-Latin scripts: without
-            // it Java's `\b` (and `\w`) only match ASCII word characters, so a
-            // whole-word rule like `\bзамок\b` would silently fail to match
-            // inside Cyrillic text. UNICODE_CASE makes case-insensitive
-            // matching fold Russian capitals as well.
-            var flags = Pattern.UNICODE_CHARACTER_CLASS
-            if (item.ignoreCase) {
-                flags = flags or Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
-            }
-
+        for (compiled in compiledRules) {
+            val (pattern, replacement) = compiled ?: continue
             try {
-                val pattern = if (item.isRegex) {
-                    Pattern.compile(item.term, flags)
-                } else {
-                    // Whole word matching with quoting
-                    Pattern.compile("\\b${Pattern.quote(item.term)}\\b", flags)
-                }
-                // Escape $ and \ in the replacement so user input doesn't get
-                // interpreted as Matcher backreferences.
-                val safeReplacement = Matcher.quoteReplacement(item.replacement)
-                processed = pattern.matcher(processed).replaceAll(safeReplacement)
+                processed = pattern.matcher(processed).replaceAll(replacement)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
         return processed
     }
-    
+
+    /**
+     * Compile one lexicon rule into a (Pattern, escaped-replacement) pair so
+     * apply() can reuse it without re-parsing the regex every sentence. Null
+     * means the rule was malformed (user typed an invalid regex); the apply
+     * loop quietly skips those instead of failing the whole batch.
+     *
+     * UNICODE_CHARACTER_CLASS is critical for non-Latin scripts: without it
+     * Java's `\b` and `\w` only match ASCII word characters, so a whole-word
+     * rule like `\bзамок\b` would silently fail inside Cyrillic text.
+     */
+    private fun compileRule(item: LexiconItem): Pair<java.util.regex.Pattern, String>? {
+        if (item.term.isBlank()) return null
+        var flags = Pattern.UNICODE_CHARACTER_CLASS
+        if (item.ignoreCase) {
+            flags = flags or Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
+        }
+        return try {
+            val pattern = if (item.isRegex) {
+                Pattern.compile(item.term, flags)
+            } else {
+                Pattern.compile("\\b${Pattern.quote(item.term)}\\b", flags)
+            }
+            val replacement = Matcher.quoteReplacement(item.replacement)
+            pattern to replacement
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     // Force reload (useful when returning from LexiconActivity)
     fun reload(context: Context) {
         isLoaded = false

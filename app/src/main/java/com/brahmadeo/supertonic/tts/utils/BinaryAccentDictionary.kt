@@ -46,6 +46,16 @@ class BinaryAccentDictionary private constructor(
     private val dataOffset: Long
 ) {
 
+    // ByteBuffer is NOT thread-safe (position/limit/mark are mutable state),
+    // so readValueAt used to call buffer.duplicate() per lookup to get a
+    // private view. With thousands of word lookups per synthesized sentence,
+    // that's thousands of small allocations on the hot path. A ThreadLocal
+    // duplicate amortises it — each thread that ever touches the dictionary
+    // builds one view, then reuses it forever.
+    private val threadLocalView: ThreadLocal<ByteBuffer> = ThreadLocal.withInitial {
+        buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+    }
+
     /**
      * Look up [lowerKey] (expected to already be lowercased and ready as
      * UTF-8 bytes). Returns the stressed-form value, or null if not present.
@@ -95,8 +105,10 @@ class BinaryAccentDictionary private constructor(
         val valLen = buffer.getShort(entryAbs + 2).toInt() and 0xFFFF
         val valStart = entryAbs + 4 + keyLen
         val bytes = ByteArray(valLen)
-        // Bulk get without slicing the buffer (slicing would change position).
-        val view = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        // Use the thread-local view so we don't allocate a fresh duplicate
+        // for every lookup. Each thread mutates its own view's position
+        // freely; the underlying mmap'd buffer is never touched.
+        val view = threadLocalView.get()!!
         view.position(valStart)
         view.get(bytes, 0, valLen)
         return String(bytes, Charsets.UTF_8)

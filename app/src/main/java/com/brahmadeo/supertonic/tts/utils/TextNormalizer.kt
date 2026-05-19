@@ -13,6 +13,40 @@ class TextNormalizer {
     data class Rule(val pattern: Pattern, val replacement: (java.util.regex.Matcher) -> String)
     private val rules: List<Rule> = initializeRules()
 
+    // Patterns reused across every normalize() / splitIntoSentences() call.
+    // Compiling these inline on the hot path was costing measurable CPU on
+    // long texts (Moon+ Reader sends sentence-sized chunks rapidly, and each
+    // chunk used to re-parse 30+ regexes). Keep them as immutable fields so
+    // every TTS engine instance pays the compile cost exactly once.
+    private val smushedSentencePattern: Pattern = Pattern.compile("([a-z])\\.([A-Z])")
+    private val smushedWordPattern1: Pattern = Pattern.compile("([a-z])([A-Z])")
+    private val smushedWordPattern2: Pattern = Pattern.compile("([A-Z])([A-Z][a-z])")
+    private val letterNumberPattern: Pattern = Pattern.compile("([a-zA-Z])(\\d)")
+    private val numberPattern: Pattern = Pattern.compile("\\b(\\d+(?:\\.\\d+)?)\\b")
+
+    // Punctuation tweaks (applyPunctuationTweaks) — fixed regexes, cached.
+    private val ellipsisUnicodeRegex = Regex("…")
+    private val ellipsisCollapseRegex = Regex("\\.\\s*\\.\\s*\\.+")
+    private val ellipsisLeadingWsRegex = Regex("\\s+\\.{3,}")
+    private val doubleMarkRegex = Regex("(?<![?!])([?!])(?![?!])")
+
+    // splitIntoSentences — both the split regex and the per-abbreviation
+    // protect patterns are stable across calls. Building them once avoids
+    // re-compiling 24+ patterns per synthesis.
+    private val abbreviations = listOf(
+        "Mr.", "Mrs.", "Dr.", "Ms.", "Prof.", "Sr.", "Jr.",
+        "etc.", "vs.", "e.g.", "i.e.",
+        "Jan.", "Feb.", "Mar.", "Apr.", "May.", "Jun.",
+        "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec.",
+        "U.S.", "U.K.", "E.U."
+    )
+    private val abbreviationPatterns: List<Pattern> = abbreviations.map { abbr ->
+        Pattern.compile("\\b" + Pattern.quote(abbr), Pattern.CASE_INSENSITIVE)
+    }
+    private val sentenceSplitPattern: Pattern =
+        Pattern.compile("(?<=[.!?]['\"”’]?)\\s+(?=['\"“‘]?[\\p{L}\\d])|(?<=;)\\s+")
+    private val commaSplitPattern: Pattern = Pattern.compile("(?<=,)\\s+")
+
     private fun initializeRules(): List<Rule> {
         val rulesList = mutableListOf<Rule>()
         
@@ -192,16 +226,16 @@ class TextNormalizer {
         // to a canonical "...", and remove any whitespace immediately before
         // it so the model gets one expressive pause instead of three.
         if (PunctuationPrefs.tightEllipsis) {
-            t = t.replace("…", "...")
-            t = t.replace(Regex("\\.\\s*\\.\\s*\\.+"), "...")
-            t = t.replace(Regex("\\s+\\.{3,}"), "...")
+            t = ellipsisUnicodeRegex.replace(t, "...")
+            t = ellipsisCollapseRegex.replace(t, "...")
+            t = ellipsisLeadingWsRegex.replace(t, "...")
         }
 
         // Doubled question/exclamation marks. Only applies to a single mark —
         // we don't want to turn "!!" into "!!!" and so on. Run after ellipsis
         // normalization so the period collapse can't accidentally consume `?`.
         if (PunctuationPrefs.strengthenIntonation) {
-            t = t.replace(Regex("(?<![?!])([?!])(?![?!])"), "$1$1")
+            t = doubleMarkRegex.replace(t, "$1$1")
         }
 
         return t
@@ -275,21 +309,11 @@ class TextNormalizer {
             return processedText
         }
 
-        // Step 0: Fix smushed text from webpage layouts
-        // Fix smushed sentences: lowercase char, period, uppercase char (reserved.Reuse)
-        val smushedSentencePattern = Pattern.compile("([a-z])\\.([A-Z])")
+        // Step 0: Fix smushed text from webpage layouts (uses class-level
+        // cached patterns — see header for why they're not compiled inline).
         var fixedText = smushedSentencePattern.matcher(processedText).replaceAll("$1. $2")
-        
-        // Fix smushed words: lowercase char, uppercase char (economyIMF)
-        val smushedWordPattern1 = Pattern.compile("([a-z])([A-Z])")
         fixedText = smushedWordPattern1.matcher(fixedText).replaceAll("$1 $2")
-        
-        // Fix smushed words: Uppercase followed by Uppercase+Lowercase (FTNews)
-        val smushedWordPattern2 = Pattern.compile("([A-Z])([A-Z][a-z])")
         fixedText = smushedWordPattern2.matcher(fixedText).replaceAll("$1 $2")
-
-        // Fix letter-number merges (Published8 -> Published 8)
-        val letterNumberPattern = Pattern.compile("([a-zA-Z])(\\d)")
         fixedText = letterNumberPattern.matcher(fixedText).replaceAll("$1 $2")
 
         // Step 1: Currency
@@ -309,7 +333,6 @@ class TextNormalizer {
 
         // Step 3: Convert remaining numbers to words (CRITICAL for C++ Engine)
         // Matches integers and decimals (e.g. "300000" -> "three hundred thousand")
-        val numberPattern = Pattern.compile("\\b(\\d+(?:\\.\\d+)?)\\b")
         val matcher = numberPattern.matcher(normalized)
         val sb = StringBuffer()
         while (matcher.find()) {
@@ -334,31 +357,16 @@ class TextNormalizer {
     }
 
     fun splitIntoSentences(text: String, lang: String = "en"): List<String> {
-        val abbreviations = listOf(
-            "Mr.", "Mrs.", "Dr.", "Ms.", "Prof.", "Sr.", "Jr.", 
-            "etc.", "vs.", "e.g.", "i.e.",
-            "Jan.", "Feb.", "Mar.", "Apr.", "May.", "Jun.", 
-            "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec.",
-            "U.S.", "U.K.", "E.U."
-        )
         var protectedText = text
-        
-        abbreviations.forEachIndexed { index, abbr ->
+
+        // Abbreviation protection — patterns pre-compiled as class fields.
+        abbreviationPatterns.forEachIndexed { index, pattern ->
             val placeholder = "__ABBR${index}__"
-            val pattern = Pattern.compile("\\b" + Pattern.quote(abbr), Pattern.CASE_INSENSITIVE)
             protectedText = pattern.matcher(protectedText).replaceAll(placeholder)
         }
-        
-        // Split by:
-        // 1. Punctuation (.!?) followed by optional quote and space and Capital/Number/Unicode Letter
-        // 2. Semi-colon followed by space
-        // FIXED: Quotes are now INSIDE the lookbehind so they aren't consumed by split
-        // OLD: (?<=[.!?])['"”’]?\\s+
-        // NEW: (?<=[.!?]['"”’]?)\\s+
-        // We also use a more specific lookahead to detect start of next sentence
-        val pattern = Pattern.compile("(?<=[.!?]['\"”’]?)\\s+(?=['\"“‘]?[\\p{L}\\d])|(?<=;)\\s+")
-        val rawSentences = protectedText.split(pattern)
-        
+
+        val rawSentences = protectedText.split(sentenceSplitPattern)
+
         val refinedSentences = mutableListOf<String>()
         val maxLength = 300
 
@@ -367,7 +375,7 @@ class TextNormalizer {
                 refinedSentences.add(raw)
             } else {
                 // Split long sentences by comma if they are too long
-                val subParts = raw.split(Pattern.compile("(?<=,)\\s+"))
+                val subParts = raw.split(commaSplitPattern)
                 val currentPart = StringBuilder()
                 
                 for (part in subParts) {
@@ -407,26 +415,30 @@ class TextNormalizer {
         val currentChunk = StringBuilder()
         val chunkLimit = 300
 
+        // Build the volatile-punctuation regex once per call, not once per
+        // sentence. Punctuation prefs are stable for the duration of a single
+        // synthesis batch — we just need to recompute when the user flips a
+        // toggle in the Lexicon screen, which they can only do between calls.
+        val isKorean = lang.lowercase().startsWith("ko")
+        val volatilePunctuationRegex: Regex? = if (!isKorean) {
+            val marks = StringBuilder()
+            if (!PunctuationPrefs.tightQuestionExclamation) marks.append("!?")
+            if (!PunctuationPrefs.tightCommasAndPeriods) marks.append(",;")
+            if (marks.isNotEmpty()) {
+                Regex("([${Regex.escape(marks.toString())}])(['\"”’]?)\\s*$")
+            } else null
+        } else null
+
         var i = 0
         while (i < processedSentences.size) {
             var sentence = processedSentences[i]
-            
-            // Universal Volatile/Punctuation Fix:
-            // Default: insert space before !, ?, ,, ; to stabilize audio.
-            // DISABLED for Korean.
-            // Toggleable per-punctuation type. The regex is dynamically built
-            // from whatever marks the user hasn't opted to tighten — so when
-            // all toggles are off, behavior is identical to the legacy rule.
-            if (!lang.lowercase().startsWith("ko")) {
-                val marks = StringBuilder()
-                if (!PunctuationPrefs.tightQuestionExclamation) marks.append("!?")
-                if (!PunctuationPrefs.tightCommasAndPeriods) marks.append(",;")
-                if (marks.isNotEmpty()) {
-                    sentence = sentence.replaceFirst(
-                        Regex("([${Regex.escape(marks.toString())}])(['\"”’]?)\\s*$"),
-                        " $1$2"
-                    )
-                }
+
+            // Universal Volatile/Punctuation Fix: insert space before
+            // configured marks at the end of the sentence to stabilize audio.
+            // DISABLED for Korean. The regex (see above) is null when nothing
+            // needs rewriting, so this is a single null-check on the fast path.
+            if (volatilePunctuationRegex != null) {
+                sentence = sentence.replaceFirst(volatilePunctuationRegex, " $1$2")
             }
 
             // HANDLE STABLE SENTENCE (Standard Accumulation)

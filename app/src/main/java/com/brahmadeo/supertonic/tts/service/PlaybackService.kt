@@ -34,10 +34,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -153,14 +155,21 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
         override fun onAudioChunk(sessionId: Long, data: ByteArray) {
             val ch = currentAudioChannel ?: return
-            // Non-blocking send with manual backoff — keeps us off the
-            // coroutine machinery on the Rust JNI thread, while still
-            // applying backpressure when the channel is full.
-            while (true) {
-                val result = ch.trySend(data)
-                if (result.isSuccess || result.isClosed) return
-                if (SupertonicTTS.isCancelled()) return
-                try { Thread.sleep(20) } catch (_: InterruptedException) { return }
+            if (SupertonicTTS.isCancelled()) return
+            // Block the Rust JNI thread on send instead of busy-waiting with
+            // Thread.sleep(20) in a trySend loop. runBlocking parks this
+            // thread until the channel has space (consumer drained a chunk
+            // into AudioTrack) or the channel was closed (producer side
+            // ended synthesis). Either way it costs zero CPU while waiting,
+            // versus the old design that woke up 50 times per second to
+            // poll. ClosedSendChannelException is the normal cancellation
+            // path — caller invokes channel.close() in its finally block.
+            try {
+                runBlocking { ch.send(data) }
+            } catch (_: ClosedSendChannelException) {
+                // Producer closed the channel — synthesis cancelled, fine.
+            } catch (_: InterruptedException) {
+                // Rust side interrupted; let it return cleanly.
             }
         }
     }
@@ -187,7 +196,15 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
         audioManager = attributionContext.getSystemService(AUDIO_SERVICE) as AudioManager
         val powerManager = attributionContext.getSystemService(POWER_SERVICE) as android.os.PowerManager
-        wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Supertonic:PlaybackWakeLock")
+        wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Supertonic:PlaybackWakeLock").apply {
+            // Idempotent acquire/release. Without this, a rapid sequence of
+            // synthesizeAndPlay() calls (e.g. queue with auto-advance, or
+            // MacroDroid hammering the TTS service) acquires the lock once
+            // per call but the stop path releases it only once — the lock
+            // stays held until its 10-minute auto-timeout, falsely keeping
+            // the CPU awake.
+            setReferenceCounted(false)
+        }
         
         mediaSession = MediaSessionCompat(attributionContext, "SupertonicMediaSession").apply {
             setCallback(object : MediaSessionCompat.Callback() {
@@ -492,11 +509,34 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         return if (cyrillic > latin && cyrillic >= 4) "ru" else declared
     }
 
-    /** Returns a zeroed PCM-16 mono buffer of the requested duration (in ms). */
+    // Cache the (rate, durationMs) -> zeroed-buffer mapping. silenceBytes is
+    // called between every pair of consecutive sentences with the same
+    // (80 ms, sample rate) parameters, so without caching a fresh 7-15 KB
+    // ByteArray was allocated per inter-sentence gap — multiple MB of GC
+    // pressure on a long book.
+    @Volatile private var cachedSilenceRate: Int = -1
+    @Volatile private var cachedSilenceDurationMs: Int = -1
+    @Volatile private var cachedSilenceBuffer: ByteArray? = null
+
+    /**
+     * Returns a zeroed PCM-16 mono buffer of the requested duration (in ms).
+     *
+     * The returned buffer is shared — callers must treat it as read-only.
+     * AudioTrack.write() only reads from the input array, so handing the same
+     * array to the channel repeatedly is safe.
+     */
     private fun silenceBytes(durationMs: Int): ByteArray {
         val rate = lastTrackRate.takeIf { it > 0 } ?: SupertonicTTS.getAudioSampleRate()
+        val existing = cachedSilenceBuffer
+        if (existing != null && cachedSilenceRate == rate && cachedSilenceDurationMs == durationMs) {
+            return existing
+        }
         val samples = (rate.toLong() * durationMs / 1000L).toInt().coerceAtLeast(0)
-        return ByteArray(samples * 2)
+        val fresh = ByteArray(samples * 2)
+        cachedSilenceRate = rate
+        cachedSilenceDurationMs = durationMs
+        cachedSilenceBuffer = fresh
+        return fresh
     }
 
     /**

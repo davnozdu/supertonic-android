@@ -336,8 +336,9 @@ object AccentDictionaryManager {
                 applyFallback -> fallbackLastVowel(original) ?: continue
                 else -> continue
             }
-            // appendReplacement treats $ and \ specially — escape them.
-            matcher.appendReplacement(sb, cased.replace("\\", "\\\\").replace("$", "\\$"))
+            // appendReplacement treats $ and \ specially — quoteReplacement
+            // does the escape in a single pass without two intermediate Strings.
+            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(cased))
         }
         matcher.appendTail(sb)
         return sb.toString()

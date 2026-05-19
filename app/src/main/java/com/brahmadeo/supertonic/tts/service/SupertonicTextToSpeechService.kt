@@ -287,11 +287,16 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val streamingListener = object : SupertonicTTS.ProgressListener {
             override fun onProgress(sessionId: Long, current: Int, total: Int) {}
             override fun onAudioChunk(sessionId: Long, data: ByteArray) {
-                while (true) {
-                    val r = ttsChannel.trySend(data)
-                    if (r.isSuccess || r.isClosed) return
-                    if (SupertonicTTS.isCancelled()) return
-                    try { Thread.sleep(20) } catch (_: InterruptedException) { return }
+                if (SupertonicTTS.isCancelled()) return
+                // Block on send instead of busy-waiting. See PlaybackService
+                // for the same pattern + rationale (no CPU burn vs the old
+                // 50 Hz trySend poll loop).
+                try {
+                    runBlocking { ttsChannel.send(data) }
+                } catch (_: kotlinx.coroutines.channels.ClosedSendChannelException) {
+                    // Producer closed the channel — fine.
+                } catch (_: InterruptedException) {
+                    // Caller interrupted us — return cleanly.
                 }
             }
         }
