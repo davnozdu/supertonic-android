@@ -198,6 +198,29 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         return LANG_PREFIX_MAP.entries.firstOrNull { l.startsWith(it.key) }?.value ?: "en"
     }
 
+    /**
+     * Override the requested language when the actual text content tells us
+     * otherwise. Apps like Moon+ Reader sometimes don't set the language
+     * field, so we'd get whatever the system locale is — and a Russian
+     * audiobook would land in our English path, missing Cyrillic stress
+     * marks and number-to-words spellout.
+     *
+     * Counts Cyrillic vs Latin letters and overrides only when Cyrillic is
+     * the clear majority. Threshold tuned to avoid flipping on isolated
+     * proper nouns inside an English text ("Pushkin", "Tolstoy").
+     */
+    private fun detectLanguage(text: String, requested: String): String {
+        var cyrillic = 0
+        var latin = 0
+        for (ch in text) {
+            when {
+                ch in 'Ѐ'..'ӿ' -> cyrillic++
+                ch in 'a'..'z' || ch in 'A'..'Z' -> latin++
+            }
+        }
+        return if (cyrillic > latin && cyrillic >= 4) "ru" else requested
+    }
+
     private val textNormalizer = com.brahmadeo.supertonic.tts.utils.TextNormalizer()
 
     override fun onSynthesizeText(request: SynthesisRequest?, callback: SynthesisCallback?) {
@@ -213,7 +236,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         callback.start(SupertonicTTS.getAudioSampleRate(), android.media.AudioFormat.ENCODING_PCM_16BIT, 1)
 
         val requestedVoice = request.voiceName
-        val requestedLang = normalizeLanguage(request.language)
+        val requestedLang = detectLanguage(rawText, normalizeLanguage(request.language))
         val prefs = attributionContext.getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
 
         val voiceFile = if (requestedVoice != null && requestedVoice.contains("-supertonic-")) {

@@ -165,29 +165,56 @@ object AccentDictionaryManager {
     }
 
     /**
-     * Best-effort stress for a word that didn't show up in the dictionary:
-     * put U+0301 after the **last** vowel. This is intentionally a coarse
-     * heuristic — Russian stress is free, not oxytonic — but it's noticeably
-     * better than the model guessing from the consonant skeleton alone for
-     * rare or borrowed words.
+     * Best-effort stress for a word that didn't show up in the dictionary.
      *
-     * Guard rails:
-     * - returns null (= skip replacement) if the word already has a stress mark,
-     * - returns null for single-vowel words, which always read fine as-is.
+     * Default heuristic is **paroxytone** — stress on the *penultimate* vowel —
+     * which beats "last vowel" on average for Russian: in a Zipf-weighted
+     * frequency corpus, words with stress on the second-to-last syllable
+     * outnumber oxytones roughly 2:1, and the paroxytone choice is right far
+     * more often for nouns, adjectives and most verb forms.
+     *
+     * Some suffixes are reliably non-paroxytone, so we special-case the most
+     * common ones:
+     * - `-ция` / `-сия` (станция, акция, операция, демонстрация): stress on
+     *   the vowel right before the suffix (опера́ция, демонстра́ция).
+     * - `-ение` / `-ание` / `-ование` (учение, образование, требование):
+     *   stress on the vowel right before -ние (уче́ние, образова́ние).
+     * - `-ист` (лингвист, программист, журналист): stress on the suffix's `и`.
+     *
+     * Guard rails: skip words that already have stress, single-vowel words,
+     * and words with no vowels at all.
      */
     private fun fallbackLastVowel(word: String): String? {
         if (word.any { it == ACUTE }) return null
+
         val lower = word.lowercase()
-        var vowelCount = 0
-        var lastVowelIdx = -1
+
+        // Collect vowel positions once — used by every branch below.
+        val vowelPositions = ArrayList<Int>(word.length / 2)
         for ((i, ch) in lower.withIndex()) {
-            if (ch in RU_VOWELS) {
-                vowelCount++
-                lastVowelIdx = i
-            }
+            if (ch in RU_VOWELS) vowelPositions.add(i)
         }
-        if (vowelCount < 2 || lastVowelIdx < 0) return null
-        return word.substring(0, lastVowelIdx + 1) + ACUTE + word.substring(lastVowelIdx + 1)
+        if (vowelPositions.size < 2) return null
+
+        // Suffix-based overrides for cases where paroxytone is almost always wrong.
+        val targetIdx: Int = when {
+            // -ция / -сия → vowel immediately before the "-ция" tail
+            lower.endsWith("ция") || lower.endsWith("сия") -> {
+                val cutoff = word.length - 3
+                vowelPositions.lastOrNull { it < cutoff } ?: return null
+            }
+            // -ние with a vowel-before-"н" pattern (учение, образование, требование)
+            lower.endsWith("ние") -> {
+                val cutoff = word.length - 3
+                vowelPositions.lastOrNull { it < cutoff } ?: return null
+            }
+            // -ист → stress the suffix's "и"
+            lower.endsWith("ист") -> word.length - 3
+            // Default: paroxytone (penultimate vowel)
+            else -> vowelPositions[vowelPositions.size - 2]
+        }
+
+        return word.substring(0, targetIdx + 1) + ACUTE + word.substring(targetIdx + 1)
     }
 
     fun setFallbackEnabled(context: Context, enabled: Boolean) {

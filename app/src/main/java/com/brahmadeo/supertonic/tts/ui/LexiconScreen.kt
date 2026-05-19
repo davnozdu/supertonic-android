@@ -171,7 +171,7 @@ fun LexiconScreen(
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            text = "When a word isn't in the dictionary, put stress on the last vowel. Heuristic — sometimes wrong (e.g. \"ма́кбук\" gets read as \"макбу́к\").",
+                            text = "When a word isn't in the dictionary, fall back to the penultimate vowel (paroxytone). Common Russian suffixes (-ция, -ние, -ист) get their own special positions. Heuristic — sometimes wrong, but better than nothing.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
