@@ -88,18 +88,18 @@ object AccentDictionaryManager {
                 id = "ru-standard-bin",
                 displayName = "Standard (binary)",
                 format = DictFormat.BINARY,
-                subtitle = "38 MB · 962K entries · ~5-10 MB RAM · words ≤ 9 chars, no homographs",
-                sizeBytes = 38L * 1024 * 1024,
-                entries = 961_968,
+                subtitle = "39 MB · 983K entries · ~5-10 MB RAM · words ≤ 9 chars, no homographs, ё",
+                sizeBytes = 39L * 1024 * 1024,
+                entries = 982_511,
                 url = "$DICT_BASE_URL/russian_accents_max9.sacc"
             ),
             PrebuiltDict(
                 id = "ru-compact-bin",
                 displayName = "Compact (binary)",
                 format = DictFormat.BINARY,
-                subtitle = "22 MB · 615K entries · ~3-7 MB RAM · words ≤ 8 chars",
-                sizeBytes = 22L * 1024 * 1024,
-                entries = 615_365,
+                subtitle = "23 MB · 628K entries · ~3-7 MB RAM · words ≤ 8 chars, ё",
+                sizeBytes = 23L * 1024 * 1024,
+                entries = 628_177,
                 url = "$DICT_BASE_URL/russian_accents_max8.sacc"
             ),
             // ------------- Text (.json, HashMap, hand-editable) -------------
@@ -116,18 +116,18 @@ object AccentDictionaryManager {
                 id = "ru-standard-txt",
                 displayName = "Standard (text)",
                 format = DictFormat.TEXT,
-                subtitle = "36 MB · 962K entries · ~150 MB RAM · words ≤ 9 chars, no homographs",
-                sizeBytes = 36L * 1024 * 1024,
-                entries = 961_968,
+                subtitle = "37 MB · 983K entries · ~150 MB RAM · words ≤ 9 chars, no homographs, ё",
+                sizeBytes = 37L * 1024 * 1024,
+                entries = 982_511,
                 url = "$DICT_BASE_URL/russian_accents_max9.json"
             ),
             PrebuiltDict(
                 id = "ru-compact-txt",
                 displayName = "Compact (text)",
                 format = DictFormat.TEXT,
-                subtitle = "21 MB · 615K entries · ~85 MB RAM · words ≤ 8 chars",
-                sizeBytes = 21L * 1024 * 1024,
-                entries = 615_365,
+                subtitle = "22 MB · 628K entries · ~85 MB RAM · words ≤ 8 chars, ё",
+                sizeBytes = 22L * 1024 * 1024,
+                entries = 628_177,
                 url = "$DICT_BASE_URL/russian_accents_max8.json"
             )
         )
