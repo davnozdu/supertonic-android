@@ -135,11 +135,20 @@ class LexiconActivity : ComponentActivity() {
                             showProgress = false
                             if (count > 0) {
                                 refreshRules()
-                                Toast.makeText(this@LexiconActivity,
-                                    "Loaded $count entries", Toast.LENGTH_LONG).show()
+                                MaterialAlertDialogBuilder(this@LexiconActivity)
+                                    .setTitle("Dictionary loaded")
+                                    .setMessage("%,d entries are now active for synthesis.".format(count))
+                                    .setPositiveButton("OK", null)
+                                    .show()
                             } else {
-                                Toast.makeText(this@LexiconActivity,
-                                    "Failed to download accent dictionary", Toast.LENGTH_LONG).show()
+                                // Show the *specific* reason in a persistent dialog
+                                // so the user knows what went wrong (OOM with Full
+                                // on small phones is the most common case here).
+                                MaterialAlertDialogBuilder(this@LexiconActivity)
+                                    .setTitle("Download failed")
+                                    .setMessage(downloadErrorMessage(count))
+                                    .setPositiveButton("OK", null)
+                                    .show()
                             }
                         }
                     }
@@ -264,9 +273,32 @@ class LexiconActivity : ComponentActivity() {
                 Toast.makeText(this, getString(R.string.accent_dict_empty), Toast.LENGTH_SHORT).show()
             }
             else -> {
-                Toast.makeText(this, getString(R.string.accent_dict_import_failed), Toast.LENGTH_LONG).show()
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(getString(R.string.accent_dict_import_failed))
+                    .setMessage(downloadErrorMessage(count))
+                    .setPositiveButton(getString(R.string.ok), null)
+                    .show()
             }
         }
+    }
+
+    /**
+     * Map an ERR_* code returned by [AccentDictionaryManager] into a sentence
+     * the user can act on. We always include the OOM advice because that's
+     * by far the most common failure on phones <= 4 GB RAM trying to load Full.
+     */
+    private fun downloadErrorMessage(code: Int): String = when (code) {
+        AccentDictionaryManager.ERR_OOM ->
+            "Out of memory while parsing the dictionary. The Full dictionary needs ~500 MB of heap; pick Standard (36 MB / ~150 MB RAM) or Compact (21 MB / ~85 MB RAM) instead."
+        AccentDictionaryManager.ERR_NETWORK ->
+            "Network error. Check your connection and try again."
+        AccentDictionaryManager.ERR_TOO_LARGE ->
+            "Downloaded file is larger than 250 MB cap and was discarded."
+        AccentDictionaryManager.ERR_PARSE ->
+            "Couldn't parse the JSON. The file may be corrupt or in an unexpected format."
+        AccentDictionaryManager.ERR_IO ->
+            "I/O error while reading the source. Try again."
+        else -> "Unknown error (code $code)."
     }
 
     private fun clearAccentDict() {

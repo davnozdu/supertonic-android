@@ -2,10 +2,14 @@ package com.brahmadeo.supertonic.tts.utils
 
 import android.content.Context
 import android.net.Uri
+import android.util.JsonReader
 import android.util.Log
-import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.InputStreamReader
 import java.net.URL
 import java.util.regex.Pattern
 
@@ -131,10 +135,13 @@ object AccentDictionaryManager {
             return
         }
         try {
-            val json = file.readText()
-            entries = parseJsonToMap(json)
+            // Streaming parser — never builds the whole tree in memory.
+            // Critical for the 165 MB Full dictionary, which OOMs JSONObject.
+            FileInputStream(file).use { fis ->
+                entries = parseJsonStream(fis, file.length())
+            }
             Log.i(TAG, "Loaded ${entries.size} accent entries from disk")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "Failed to load accent dictionary", e)
             entries = emptyMap()
         }
@@ -265,25 +272,41 @@ object AccentDictionaryManager {
 
     /**
      * Imports a dictionary from a content:// URI selected by the user.
-     * @return number of entries loaded (or -1 on failure).
+     *
+     * Two-pass: stream the URI into a tmp file (we don't know its size from
+     * content://, so this enforces the cap), then stream-parse the file.
+     * Never materialises the whole JSON in memory.
+     *
+     * @return number of entries loaded (or a negative ImportError code on failure).
      */
     fun importFromUri(context: Context, uri: Uri): Int {
+        val tmp = File(context.cacheDir, "accent_import.tmp")
         return try {
-            val bytes = context.contentResolver.openInputStream(uri)?.use {
-                it.readBytes()
-            } ?: return -1
-            if (bytes.size > MAX_FILE_BYTES) {
-                Log.w(TAG, "Refusing dictionary ${bytes.size} bytes — over ${MAX_FILE_BYTES} cap")
-                return -1
+            val written = context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(tmp).use { out ->
+                    copyWithCap(input, out, MAX_FILE_BYTES)
+                }
+            } ?: return ERR_IO
+            if (written < 0) {
+                tmp.delete()
+                return ERR_TOO_LARGE
             }
-            val parsed = parseJsonToMap(String(bytes, Charsets.UTF_8))
-            if (parsed.isEmpty()) return 0
-            saveAndCache(context, parsed)
-            writeMetadata(context, "Imported from file", parsed.size, bytes.size.toLong())
+            val parsed = FileInputStream(tmp).use { parseJsonStream(it, tmp.length()) }
+            if (parsed.isEmpty()) {
+                tmp.delete()
+                return 0
+            }
+            installFromTmp(context, tmp, parsed, "Imported from file")
             parsed.size
-        } catch (e: Exception) {
+        } catch (oom: OutOfMemoryError) {
+            Log.e(TAG, "Import OOM", oom)
+            tmp.delete()
+            entries = emptyMap()
+            ERR_OOM
+        } catch (e: Throwable) {
             Log.e(TAG, "Import failed", e)
-            -1
+            tmp.delete()
+            ERR_PARSE
         }
     }
 
@@ -294,13 +317,22 @@ object AccentDictionaryManager {
         clearMetadata(context)
     }
 
+    // Negative return codes from importFromUri / downloadPrebuilt so the UI
+    // can show a specific reason instead of a generic "failed" toast.
+    const val ERR_IO = -1
+    const val ERR_OOM = -2
+    const val ERR_PARSE = -3
+    const val ERR_TOO_LARGE = -4
+    const val ERR_NETWORK = -5
+    const val ERR_EMPTY = 0
+
     /**
      * Downloads and installs the pre-built dictionary for [lang] (currently only "ru").
      * Streams bytes to a temp file with progress callbacks so the UI can show a bar
      * instead of freezing for ~10 s on a 36 MB file. Reports byte counts; the caller
      * decides whether to translate them into a percentage.
      *
-     * Returns the number of entries loaded, or -1 on any failure.
+     * Returns the number of entries loaded, or a negative ERR_* code on failure.
      */
     fun downloadPrebuilt(
         context: Context,
@@ -338,47 +370,107 @@ object AccentDictionaryManager {
             if (tmp.length() > MAX_FILE_BYTES) {
                 Log.w(TAG, "Downloaded dict ${tmp.length()} bytes exceeds cap")
                 tmp.delete()
-                return -1
+                return ERR_TOO_LARGE
             }
             onProgress(tmp.length(), tmp.length()) // signal "parsing now"
-            val bytesLen = tmp.length()
-            val parsed = parseJsonToMap(tmp.readText(Charsets.UTF_8))
-            tmp.delete()
-            if (parsed.isEmpty()) return 0
-            saveAndCache(context, parsed)
-            writeMetadata(context, sourceName, parsed.size, bytesLen)
+            // Stream-parse straight off disk — no readText, no JSONObject.
+            val parsed = FileInputStream(tmp).use { parseJsonStream(it, tmp.length()) }
+            if (parsed.isEmpty()) {
+                tmp.delete()
+                return ERR_EMPTY
+            }
+            installFromTmp(context, tmp, parsed, sourceName)
             return parsed.size
-        } catch (e: Exception) {
+        } catch (oom: OutOfMemoryError) {
+            // Parsing the full 165 MB dict allocates ~390 MB for the HashMap
+            // alone. With largeHeap=true that fits on 4 GB+ phones, but on
+            // smaller devices it OOMs. Tell the user explicitly so they pick a
+            // smaller dict instead of staring at a silent "failed" toast.
+            Log.e(TAG, "downloadPrebuilt OOM from $urlStr", oom)
+            tmp.delete()
+            entries = emptyMap()
+            return ERR_OOM
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "downloadPrebuilt network failure from $urlStr", e)
+            tmp.delete()
+            return ERR_NETWORK
+        } catch (e: Throwable) {
             Log.e(TAG, "downloadPrebuilt failed from $urlStr", e)
             tmp.delete()
-            return -1
+            return ERR_PARSE
         }
     }
 
-    private fun saveAndCache(context: Context, map: Map<String, String>) {
-        entries = map
+    /**
+     * Move the validated tmp file into place and swap the in-memory map.
+     *
+     * The big win over the old saveAndCache: we never re-serialise the map
+     * via JSONObject.toString() (which would allocate a second 200+ MB
+     * String on top of the already-loaded HashMap and OOM most phones).
+     * The tmp file is *already* valid JSON — we just rename it.
+     */
+    private fun installFromTmp(
+        context: Context,
+        tmp: File,
+        parsed: Map<String, String>,
+        sourceName: String
+    ) {
+        val target = File(context.filesDir, FILE_NAME)
+        if (target.exists()) target.delete()
+        val size = tmp.length()
+        if (!tmp.renameTo(target)) {
+            // Cross-device fallback (cacheDir and filesDir can be different
+            // mounts on some OEMs); copy then drop the original.
+            tmp.inputStream().use { input ->
+                FileOutputStream(target).use { out -> input.copyTo(out) }
+            }
+            tmp.delete()
+        }
+        entries = parsed
         isLoaded = true
-        try {
-            val json = JSONObject()
-            for ((k, v) in map) json.put(k, v)
-            File(context.filesDir, FILE_NAME).writeText(json.toString())
-        } catch (e: Exception) {
-            Log.e(TAG, "Save failed", e)
-        }
+        writeMetadata(context, sourceName, parsed.size, size)
     }
 
-    private fun parseJsonToMap(json: String): Map<String, String> {
-        val obj = JSONObject(json)
-        val out = HashMap<String, String>(obj.length())
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next() ?: continue
-            val value = obj.optString(key, null) ?: continue
-            if (key.isBlank() || value.isBlank()) continue
-            // Store keys lowercased so lookups can be case-insensitive.
-            out[key.lowercase()] = value
+    /**
+     * Stream-parse a `{"word": "wórd", ...}` JSON object directly from an
+     * InputStream. Uses constant memory (one key/value pair at a time) so the
+     * full 165 MB dict only allocates the final HashMap, not the parse tree.
+     */
+    private fun parseJsonStream(input: InputStream, knownSize: Long): HashMap<String, String> {
+        // Pre-size the HashMap roughly so we don't pay a dozen resizes during
+        // load. ~10 bytes per entry on disk for Cyrillic JSON is a decent guess.
+        val estimatedEntries = if (knownSize > 0) (knownSize / 10).toInt().coerceAtLeast(64) else 64
+        val out = HashMap<String, String>(estimatedEntries)
+        JsonReader(InputStreamReader(BufferedInputStream(input), Charsets.UTF_8)).use { reader ->
+            reader.isLenient = true
+            reader.beginObject()
+            while (reader.hasNext()) {
+                val key = reader.nextName()
+                val value = reader.nextString()
+                if (key.isNotBlank() && value.isNotBlank()) {
+                    out[key.lowercase()] = value
+                }
+            }
+            reader.endObject()
         }
         return out
+    }
+
+    /**
+     * Copy [input] to [output] up to [cap] bytes. Returns bytes written,
+     * or -1 if the source exceeded the cap.
+     */
+    private fun copyWithCap(input: InputStream, output: FileOutputStream, cap: Long): Long {
+        val buf = ByteArray(64 * 1024)
+        var soFar = 0L
+        while (true) {
+            val read = input.read(buf)
+            if (read < 0) break
+            soFar += read
+            if (soFar > cap) return -1
+            output.write(buf, 0, read)
+        }
+        return soFar
     }
 
     /**
