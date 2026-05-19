@@ -29,6 +29,12 @@ class TextNormalizer {
     private val ellipsisCollapseRegex = Regex("\\.\\s*\\.\\s*\\.+")
     private val ellipsisLeadingWsRegex = Regex("\\s+\\.{3,}")
     private val doubleMarkRegex = Regex("(?<![?!])([?!])(?![?!])")
+    // Force-space: letter (or combining mark) + one punctuation, NOT followed
+    // by another punctuation. The negative lookahead is what keeps "..."
+    // and "?!" intact — only single trailing marks like "что," "конец!"
+    // get split. Digits aren't included on the left side so "1.5" / "3,14"
+    // survive as a single number for the Russian number normaliser.
+    private val forceSpacePunctRegex = Regex("([\\p{L}\\p{M}])([.,;:!?])(?![.,!?])")
 
     // splitIntoSentences — both the split regex and the per-abbreviation
     // protect patterns are stable across calls. Building them once avoids
@@ -236,6 +242,16 @@ class TextNormalizer {
         // normalization so the period collapse can't accidentally consume `?`.
         if (PunctuationPrefs.strengthenIntonation) {
             t = doubleMarkRegex.replace(t, "$1$1")
+        }
+
+        // Force a space between a word and trailing punctuation so the model's
+        // tokenizer sees a clean word token. Pre-dict in the pipeline means
+        // wordPattern in AccentDictionaryManager still finds the same word
+        // (it already excludes punctuation), but the final text sent to the
+        // engine has cleaner segmentation. Excludes consecutive punctuation
+        // (`...`, `?!`) via negative lookahead so the previous tweaks survive.
+        if (PunctuationPrefs.forceSpaceBeforePunctuation) {
+            t = forceSpacePunctRegex.replace(t, "$1 $2")
         }
 
         return t

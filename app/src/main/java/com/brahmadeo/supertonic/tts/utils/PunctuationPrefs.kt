@@ -32,6 +32,7 @@ object PunctuationPrefs {
     private const val KEY_DOUBLE_MARKS = "double_marks"
     private const val KEY_TIGHT_ELLIPSIS = "tight_ellipsis"
     private const val KEY_TIGHT_COMMAS_PERIODS = "tight_commas_periods"
+    private const val KEY_FORCE_SPACE_BEFORE_PUNCT = "force_space_before_punct"
 
     @Volatile var tightQuestionExclamation: Boolean = false
         private set
@@ -41,6 +42,15 @@ object PunctuationPrefs {
         private set
     @Volatile var tightCommasAndPeriods: Boolean = false
         private set
+    // When ON, [TextNormalizer] inserts a space between a letter and an
+    // immediately-following `.,;:!?`. Belt-and-braces hint for the engine's
+    // text tokenizer: dictionary lookup already strips punctuation thanks to
+    // [\\p{L}\\p{M}]+ matching, but the model's phonemizer may treat
+    // "удивлён," and "удивлён ," as different tokens. Excludes repeated
+    // punctuation (`...`, `?!`) so the existing tight-ellipsis / strengthen
+    // pipeline isn't subverted.
+    @Volatile var forceSpaceBeforePunctuation: Boolean = false
+        private set
 
     /** Pull flags from disk into memory. Cheap; safe to call repeatedly. */
     fun load(context: Context) {
@@ -49,6 +59,7 @@ object PunctuationPrefs {
         strengthenIntonation = p.getBoolean(KEY_DOUBLE_MARKS, false)
         tightEllipsis = p.getBoolean(KEY_TIGHT_ELLIPSIS, false)
         tightCommasAndPeriods = p.getBoolean(KEY_TIGHT_COMMAS_PERIODS, false)
+        forceSpaceBeforePunctuation = p.getBoolean(KEY_FORCE_SPACE_BEFORE_PUNCT, false)
     }
 
     fun setTightQuestionExclamation(context: Context, value: Boolean) {
@@ -69,6 +80,11 @@ object PunctuationPrefs {
     fun setTightCommasAndPeriods(context: Context, value: Boolean) {
         tightCommasAndPeriods = value
         save(context, KEY_TIGHT_COMMAS_PERIODS, value)
+    }
+
+    fun setForceSpaceBeforePunctuation(context: Context, value: Boolean) {
+        forceSpaceBeforePunctuation = value
+        save(context, KEY_FORCE_SPACE_BEFORE_PUNCT, value)
     }
 
     private fun save(context: Context, key: String, value: Boolean) {

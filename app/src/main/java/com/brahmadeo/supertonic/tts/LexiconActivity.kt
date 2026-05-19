@@ -58,6 +58,7 @@ class LexiconActivity : ComponentActivity() {
     private val doubleMarksState = mutableStateOf(false)
     private val tightEllipsisState = mutableStateOf(false)
     private val tightCommasPeriodsState = mutableStateOf(false)
+    private val forceSpacePunctState = mutableStateOf(false)
     private val chunkModeState = mutableStateOf(com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.ChunkMode.DEFAULT)
     private val preRollEnabledState = mutableStateOf(false)
     private val preRollSentencesState = mutableStateOf(2)
@@ -243,6 +244,7 @@ class LexiconActivity : ComponentActivity() {
                     strengthenIntonation = doubleMarksState.value,
                     tightEllipsis = tightEllipsisState.value,
                     tightCommasAndPeriods = tightCommasPeriodsState.value,
+                    forceSpaceBeforePunctuation = forceSpacePunctState.value,
                     chunkMode = chunkModeState.value,
                     preRollEnabled = preRollEnabledState.value,
                     preRollSentences = preRollSentencesState.value,
@@ -285,6 +287,10 @@ class LexiconActivity : ComponentActivity() {
                     onTightCommasPeriodsToggle = { enabled ->
                         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.setTightCommasAndPeriods(this@LexiconActivity, enabled)
                         tightCommasPeriodsState.value = enabled
+                    },
+                    onForceSpaceBeforePunctToggle = { enabled ->
+                        com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.setForceSpaceBeforePunctuation(this@LexiconActivity, enabled)
+                        forceSpacePunctState.value = enabled
                     },
                     onChunkModeChange = { mode ->
                         com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setChunkMode(this@LexiconActivity, mode)
@@ -337,6 +343,7 @@ class LexiconActivity : ComponentActivity() {
         doubleMarksState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.strengthenIntonation
         tightEllipsisState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.tightEllipsis
         tightCommasPeriodsState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.tightCommasAndPeriods
+        forceSpacePunctState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.forceSpaceBeforePunctuation
         com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.load(this)
         chunkModeState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.chunkMode
         preRollEnabledState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollEnabled

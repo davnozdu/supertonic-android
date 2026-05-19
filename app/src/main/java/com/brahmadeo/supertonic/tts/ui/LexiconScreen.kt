@@ -37,6 +37,7 @@ fun LexiconScreen(
     strengthenIntonation: Boolean,
     tightEllipsis: Boolean,
     tightCommasAndPeriods: Boolean,
+    forceSpaceBeforePunctuation: Boolean,
     chunkMode: PlaybackPrefs.ChunkMode,
     preRollEnabled: Boolean,
     preRollSentences: Int,
@@ -55,6 +56,7 @@ fun LexiconScreen(
     onDoubleMarksToggle: (Boolean) -> Unit,
     onTightEllipsisToggle: (Boolean) -> Unit,
     onTightCommasPeriodsToggle: (Boolean) -> Unit,
+    onForceSpaceBeforePunctToggle: (Boolean) -> Unit,
     onChunkModeChange: (PlaybackPrefs.ChunkMode) -> Unit,
     onPreRollToggle: (Boolean) -> Unit,
     onPreRollSentencesChange: (Int) -> Unit,
@@ -349,6 +351,15 @@ fun LexiconScreen(
                     description = "Skip the legacy `,/;` spacing stabilisation at end of chunk and the closing-quote+period split. Cleaner phrasing but slightly higher glitch risk on rare punctuation.",
                     checked = tightCommasAndPeriods,
                     onToggle = onTightCommasPeriodsToggle
+                )
+            }
+
+            item {
+                PunctuationToggleRow(
+                    title = "Force space before punctuation",
+                    description = "Insert a space between any word and a trailing `.,;:!?`. Belt-and-braces hint for the model's text tokenizer (`удивлён,` → `удивлён ,`). Leaves consecutive marks (`...`, `?!`) and numbers (`3,14`, `1.5`) alone. Off by default.",
+                    checked = forceSpaceBeforePunctuation,
+                    onToggle = onForceSpaceBeforePunctToggle
                 )
             }
 
