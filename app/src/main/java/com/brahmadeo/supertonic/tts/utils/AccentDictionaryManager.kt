@@ -99,6 +99,12 @@ object AccentDictionaryManager {
 
     @Volatile private var entries: Map<String, String> = emptyMap()
     @Volatile private var isLoaded = false
+    @Volatile private var isLoading = false
+    // Bumped every time a load is requested. The background thread checks its
+    // captured value against this on completion — if the user cleared or
+    // imported a new dict mid-parse, the stale result is dropped.
+    @Volatile private var loadGeneration = 0
+    private val loadLock = Object()
     @Volatile private var fallbackEnabled = false
 
     // Match a word as "Unicode letters + any combining marks attached to them".
@@ -124,34 +130,94 @@ object AccentDictionaryManager {
     private const val RU_VOWELS = "аеёиоуыэюя"
     private val ACUTE = '́'
 
+    /**
+     * Kick off loading the dictionary into memory.
+     *
+     * Returns immediately. The actual parsing runs on a background thread —
+     * for the 165 MB Full dictionary this is the ~5-10 s of JSON streaming
+     * we used to do synchronously inside `Service.onCreate`, blocking the
+     * first synthesis. Now `apply()` is just a no-op until [isReady] flips,
+     * which means the first sentence after a cold start may render without
+     * stress marks, but the second one onwards is properly stressed.
+     *
+     * Safe to call multiple times: a parse already in progress isn't
+     * restarted, and calls after a successful load are a fast-path no-op.
+     */
     fun load(context: Context) {
         if (isLoaded) return
         fallbackEnabled = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
             .getBoolean(FALLBACK_PREFS_KEY, false)
-        val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) {
-            entries = emptyMap()
-            isLoaded = true
-            return
+
+        val myGen: Int
+        synchronized(loadLock) {
+            if (isLoaded || isLoading) return
+            isLoading = true
+            myGen = ++loadGeneration
         }
-        try {
-            // Streaming parser — never builds the whole tree in memory.
-            // Critical for the 165 MB Full dictionary, which OOMs JSONObject.
-            FileInputStream(file).use { fis ->
-                entries = parseJsonStream(fis, file.length())
-            }
-            Log.i(TAG, "Loaded ${entries.size} accent entries from disk")
-        } catch (e: Throwable) {
-            Log.e(TAG, "Failed to load accent dictionary", e)
-            entries = emptyMap()
-        }
-        isLoaded = true
+
+        val appContext = context.applicationContext
+        Thread(
+            {
+                try {
+                    val file = File(appContext.filesDir, FILE_NAME)
+                    val parsed: Map<String, String> = if (!file.exists()) {
+                        emptyMap()
+                    } else {
+                        FileInputStream(file).use { fis ->
+                            parseJsonStream(fis, file.length())
+                        }
+                    }
+                    synchronized(loadLock) {
+                        // Only commit the result if no one (clear / import /
+                        // download) preempted us by bumping the generation.
+                        if (loadGeneration == myGen) {
+                            entries = parsed
+                            isLoaded = true
+                        }
+                    }
+                    if (parsed.isNotEmpty()) {
+                        Log.i(TAG, "Loaded ${parsed.size} accent entries from disk (bg)")
+                    }
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to load accent dictionary in background", e)
+                    synchronized(loadLock) {
+                        if (loadGeneration == myGen) {
+                            entries = emptyMap()
+                            isLoaded = true
+                        }
+                    }
+                } finally {
+                    synchronized(loadLock) {
+                        if (loadGeneration == myGen) {
+                            isLoading = false
+                        }
+                    }
+                }
+            },
+            "AccentDict-Loader"
+        ).apply {
+            // Lowered priority — the parse is heavy on weak phones and we don't
+            // want to fight ORT initialisation, which is doing the same trick.
+            priority = Thread.NORM_PRIORITY - 1
+            isDaemon = true
+        }.start()
     }
 
+    /**
+     * Force a re-read from disk next time [load] is called. Used by the
+     * "import / download" flows when they want to drop the cached entries
+     * and re-parse the new file.
+     */
     fun reload(context: Context) {
-        isLoaded = false
+        synchronized(loadLock) {
+            ++loadGeneration
+            isLoaded = false
+            isLoading = false
+        }
         load(context)
     }
+
+    fun isLoading(): Boolean = isLoading
 
     fun size(): Int = entries.size
 
@@ -311,8 +377,14 @@ object AccentDictionaryManager {
     }
 
     fun clear(context: Context) {
-        entries = emptyMap()
-        isLoaded = true
+        synchronized(loadLock) {
+            // Invalidate any pending background load so it doesn't race and
+            // restore the deleted dictionary into `entries`.
+            ++loadGeneration
+            isLoading = false
+            entries = emptyMap()
+            isLoaded = true
+        }
         File(context.filesDir, FILE_NAME).delete()
         clearMetadata(context)
     }
@@ -426,8 +498,15 @@ object AccentDictionaryManager {
             }
             tmp.delete()
         }
-        entries = parsed
-        isLoaded = true
+        synchronized(loadLock) {
+            // Same race protection as clear(): the user just downloaded /
+            // imported a fresh dict, so any older background load result
+            // must not clobber it.
+            ++loadGeneration
+            isLoading = false
+            entries = parsed
+            isLoaded = true
+        }
         writeMetadata(context, sourceName, parsed.size, size)
     }
 

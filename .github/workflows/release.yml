@@ -96,33 +96,40 @@ jobs:
           echo "Using build-tools: $BT_DIR"
           echo "path=$BT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Sign release APK
+      - name: Sign all release APKs
+        # AGP emits one APK per ABI plus a universal fallback. We sign each
+        # one independently and rename it `Supertonic-<tag>-<abi>.apk` so
+        # users can pick their architecture from the GitHub Releases page.
         run: |
-          UNSIGNED=$(ls app/build/outputs/apk/release/*.apk | head -n1)
-          ALIGNED="${UNSIGNED%.apk}-aligned.apk"
-          SIGNED="${UNSIGNED%-unsigned.apk}.apk"
-          if [ "$SIGNED" = "$UNSIGNED" ]; then
-            SIGNED="${UNSIGNED%.apk}-signed.apk"
-          fi
-          "${{ steps.buildtools.outputs.path }}/zipalign" -v -p 4 "$UNSIGNED" "$ALIGNED"
-          "${{ steps.buildtools.outputs.path }}/apksigner" sign \
-            --ks "${{ steps.keystore.outputs.path }}" \
-            --ks-key-alias supertonic \
-            --ks-pass pass:supertonic-ci \
-            --key-pass pass:supertonic-ci \
-            --out "$SIGNED" \
-            "$ALIGNED"
-          "${{ steps.buildtools.outputs.path }}/apksigner" verify --verbose "$SIGNED"
           TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
-          FINAL="app/build/outputs/apk/release/Supertonic-${TAG}.apk"
-          mv "$SIGNED" "$FINAL"
-          echo "FINAL_APK=$FINAL" >> "$GITHUB_ENV"
+          RELEASE_DIR="app/build/outputs/apk/release"
+          OUT_DIR="$RELEASE_DIR/signed"
+          mkdir -p "$OUT_DIR"
+          for UNSIGNED in "$RELEASE_DIR"/*-unsigned.apk; do
+            BASENAME=$(basename "$UNSIGNED")
+            # Strip "app-" prefix and "-release-unsigned.apk" suffix → ABI label.
+            ABI="${BASENAME#app-}"
+            ABI="${ABI%-release-unsigned.apk}"
+            ALIGNED="$RELEASE_DIR/${BASENAME%.apk}-aligned.apk"
+            SIGNED="$OUT_DIR/Supertonic-${TAG}-${ABI}.apk"
+            "${{ steps.buildtools.outputs.path }}/zipalign" -v -p 4 "$UNSIGNED" "$ALIGNED"
+            "${{ steps.buildtools.outputs.path }}/apksigner" sign \
+              --ks "${{ steps.keystore.outputs.path }}" \
+              --ks-key-alias supertonic \
+              --ks-pass pass:supertonic-ci \
+              --key-pass pass:supertonic-ci \
+              --out "$SIGNED" \
+              "$ALIGNED"
+            "${{ steps.buildtools.outputs.path }}/apksigner" verify --verbose "$SIGNED"
+          done
+          ls -la "$OUT_DIR"
+          echo "SIGNED_DIR=$OUT_DIR" >> "$GITHUB_ENV"
 
-      - name: Upload signed APK as artifact
+      - name: Upload signed APKs as artifact
         uses: actions/upload-artifact@v5
         with:
           name: Supertonic-${{ github.ref_name }}
-          path: ${{ env.FINAL_APK }}
+          path: ${{ env.SIGNED_DIR }}/*.apk
           if-no-files-found: error
           retention-days: 90
 
@@ -130,19 +137,25 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.FINAL_APK }}
+          files: ${{ env.SIGNED_DIR }}/*.apk
           generate_release_notes: true
           body: |
             **Supertonic 3 multilingual TTS for Android** — 31-language fork of `DevGitPit/supertonic-android`.
 
+            ### Which APK to download
+            - **`Supertonic-<tag>-arm64-v8a.apk`** — modern phones (recommended for almost everyone). Smallest download.
+            - `Supertonic-<tag>-armeabi-v7a.apk` — older 32-bit ARM phones.
+            - `Supertonic-<tag>-x86_64.apk` / `Supertonic-<tag>-x86.apk` — emulators, Chrome OS.
+            - `Supertonic-<tag>-universal.apk` — fat fallback if you're not sure. ~2× larger than the per-ABI ones.
+
             ### Install
-            1. Download the `.apk` below.
+            1. Download the right APK above (arm64-v8a in 99% of cases).
             2. On the phone: Settings → Apps → Install unknown apps → allow your file manager / browser.
             3. Tap the APK to install. If `adb install` returns `INSTALL_FAILED_VERIFICATION_FAILURE`, disable `Verify apps over USB` in Developer Options.
             4. First launch downloads ~400 MB of ONNX models from Hugging Face — needs Wi-Fi once.
 
             ### Make it the system TTS
-            Settings → Accessibility → Text-to-speech output → Preferred engine → **Supertonic TTS**.
+            Settings → Accessibility → Text-to-speech output → Preferred engine → **Supertonic TTS (Fork)**.
 
             ### Note on signing
             This release is signed with an **ephemeral CI keystore** that changes every build. To upgrade you must uninstall the previous version first. For long-term distribution, configure a stable keystore via repository secrets `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`.
