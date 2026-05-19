@@ -17,14 +17,34 @@ data class LexiconItem(
 
 object LexiconManager {
     private const val FILE_NAME = "user_lexicon.json"
+    private const val PREFS_NAME = "LexiconPrefs"
+    private const val PREFS_KEY_ENABLED = "lexicon_enabled"
+
     private var cachedRules: List<LexiconItem> = emptyList()
     @Volatile private var isLoaded = false
+    // Master switch: when false, apply() is a no-op even if rules exist.
+    // Default ON so existing users keep their behavior; persisted per-device.
+    @Volatile private var enabled: Boolean = true
+
+    fun isEnabled(): Boolean = enabled
+
+    fun setEnabled(context: Context, value: Boolean) {
+        enabled = value
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(PREFS_KEY_ENABLED, value)
+            .apply()
+    }
 
     fun load(context: Context): List<LexiconItem> {
-        // Always reload from file if not loaded or if requested, 
+        // Always refresh the enabled flag from prefs — cheap and keeps the
+        // switch behavior coherent if the user toggles it from elsewhere.
+        enabled = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(PREFS_KEY_ENABLED, true)
+
+        // Always reload from file if not loaded or if requested,
         // but for performance we cache.
         if (isLoaded) return cachedRules
-        
+
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
             cachedRules = emptyList()
@@ -78,6 +98,8 @@ object LexiconManager {
     }
 
     fun apply(text: String): String {
+        // Master switch — user disabled the lexicon entirely.
+        if (!enabled) return text
         // If not loaded, we can't apply rules safely without context to load them.
         // Consumers must ensure load(context) is called at app start.
         if (cachedRules.isEmpty()) return text

@@ -30,6 +30,7 @@ fun LexiconScreen(
     accentDictBanner: AccentDictBanner?,
     canDownloadAccentDict: Boolean,
     fallbackEnabled: Boolean,
+    lexiconEnabled: Boolean,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -37,6 +38,7 @@ fun LexiconScreen(
     onDownloadAccentDictClick: () -> Unit,
     onClearAccentDictClick: () -> Unit,
     onFallbackToggle: (Boolean) -> Unit,
+    onLexiconToggle: (Boolean) -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
     onDeleteClick: (LexiconItem) -> Unit
@@ -91,7 +93,18 @@ fun LexiconScreen(
                                 onImportAccentDictClick()
                             }
                         )
-                        // Clear lives on the banner now, not in this menu.
+                        // Mirror the banner's Delete button here so users can
+                        // also reach it via the overflow menu, in case the
+                        // banner is hidden or they're looking under "more".
+                        if (accentDictBanner != null) {
+                            DropdownMenuItem(
+                                text = { Text("Clear accent dictionary") },
+                                onClick = {
+                                    showMenu = false
+                                    onClearAccentDictClick()
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -148,6 +161,39 @@ fun LexiconScreen(
                             )
                         }
                     }
+                }
+            }
+
+            // Master switch for the user lexicon. When off, none of the
+            // custom replacement rules below are applied during synthesis —
+            // useful for A/B testing whether a rule is doing more harm than
+            // good without having to delete it.
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = MaterialTheme.shapes.small
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Apply user lexicon",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "When on, the rules below rewrite text before the model sees it. Turn off to disable all custom rules at once without deleting them.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = lexiconEnabled,
+                        onCheckedChange = onLexiconToggle
+                    )
                 }
             }
 

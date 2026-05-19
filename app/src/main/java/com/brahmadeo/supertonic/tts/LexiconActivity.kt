@@ -52,6 +52,7 @@ class LexiconActivity : ComponentActivity() {
     private val rulesState = mutableStateOf<List<LexiconItem>>(emptyList())
     private val accentDictBannerState = mutableStateOf<com.brahmadeo.supertonic.tts.ui.AccentDictBanner?>(null)
     private val fallbackState = mutableStateOf(false)
+    private val lexiconEnabledState = mutableStateOf(true)
     private var playbackService: IPlaybackService? = null
     private var isBound = false
 
@@ -202,6 +203,7 @@ class LexiconActivity : ComponentActivity() {
                     accentDictBanner = accentDictBannerState.value,
                     canDownloadAccentDict = canDownload,
                     fallbackEnabled = fallbackState.value,
+                    lexiconEnabled = lexiconEnabledState.value,
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
@@ -211,6 +213,10 @@ class LexiconActivity : ComponentActivity() {
                     onFallbackToggle = { enabled ->
                         AccentDictionaryManager.setFallbackEnabled(this@LexiconActivity, enabled)
                         fallbackState.value = enabled
+                    },
+                    onLexiconToggle = { enabled ->
+                        LexiconManager.setEnabled(this@LexiconActivity, enabled)
+                        lexiconEnabledState.value = enabled
                     },
                     onAddClick = {
                         editingItem = null
@@ -240,6 +246,7 @@ class LexiconActivity : ComponentActivity() {
             )
         }
         fallbackState.value = AccentDictionaryManager.isFallbackEnabled()
+        lexiconEnabledState.value = LexiconManager.isEnabled()
     }
 
     private fun performImportAccentDict(uri: Uri) {
