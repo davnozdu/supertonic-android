@@ -117,7 +117,11 @@ class LexiconActivity : ComponentActivity() {
                 var showProgress by remember { mutableStateOf(false) }
                 var progressLabel by remember { mutableStateOf("") }
                 var progressFraction by remember { mutableFloatStateOf(0f) }
-                var showChooser by remember { mutableStateOf(false) }
+                // null = chooser hidden; otherwise carries the format filter
+                // (BINARY/TEXT) selected from the overflow menu.
+                var chooserFormat by remember {
+                    mutableStateOf<AccentDictionaryManager.DictFormat?>(null)
+                }
 
                 fun startDownload(url: String, source: String) {
                     showProgress = true
@@ -159,11 +163,23 @@ class LexiconActivity : ComponentActivity() {
                     }
                 }
 
-                if (showChooser) {
-                    val options = remember { AccentDictionaryManager.prebuiltOptionsFor(selectedLang) }
+                val activeFormat = chooserFormat
+                if (activeFormat != null) {
+                    // Pull a fresh per-format list; remembering by activeFormat
+                    // ensures the dialog reshows the correct subset when the
+                    // user toggles between the two menu items.
+                    val options = remember(activeFormat) {
+                        AccentDictionaryManager.prebuiltOptionsFor(selectedLang, activeFormat)
+                    }
+                    val title = when (activeFormat) {
+                        AccentDictionaryManager.DictFormat.BINARY ->
+                            "Choose dictionary size (binary)"
+                        AccentDictionaryManager.DictFormat.TEXT ->
+                            "Choose dictionary size (text)"
+                    }
                     AlertDialog(
-                        onDismissRequest = { showChooser = false },
-                        title = { Text("Choose dictionary size") },
+                        onDismissRequest = { chooserFormat = null },
+                        title = { Text(title) },
                         text = {
                             Column {
                                 options.forEach { opt ->
@@ -171,7 +187,7 @@ class LexiconActivity : ComponentActivity() {
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                showChooser = false
+                                                chooserFormat = null
                                                 startDownload(opt.url, "Russian — ${opt.displayName}")
                                             }
                                             .padding(vertical = 8.dp)
@@ -186,7 +202,7 @@ class LexiconActivity : ComponentActivity() {
                         },
                         confirmButton = {},
                         dismissButton = {
-                            TextButton(onClick = { showChooser = false }) {
+                            TextButton(onClick = { chooserFormat = null }) {
                                 Text("Cancel")
                             }
                         }
@@ -226,8 +242,13 @@ class LexiconActivity : ComponentActivity() {
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
-                    onImportAccentDictClick = { importAccentDictLauncher.launch("application/json") },
-                    onDownloadAccentDictClick = { showChooser = true },
+                    onImportAccentDictClick = { importAccentDictLauncher.launch("*/*") },
+                    onDownloadAccentDictTextClick = {
+                        chooserFormat = AccentDictionaryManager.DictFormat.TEXT
+                    },
+                    onDownloadAccentDictBinaryClick = {
+                        chooserFormat = AccentDictionaryManager.DictFormat.BINARY
+                    },
                     onClearAccentDictClick = { clearAccentDict() },
                     onFallbackToggle = { enabled ->
                         AccentDictionaryManager.setFallbackEnabled(this@LexiconActivity, enabled)

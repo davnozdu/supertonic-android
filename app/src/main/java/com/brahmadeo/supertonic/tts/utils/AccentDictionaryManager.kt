@@ -38,16 +38,24 @@ import java.util.regex.Pattern
  */
 object AccentDictionaryManager {
     private const val TAG = "AccentDict"
-    private const val FILE_NAME = "accent_dictionary.json"
+    // Two on-disk formats. Whichever file is present at load time is used; if
+    // both exist we prefer .sacc because mmap is dramatically cheaper than
+    // parsing JSON into a HashMap. Switching format means clear() + download
+    // again (the in-app menu has separate Text / Binary download options).
+    private const val FILE_NAME_JSON = "accent_dictionary.json"
+    private const val FILE_NAME_SACC = "accent_dictionary.sacc"
     // 250 MB cap — the full Russian dictionary is ~165 MB. The HashMap that
     // backs it takes ~500 MB of heap; that's fine on phones with ≥ 4 GB of
     // RAM but would OOM a budget device. Users who want the smaller dict can
     // still import russian_accents.json (36 MB) via the file picker.
     private const val MAX_FILE_BYTES = 250L * 1024 * 1024
 
+    enum class DictFormat { TEXT, BINARY }
+
     data class PrebuiltDict(
         val id: String,
         val displayName: String,
+        val format: DictFormat,
         val subtitle: String,
         val sizeBytes: Long,
         val entries: Int,
@@ -57,34 +65,70 @@ object AccentDictionaryManager {
     /**
      * Pre-built dictionaries published in the davnozdu/supertonic-dictionaries
      * GitHub repository (separate from the app for independent versioning).
-     * Keyed by language code; each language can offer several sizes so the
-     * user picks based on phone RAM.
+     * Two parallel sets per size — .json (heap-resident) and .sacc (mmap'd).
+     * The Lexicon screen has two menu items so the user picks format first,
+     * then size.
      */
+    private const val DICT_BASE_URL =
+        "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0"
+
     private val PREBUILT_DICTS: Map<String, List<PrebuiltDict>> = mapOf(
         "ru" to listOf(
+            // ------------- Binary (.sacc, mmap, recommended) -------------
             PrebuiltDict(
-                id = "ru-full",
-                displayName = "Full",
-                subtitle = "165 MB · 3.26M entries · ~500 MB RAM · names, homographs, ё",
-                sizeBytes = 165L * 1024 * 1024,
+                id = "ru-full-bin",
+                displayName = "Full (binary)",
+                format = DictFormat.BINARY,
+                subtitle = "171 MB · 3.26M entries · ~10-20 MB RAM · names, homographs, ё",
+                sizeBytes = 171L * 1024 * 1024,
                 entries = 3_263_003,
-                url = "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0/russian_accents_full.json"
+                url = "$DICT_BASE_URL/russian_accents_full.sacc"
             ),
             PrebuiltDict(
-                id = "ru-standard",
-                displayName = "Standard",
+                id = "ru-standard-bin",
+                displayName = "Standard (binary)",
+                format = DictFormat.BINARY,
+                subtitle = "38 MB · 962K entries · ~5-10 MB RAM · words ≤ 9 chars, no homographs",
+                sizeBytes = 38L * 1024 * 1024,
+                entries = 961_968,
+                url = "$DICT_BASE_URL/russian_accents_max9.sacc"
+            ),
+            PrebuiltDict(
+                id = "ru-compact-bin",
+                displayName = "Compact (binary)",
+                format = DictFormat.BINARY,
+                subtitle = "22 MB · 615K entries · ~3-7 MB RAM · words ≤ 8 chars",
+                sizeBytes = 22L * 1024 * 1024,
+                entries = 615_365,
+                url = "$DICT_BASE_URL/russian_accents_max8.sacc"
+            ),
+            // ------------- Text (.json, HashMap, hand-editable) -------------
+            PrebuiltDict(
+                id = "ru-full-txt",
+                displayName = "Full (text)",
+                format = DictFormat.TEXT,
+                subtitle = "165 MB · 3.26M entries · ~390 MB RAM · names, homographs, ё",
+                sizeBytes = 165L * 1024 * 1024,
+                entries = 3_263_003,
+                url = "$DICT_BASE_URL/russian_accents_full.json"
+            ),
+            PrebuiltDict(
+                id = "ru-standard-txt",
+                displayName = "Standard (text)",
+                format = DictFormat.TEXT,
                 subtitle = "36 MB · 962K entries · ~150 MB RAM · words ≤ 9 chars, no homographs",
                 sizeBytes = 36L * 1024 * 1024,
                 entries = 961_968,
-                url = "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0/russian_accents.json"
+                url = "$DICT_BASE_URL/russian_accents_max9.json"
             ),
             PrebuiltDict(
-                id = "ru-compact",
-                displayName = "Compact",
+                id = "ru-compact-txt",
+                displayName = "Compact (text)",
+                format = DictFormat.TEXT,
                 subtitle = "21 MB · 615K entries · ~85 MB RAM · words ≤ 8 chars",
                 sizeBytes = 21L * 1024 * 1024,
                 entries = 615_365,
-                url = "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0/russian_accents_compact.json"
+                url = "$DICT_BASE_URL/russian_accents_max8.json"
             )
         )
     )
@@ -95,9 +139,18 @@ object AccentDictionaryManager {
         return PREBUILT_DICTS[lang.lowercase().substringBefore('-')] ?: emptyList()
     }
 
+    fun prebuiltOptionsFor(lang: String, format: DictFormat): List<PrebuiltDict> {
+        return prebuiltOptionsFor(lang).filter { it.format == format }
+    }
+
     data class Metadata(val source: String, val entries: Int, val loadedAtMs: Long, val sizeBytes: Long)
 
+    // Two parallel backends. Whichever is non-null at lookup time wins; if
+    // the user installed a .sacc binary it takes precedence and `entries`
+    // stays empty. The JSON path is kept for compatibility with hand-edited
+    // dictionaries and the existing "Import from file" flow.
     @Volatile private var entries: Map<String, String> = emptyMap()
+    @Volatile private var binaryDict: BinaryAccentDictionary? = null
     @Volatile private var isLoaded = false
     @Volatile private var isLoading = false
     // Bumped every time a load is requested. The background thread checks its
@@ -166,29 +219,50 @@ object AccentDictionaryManager {
         // or on the AccentDict-Loader background thread (lazy mode, default).
         val loader = Runnable {
             try {
-                val file = File(appContext.filesDir, FILE_NAME)
-                val parsed: Map<String, String> = if (!file.exists()) {
-                    emptyMap()
-                } else {
-                    FileInputStream(file).use { fis ->
-                        parseJsonStream(fis, file.length())
+                val saccFile = File(appContext.filesDir, FILE_NAME_SACC)
+                val jsonFile = File(appContext.filesDir, FILE_NAME_JSON)
+                // .sacc wins over .json when both exist. mmap is free and
+                // there's no point parsing JSON if the binary is right there.
+                var newBinary: BinaryAccentDictionary? = null
+                var newEntries: Map<String, String> = emptyMap()
+                when {
+                    saccFile.exists() && BinaryAccentDictionary.looksLikeSacc(saccFile) -> {
+                        newBinary = BinaryAccentDictionary.open(saccFile)
+                        if (newBinary == null) {
+                            Log.w(TAG, ".sacc present but failed to open, falling back to .json")
+                        }
+                    }
+                }
+                if (newBinary == null && jsonFile.exists()) {
+                    FileInputStream(jsonFile).use { fis ->
+                        newEntries = parseJsonStream(fis, jsonFile.length())
                     }
                 }
                 synchronized(loadLock) {
                     // Only commit the result if no one (clear / import /
                     // download) preempted us by bumping the generation.
                     if (loadGeneration == myGen) {
-                        entries = parsed
+                        // Close any previously-mapped file so we don't leak fds.
+                        binaryDict?.close()
+                        binaryDict = newBinary
+                        entries = newEntries
                         isLoaded = true
+                    } else {
+                        // Stale result: discard the mmap to release the fd.
+                        newBinary?.close()
                     }
                 }
-                if (parsed.isNotEmpty()) {
-                    Log.i(TAG, "Loaded ${parsed.size} accent entries from disk")
+                val effectiveCount = newBinary?.entryCount ?: newEntries.size
+                if (effectiveCount > 0) {
+                    val mode = if (newBinary != null) "binary mmap" else "JSON HashMap"
+                    Log.i(TAG, "Loaded $effectiveCount accent entries ($mode)")
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed to load accent dictionary", e)
                 synchronized(loadLock) {
                     if (loadGeneration == myGen) {
+                        binaryDict?.close()
+                        binaryDict = null
                         entries = emptyMap()
                         isLoaded = true
                     }
@@ -232,20 +306,31 @@ object AccentDictionaryManager {
 
     fun isLoading(): Boolean = isLoading
 
-    fun size(): Int = entries.size
+    fun size(): Int = binaryDict?.entryCount ?: entries.size
 
-    fun isReady(): Boolean = entries.isNotEmpty()
+    fun isReady(): Boolean = binaryDict != null || entries.isNotEmpty()
 
     fun apply(text: String, lang: String = ""): String {
-        // No work to do if both the dictionary is empty and fallback is off.
-        if (entries.isEmpty() && !fallbackEnabled) return text
+        // Snapshot the backends once per call so concurrent reload doesn't
+        // flip us mid-iteration.
+        val bin = binaryDict
+        val map = entries
+        val haveDict = bin != null || map.isNotEmpty()
+        if (!haveDict && !fallbackEnabled) return text
 
         val applyFallback = fallbackEnabled && lang.startsWith("ru")
         val matcher = wordPattern.matcher(text)
         val sb = StringBuffer()
         while (matcher.find()) {
             val original = matcher.group() ?: continue
-            val dictHit = entries[original.lowercase()]
+            val lower = original.lowercase()
+            // Look up in whichever backend is live. The .sacc reader takes
+            // UTF-8 bytes; the JSON HashMap is keyed by the lowercased String.
+            val dictHit: String? = if (bin != null) {
+                bin.lookup(lower.toByteArray(Charsets.UTF_8))
+            } else {
+                map[lower]
+            }
             val cased = when {
                 dictHit != null -> applyCasing(original, dictHit)
                 applyFallback -> fallbackLastVowel(original) ?: continue
@@ -379,13 +464,7 @@ object AccentDictionaryManager {
                 tmp.delete()
                 return ERR_TOO_LARGE
             }
-            val parsed = FileInputStream(tmp).use { parseJsonStream(it, tmp.length()) }
-            if (parsed.isEmpty()) {
-                tmp.delete()
-                return 0
-            }
-            installFromTmp(context, tmp, parsed, "Imported from file")
-            parsed.size
+            installFromTmpAuto(context, tmp, "Imported from file")
         } catch (oom: OutOfMemoryError) {
             Log.e(TAG, "Import OOM", oom)
             tmp.delete()
@@ -398,16 +477,39 @@ object AccentDictionaryManager {
         }
     }
 
+    /**
+     * Detect the format of [tmp] from its magic bytes and route to the
+     * appropriate installer. Returns the entry count on success, or an
+     * ERR_* code on failure. The caller is responsible for *not* using
+     * [tmp] after this returns — it's been moved into place or deleted.
+     */
+    private fun installFromTmpAuto(context: Context, tmp: File, sourceName: String): Int {
+        return if (BinaryAccentDictionary.looksLikeSacc(tmp)) {
+            installSaccFromTmp(context, tmp, sourceName)
+        } else {
+            val parsed = FileInputStream(tmp).use { parseJsonStream(it, tmp.length()) }
+            if (parsed.isEmpty()) {
+                tmp.delete()
+                return 0
+            }
+            installFromTmp(context, tmp, parsed, sourceName)
+            parsed.size
+        }
+    }
+
     fun clear(context: Context) {
         synchronized(loadLock) {
             // Invalidate any pending background load so it doesn't race and
             // restore the deleted dictionary into `entries`.
             ++loadGeneration
             isLoading = false
+            binaryDict?.close()
+            binaryDict = null
             entries = emptyMap()
             isLoaded = true
         }
-        File(context.filesDir, FILE_NAME).delete()
+        File(context.filesDir, FILE_NAME_JSON).delete()
+        File(context.filesDir, FILE_NAME_SACC).delete()
         clearMetadata(context)
     }
 
@@ -467,14 +569,10 @@ object AccentDictionaryManager {
                 return ERR_TOO_LARGE
             }
             onProgress(tmp.length(), tmp.length()) // signal "parsing now"
-            // Stream-parse straight off disk — no readText, no JSONObject.
-            val parsed = FileInputStream(tmp).use { parseJsonStream(it, tmp.length()) }
-            if (parsed.isEmpty()) {
-                tmp.delete()
-                return ERR_EMPTY
-            }
-            installFromTmp(context, tmp, parsed, sourceName)
-            return parsed.size
+            // Branch on file format. .sacc is a near-instant mmap; JSON is a
+            // stream-parse straight off disk (no readText, no JSONObject).
+            val count = installFromTmpAuto(context, tmp, sourceName)
+            return if (count == 0) ERR_EMPTY else count
         } catch (oom: OutOfMemoryError) {
             // Parsing the full 165 MB dict allocates ~390 MB for the HashMap
             // alone. With largeHeap=true that fits on 4 GB+ phones, but on
@@ -496,12 +594,16 @@ object AccentDictionaryManager {
     }
 
     /**
-     * Move the validated tmp file into place and swap the in-memory map.
+     * Move the validated JSON tmp file into place and swap the in-memory map.
      *
      * The big win over the old saveAndCache: we never re-serialise the map
      * via JSONObject.toString() (which would allocate a second 200+ MB
      * String on top of the already-loaded HashMap and OOM most phones).
      * The tmp file is *already* valid JSON — we just rename it.
+     *
+     * Any existing .sacc dictionary is dropped because the user explicitly
+     * picked the JSON format this time. Same the other way around in
+     * [installSaccFromTmp].
      */
     private fun installFromTmp(
         context: Context,
@@ -509,7 +611,7 @@ object AccentDictionaryManager {
         parsed: Map<String, String>,
         sourceName: String
     ) {
-        val target = File(context.filesDir, FILE_NAME)
+        val target = File(context.filesDir, FILE_NAME_JSON)
         if (target.exists()) target.delete()
         val size = tmp.length()
         if (!tmp.renameTo(target)) {
@@ -520,16 +622,60 @@ object AccentDictionaryManager {
             }
             tmp.delete()
         }
+        // Drop the other-format file so we don't have stale data on disk.
+        File(context.filesDir, FILE_NAME_SACC).delete()
         synchronized(loadLock) {
             // Same race protection as clear(): the user just downloaded /
             // imported a fresh dict, so any older background load result
             // must not clobber it.
             ++loadGeneration
             isLoading = false
+            binaryDict?.close()
+            binaryDict = null
             entries = parsed
             isLoaded = true
         }
         writeMetadata(context, sourceName, parsed.size, size)
+    }
+
+    /**
+     * Move a verified `.sacc` tmp file into place and open it via mmap.
+     * Mirrors [installFromTmp] but for the binary backend. The tmp must
+     * have already been validated by [BinaryAccentDictionary.looksLikeSacc];
+     * we open it after rename to make sure the actual mapped view is healthy.
+     *
+     * Returns the entry count on success, or an ERR_* code on failure.
+     */
+    private fun installSaccFromTmp(context: Context, tmp: File, sourceName: String): Int {
+        val target = File(context.filesDir, FILE_NAME_SACC)
+        if (target.exists()) target.delete()
+        val size = tmp.length()
+        if (!tmp.renameTo(target)) {
+            tmp.inputStream().use { input ->
+                FileOutputStream(target).use { out -> input.copyTo(out) }
+            }
+            tmp.delete()
+        }
+        val opened = BinaryAccentDictionary.open(target)
+        if (opened == null) {
+            // Roll back so we don't leave a broken file around that the next
+            // load would also fail on. The user gets ERR_PARSE.
+            target.delete()
+            return ERR_PARSE
+        }
+        // Drop the other-format file so .sacc fully replaces .json.
+        File(context.filesDir, FILE_NAME_JSON).delete()
+        val count = opened.entryCount
+        synchronized(loadLock) {
+            ++loadGeneration
+            isLoading = false
+            binaryDict?.close()
+            binaryDict = opened
+            entries = emptyMap()
+            isLoaded = true
+        }
+        writeMetadata(context, sourceName, count, size)
+        return count
     }
 
     /**

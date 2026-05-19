@@ -40,8 +40,9 @@ fun LexiconScreen(
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
     onImportAccentDictClick: () -> Unit,
-    onDownloadAccentDictClick: () -> Unit,
     onClearAccentDictClick: () -> Unit,
+    onDownloadAccentDictTextClick: () -> Unit,
+    onDownloadAccentDictBinaryClick: () -> Unit,
     onFallbackToggle: (Boolean) -> Unit,
     onSyncLoadToggle: (Boolean) -> Unit,
     onLexiconToggle: (Boolean) -> Unit,
@@ -88,11 +89,22 @@ fun LexiconScreen(
                         )
                         HorizontalDivider()
                         if (canDownloadAccentDict) {
+                            // Two separate items, format chosen up front so the
+                            // chooser dialog can show only the relevant sizes.
+                            // Binary is listed first because it's the better
+                            // default for everyone (~10-20 MB RAM vs ~390 MB).
                             DropdownMenuItem(
-                                text = { Text("Download accent dictionary…") },
+                                text = { Text("Download accent dictionary (binary)…") },
                                 onClick = {
                                     showMenu = false
-                                    onDownloadAccentDictClick()
+                                    onDownloadAccentDictBinaryClick()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Download accent dictionary (text)…") },
+                                onClick = {
+                                    showMenu = false
+                                    onDownloadAccentDictTextClick()
                                 }
                             )
                         }
