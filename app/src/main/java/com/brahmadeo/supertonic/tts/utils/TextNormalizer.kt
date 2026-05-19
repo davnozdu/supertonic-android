@@ -25,9 +25,13 @@ class TextNormalizer {
         }
 
         // QUOTE PUNCTUATION SPACING (Model Stability)
-        // Adds space between double quote and punctuation (".) -> (" .) to prevent audio glitches
+        // Adds space between double quote and punctuation (".) -> (" .) to prevent audio glitches.
+        // Toggleable: "tight ?/!" skips this for ?/!, "tight , and ." skips it for period.
         addLambda("([\"”])([.!?])") { m ->
-            "${m.group(1)} ${m.group(2)}"
+            val punct = m.group(2) ?: ""
+            val skip = (punct == "." && PunctuationPrefs.tightCommasAndPeriods) ||
+                       ((punct == "?" || punct == "!") && PunctuationPrefs.tightQuestionExclamation)
+            if (skip) "${m.group(1)}${m.group(2)}" else "${m.group(1)} ${m.group(2)}"
         }
 
         // PARENTHESES SPACING (Audio Fix)
@@ -175,6 +179,34 @@ class TextNormalizer {
         return rulesList
     }
 
+    /**
+     * Punctuation tweaks driven by [PunctuationPrefs]. When all toggles are
+     * off this is a no-op — the input text is returned verbatim. Each branch
+     * is independent so users can layer them however they want (e.g. tight
+     * ellipsis + doubled marks, but legacy spacing for commas).
+     */
+    private fun applyPunctuationTweaks(text: String): String {
+        var t = text
+
+        // Ellipsis: U+2026 → "...", collapse stretched "." or ". ." sequences
+        // to a canonical "...", and remove any whitespace immediately before
+        // it so the model gets one expressive pause instead of three.
+        if (PunctuationPrefs.tightEllipsis) {
+            t = t.replace("…", "...")
+            t = t.replace(Regex("\\.\\s*\\.\\s*\\.+"), "...")
+            t = t.replace(Regex("\\s+\\.{3,}"), "...")
+        }
+
+        // Doubled question/exclamation marks. Only applies to a single mark —
+        // we don't want to turn "!!" into "!!!" and so on. Run after ellipsis
+        // normalization so the period collapse can't accidentally consume `?`.
+        if (PunctuationPrefs.strengthenIntonation) {
+            t = t.replace(Regex("(?<![?!])([?!])(?![?!])"), "$1$1")
+        }
+
+        return t
+    }
+
     private fun numberToOrdinal(num: Int): String {
         val ordinals = mapOf(
             1 to "first", 2 to "second", 3 to "third", 4 to "fourth", 5 to "fifth",
@@ -211,6 +243,12 @@ class TextNormalizer {
     fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false): String {
         val lowerLang = lang.lowercase()
 
+        // Pre-pass for user-controlled punctuation tweaks. Done before Lexicon
+        // so any rules the user writes still match against the original text,
+        // and *before* number/accent passes so stressed Russian numbers don't
+        // get double-`?` artefacts on the second cycle.
+        var inputText = applyPunctuationTweaks(text)
+
         // Pipeline for everything except Korean (whose tokenisation does not
         // play nicely with whole-word patches):
         //   1) user lexicon — highest priority
@@ -219,13 +257,13 @@ class TextNormalizer {
         //      words that the number normaliser just emitted ("две тысячи
         //      двадцать четыре" -> "две ты́сячи два́дцать четы́ре").
         var processedText = if (lowerLang != "ko") {
-            var t = LexiconManager.apply(text)
+            var t = LexiconManager.apply(inputText)
             if (lowerLang.startsWith("ru")) {
                 t = russianNumbers.normalize(t)
             }
             AccentDictionaryManager.apply(t, lowerLang)
         } else {
-            text
+            inputText
         }
 
         // 2. Determine if we should apply English-style normalization rules
@@ -374,10 +412,21 @@ class TextNormalizer {
             var sentence = processedSentences[i]
             
             // Universal Volatile/Punctuation Fix:
-            // Always insert space before !, ?, ,, ; to stabilize audio
-            // DISABLED for Korean
+            // Default: insert space before !, ?, ,, ; to stabilize audio.
+            // DISABLED for Korean.
+            // Toggleable per-punctuation type. The regex is dynamically built
+            // from whatever marks the user hasn't opted to tighten — so when
+            // all toggles are off, behavior is identical to the legacy rule.
             if (!lang.lowercase().startsWith("ko")) {
-                sentence = sentence.replaceFirst(Regex("([!?,;])(['\"”’]?)\\s*$"), " $1$2")
+                val marks = StringBuilder()
+                if (!PunctuationPrefs.tightQuestionExclamation) marks.append("!?")
+                if (!PunctuationPrefs.tightCommasAndPeriods) marks.append(",;")
+                if (marks.isNotEmpty()) {
+                    sentence = sentence.replaceFirst(
+                        Regex("([${Regex.escape(marks.toString())}])(['\"”’]?)\\s*$"),
+                        " $1$2"
+                    )
+                }
             }
 
             // HANDLE STABLE SENTENCE (Standard Accumulation)

@@ -31,6 +31,10 @@ fun LexiconScreen(
     canDownloadAccentDict: Boolean,
     fallbackEnabled: Boolean,
     lexiconEnabled: Boolean,
+    tightQuestionExclamation: Boolean,
+    strengthenIntonation: Boolean,
+    tightEllipsis: Boolean,
+    tightCommasAndPeriods: Boolean,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -39,6 +43,10 @@ fun LexiconScreen(
     onClearAccentDictClick: () -> Unit,
     onFallbackToggle: (Boolean) -> Unit,
     onLexiconToggle: (Boolean) -> Unit,
+    onTightQuestionToggle: (Boolean) -> Unit,
+    onDoubleMarksToggle: (Boolean) -> Unit,
+    onTightEllipsisToggle: (Boolean) -> Unit,
+    onTightCommasPeriodsToggle: (Boolean) -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
     onDeleteClick: (LexiconItem) -> Unit
@@ -229,6 +237,44 @@ fun LexiconScreen(
                 }
             }
 
+            // Punctuation experiments. Each toggle is independent; default OFF
+            // preserves the legacy stabilisation rules. Section header sets the
+            // shared context so the four switches read as a single feature.
+            Text(
+                text = "Punctuation",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
+            )
+
+            PunctuationToggleRow(
+                title = "Tight ?/!",
+                description = "Don't insert a space before ? and ! at the end of a chunk. Glues the mark to the preceding word so the model gets a stronger intonation hint.",
+                checked = tightQuestionExclamation,
+                onToggle = onTightQuestionToggle
+            )
+
+            PunctuationToggleRow(
+                title = "Strengthen intonation",
+                description = "Double ?/! at the end of a chunk (`Куда?` → `Куда??`). Some models react with a stronger prosodic contour; others ignore it.",
+                checked = strengthenIntonation,
+                onToggle = onDoubleMarksToggle
+            )
+
+            PunctuationToggleRow(
+                title = "Tight ellipsis",
+                description = "Normalize `…` and `. . .` to `...` and strip whitespace before it. One expressive pause instead of three independent dots.",
+                checked = tightEllipsis,
+                onToggle = onTightEllipsisToggle
+            )
+
+            PunctuationToggleRow(
+                title = "Tight commas and periods",
+                description = "Skip the legacy `,/;` spacing stabilisation at end of chunk and the closing-quote+period split. Cleaner phrasing but slightly higher glitch risk on rare punctuation.",
+                checked = tightCommasAndPeriods,
+                onToggle = onTightCommasPeriodsToggle
+            )
+
             if (rules.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -256,6 +302,41 @@ fun LexiconScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Single-line toggle with title + small description, used four times for the
+ * punctuation tweaks. Factored out so all four rows share spacing/colors.
+ */
+@Composable
+private fun PunctuationToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        shape = MaterialTheme.shapes.small
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = checked, onCheckedChange = onToggle)
         }
     }
 }

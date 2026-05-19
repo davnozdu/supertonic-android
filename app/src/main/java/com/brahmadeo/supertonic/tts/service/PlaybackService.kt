@@ -182,6 +182,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         createNotificationChannel()
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
+        com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
         QueueManager.initialize(this)
 
         audioManager = attributionContext.getSystemService(AUDIO_SERVICE) as AudioManager

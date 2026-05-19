@@ -53,6 +53,10 @@ class LexiconActivity : ComponentActivity() {
     private val accentDictBannerState = mutableStateOf<com.brahmadeo.supertonic.tts.ui.AccentDictBanner?>(null)
     private val fallbackState = mutableStateOf(false)
     private val lexiconEnabledState = mutableStateOf(true)
+    private val tightQuestionState = mutableStateOf(false)
+    private val doubleMarksState = mutableStateOf(false)
+    private val tightEllipsisState = mutableStateOf(false)
+    private val tightCommasPeriodsState = mutableStateOf(false)
     private var playbackService: IPlaybackService? = null
     private var isBound = false
 
@@ -213,6 +217,10 @@ class LexiconActivity : ComponentActivity() {
                     canDownloadAccentDict = canDownload,
                     fallbackEnabled = fallbackState.value,
                     lexiconEnabled = lexiconEnabledState.value,
+                    tightQuestionExclamation = tightQuestionState.value,
+                    strengthenIntonation = doubleMarksState.value,
+                    tightEllipsis = tightEllipsisState.value,
+                    tightCommasAndPeriods = tightCommasPeriodsState.value,
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
@@ -226,6 +234,22 @@ class LexiconActivity : ComponentActivity() {
                     onLexiconToggle = { enabled ->
                         LexiconManager.setEnabled(this@LexiconActivity, enabled)
                         lexiconEnabledState.value = enabled
+                    },
+                    onTightQuestionToggle = { enabled ->
+                        com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.setTightQuestionExclamation(this@LexiconActivity, enabled)
+                        tightQuestionState.value = enabled
+                    },
+                    onDoubleMarksToggle = { enabled ->
+                        com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.setStrengthenIntonation(this@LexiconActivity, enabled)
+                        doubleMarksState.value = enabled
+                    },
+                    onTightEllipsisToggle = { enabled ->
+                        com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.setTightEllipsis(this@LexiconActivity, enabled)
+                        tightEllipsisState.value = enabled
+                    },
+                    onTightCommasPeriodsToggle = { enabled ->
+                        com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.setTightCommasAndPeriods(this@LexiconActivity, enabled)
+                        tightCommasPeriodsState.value = enabled
                     },
                     onAddClick = {
                         editingItem = null
@@ -256,6 +280,11 @@ class LexiconActivity : ComponentActivity() {
         }
         fallbackState.value = AccentDictionaryManager.isFallbackEnabled()
         lexiconEnabledState.value = LexiconManager.isEnabled()
+        com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
+        tightQuestionState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.tightQuestionExclamation
+        doubleMarksState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.strengthenIntonation
+        tightEllipsisState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.tightEllipsis
+        tightCommasPeriodsState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.tightCommasAndPeriods
     }
 
     private fun performImportAccentDict(uri: Uri) {
