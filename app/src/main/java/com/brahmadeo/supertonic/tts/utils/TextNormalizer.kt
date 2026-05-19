@@ -357,6 +357,13 @@ class TextNormalizer {
     }
 
     fun splitIntoSentences(text: String, lang: String = "en"): List<String> {
+        // Per-call chunk limit. SMALL gives sub-second first-audio for short
+        // notifications; LARGE merges multiple sentences for audiobook
+        // narration with continuous intonation; DEFAULT is the legacy 300-char
+        // balance. Re-read on every call so the user can flip the toggle
+        // between sessions without restarting.
+        val chunkLimit = PlaybackPrefs.chunkMode.limit
+
         var protectedText = text
 
         // Abbreviation protection — patterns pre-compiled as class fields.
@@ -368,7 +375,7 @@ class TextNormalizer {
         val rawSentences = protectedText.split(sentenceSplitPattern)
 
         val refinedSentences = mutableListOf<String>()
-        val maxLength = 300
+        val maxLength = chunkLimit
 
         for (raw in rawSentences) {
             if (raw.length <= maxLength) {
@@ -410,10 +417,10 @@ class TextNormalizer {
             restored.trim()
         }.filter { it.isNotEmpty() }
 
-        // Chunking Logic: Accumulate sentences up to chunkLimit (300)
+        // Chunking Logic: Accumulate sentences up to chunkLimit
+        // (chunkLimit was computed above from PlaybackPrefs.chunkMode).
         val chunkedSentences = mutableListOf<String>()
         val currentChunk = StringBuilder()
-        val chunkLimit = 300
 
         // Build the volatile-punctuation regex once per call, not once per
         // sentence. Punctuation prefs are stable for the duration of a single

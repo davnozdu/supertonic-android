@@ -58,6 +58,9 @@ class LexiconActivity : ComponentActivity() {
     private val doubleMarksState = mutableStateOf(false)
     private val tightEllipsisState = mutableStateOf(false)
     private val tightCommasPeriodsState = mutableStateOf(false)
+    private val chunkModeState = mutableStateOf(com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.ChunkMode.DEFAULT)
+    private val preRollEnabledState = mutableStateOf(false)
+    private val preRollSentencesState = mutableStateOf(2)
     private var playbackService: IPlaybackService? = null
     private var isBound = false
 
@@ -239,6 +242,9 @@ class LexiconActivity : ComponentActivity() {
                     strengthenIntonation = doubleMarksState.value,
                     tightEllipsis = tightEllipsisState.value,
                     tightCommasAndPeriods = tightCommasPeriodsState.value,
+                    chunkMode = chunkModeState.value,
+                    preRollEnabled = preRollEnabledState.value,
+                    preRollSentences = preRollSentencesState.value,
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
@@ -278,6 +284,18 @@ class LexiconActivity : ComponentActivity() {
                         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.setTightCommasAndPeriods(this@LexiconActivity, enabled)
                         tightCommasPeriodsState.value = enabled
                     },
+                    onChunkModeChange = { mode ->
+                        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setChunkMode(this@LexiconActivity, mode)
+                        chunkModeState.value = mode
+                    },
+                    onPreRollToggle = { enabled ->
+                        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setPreRollEnabled(this@LexiconActivity, enabled)
+                        preRollEnabledState.value = enabled
+                    },
+                    onPreRollSentencesChange = { count ->
+                        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setPreRollSentences(this@LexiconActivity, count)
+                        preRollSentencesState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollSentences
+                    },
                     onAddClick = {
                         editingItem = null
                         showEditDialog = true
@@ -313,6 +331,10 @@ class LexiconActivity : ComponentActivity() {
         doubleMarksState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.strengthenIntonation
         tightEllipsisState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.tightEllipsis
         tightCommasPeriodsState.value = com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.tightCommasAndPeriods
+        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.load(this)
+        chunkModeState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.chunkMode
+        preRollEnabledState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollEnabled
+        preRollSentencesState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollSentences
     }
 
     private fun performImportAccentDict(uri: Uri) {

@@ -113,6 +113,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
+        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.load(this)
 
         initJob = serviceScope.launch(Dispatchers.IO) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath

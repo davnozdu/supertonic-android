@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.utils.LexiconItem
+import com.brahmadeo.supertonic.tts.utils.PlaybackPrefs
 
 data class AccentDictBanner(
     val source: String,
@@ -36,6 +37,9 @@ fun LexiconScreen(
     strengthenIntonation: Boolean,
     tightEllipsis: Boolean,
     tightCommasAndPeriods: Boolean,
+    chunkMode: PlaybackPrefs.ChunkMode,
+    preRollEnabled: Boolean,
+    preRollSentences: Int,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -50,6 +54,9 @@ fun LexiconScreen(
     onDoubleMarksToggle: (Boolean) -> Unit,
     onTightEllipsisToggle: (Boolean) -> Unit,
     onTightCommasPeriodsToggle: (Boolean) -> Unit,
+    onChunkModeChange: (PlaybackPrefs.ChunkMode) -> Unit,
+    onPreRollToggle: (Boolean) -> Unit,
+    onPreRollSentencesChange: (Int) -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
     onDeleteClick: (LexiconItem) -> Unit
@@ -343,6 +350,37 @@ fun LexiconScreen(
                 )
             }
 
+            // ─── Playback section ────────────────────────────────────────
+            // Independent of Lexicon/Punctuation — controls how text is
+            // chunked before synthesis and whether AudioTrack waits for a
+            // pre-roll buffer before starting playback. Both default to the
+            // legacy behavior (DEFAULT chunk size, pre-roll off) so existing
+            // users see no change unless they opt in.
+            item {
+                Text(
+                    text = "Playback",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+                )
+            }
+
+            item {
+                ChunkModeRow(
+                    chunkMode = chunkMode,
+                    onChange = onChunkModeChange
+                )
+            }
+
+            item {
+                PreRollRow(
+                    enabled = preRollEnabled,
+                    sentences = preRollSentences,
+                    onToggle = onPreRollToggle,
+                    onSentencesChange = onPreRollSentencesChange
+                )
+            }
+
             if (rules.isEmpty()) {
                 item {
                     Box(
@@ -378,6 +416,106 @@ fun LexiconScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Three-option chunk-size selector with description. Uses a single-choice
+ * segmented button row for a compact, idiomatic Material 3 control. The
+ * labels reflect typical use cases (notifications vs balanced vs books) so
+ * users don't need to know what "chunk limit" means.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChunkModeRow(
+    chunkMode: PlaybackPrefs.ChunkMode,
+    onChange: (PlaybackPrefs.ChunkMode) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        shape = MaterialTheme.shapes.small
+    ) {
+        Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)) {
+            Text(text = "Chunk size", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = "Small (120) — quick start, best for short messages. Default (300) — balanced, current behavior. Large (500) — smoother intonation across longer sentences, best for books.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+            val options = PlaybackPrefs.ChunkMode.values()
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                options.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = chunkMode == mode,
+                        onClick = { onChange(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
+                    ) {
+                        Text(
+                            text = when (mode) {
+                                PlaybackPrefs.ChunkMode.SMALL -> "Small"
+                                PlaybackPrefs.ChunkMode.DEFAULT -> "Default"
+                                PlaybackPrefs.ChunkMode.LARGE -> "Large"
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Pre-roll switch with an inline slider that only appears when the switch is
+ * on. Slider range matches PlaybackPrefs (1..5) and reads/writes through the
+ * onSentencesChange callback so the activity owns persistence.
+ */
+@Composable
+private fun PreRollRow(
+    enabled: Boolean,
+    sentences: Int,
+    onToggle: (Boolean) -> Unit,
+    onSentencesChange: (Int) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        shape = MaterialTheme.shapes.small
+    ) {
+        Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Pre-roll buffer", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "Build up several sentences of synthesized audio in RAM (~1-3 MB) before playback starts. Smooths out pauses between sentences on weak devices. Costs a longer wait at the very beginning of playback.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onToggle)
+            }
+            if (enabled) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Sentences buffered before start: $sentences",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // valueRange (1, 5) with 3 steps between gives 1,2,3,4,5 stops.
+                Slider(
+                    value = sentences.toFloat(),
+                    onValueChange = { onSentencesChange(it.toInt()) },
+                    valueRange = 1f..5f,
+                    steps = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

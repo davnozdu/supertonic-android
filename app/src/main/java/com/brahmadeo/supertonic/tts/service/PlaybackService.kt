@@ -28,6 +28,7 @@ import com.brahmadeo.supertonic.tts.utils.QueueItem
 import com.brahmadeo.supertonic.tts.utils.QueueManager
 import com.brahmadeo.supertonic.tts.utils.TextNormalizer
 import com.brahmadeo.supertonic.tts.utils.WavUtils
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -192,6 +193,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
+        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.load(this)
         QueueManager.initialize(this)
 
         audioManager = attributionContext.getSystemService(AUDIO_SERVICE) as AudioManager
@@ -276,13 +278,24 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 Log.w(TAG, "Audio Focus denied")
             }
 
-            try {
-                if (audioTrack?.state == AudioTrack.STATE_INITIALIZED &&
-                    audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                    audioTrack?.play()
+            // When pre-roll is OFF (default) we kick AudioTrack into PLAYING
+            // immediately so the first synthesized chunk plays as soon as it
+            // arrives — same as before this feature existed. When pre-roll is
+            // ON we keep AudioTrack stopped here; the consumer below starts
+            // playback only after enough audio is buffered in the channel.
+            // Writing PCM to AudioTrack in PAUSED state is a no-op on Android
+            // (it returns immediately without queuing), so we have to hold
+            // the chunks in the in-memory channel until play() is called.
+            val preRollEnabled = PlaybackPrefs.preRollEnabled
+            if (!preRollEnabled) {
+                try {
+                    if (audioTrack?.state == AudioTrack.STATE_INITIALIZED &&
+                        audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                        audioTrack?.play()
+                    }
+                } catch (e: IllegalStateException) {
+                    Log.e(TAG, "AudioTrack.play() failed", e)
                 }
-            } catch (e: IllegalStateException) {
-                Log.e(TAG, "AudioTrack.play() failed", e)
             }
 
             // Auto-detect Russian when the in-app language picker disagrees
@@ -301,26 +314,59 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
                 val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
 
-                // 50 chunks ~ 5 seconds of look-ahead audio. Big enough to hide
-                // the per-sentence inference startup cost; small enough that
-                // cancel still feels responsive (worst case: 5 s of buffered
-                // audio plays out before silence).
-                val channel = Channel<ByteArray>(capacity = 50)
+                // Channel sizing:
+                //  pre-roll OFF: 50 chunks ~ 5 s look-ahead — enough to hide
+                //                per-sentence inference startup, small enough
+                //                that cancel still feels responsive (worst
+                //                case: 5 s of buffered audio before silence).
+                //  pre-roll ON:  ~50 s capacity. We deliberately let the
+                //                producer race ahead and accumulate several
+                //                sentences worth of PCM in RAM before
+                //                AudioTrack starts. RAM cost: ~1-3 MB for
+                //                typical voice settings, never spills to disk.
+                val preRollSentences = PlaybackPrefs.preRollSentences
+                val channelCapacity = if (preRollEnabled) 500 else 50
+                val channel = Channel<ByteArray>(capacity = channelCapacity)
                 currentAudioChannel = channel
+
+                // When pre-roll is enabled, the consumer waits on this signal
+                // before starting AudioTrack. The producer below completes it
+                // once preRollSentences sentences have finished synthesis (or
+                // when the input is shorter than that target — see the
+                // edge-case complete() after the producer loop).
+                val preRollSignal: CompletableDeferred<Unit>? =
+                    if (preRollEnabled) CompletableDeferred() else null
 
                 var statePromotedToPlaying = false
                 var sawAnyAudio = false
 
                 // Consumer: drains the channel into AudioTrack. Runs in
                 // parallel with the producer below; pause/cancel polling is
-                // handled inside writeToTrackBlocking.
+                // handled inside writeToTrackBlocking. When pre-roll is on,
+                // it parks on preRollSignal until the producer has enough
+                // audio queued, then calls audioTrack.play() and begins
+                // streaming. This is the gate that lets the buffer fill up
+                // without playback racing ahead and underrunning.
                 val playerJob = launch(Dispatchers.IO) {
+                    if (preRollSignal != null) {
+                        preRollSignal.await()
+                        if (SupertonicTTS.isCancelled() || !isActive) return@launch
+                        try {
+                            if (audioTrack?.state == AudioTrack.STATE_INITIALIZED &&
+                                audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                                audioTrack?.play()
+                            }
+                        } catch (e: IllegalStateException) {
+                            Log.e(TAG, "AudioTrack.play() failed (post pre-roll)", e)
+                        }
+                    }
                     for (data in channel) {
                         if (!isActive || SupertonicTTS.isCancelled()) break
                         writeToTrackBlocking(data)
                     }
                 }
 
+                var producedSentences = 0
                 try {
                     for (index in validStartIndex until totalSentences) {
                         if (SupertonicTTS.isCancelled() || !isActive) break
@@ -350,6 +396,18 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
                         if (result != null && result.isNotEmpty()) {
                             sawAnyAudio = true
+                            producedSentences++
+                            // Pre-roll: release the consumer once enough
+                            // sentences are queued. Also release if input
+                            // turned out to be shorter than the target — we
+                            // don't want to wait forever for a 5th sentence
+                            // that doesn't exist.
+                            if (preRollSignal != null &&
+                                !preRollSignal.isCompleted &&
+                                producedSentences >= preRollSentences
+                            ) {
+                                preRollSignal.complete(Unit)
+                            }
                             if (!statePromotedToPlaying) {
                                 statePromotedToPlaying = true
                                 withContext(Dispatchers.Main) {
@@ -368,6 +426,14 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         }
                     }
                 } finally {
+                    // Edge cases for the pre-roll gate:
+                    //   - text was shorter than preRollSentences → consumer
+                    //     would await forever for chunks that never come
+                    //   - cancelled mid-pre-roll → consumer should unblock
+                    //     and exit cleanly via the channel.close() below
+                    if (preRollSignal != null && !preRollSignal.isCompleted) {
+                        preRollSignal.complete(Unit)
+                    }
                     channel.close()
                     currentAudioChannel = null
                 }
