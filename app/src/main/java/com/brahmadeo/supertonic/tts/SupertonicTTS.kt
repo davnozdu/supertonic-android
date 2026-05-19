@@ -4,7 +4,9 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicReference
 
 object SupertonicTTS {
+    @Volatile
     private var nativePtr: Long = 0
+    @Volatile
     private var currentModelPath: String? = null
 
     init {

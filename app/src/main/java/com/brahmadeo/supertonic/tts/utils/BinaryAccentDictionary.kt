@@ -143,6 +143,7 @@ class BinaryAccentDictionary private constructor(
          * JSON code path.
          */
         fun open(file: File): BinaryAccentDictionary? {
+            var raf: RandomAccessFile? = null
             return try {
                 val size = file.length()
                 if (size < HEADER_SIZE) {
@@ -153,7 +154,7 @@ class BinaryAccentDictionary private constructor(
                     Log.w(TAG, "file > 2 GiB, ByteBuffer addressing won't fit: $size")
                     return null
                 }
-                val raf = RandomAccessFile(file, "r")
+                raf = RandomAccessFile(file, "r")
                 val channel = raf.channel
                 val buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0L, size)
                     .order(ByteOrder.LITTLE_ENDIAN)
@@ -187,6 +188,7 @@ class BinaryAccentDictionary private constructor(
                 BinaryAccentDictionary(raf, buffer, entryCount, offsetsOffset, dataOffset)
             } catch (e: Throwable) {
                 Log.e(TAG, "open failed: ${file.absolutePath}", e)
+                try { raf?.close() } catch (_: Exception) {}
                 null
             }
         }

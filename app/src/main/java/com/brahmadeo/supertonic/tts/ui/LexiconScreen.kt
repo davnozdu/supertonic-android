@@ -139,48 +139,52 @@ fun LexiconScreen(
             ExtendedFloatingActionButton(
                 onClick = onAddClick,
                 icon = { Icon(Icons.Default.Add, "Add Term") },
-                text = { Text("Add Term") }
+                text = { Text("Add Term") },
+                modifier = Modifier.padding(bottom = 16.dp)
             )
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(paddingValues),
+            contentPadding = PaddingValues(bottom = 88.dp)
         ) {
             if (accentDictBanner != null) {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        shape = MaterialTheme.shapes.small
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = accentDictBanner.source,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Text(
-                                text = "%,d entries · %.1f MB".format(
-                                    accentDictBanner.entries,
-                                    accentDictBanner.sizeBytes / 1_048_576.0
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                        IconButton(onClick = onClearAccentDictClick) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete accent dictionary",
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = accentDictBanner.source,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = "%,d entries · %.1f MB".format(
+                                        accentDictBanner.entries,
+                                        accentDictBanner.sizeBytes / 1_048_576.0
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                            IconButton(onClick = onClearAccentDictClick) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete accent dictionary",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }
@@ -190,64 +194,68 @@ fun LexiconScreen(
             // custom replacement rules below are applied during synthesis —
             // useful for A/B testing whether a rule is doing more harm than
             // good without having to delete it.
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = MaterialTheme.shapes.small
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Apply user lexicon",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "When on, the rules below rewrite text before the model sees it. Turn off to disable all custom rules at once without deleting them.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Apply user lexicon",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = "When on, the rules below rewrite text before the model sees it. Turn off to disable all custom rules at once without deleting them.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = lexiconEnabled,
+                            onCheckedChange = onLexiconToggle
                         )
                     }
-                    Switch(
-                        checked = lexiconEnabled,
-                        onCheckedChange = onLexiconToggle
-                    )
                 }
             }
 
             // Fallback toggle — works without a dictionary too. The hint
             // explicitly warns this is a heuristic, not a Russian grammar
             // rule, so users don't enable it expecting magic.
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = MaterialTheme.shapes.small
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Stress fallback (Russian)",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "When a word isn't in the dictionary, fall back to the penultimate vowel (paroxytone). Common Russian suffixes (-ция, -ние, -ист) get their own special positions. Heuristic — sometimes wrong, but better than nothing.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Stress fallback (Russian)",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = "When a word isn't in the dictionary, fall back to the penultimate vowel (paroxytone). Common Russian suffixes (-ция, -ние, -ист) get their own special positions. Heuristic — sometimes wrong, but better than nothing.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = fallbackEnabled,
+                            onCheckedChange = onFallbackToggle
                         )
                     }
-                    Switch(
-                        checked = fallbackEnabled,
-                        onCheckedChange = onFallbackToggle
-                    )
                 }
             }
 
@@ -256,92 +264,113 @@ fun LexiconScreen(
             // un-stressed; turning it ON makes Service.onCreate block until
             // the full 165 MB dict is loaded — slower startup, but guaranteed
             // stresses from the very first word.
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = MaterialTheme.shapes.small
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Block first synthesis until dictionary loads",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "Off: dictionary parses in the background after a cold start; the very first sentence may go without stress marks. On: the service waits ~5-10 s on first launch so every sentence is stressed from the start. Recommended only if the first sentence really matters (short automation TTS, single-word readouts).",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Block first synthesis until dictionary loads",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = "Off: dictionary parses in the background after a cold start; the very first sentence may go without stress marks. On: the service waits ~5-10 s on first launch so every sentence is stressed from the start. Recommended only if the first sentence really matters (short automation TTS, single-word readouts).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = syncLoadEnabled,
+                            onCheckedChange = onSyncLoadToggle
                         )
                     }
-                    Switch(
-                        checked = syncLoadEnabled,
-                        onCheckedChange = onSyncLoadToggle
-                    )
                 }
             }
 
             // Punctuation experiments. Each toggle is independent; default OFF
             // preserves the legacy stabilisation rules. Section header sets the
             // shared context so the four switches read as a single feature.
-            Text(
-                text = "Punctuation",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
-            )
+            item {
+                Text(
+                    text = "Punctuation",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
+                )
+            }
 
-            PunctuationToggleRow(
-                title = "Tight ?/!",
-                description = "Don't insert a space before ? and ! at the end of a chunk. Glues the mark to the preceding word so the model gets a stronger intonation hint.",
-                checked = tightQuestionExclamation,
-                onToggle = onTightQuestionToggle
-            )
+            item {
+                PunctuationToggleRow(
+                    title = "Tight ?/!",
+                    description = "Don't insert a space before ? and ! at the end of a chunk. Glues the mark to the preceding word so the model gets a stronger intonation hint.",
+                    checked = tightQuestionExclamation,
+                    onToggle = onTightQuestionToggle
+                )
+            }
 
-            PunctuationToggleRow(
-                title = "Strengthen intonation",
-                description = "Double ?/! at the end of a chunk (`Куда?` → `Куда??`). Some models react with a stronger prosodic contour; others ignore it.",
-                checked = strengthenIntonation,
-                onToggle = onDoubleMarksToggle
-            )
+            item {
+                PunctuationToggleRow(
+                    title = "Strengthen intonation",
+                    description = "Double ?/! at the end of a chunk (`Куда?` → `Куда??`). Some models react with a stronger prosodic contour; others ignore it.",
+                    checked = strengthenIntonation,
+                    onToggle = onDoubleMarksToggle
+                )
+            }
 
-            PunctuationToggleRow(
-                title = "Tight ellipsis",
-                description = "Normalize `…` and `. . .` to `...` and strip whitespace before it. One expressive pause instead of three independent dots.",
-                checked = tightEllipsis,
-                onToggle = onTightEllipsisToggle
-            )
+            item {
+                PunctuationToggleRow(
+                    title = "Tight ellipsis",
+                    description = "Normalize `…` and `. . .` to `...` and strip whitespace before it. One expressive pause instead of three independent dots.",
+                    checked = tightEllipsis,
+                    onToggle = onTightEllipsisToggle
+                )
+            }
 
-            PunctuationToggleRow(
-                title = "Tight commas and periods",
-                description = "Skip the legacy `,/;` spacing stabilisation at end of chunk and the closing-quote+period split. Cleaner phrasing but slightly higher glitch risk on rare punctuation.",
-                checked = tightCommasAndPeriods,
-                onToggle = onTightCommasPeriodsToggle
-            )
+            item {
+                PunctuationToggleRow(
+                    title = "Tight commas and periods",
+                    description = "Skip the legacy `,/;` spacing stabilisation at end of chunk and the closing-quote+period split. Cleaner phrasing but slightly higher glitch risk on rare punctuation.",
+                    checked = tightCommasAndPeriods,
+                    onToggle = onTightCommasPeriodsToggle
+                )
+            }
 
             if (rules.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No custom rules yet.\nAdd terms to fix pronunciations.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No custom rules yet.\nAdd terms to fix pronunciations.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 88.dp, top = 16.dp, start = 16.dp, end = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(rules) { rule ->
+                item {
+                    Text(
+                        text = "Custom Rules",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
+                    )
+                }
+
+                items(rules) { rule ->
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         LexiconItemRow(
                             item = rule,
                             onEdit = { onEditClick(rule) },
