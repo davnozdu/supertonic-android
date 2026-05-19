@@ -70,7 +70,7 @@ object AccentDictionaryManager {
      * then size.
      */
     private const val DICT_BASE_URL =
-        "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.0"
+        "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.1"
 
     private val PREBUILT_DICTS: Map<String, List<PrebuiltDict>> = mapOf(
         "ru" to listOf(
@@ -79,27 +79,27 @@ object AccentDictionaryManager {
                 id = "ru-full-bin",
                 displayName = "Full (binary)",
                 format = DictFormat.BINARY,
-                subtitle = "171 MB · 3.26M entries · ~10-20 MB RAM · names, homographs, ё",
+                subtitle = "171 MB · 3.26M entries · ~10-20 MB RAM · names, homographs, ё (yoficator-augmented)",
                 sizeBytes = 171L * 1024 * 1024,
-                entries = 3_263_003,
+                entries = 3_263_148,
                 url = "$DICT_BASE_URL/russian_accents_full.sacc"
             ),
             PrebuiltDict(
                 id = "ru-standard-bin",
                 displayName = "Standard (binary)",
                 format = DictFormat.BINARY,
-                subtitle = "39 MB · 983K entries · ~5-10 MB RAM · words ≤ 9 chars, no homographs, ё",
+                subtitle = "39 MB · 983K entries · ~5-10 MB RAM · words ≤ 9 chars, no homographs, ё (yoficator-augmented)",
                 sizeBytes = 39L * 1024 * 1024,
-                entries = 982_511,
+                entries = 982_598,
                 url = "$DICT_BASE_URL/russian_accents_max9.sacc"
             ),
             PrebuiltDict(
                 id = "ru-compact-bin",
                 displayName = "Compact (binary)",
                 format = DictFormat.BINARY,
-                subtitle = "23 MB · 628K entries · ~3-7 MB RAM · words ≤ 8 chars, ё",
+                subtitle = "23 MB · 628K entries · ~3-7 MB RAM · words ≤ 8 chars, ё (yoficator-augmented)",
                 sizeBytes = 23L * 1024 * 1024,
-                entries = 628_177,
+                entries = 628_242,
                 url = "$DICT_BASE_URL/russian_accents_max8.sacc"
             ),
             // ------------- Text (.json, HashMap, hand-editable) -------------
@@ -107,27 +107,27 @@ object AccentDictionaryManager {
                 id = "ru-full-txt",
                 displayName = "Full (text)",
                 format = DictFormat.TEXT,
-                subtitle = "165 MB · 3.26M entries · ~390 MB RAM · names, homographs, ё",
+                subtitle = "165 MB · 3.26M entries · ~390 MB RAM · names, homographs, ё (yoficator-augmented)",
                 sizeBytes = 165L * 1024 * 1024,
-                entries = 3_263_003,
+                entries = 3_263_148,
                 url = "$DICT_BASE_URL/russian_accents_full.json"
             ),
             PrebuiltDict(
                 id = "ru-standard-txt",
                 displayName = "Standard (text)",
                 format = DictFormat.TEXT,
-                subtitle = "37 MB · 983K entries · ~150 MB RAM · words ≤ 9 chars, no homographs, ё",
+                subtitle = "37 MB · 983K entries · ~150 MB RAM · words ≤ 9 chars, no homographs, ё (yoficator-augmented)",
                 sizeBytes = 37L * 1024 * 1024,
-                entries = 982_511,
+                entries = 982_598,
                 url = "$DICT_BASE_URL/russian_accents_max9.json"
             ),
             PrebuiltDict(
                 id = "ru-compact-txt",
                 displayName = "Compact (text)",
                 format = DictFormat.TEXT,
-                subtitle = "22 MB · 628K entries · ~85 MB RAM · words ≤ 8 chars, ё",
+                subtitle = "22 MB · 628K entries · ~85 MB RAM · words ≤ 8 chars, ё (yoficator-augmented)",
                 sizeBytes = 22L * 1024 * 1024,
-                entries = 628_177,
+                entries = 628_242,
                 url = "$DICT_BASE_URL/russian_accents_max8.json"
             )
         )
