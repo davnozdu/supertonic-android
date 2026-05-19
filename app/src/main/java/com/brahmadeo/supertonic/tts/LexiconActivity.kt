@@ -61,7 +61,6 @@ class LexiconActivity : ComponentActivity() {
     private val chunkModeState = mutableStateOf(com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.ChunkMode.DEFAULT)
     private val preRollEnabledState = mutableStateOf(false)
     private val preRollSentencesState = mutableStateOf(2)
-    private val autoStepsState = mutableStateOf(false)
     private var playbackService: IPlaybackService? = null
     private var isBound = false
 
@@ -127,9 +126,10 @@ class LexiconActivity : ComponentActivity() {
                     mutableStateOf<AccentDictionaryManager.DictFormat?>(null)
                 }
 
+                val connectingLabel = getString(R.string.connecting)
                 fun startDownload(url: String, source: String) {
                     showProgress = true
-                    progressLabel = "Connecting…"
+                    progressLabel = connectingLabel
                     progressFraction = 0f
                     CoroutineScope(Dispatchers.IO).launch {
                         val count = AccentDictionaryManager.downloadPrebuilt(
@@ -149,18 +149,18 @@ class LexiconActivity : ComponentActivity() {
                             if (count > 0) {
                                 refreshRules()
                                 MaterialAlertDialogBuilder(this@LexiconActivity)
-                                    .setTitle("Dictionary loaded")
-                                    .setMessage("%,d entries are now active for synthesis.".format(count))
-                                    .setPositiveButton("OK", null)
+                                    .setTitle(R.string.dict_loaded_title)
+                                    .setMessage(getString(R.string.dict_loaded_msg_fmt, count))
+                                    .setPositiveButton(R.string.ok, null)
                                     .show()
                             } else {
                                 // Show the *specific* reason in a persistent dialog
                                 // so the user knows what went wrong (OOM with Full
                                 // on small phones is the most common case here).
                                 MaterialAlertDialogBuilder(this@LexiconActivity)
-                                    .setTitle("Download failed")
+                                    .setTitle(R.string.download_failed_title)
                                     .setMessage(downloadErrorMessage(count))
-                                    .setPositiveButton("OK", null)
+                                    .setPositiveButton(R.string.ok, null)
                                     .show()
                             }
                         }
@@ -177,9 +177,9 @@ class LexiconActivity : ComponentActivity() {
                     }
                     val title = when (activeFormat) {
                         AccentDictionaryManager.DictFormat.BINARY ->
-                            "Choose dictionary size (binary)"
+                            getString(R.string.download_chooser_binary_title)
                         AccentDictionaryManager.DictFormat.TEXT ->
-                            "Choose dictionary size (text)"
+                            getString(R.string.download_chooser_text_title)
                     }
                     AlertDialog(
                         onDismissRequest = { chooserFormat = null },
@@ -192,7 +192,7 @@ class LexiconActivity : ComponentActivity() {
                                             .fillMaxWidth()
                                             .clickable {
                                                 chooserFormat = null
-                                                startDownload(opt.url, "Russian — ${opt.displayName}")
+                                                startDownload(opt.url, getString(R.string.russian_source_fmt, opt.displayName))
                                             }
                                             .padding(vertical = 8.dp)
                                     ) {
@@ -207,7 +207,7 @@ class LexiconActivity : ComponentActivity() {
                         confirmButton = {},
                         dismissButton = {
                             TextButton(onClick = { chooserFormat = null }) {
-                                Text("Cancel")
+                                Text(getString(R.string.cancel))
                             }
                         }
                     )
@@ -216,7 +216,7 @@ class LexiconActivity : ComponentActivity() {
                 if (showProgress) {
                     AlertDialog(
                         onDismissRequest = {},
-                        title = { Text("Downloading accent dictionary") },
+                        title = { Text(getString(R.string.download_progress_title)) },
                         text = {
                             Column {
                                 Text(progressLabel)
@@ -246,7 +246,6 @@ class LexiconActivity : ComponentActivity() {
                     chunkMode = chunkModeState.value,
                     preRollEnabled = preRollEnabledState.value,
                     preRollSentences = preRollSentencesState.value,
-                    autoStepsEnabled = autoStepsState.value,
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
@@ -298,10 +297,6 @@ class LexiconActivity : ComponentActivity() {
                         com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setPreRollSentences(this@LexiconActivity, count)
                         preRollSentencesState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollSentences
                     },
-                    onAutoStepsToggle = { enabled ->
-                        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setAutoSteps(this@LexiconActivity, enabled)
-                        autoStepsState.value = enabled
-                    },
                     onAddClick = {
                         editingItem = null
                         showEditDialog = true
@@ -341,7 +336,6 @@ class LexiconActivity : ComponentActivity() {
         chunkModeState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.chunkMode
         preRollEnabledState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollEnabled
         preRollSentencesState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollSentences
-        autoStepsState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.autoSteps
     }
 
     private fun performImportAccentDict(uri: Uri) {
@@ -374,19 +368,13 @@ class LexiconActivity : ComponentActivity() {
      * by far the most common failure on phones <= 4 GB RAM trying to load Full.
      */
     private fun downloadErrorMessage(code: Int): String = when (code) {
-        AccentDictionaryManager.ERR_OOM ->
-            "Out of memory while parsing the dictionary. Either pick the binary variant of the same size (mmap, no heap) or switch to Standard (36 MB / ~150 MB heap) / Compact (21 MB / ~85 MB heap)."
-        AccentDictionaryManager.ERR_NETWORK ->
-            "Network error. Check your connection and try again."
-        AccentDictionaryManager.ERR_TOO_LARGE ->
-            "Downloaded file is larger than 250 MB cap and was discarded."
-        AccentDictionaryManager.ERR_PARSE ->
-            "Couldn't read the dictionary. The file may be corrupt, truncated, or in an unsupported format."
-        AccentDictionaryManager.ERR_IO ->
-            "I/O error while reading the source. Try again."
-        AccentDictionaryManager.ERR_BUSY ->
-            "Another dictionary download or import is already in progress. Wait for it to finish and try again."
-        else -> "Unknown error (code $code)."
+        AccentDictionaryManager.ERR_OOM -> getString(R.string.err_oom)
+        AccentDictionaryManager.ERR_NETWORK -> getString(R.string.err_network)
+        AccentDictionaryManager.ERR_TOO_LARGE -> getString(R.string.err_too_large)
+        AccentDictionaryManager.ERR_PARSE -> getString(R.string.err_parse)
+        AccentDictionaryManager.ERR_IO -> getString(R.string.err_io)
+        AccentDictionaryManager.ERR_BUSY -> getString(R.string.err_busy)
+        else -> getString(R.string.err_unknown_fmt, code)
     }
 
     private fun clearAccentDict() {
@@ -554,7 +542,7 @@ class LexiconActivity : ComponentActivity() {
         val selectedLang = prefs.getString("selected_lang", "en") ?: "en"
 
         if (!AssetManager.isReady(this)) {
-            Toast.makeText(this, "Assets not ready. Please download them on the main screen.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.assets_not_ready), Toast.LENGTH_LONG).show()
             return
         }
 

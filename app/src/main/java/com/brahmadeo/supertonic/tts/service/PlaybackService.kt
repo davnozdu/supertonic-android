@@ -266,11 +266,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     private var synthesisJob: Job? = null
 
     fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int = 0) {
-        // Auto-tune: when PlaybackPrefs.autoSteps is ON, override the
-        // caller-supplied steps with the SoC-class-appropriate value.
-        // Resolved here so the original `steps` parameter signature stays the
-        // same for IPC compatibility with MainActivity.
-        val effectiveSteps = PlaybackPrefs.resolveSteps(SupertonicTTS.getSoC(), steps)
         serviceScope.launch {
             // Cancel any in-flight synthesis, but keep the AudioTrack alive so the
             // next sentence can stream straight in without a re-init delay.
@@ -424,7 +419,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         // pushed via streamingListener.onAudioChunk into the
                         // channel, where the consumer above picks it up.
                         val result = SupertonicTTS.generateAudio(
-                            normalizedText, effectiveLang, stylePath, speed, 0.0f, effectiveSteps,
+                            normalizedText, effectiveLang, stylePath, speed, 0.0f, steps,
                             VOLUME_BOOST_FACTOR, streamingListener
                         )
 

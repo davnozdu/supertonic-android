@@ -274,11 +274,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
 
-        val userSteps = prefs.getInt("diffusion_steps", 5)
-        // Apply auto-tune if the user enabled it. resolveSteps falls back to
-        // userSteps when the engine isn't ready yet or autoSteps is off.
-        val steps = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs
-            .resolveSteps(SupertonicTTS.getSoC(), userSteps)
+        val steps = prefs.getInt("diffusion_steps", 5)
 
         if (SupertonicTTS.getSoC() == -1) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath

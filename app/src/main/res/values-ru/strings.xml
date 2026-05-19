@@ -1,0 +1,233 @@
+<resources>
+    <string name="app_name">Supertonic TTS (Fork)</string>
+
+    <!-- Main Activity -->
+    <string name="default_input_text">Привет, мир. Это Supertonic TTS для Android. Выберите голос и скорость ниже.</string>
+    <string name="voice_style_label">Стиль голоса</string>
+    <string name="mix_voices_label">Смешивать голоса</string>
+    <string name="voice_style_2_label">Дополнительный голос</string>
+    <string name="mix_ratio_label">Пропорция смешивания (основной/дополнительный)</string>
+    <string name="speed_label">Скорость</string>
+    <string name="quality_label">Качество</string>
+    <string name="quality_hint">Рекомендуется: 3 для слабых телефонов (CPU до 2 ГГц), 4-5 для среднего класса, 6-7 для флагманов. Выше — лучше интонация, но дольше до первого слова.</string>
+    <string name="synthesize_button">Озвучить</string>
+    <string name="loading_engine">Загрузка движка…</string>
+    <string name="initializing">Инициализация…</string>
+    <string name="ready_soc_fmt">Готов (SoC: %1$s)</string>
+    <string name="init_failed">Ошибка инициализации</string>
+    <string name="engine_error">Ошибка движка</string>
+    <string name="asset_copy_failed">Не удалось скопировать ресурсы</string>
+    <string name="asset_error">Ошибка ресурсов</string>
+    <string name="shared_text">Полученный текст</string>
+    <string name="fetched_web_text">Текст с веб-страницы</string>
+    <string name="resume_title">Продолжить воспроизведение?</string>
+    <string name="resume_message">Хотите продолжить чтение с того места, где остановились?</string>
+    <string name="resume_button">Продолжить</string>
+    <string name="resume_content_description">Возобновить последнее воспроизведение</string>
+    <string name="play_selected_title">Озвучить выделенный текст?</string>
+    <string name="play_selected_message">Начать синтез этого текста сейчас?</string>
+    <string name="yes">Да</string>
+    <string name="no">Нет</string>
+    <string name="cancel">Отмена</string>
+    <string name="delete">Удалить</string>
+    <string name="ok">ОК</string>
+    <string name="playback_active_title">Воспроизведение идёт</string>
+    <string name="playback_active_message">Сейчас уже что-то проигрывается. Добавить этот текст в очередь или включить его сразу?</string>
+    <string name="add_to_queue">В очередь</string>
+    <string name="play_now">Воспроизвести сейчас</string>
+    <string name="added_to_queue">Добавлено в очередь</string>
+
+    <string name="model_download_title">Скачать модели Supertonic 3?</string>
+    <string name="model_download_message">Supertonic 3 поддерживает 31 язык и требует одноразовой загрузки (~400 МБ). Скачать сейчас?</string>
+    <string name="model_download_button">Скачать</string>
+    <string name="model_delete_title">Удалить TTS-модели?</string>
+    <string name="model_delete_message">Это удалит все модели Supertonic 3 и стили голосов, чтобы освободить место (~400 МБ). Их можно будет скачать заново позже.</string>
+    <string name="model_deleted_msg">TTS-модели удалены</string>
+
+    <!-- Playback Activity -->
+    <string name="now_playing_title">Сейчас играет</string>
+    <string name="saving_audio">Сохранение аудио…</string>
+    <string name="saved_to_fmt">Сохранено в %1$s</string>
+    <string name="export_failed">Ошибка экспорта</string>
+
+    <!-- History Activity -->
+    <string name="history_title">История</string>
+    <string name="clear_all_button">Очистить всё</string>
+
+    <!-- Saved Audio Activity -->
+    <string name="saved_audio_title">Сохранённое аудио</string>
+    <string name="delete_audio_title">Удалить аудио</string>
+    <string name="delete_audio_message_fmt">Удалить файл %1$s?</string>
+
+    <!-- Lexicon Activity -->
+    <string name="lexicon_title">Словарь произношения</string>
+    <string name="lexicon_empty_state">Пока нет своих правил.\nДобавьте слова, чтобы исправить произношение.</string>
+    <string name="add_term_button">Добавить слово</string>
+    <string name="add_rule_title">Добавить правило произношения</string>
+    <string name="term_hint">Слово (например, LLMs)</string>
+    <string name="replacement_hint">Замена (например, Эл Эл Эмс)</string>
+    <string name="ignore_case_label">Без учёта регистра</string>
+    <string name="test_button">Проверить</string>
+    <string name="testing_pronunciation_fmt">Проверка произношения: %1$s</string>
+    <string name="save_button">Сохранить</string>
+    <string name="enter_replacement_msg">Введите замену, чтобы проверить</string>
+    <string name="empty_fields_msg">Слово и замена не могут быть пустыми</string>
+    <string name="no_rules_export">Нет правил для экспорта</string>
+    <string name="export_failed_fmt">Не удалось экспортировать: %1$s</string>
+    <string name="import_error">Ошибка импорта: некорректный JSON-файл</string>
+    <string name="no_valid_rules">В файле не найдено валидных правил</string>
+    <string name="import_complete_title">Импорт завершён</string>
+    <string name="import_stats_fmt">Добавлено новых правил: %1$d.\nОбновлено правил: %2$d.</string>
+    <string name="import_no_changes">Все правила уже есть и актуальны.</string>
+    <string name="export_chooser_title">Экспорт словаря</string>
+
+    <!-- Menus -->
+    <string name="action_reset">Сбросить</string>
+    <string name="action_open_ebook">Открыть книгу (EPUB/PDF)</string>
+    <string name="action_saved">Сохранённое аудио</string>
+    <string name="action_history">История</string>
+    <string name="action_queue">Очередь</string>
+    <string name="action_lexicon">Словарь</string>
+    <string name="action_tts_settings">Системные настройки TTS</string>
+    <string name="tts_settings_unavailable">Не удалось открыть настройки TTS на этом устройстве</string>
+    <string name="accent_dict_import_title">Словарь ударений импортирован</string>
+    <string name="accent_dict_import_msg_fmt">Загружено записей: %1$d. Они будут применяться перед каждым синтезом.</string>
+    <string name="accent_dict_import_failed">Не удалось импортировать словарь ударений. Ожидался JSON-объект формата: { \"слово\": \"сло́во\" }</string>
+    <string name="accent_dict_empty">В файле не найдено валидных записей</string>
+    <string name="accent_dict_clear_title">Удалить словарь ударений?</string>
+    <string name="accent_dict_clear_msg">Все импортированные записи произношения будут удалены. Ваши правила, заданные вручную, останутся.</string>
+    <string name="accent_dict_cleared">Словарь ударений удалён</string>
+    <string name="action_delete_model">Удалить TTS-модели</string>
+    <string name="action_import">Импорт JSON</string>
+    <string name="action_export">Экспорт JSON</string>
+
+    <string name="synthesize_content_description">Озвучить и проиграть</string>
+    <string name="input_label">Текст</string>
+    <string name="language_label">Язык</string>
+    <string name="lang_english">Английский</string>
+    <string name="lang_korean">Корейский</string>
+    <string name="lang_japanese">Японский</string>
+    <string name="lang_arabic">Арабский</string>
+    <string name="lang_bulgarian">Болгарский</string>
+    <string name="lang_czech">Чешский</string>
+    <string name="lang_danish">Датский</string>
+    <string name="lang_german">Немецкий</string>
+    <string name="lang_greek">Греческий</string>
+    <string name="lang_spanish">Испанский</string>
+    <string name="lang_estonian">Эстонский</string>
+    <string name="lang_finnish">Финский</string>
+    <string name="lang_french">Французский</string>
+    <string name="lang_hindi">Хинди</string>
+    <string name="lang_croatian">Хорватский</string>
+    <string name="lang_hungarian">Венгерский</string>
+    <string name="lang_indonesian">Индонезийский</string>
+    <string name="lang_italian">Итальянский</string>
+    <string name="lang_lithuanian">Литовский</string>
+    <string name="lang_latvian">Латышский</string>
+    <string name="lang_dutch">Нидерландский</string>
+    <string name="lang_polish">Польский</string>
+    <string name="lang_portuguese">Португальский</string>
+    <string name="lang_romanian">Румынский</string>
+    <string name="lang_russian">Русский</string>
+    <string name="lang_slovak">Словацкий</string>
+    <string name="lang_slovenian">Словенский</string>
+    <string name="lang_swedish">Шведский</string>
+    <string name="lang_turkish">Турецкий</string>
+    <string name="lang_ukrainian">Украинский</string>
+    <string name="lang_vietnamese">Вьетнамский</string>
+    <string name="lang_other">Другой / Автоопределение</string>
+    <string name="advanced_normalization_label">Расширенная нормализация</string>
+    <string name="advanced_normalization_desc">Применяет правила английского стиля для чисел, единиц измерения и т. п.</string>
+
+    <!-- Notifications -->
+    <string name="notif_synthesizing">Синтез…</string>
+    <string name="notif_playing">Воспроизведение</string>
+    <string name="notif_paused">Пауза</string>
+    <string name="notif_exporting">Экспорт аудио…</string>
+
+    <!-- Voices -->
+    <string name="voice_m1">Алекс — живой, бодрый</string>
+    <string name="voice_m2">Джеймс — низкий, спокойный</string>
+    <string name="voice_m3">Роберт — отточенный, властный</string>
+    <string name="voice_m4">Сэм — мягкий, дружелюбный</string>
+    <string name="voice_m5">Дэниел — тёплый, успокаивающий</string>
+    <string name="voice_f1">Сара — спокойная, собранная</string>
+    <string name="voice_f2">Лили — звонкая, весёлая</string>
+    <string name="voice_f3">Джессика — профессиональная, чёткая</string>
+    <string name="voice_f4">Оливия — звонкая, уверенная</string>
+    <string name="voice_f5">Эмили — добрая, нежная</string>
+
+    <!-- Lexicon / Playback toggles (Lexicon screen sections) -->
+    <string name="section_punctuation">Пунктуация</string>
+    <string name="section_playback">Воспроизведение</string>
+    <string name="lexicon_master_title">Применять пользовательский словарь</string>
+    <string name="lexicon_master_desc">Когда включено — правила ниже переписывают текст до того, как его увидит модель. Выключите, чтобы временно отключить все свои правила, не удаляя их.</string>
+    <string name="sync_load_title">Блокировать первый синтез до загрузки словаря</string>
+    <string name="sync_load_desc">Выкл: словарь грузится в фоне после холодного старта, первое предложение может быть без ударений. Вкл: служба ждёт ~5–10 с при первом запуске, чтобы каждая фраза была с ударениями с самого начала. Рекомендуется только если важно именно первое предложение (короткие реплики автоматизаций, чтение отдельных слов).</string>
+    <string name="punct_tight_qe_title">Без пробела перед ? и !</string>
+    <string name="punct_tight_qe_desc">Не вставлять пробел перед «?» и «!» в конце куска. Знак прилипает к слову — модель получает более чёткий сигнал интонации, но на некоторых голосах возможны щелчки.</string>
+    <string name="punct_double_marks_title">Усиливать интонацию</string>
+    <string name="punct_double_marks_desc">Удваивать «?» и «!» в конце куска (Куда? → Куда??). Некоторые модели реагируют более выраженной интонацией, другие игнорируют.</string>
+    <string name="punct_tight_ellipsis_title">Нормализовать многоточие</string>
+    <string name="punct_tight_ellipsis_desc">Приводить «…» и «. . .» к «...» и убирать пробел перед ним. Одна выразительная пауза вместо трёх отдельных точек.</string>
+    <string name="punct_tight_cp_title">Без пробела перед запятой и точкой</string>
+    <string name="punct_tight_cp_desc">Пропускать стандартную стабилизацию пробелов перед «,/;» в конце куска и разделение последовательностей «.»/«!»/«?» в кавычках. Чище фраза, но чуть выше риск артефактов на редкой пунктуации.</string>
+    <string name="punct_force_space_title">Принудительный пробел перед знаком препинания</string>
+    <string name="punct_force_space_desc">Вставлять пробел между словом и идущим за ним «.,;:!?». Подсказка для токенизатора модели (удивлён, → удивлён ,). Не трогает повторяющиеся знаки (..., ?!) и числа (3,14, 1.5). По умолчанию выключено.</string>
+    <string name="chunk_size_title">Размер блока</string>
+    <string name="chunk_size_desc">Small (120) — быстрый старт для коротких сообщений. Default (300) — сбалансированный, текущее поведение. Large (500) — плавнее интонация, для книг. Huge (1000, экспериментально) — упаковывает короткие абзацы в один вызов синтеза.</string>
+    <string name="chunk_size_small">Small</string>
+    <string name="chunk_size_default">Default</string>
+    <string name="chunk_size_large">Large</string>
+    <string name="chunk_size_huge">Huge</string>
+    <string name="preroll_title">Буфер предзагрузки</string>
+    <string name="preroll_desc">Накопить несколько предложений в RAM (~1–3 МБ) перед началом воспроизведения. Сглаживает паузы между фразами на слабых устройствах. В обмен — чуть больше ожидания в самом начале.</string>
+    <string name="preroll_sentences_fmt">Предложений в буфере: %1$d</string>
+    <string name="custom_rules_header">Свои правила</string>
+
+    <!-- LexiconScreen menu items -->
+    <string name="menu_import_json">Импорт JSON</string>
+    <string name="menu_export_json">Экспорт JSON</string>
+    <string name="menu_download_binary">Скачать словарь ударений (бинарный)…</string>
+    <string name="menu_download_text">Скачать словарь ударений (текстовый)…</string>
+    <string name="menu_import_dict">Импорт словаря ударений из файла…</string>
+    <string name="menu_clear_dict">Удалить словарь ударений</string>
+    <string name="more">Ещё</string>
+    <string name="back">Назад</string>
+
+    <!-- Download dialog -->
+    <string name="download_chooser_binary_title">Выберите размер словаря (бинарный)</string>
+    <string name="download_chooser_text_title">Выберите размер словаря (текстовый)</string>
+    <string name="download_progress_title">Загрузка словаря ударений</string>
+    <string name="dict_loaded_title">Словарь загружен</string>
+    <string name="dict_loaded_msg_fmt">Активных записей: %,d. Применяются при синтезе.</string>
+    <string name="download_failed_title">Ошибка загрузки</string>
+
+    <!-- PlaybackScreen / SavedAudio / Queue / History -->
+    <string name="playback_now_playing">Сейчас играет</string>
+    <string name="cancel_action">Отмена</string>
+    <string name="delete_audio_action">Удалить</string>
+    <string name="confirm_delete_audio_fmt">Удалить файл «%1$s»?</string>
+    <string name="queue_title">Очередь</string>
+    <string name="clear_history_title">Очистить историю</string>
+    <string name="clear_history_msg">Удалить все записи из истории?</string>
+    <string name="search_history_placeholder">Поиск в истории…</string>
+    <string name="action_retry_download">Повторить загрузку</string>
+    <string name="download_intro">Загрузка моделей Supertonic 3 (~400 МБ). Поддерживает 31 язык — это разовая загрузка.</string>
+    <string name="download_failed">Ошибка загрузки</string>
+    <string name="download_in_progress">Загрузка моделей</string>
+    <string name="edit_rule_title">Изменить правило</string>
+    <string name="regex_mode_label">Режим регулярного выражения</string>
+    <string name="regex_pattern_label">Регулярное выражение</string>
+    <string name="fields_empty_msg">Поля не могут быть пустыми</string>
+    <string name="connecting">Подключение…</string>
+    <string name="russian_source_fmt">Русский — %1$s</string>
+    <string name="err_oom">Не хватило памяти на парсинг словаря. Выберите бинарный вариант того же размера (mmap, не съедает heap) или переключитесь на Standard (37 МБ / ~150 МБ heap) / Compact (22 МБ / ~85 МБ heap).</string>
+    <string name="err_network">Сетевая ошибка. Проверьте подключение и попробуйте ещё раз.</string>
+    <string name="err_too_large">Скачанный файл больше предельных 250 МБ и был отброшен.</string>
+    <string name="err_parse">Не удалось прочитать словарь. Файл повреждён, обрезан или в неизвестном формате.</string>
+    <string name="err_io">Ошибка ввода-вывода при чтении источника. Попробуйте ещё раз.</string>
+    <string name="err_busy">Уже идёт другая загрузка или импорт словаря. Дождитесь окончания и попробуйте ещё раз.</string>
+    <string name="err_unknown_fmt">Неизвестная ошибка (код %1$d).</string>
+    <string name="assets_not_ready">Ресурсы не готовы. Сначала скачайте их на главном экране.</string>
+</resources>

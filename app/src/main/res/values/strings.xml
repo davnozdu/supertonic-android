@@ -9,6 +9,7 @@
     <string name="mix_ratio_label">Mix Ratio (Primary vs Secondary)</string>
     <string name="speed_label">Speed</string>
     <string name="quality_label">Quality</string>
+    <string name="quality_hint">Recommended: 3 for weak phones (sub-2 GHz CPU), 4-5 for mid-range, 6-7 for flagships. Higher = better prosody but longer first-word latency.</string>
     <string name="synthesize_button">Synthesize</string>
     <string name="loading_engine">Loading Engine…</string>
     <string name="initializing">Initializing…</string>
@@ -143,6 +144,80 @@
     <string name="notif_playing">Playing Audio</string>
     <string name="notif_paused">Paused</string>
     <string name="notif_exporting">Exporting Audio…</string>
+
+    <!-- Lexicon / Playback section labels -->
+    <string name="section_punctuation">Punctuation</string>
+    <string name="section_playback">Playback</string>
+    <string name="lexicon_master_title">Apply user lexicon</string>
+    <string name="lexicon_master_desc">When on, the rules below rewrite text before the model sees it. Turn off to disable all custom rules at once without deleting them.</string>
+    <string name="sync_load_title">Block first synthesis until dictionary loads</string>
+    <string name="sync_load_desc">Off: dictionary parses in the background after a cold start; the very first sentence may go without stress marks. On: the service waits ~5-10 s on first launch so every sentence is stressed from the start. Recommended only if the first sentence really matters (short automation TTS, single-word readouts).</string>
+    <string name="punct_tight_qe_title">Tight ?/!</string>
+    <string name="punct_tight_qe_desc">Don\'t insert a space before ? and ! at the end of a chunk. Glues the mark to the preceding word so the model gets a stronger intonation hint.</string>
+    <string name="punct_double_marks_title">Strengthen intonation</string>
+    <string name="punct_double_marks_desc">Double ?/! at the end of a chunk (`Куда?` → `Куда??`). Some models react with a stronger prosodic contour; others ignore it.</string>
+    <string name="punct_tight_ellipsis_title">Tight ellipsis</string>
+    <string name="punct_tight_ellipsis_desc">Normalize `…` and `. . .` to `...` and strip whitespace before it. One expressive pause instead of three independent dots.</string>
+    <string name="punct_tight_cp_title">Tight commas and periods</string>
+    <string name="punct_tight_cp_desc">Skip the legacy `,/;` spacing stabilisation at end of chunk and the closing-quote+period split. Cleaner phrasing but slightly higher glitch risk on rare punctuation.</string>
+    <string name="punct_force_space_title">Force space before punctuation</string>
+    <string name="punct_force_space_desc">Insert a space between any word and a trailing `.,;:!?`. Belt-and-braces hint for the model\'s text tokenizer (`удивлён,` → `удивлён ,`). Leaves consecutive marks (`...`, `?!`) and numbers (`3,14`, `1.5`) alone. Off by default.</string>
+    <string name="chunk_size_title">Chunk size</string>
+    <string name="chunk_size_desc">Small (120) — quick start for short messages. Default (300) — balanced, current behavior. Large (500) — smoother intonation, best for books. Huge (1000, experimental) — packs whole short paragraphs into one synthesis call.</string>
+    <string name="chunk_size_small">Small</string>
+    <string name="chunk_size_default">Default</string>
+    <string name="chunk_size_large">Large</string>
+    <string name="chunk_size_huge">Huge</string>
+    <string name="preroll_title">Pre-roll buffer</string>
+    <string name="preroll_desc">Build up several sentences of synthesized audio in RAM (~1-3 MB) before playback starts. Smooths out pauses between sentences on weak devices. Costs a longer wait at the very beginning of playback.</string>
+    <string name="preroll_sentences_fmt">Sentences buffered before start: %1$d</string>
+    <string name="custom_rules_header">Custom Rules</string>
+
+    <!-- LexiconScreen menu items -->
+    <string name="menu_import_json">Import JSON</string>
+    <string name="menu_export_json">Export JSON</string>
+    <string name="menu_download_binary">Download accent dictionary (binary)…</string>
+    <string name="menu_download_text">Download accent dictionary (text)…</string>
+    <string name="menu_import_dict">Import accent dictionary from file…</string>
+    <string name="menu_clear_dict">Clear accent dictionary</string>
+    <string name="more">More</string>
+    <string name="back">Back</string>
+
+    <!-- Download dialog -->
+    <string name="download_chooser_binary_title">Choose dictionary size (binary)</string>
+    <string name="download_chooser_text_title">Choose dictionary size (text)</string>
+    <string name="download_progress_title">Downloading accent dictionary</string>
+    <string name="dict_loaded_title">Dictionary loaded</string>
+    <string name="dict_loaded_msg_fmt">%,d entries are now active for synthesis.</string>
+    <string name="download_failed_title">Download failed</string>
+
+    <!-- PlaybackScreen / SavedAudio / Queue / History -->
+    <string name="playback_now_playing">Now Playing</string>
+    <string name="cancel_action">Cancel</string>
+    <string name="delete_audio_action">Delete</string>
+    <string name="confirm_delete_audio_fmt">Are you sure you want to delete %1$s?</string>
+    <string name="queue_title">Queue</string>
+    <string name="clear_history_title">Clear History</string>
+    <string name="clear_history_msg">Are you sure you want to delete all history items?</string>
+    <string name="search_history_placeholder">Search history...</string>
+    <string name="action_retry_download">Retry Download</string>
+    <string name="download_intro">Downloading Supertonic 3 TTS models (~400MB). Supports 31 languages — this download happens only once.</string>
+    <string name="download_failed">Download Failed</string>
+    <string name="download_in_progress">Downloading Models</string>
+    <string name="edit_rule_title">Edit Rule</string>
+    <string name="regex_mode_label">Regex Mode</string>
+    <string name="regex_pattern_label">Regex Pattern</string>
+    <string name="fields_empty_msg">Fields cannot be empty</string>
+    <string name="connecting">Connecting…</string>
+    <string name="russian_source_fmt">Russian — %1$s</string>
+    <string name="err_oom">Out of memory while parsing the dictionary. Either pick the binary variant of the same size (mmap, no heap) or switch to Standard (37 MB / ~150 MB heap) / Compact (22 MB / ~85 MB heap).</string>
+    <string name="err_network">Network error. Check your connection and try again.</string>
+    <string name="err_too_large">Downloaded file is larger than 250 MB cap and was discarded.</string>
+    <string name="err_parse">Couldn\'t read the dictionary. The file may be corrupt, truncated, or in an unsupported format.</string>
+    <string name="err_io">I/O error while reading the source. Try again.</string>
+    <string name="err_busy">Another dictionary download or import is already in progress. Wait for it to finish and try again.</string>
+    <string name="err_unknown_fmt">Unknown error (code %1$d).</string>
+    <string name="assets_not_ready">Assets not ready. Please download them on the main screen.</string>
 
     <!-- Voices -->
     <string name="voice_m1">Alex - Lively, Upbeat</string>

@@ -15,10 +15,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.brahmadeo.supertonic.tts.R as AppR
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,8 +54,8 @@ fun SavedAudioScreen(
     if (fileToDelete != null) {
         AlertDialog(
             onDismissRequest = { fileToDelete = null },
-            title = { Text("Delete Audio") },
-            text = { Text("Are you sure you want to delete ${fileToDelete?.name}?") },
+            title = { Text(stringResource(AppR.string.delete_audio_title)) },
+            text = { Text(stringResource(AppR.string.confirm_delete_audio_fmt, fileToDelete?.name ?: "")) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -62,12 +64,12 @@ fun SavedAudioScreen(
                         fileToDelete = null
                     }
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(AppR.string.delete_audio_action), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { fileToDelete = null }) {
-                    Text("Cancel")
+                    Text(stringResource(AppR.string.cancel_action))
                 }
             }
         )
@@ -76,10 +78,10 @@ fun SavedAudioScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Saved Audio") },
+                title = { Text(stringResource(AppR.string.saved_audio_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(AppR.string.back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

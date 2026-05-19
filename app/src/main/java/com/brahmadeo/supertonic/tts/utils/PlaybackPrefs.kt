@@ -31,7 +31,6 @@ object PlaybackPrefs {
     private const val KEY_CHUNK_MODE = "chunk_mode"
     private const val KEY_PREROLL_ENABLED = "preroll_enabled"
     private const val KEY_PREROLL_SENTENCES = "preroll_sentences"
-    private const val KEY_AUTO_STEPS = "auto_steps"
 
     enum class ChunkMode(val limit: Int) {
         // Tuned so a typical Russian sentence stays within one chunk:
@@ -63,43 +62,12 @@ object PlaybackPrefs {
     // (0) or eat too much RAM (10+).
     @Volatile var preRollSentences: Int = 2
         private set
-    // When ON, services pick diffusion steps based on SupertonicTTS.getSoC()
-    // instead of the user's manual SupertonicPrefs.diffusion_steps. The
-    // mapping (see resolveSteps) gives weak SoCs 3 steps for ~40% lower
-    // first-chunk latency, mid devices 4 steps, top tiers stay at 5.
-    // Default OFF so behavior matches manual selection unless opted in.
-    @Volatile var autoSteps: Boolean = false
-        private set
 
     fun load(context: Context) {
         val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         chunkMode = ChunkMode.fromOrdinal(p.getInt(KEY_CHUNK_MODE, ChunkMode.DEFAULT.ordinal))
         preRollEnabled = p.getBoolean(KEY_PREROLL_ENABLED, false)
         preRollSentences = p.getInt(KEY_PREROLL_SENTENCES, 2).coerceIn(1, 5)
-        autoSteps = p.getBoolean(KEY_AUTO_STEPS, false)
-    }
-
-    /**
-     * Decide how many diffusion steps to use for a synthesis call.
-     *
-     * When [autoSteps] is OFF (default), returns [userSteps] verbatim — the
-     * legacy behavior where the slider on the main screen controls everything.
-     *
-     * When ON, ignores [userSteps] and picks by [SupertonicTTS.getSoC()] class:
-     *   0 (LowEnd)   → 3   ~40% faster first chunk vs 5 steps, minor quality dip
-     *   1 (MidRange) → 4   balance — barely audible quality difference vs 5
-     *   2 (HighEnd)  → 5   no need to go lower, SoC handles it
-     *   3 (Flagship) → 5   capping at 5 — going higher (6-7) only hurts latency
-     *  -1 (engine not yet initialised) → fall back to userSteps
-     */
-    fun resolveSteps(socClass: Int, userSteps: Int): Int {
-        if (!autoSteps) return userSteps
-        return when (socClass) {
-            0 -> 3
-            1 -> 4
-            2, 3 -> 5
-            else -> userSteps
-        }
     }
 
     fun setChunkMode(context: Context, mode: ChunkMode) {
@@ -119,11 +87,5 @@ object PlaybackPrefs {
         preRollSentences = clamped
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putInt(KEY_PREROLL_SENTENCES, clamped).apply()
-    }
-
-    fun setAutoSteps(context: Context, value: Boolean) {
-        autoSteps = value
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .putBoolean(KEY_AUTO_STEPS, value).apply()
     }
 }

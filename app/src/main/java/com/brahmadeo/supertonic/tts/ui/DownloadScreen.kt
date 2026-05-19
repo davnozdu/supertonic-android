@@ -5,7 +5,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.brahmadeo.supertonic.tts.R as AppR
 import com.brahmadeo.supertonic.tts.ui.components.WavyLinearProgressIndicator
 
 @Composable
@@ -15,7 +17,7 @@ fun DownloadScreen(
     error: String? = null,
     onRetry: () -> Unit = {}
 ) {
-    val message = "Downloading Supertonic 3 TTS models (~400MB). Supports 31 languages — this download happens only once."
+    val message = stringResource(AppR.string.download_intro)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -29,7 +31,7 @@ fun DownloadScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = if (error != null) "Download Failed" else "Downloading Models",
+                text = stringResource(if (error != null) AppR.string.download_failed else AppR.string.download_in_progress),
                 style = MaterialTheme.typography.headlineMedium,
                 color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
             )
@@ -59,7 +61,7 @@ fun DownloadScreen(
                     onClick = onRetry,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Retry Download")
+                    Text(stringResource(AppR.string.action_retry_download))
                 }
             }
         }

@@ -20,7 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import com.brahmadeo.supertonic.tts.R as AppR
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -86,8 +88,8 @@ fun HistoryScreen(
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            title = { Text("Clear History") },
-            text = { Text("Are you sure you want to delete all history items?") },
+            title = { Text(stringResource(AppR.string.clear_history_title)) },
+            text = { Text(stringResource(AppR.string.clear_history_msg)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -96,12 +98,12 @@ fun HistoryScreen(
                         showClearDialog = false
                     }
                 ) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(AppR.string.clear_all_button), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(AppR.string.cancel_action))
                 }
             }
         )
@@ -115,7 +117,7 @@ fun HistoryScreen(
                         TextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("Search history...") },
+                            placeholder = { Text(stringResource(AppR.string.search_history_placeholder)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
@@ -134,12 +136,12 @@ fun HistoryScreen(
                             }
                         )
                     } else {
-                        Text("History")
+                        Text(stringResource(AppR.string.history_title))
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = if (isSearchActive) { { isSearchActive = false; searchQuery = "" } } else onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(AppR.string.back))
                     }
                 },
                 actions = {

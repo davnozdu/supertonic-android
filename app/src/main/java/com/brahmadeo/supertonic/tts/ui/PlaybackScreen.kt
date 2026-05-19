@@ -18,8 +18,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.brahmadeo.supertonic.tts.R as AppR
 import com.brahmadeo.supertonic.tts.ui.components.IndeterminateWavyProgressIndicator
 import com.brahmadeo.supertonic.tts.ui.components.WavyCircularProgressIndicator
 import com.brahmadeo.supertonic.tts.ui.components.WavyLinearProgressIndicator
@@ -52,10 +54,10 @@ fun PlaybackScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Now Playing", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(AppR.string.playback_now_playing), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(AppR.string.back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -235,7 +237,7 @@ fun PlaybackScreen(
                                     onClick = onCancelExportClick,
                                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                                 ) {
-                                    Text("Cancel")
+                                    Text(stringResource(AppR.string.cancel_action))
                                 }
                             }
                         }

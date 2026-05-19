@@ -345,6 +345,11 @@ fun MainScreen(
                             steps = 8,
                             displayValue = "$steps steps"
                         )
+                        Text(
+                            text = stringResource(AppR.string.quality_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
                         if (currentLangCode != "en" && currentLangCode != "ko") {
                             Row(

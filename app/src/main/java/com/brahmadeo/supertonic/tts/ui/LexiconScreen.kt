@@ -13,8 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.brahmadeo.supertonic.tts.R as AppR
 import com.brahmadeo.supertonic.tts.utils.LexiconItem
 import com.brahmadeo.supertonic.tts.utils.PlaybackPrefs
 
@@ -40,7 +42,6 @@ fun LexiconScreen(
     chunkMode: PlaybackPrefs.ChunkMode,
     preRollEnabled: Boolean,
     preRollSentences: Int,
-    autoStepsEnabled: Boolean,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -58,7 +59,6 @@ fun LexiconScreen(
     onChunkModeChange: (PlaybackPrefs.ChunkMode) -> Unit,
     onPreRollToggle: (Boolean) -> Unit,
     onPreRollSentencesChange: (Int) -> Unit,
-    onAutoStepsToggle: (Boolean) -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
     onDeleteClick: (LexiconItem) -> Unit
@@ -68,29 +68,29 @@ fun LexiconScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Pronunciation Dictionary") },
+                title = { Text(stringResource(AppR.string.lexicon_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(AppR.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(AppR.string.more))
                     }
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Import JSON") },
+                            text = { Text(stringResource(AppR.string.menu_import_json)) },
                             onClick = {
                                 showMenu = false
                                 onImportClick()
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Export JSON") },
+                            text = { Text(stringResource(AppR.string.menu_export_json)) },
                             onClick = {
                                 showMenu = false
                                 onExportClick()
@@ -98,19 +98,15 @@ fun LexiconScreen(
                         )
                         HorizontalDivider()
                         if (canDownloadAccentDict) {
-                            // Two separate items, format chosen up front so the
-                            // chooser dialog can show only the relevant sizes.
-                            // Binary is listed first because it's the better
-                            // default for everyone (~10-20 MB RAM vs ~390 MB).
                             DropdownMenuItem(
-                                text = { Text("Download accent dictionary (binary)…") },
+                                text = { Text(stringResource(AppR.string.menu_download_binary)) },
                                 onClick = {
                                     showMenu = false
                                     onDownloadAccentDictBinaryClick()
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Download accent dictionary (text)…") },
+                                text = { Text(stringResource(AppR.string.menu_download_text)) },
                                 onClick = {
                                     showMenu = false
                                     onDownloadAccentDictTextClick()
@@ -118,18 +114,15 @@ fun LexiconScreen(
                             )
                         }
                         DropdownMenuItem(
-                            text = { Text("Import accent dictionary from file…") },
+                            text = { Text(stringResource(AppR.string.menu_import_dict)) },
                             onClick = {
                                 showMenu = false
                                 onImportAccentDictClick()
                             }
                         )
-                        // Mirror the banner's Delete button here so users can
-                        // also reach it via the overflow menu, in case the
-                        // banner is hidden or they're looking under "more".
                         if (accentDictBanner != null) {
                             DropdownMenuItem(
-                                text = { Text("Clear accent dictionary") },
+                                text = { Text(stringResource(AppR.string.menu_clear_dict)) },
                                 onClick = {
                                     showMenu = false
                                     onClearAccentDictClick()
@@ -147,8 +140,8 @@ fun LexiconScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAddClick,
-                icon = { Icon(Icons.Default.Add, "Add Term") },
-                text = { Text("Add Term") },
+                icon = { Icon(Icons.Default.Add, stringResource(AppR.string.add_term_button)) },
+                text = { Text(stringResource(AppR.string.add_term_button)) },
                 modifier = Modifier.padding(bottom = 16.dp)
             )
         }
@@ -190,7 +183,7 @@ fun LexiconScreen(
                             IconButton(onClick = onClearAccentDictClick) {
                                 Icon(
                                     Icons.Default.Delete,
-                                    contentDescription = "Delete accent dictionary",
+                                    contentDescription = stringResource(AppR.string.menu_clear_dict),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -217,11 +210,11 @@ fun LexiconScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Apply user lexicon",
+                                text = stringResource(AppR.string.lexicon_master_title),
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
-                                text = "When on, the rules below rewrite text before the model sees it. Turn off to disable all custom rules at once without deleting them.",
+                                text = stringResource(AppR.string.lexicon_master_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -253,11 +246,11 @@ fun LexiconScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Block first synthesis until dictionary loads",
+                                text = stringResource(AppR.string.sync_load_title),
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
-                                text = "Off: dictionary parses in the background after a cold start; the very first sentence may go without stress marks. On: the service waits ~5-10 s on first launch so every sentence is stressed from the start. Recommended only if the first sentence really matters (short automation TTS, single-word readouts).",
+                                text = stringResource(AppR.string.sync_load_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -275,7 +268,7 @@ fun LexiconScreen(
             // shared context so the four switches read as a single feature.
             item {
                 Text(
-                    text = "Punctuation",
+                    text = stringResource(AppR.string.section_punctuation),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
@@ -284,8 +277,8 @@ fun LexiconScreen(
 
             item {
                 PunctuationToggleRow(
-                    title = "Tight ?/!",
-                    description = "Don't insert a space before ? and ! at the end of a chunk. Glues the mark to the preceding word so the model gets a stronger intonation hint.",
+                    title = stringResource(AppR.string.punct_tight_qe_title),
+                    description = stringResource(AppR.string.punct_tight_qe_desc),
                     checked = tightQuestionExclamation,
                     onToggle = onTightQuestionToggle
                 )
@@ -293,8 +286,8 @@ fun LexiconScreen(
 
             item {
                 PunctuationToggleRow(
-                    title = "Strengthen intonation",
-                    description = "Double ?/! at the end of a chunk (`Куда?` → `Куда??`). Some models react with a stronger prosodic contour; others ignore it.",
+                    title = stringResource(AppR.string.punct_double_marks_title),
+                    description = stringResource(AppR.string.punct_double_marks_desc),
                     checked = strengthenIntonation,
                     onToggle = onDoubleMarksToggle
                 )
@@ -302,8 +295,8 @@ fun LexiconScreen(
 
             item {
                 PunctuationToggleRow(
-                    title = "Tight ellipsis",
-                    description = "Normalize `…` and `. . .` to `...` and strip whitespace before it. One expressive pause instead of three independent dots.",
+                    title = stringResource(AppR.string.punct_tight_ellipsis_title),
+                    description = stringResource(AppR.string.punct_tight_ellipsis_desc),
                     checked = tightEllipsis,
                     onToggle = onTightEllipsisToggle
                 )
@@ -311,8 +304,8 @@ fun LexiconScreen(
 
             item {
                 PunctuationToggleRow(
-                    title = "Tight commas and periods",
-                    description = "Skip the legacy `,/;` spacing stabilisation at end of chunk and the closing-quote+period split. Cleaner phrasing but slightly higher glitch risk on rare punctuation.",
+                    title = stringResource(AppR.string.punct_tight_cp_title),
+                    description = stringResource(AppR.string.punct_tight_cp_desc),
                     checked = tightCommasAndPeriods,
                     onToggle = onTightCommasPeriodsToggle
                 )
@@ -320,8 +313,8 @@ fun LexiconScreen(
 
             item {
                 PunctuationToggleRow(
-                    title = "Force space before punctuation",
-                    description = "Insert a space between any word and a trailing `.,;:!?`. Belt-and-braces hint for the model's text tokenizer (`удивлён,` → `удивлён ,`). Leaves consecutive marks (`...`, `?!`) and numbers (`3,14`, `1.5`) alone. Off by default.",
+                    title = stringResource(AppR.string.punct_force_space_title),
+                    description = stringResource(AppR.string.punct_force_space_desc),
                     checked = forceSpaceBeforePunctuation,
                     onToggle = onForceSpaceBeforePunctToggle
                 )
@@ -335,7 +328,7 @@ fun LexiconScreen(
             // users see no change unless they opt in.
             item {
                 Text(
-                    text = "Playback",
+                    text = stringResource(AppR.string.section_playback),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
@@ -358,15 +351,6 @@ fun LexiconScreen(
                 )
             }
 
-            item {
-                PunctuationToggleRow(
-                    title = "Auto-tune diffusion steps",
-                    description = "Pick diffusion steps based on your phone's SoC class (3 for low-end, 4 for mid, 5 for high-end). Cuts first-word latency by ~30-40% on weak devices, with a barely-audible quality dip on bright voices. Overrides the manual Steps slider on the main screen.",
-                    checked = autoStepsEnabled,
-                    onToggle = onAutoStepsToggle
-                )
-            }
-
             if (rules.isEmpty()) {
                 item {
                     Box(
@@ -376,7 +360,7 @@ fun LexiconScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No custom rules yet.\nAdd terms to fix pronunciations.",
+                            text = stringResource(AppR.string.lexicon_empty_state),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -386,7 +370,7 @@ fun LexiconScreen(
             } else {
                 item {
                     Text(
-                        text = "Custom Rules",
+                        text = stringResource(AppR.string.custom_rules_header),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
@@ -427,9 +411,9 @@ private fun ChunkModeRow(
         shape = MaterialTheme.shapes.small
     ) {
         Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)) {
-            Text(text = "Chunk size", style = MaterialTheme.typography.titleSmall)
+            Text(text = stringResource(AppR.string.chunk_size_title), style = MaterialTheme.typography.titleSmall)
             Text(
-                text = "Small (120) — quick start for short messages. Default (300) — balanced, current behavior. Large (500) — smoother intonation, best for books. Huge (1000, experimental) — packs whole short paragraphs into one synthesis call; useful for testing Moon+ Reader-style flows.",
+                text = stringResource(AppR.string.chunk_size_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 6.dp)
@@ -443,12 +427,14 @@ private fun ChunkModeRow(
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
                     ) {
                         Text(
-                            text = when (mode) {
-                                PlaybackPrefs.ChunkMode.SMALL -> "Small"
-                                PlaybackPrefs.ChunkMode.DEFAULT -> "Default"
-                                PlaybackPrefs.ChunkMode.LARGE -> "Large"
-                                PlaybackPrefs.ChunkMode.HUGE -> "Huge"
-                            }
+                            text = stringResource(
+                                when (mode) {
+                                    PlaybackPrefs.ChunkMode.SMALL -> AppR.string.chunk_size_small
+                                    PlaybackPrefs.ChunkMode.DEFAULT -> AppR.string.chunk_size_default
+                                    PlaybackPrefs.ChunkMode.LARGE -> AppR.string.chunk_size_large
+                                    PlaybackPrefs.ChunkMode.HUGE -> AppR.string.chunk_size_huge
+                                }
+                            )
                         )
                     }
                 }
@@ -479,9 +465,9 @@ private fun PreRollRow(
         Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Pre-roll buffer", style = MaterialTheme.typography.titleSmall)
+                    Text(text = stringResource(AppR.string.preroll_title), style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = "Build up several sentences of synthesized audio in RAM (~1-3 MB) before playback starts. Smooths out pauses between sentences on weak devices. Costs a longer wait at the very beginning of playback.",
+                        text = stringResource(AppR.string.preroll_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -491,7 +477,7 @@ private fun PreRollRow(
             if (enabled) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Sentences buffered before start: $sentences",
+                    text = stringResource(AppR.string.preroll_sentences_fmt, sentences),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -618,20 +604,20 @@ fun LexiconEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (item == null) "Add Pronunciation Rule" else "Edit Rule") },
+        title = { Text(stringResource(if (item == null) AppR.string.add_rule_title else AppR.string.edit_rule_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = term,
                     onValueChange = { term = it },
-                    label = { Text(if (isRegex) "Regex Pattern" else "Term (e.g. LLMs)") },
+                    label = { Text(stringResource(if (isRegex) AppR.string.regex_pattern_label else AppR.string.term_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = replacement,
                     onValueChange = { replacement = it },
-                    label = { Text("Replacement (e.g. L L Ems)") },
+                    label = { Text(stringResource(AppR.string.replacement_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -640,7 +626,7 @@ fun LexiconEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Ignore Case",
+                        text = stringResource(AppR.string.ignore_case_label),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -654,7 +640,7 @@ fun LexiconEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Regex Mode",
+                        text = stringResource(AppR.string.regex_mode_label),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -673,28 +659,30 @@ fun LexiconEditDialog(
             }
         },
         confirmButton = {
+            val emptyFieldsMsg = stringResource(AppR.string.fields_empty_msg)
             Button(
                 onClick = {
                     if (term.isBlank() || replacement.isBlank()) {
-                        error = "Fields cannot be empty"
+                        error = emptyFieldsMsg
                     } else {
                         onSave(term.trim(), replacement.trim(), ignoreCase, isRegex)
                     }
                 }
             ) {
-                Text("Save")
+                Text(stringResource(AppR.string.save_button))
             }
         },
         dismissButton = {
+            val enterReplacementMsg = stringResource(AppR.string.enter_replacement_msg)
             Row {
                 TextButton(onClick = {
-                    if (replacement.isNotBlank()) onTest(replacement) else error = "Enter replacement to test"
+                    if (replacement.isNotBlank()) onTest(replacement) else error = enterReplacementMsg
                 }) {
-                    Text("Test")
+                    Text(stringResource(AppR.string.test_button))
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel")
+                    Text(stringResource(AppR.string.cancel_action))
                 }
             }
         }
