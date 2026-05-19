@@ -158,7 +158,6 @@ object AccentDictionaryManager {
     // imported a new dict mid-parse, the stale result is dropped.
     @Volatile private var loadGeneration = 0
     private val loadLock = Object()
-    @Volatile private var fallbackEnabled = false
     // When ON, load() blocks the calling thread until the dictionary is
     // fully parsed. Used by people who can't tolerate the first sentence
     // after a cold start going un-stressed (lazy default).
@@ -179,14 +178,7 @@ object AccentDictionaryManager {
     private const val META_KEY_ENTRIES = "entries"
     private const val META_KEY_LOADED_AT = "loaded_at"
     private const val META_KEY_SIZE_BYTES = "size_bytes"
-    private const val FALLBACK_PREFS_KEY = "accent_fallback_enabled"
     private const val SYNC_LOAD_PREFS_KEY = "accent_sync_load_enabled"
-
-    // Russian vowels (lowercase). Used both by the fallback rule and to count
-    // syllables when deciding whether the fallback should kick in at all —
-    // single-syllable words like "и", "за", "не" must not be touched.
-    private const val RU_VOWELS = "аеёиоуыэюя"
-    private val ACUTE = '́'
 
     /**
      * Kick off loading the dictionary into memory.
@@ -204,7 +196,6 @@ object AccentDictionaryManager {
     fun load(context: Context) {
         if (isLoaded) return
         val prefs = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
-        fallbackEnabled = prefs.getBoolean(FALLBACK_PREFS_KEY, false)
         syncLoadEnabled = prefs.getBoolean(SYNC_LOAD_PREFS_KEY, false)
 
         val myGen: Int
@@ -315,10 +306,8 @@ object AccentDictionaryManager {
         // flip us mid-iteration.
         val bin = binaryDict
         val map = entries
-        val haveDict = bin != null || map.isNotEmpty()
-        if (!haveDict && !fallbackEnabled) return text
+        if (bin == null && map.isEmpty()) return text
 
-        val applyFallback = fallbackEnabled && lang.startsWith("ru")
         val matcher = wordPattern.matcher(text)
         val sb = StringBuffer()
         while (matcher.find()) {
@@ -330,12 +319,8 @@ object AccentDictionaryManager {
                 bin.lookup(lower.toByteArray(Charsets.UTF_8))
             } else {
                 map[lower]
-            }
-            val cased = when {
-                dictHit != null -> applyCasing(original, dictHit)
-                applyFallback -> fallbackLastVowel(original) ?: continue
-                else -> continue
-            }
+            } ?: continue
+            val cased = applyCasing(original, dictHit)
             // appendReplacement treats $ and \ specially — quoteReplacement
             // does the escape in a single pass without two intermediate Strings.
             matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(cased))
@@ -343,68 +328,6 @@ object AccentDictionaryManager {
         matcher.appendTail(sb)
         return sb.toString()
     }
-
-    /**
-     * Best-effort stress for a word that didn't show up in the dictionary.
-     *
-     * Default heuristic is **paroxytone** — stress on the *penultimate* vowel —
-     * which beats "last vowel" on average for Russian: in a Zipf-weighted
-     * frequency corpus, words with stress on the second-to-last syllable
-     * outnumber oxytones roughly 2:1, and the paroxytone choice is right far
-     * more often for nouns, adjectives and most verb forms.
-     *
-     * Some suffixes are reliably non-paroxytone, so we special-case the most
-     * common ones:
-     * - `-ция` / `-сия` (станция, акция, операция, демонстрация): stress on
-     *   the vowel right before the suffix (опера́ция, демонстра́ция).
-     * - `-ение` / `-ание` / `-ование` (учение, образование, требование):
-     *   stress on the vowel right before -ние (уче́ние, образова́ние).
-     * - `-ист` (лингвист, программист, журналист): stress on the suffix's `и`.
-     *
-     * Guard rails: skip words that already have stress, single-vowel words,
-     * and words with no vowels at all.
-     */
-    private fun fallbackLastVowel(word: String): String? {
-        if (word.any { it == ACUTE }) return null
-
-        val lower = word.lowercase()
-
-        // Collect vowel positions once — used by every branch below.
-        val vowelPositions = ArrayList<Int>(word.length / 2)
-        for ((i, ch) in lower.withIndex()) {
-            if (ch in RU_VOWELS) vowelPositions.add(i)
-        }
-        if (vowelPositions.size < 2) return null
-
-        // Suffix-based overrides for cases where paroxytone is almost always wrong.
-        val targetIdx: Int = when {
-            // -ция / -сия → vowel immediately before the "-ция" tail
-            lower.endsWith("ция") || lower.endsWith("сия") -> {
-                val cutoff = word.length - 3
-                vowelPositions.lastOrNull { it < cutoff } ?: return null
-            }
-            // -ние with a vowel-before-"н" pattern (учение, образование, требование)
-            lower.endsWith("ние") -> {
-                val cutoff = word.length - 3
-                vowelPositions.lastOrNull { it < cutoff } ?: return null
-            }
-            // -ист → stress the suffix's "и"
-            lower.endsWith("ист") -> word.length - 3
-            // Default: paroxytone (penultimate vowel)
-            else -> vowelPositions[vowelPositions.size - 2]
-        }
-
-        return word.substring(0, targetIdx + 1) + ACUTE + word.substring(targetIdx + 1)
-    }
-
-    fun setFallbackEnabled(context: Context, enabled: Boolean) {
-        fallbackEnabled = enabled
-        context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).edit()
-            .putBoolean(FALLBACK_PREFS_KEY, enabled)
-            .apply()
-    }
-
-    fun isFallbackEnabled(): Boolean = fallbackEnabled
 
     fun setSyncLoadEnabled(context: Context, enabled: Boolean) {
         syncLoadEnabled = enabled

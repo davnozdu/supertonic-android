@@ -51,7 +51,6 @@ class LexiconActivity : ComponentActivity() {
 
     private val rulesState = mutableStateOf<List<LexiconItem>>(emptyList())
     private val accentDictBannerState = mutableStateOf<com.brahmadeo.supertonic.tts.ui.AccentDictBanner?>(null)
-    private val fallbackState = mutableStateOf(false)
     private val syncLoadState = mutableStateOf(false)
     private val lexiconEnabledState = mutableStateOf(true)
     private val tightQuestionState = mutableStateOf(false)
@@ -237,7 +236,6 @@ class LexiconActivity : ComponentActivity() {
                     rules = rulesState.value,
                     accentDictBanner = accentDictBannerState.value,
                     canDownloadAccentDict = canDownload,
-                    fallbackEnabled = fallbackState.value,
                     syncLoadEnabled = syncLoadState.value,
                     lexiconEnabled = lexiconEnabledState.value,
                     tightQuestionExclamation = tightQuestionState.value,
@@ -260,10 +258,6 @@ class LexiconActivity : ComponentActivity() {
                         chooserFormat = AccentDictionaryManager.DictFormat.BINARY
                     },
                     onClearAccentDictClick = { clearAccentDict() },
-                    onFallbackToggle = { enabled ->
-                        AccentDictionaryManager.setFallbackEnabled(this@LexiconActivity, enabled)
-                        fallbackState.value = enabled
-                    },
                     onSyncLoadToggle = { enabled ->
                         AccentDictionaryManager.setSyncLoadEnabled(this@LexiconActivity, enabled)
                         syncLoadState.value = enabled
@@ -335,7 +329,6 @@ class LexiconActivity : ComponentActivity() {
                 sizeBytes = it.sizeBytes
             )
         }
-        fallbackState.value = AccentDictionaryManager.isFallbackEnabled()
         syncLoadState.value = AccentDictionaryManager.isSyncLoadEnabled()
         lexiconEnabledState.value = LexiconManager.isEnabled()
         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)

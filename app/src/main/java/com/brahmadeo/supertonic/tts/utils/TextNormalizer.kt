@@ -34,7 +34,14 @@ class TextNormalizer {
     // and "?!" intact — only single trailing marks like "что," "конец!"
     // get split. Digits aren't included on the left side so "1.5" / "3,14"
     // survive as a single number for the Russian number normaliser.
+    //
+    // applyPunctuationTweaks decides per-mark whether to actually insert the
+    // space based on tightQuestionExclamation / tightCommasAndPeriods —
+    // those toggles' "don't touch end-of-chunk spacing" stance is honored
+    // here too. The shared regex matches ALL marks; we filter at replace time.
     private val forceSpacePunctRegex = Regex("([\\p{L}\\p{M}])([.,;:!?])(?![.,!?])")
+    private val tightCommaSet = setOf(",", ";", ":", ".")
+    private val tightQuestionSet = setOf("!", "?")
 
     // splitIntoSentences — both the split regex and the per-abbreviation
     // protect patterns are stable across calls. Building them once avoids
@@ -250,8 +257,21 @@ class TextNormalizer {
         // (it already excludes punctuation), but the final text sent to the
         // engine has cleaner segmentation. Excludes consecutive punctuation
         // (`...`, `?!`) via negative lookahead so the previous tweaks survive.
+        //
+        // Honors tightCommasAndPeriods and tightQuestionExclamation — if the
+        // user explicitly said "don't add spaces around `,;:.`", we leave
+        // those marks alone here too. Otherwise the two toggles would
+        // contradict each other when both are on.
         if (PunctuationPrefs.forceSpaceBeforePunctuation) {
-            t = forceSpacePunctRegex.replace(t, "$1 $2")
+            val tightCommas = PunctuationPrefs.tightCommasAndPeriods
+            val tightQuestion = PunctuationPrefs.tightQuestionExclamation
+            t = forceSpacePunctRegex.replace(t) { match ->
+                val mark = match.groupValues[2]
+                val suppress = (mark in tightCommaSet && tightCommas) ||
+                               (mark in tightQuestionSet && tightQuestion)
+                if (suppress) match.value
+                else "${match.groupValues[1]} ${match.groupValues[2]}"
+            }
         }
 
         return t

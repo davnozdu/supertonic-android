@@ -322,7 +322,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             // in SupertonicTextToSpeechService for system-TTS calls, so
             // pasting Russian into an "English"-selected session still routes
             // through the Russian normalisation path (numbers, accent
-            // dictionary, stress fallback).
+            // dictionary).
             val effectiveLang = autoDetectRussian(text, lang)
 
             synthesisJob = launch(Dispatchers.IO) {

@@ -30,7 +30,6 @@ fun LexiconScreen(
     rules: List<LexiconItem>,
     accentDictBanner: AccentDictBanner?,
     canDownloadAccentDict: Boolean,
-    fallbackEnabled: Boolean,
     syncLoadEnabled: Boolean,
     lexiconEnabled: Boolean,
     tightQuestionExclamation: Boolean,
@@ -49,7 +48,6 @@ fun LexiconScreen(
     onClearAccentDictClick: () -> Unit,
     onDownloadAccentDictTextClick: () -> Unit,
     onDownloadAccentDictBinaryClick: () -> Unit,
-    onFallbackToggle: (Boolean) -> Unit,
     onSyncLoadToggle: (Boolean) -> Unit,
     onLexiconToggle: (Boolean) -> Unit,
     onTightQuestionToggle: (Boolean) -> Unit,
@@ -231,40 +229,6 @@ fun LexiconScreen(
                         Switch(
                             checked = lexiconEnabled,
                             onCheckedChange = onLexiconToggle
-                        )
-                    }
-                }
-            }
-
-            // Fallback toggle — works without a dictionary too. The hint
-            // explicitly warns this is a heuristic, not a Russian grammar
-            // rule, so users don't enable it expecting magic.
-            item {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Stress fallback (Russian)",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = "When a word isn't in the dictionary, fall back to the penultimate vowel (paroxytone). Common Russian suffixes (-ция, -ние, -ист) get their own special positions. Heuristic — sometimes wrong, but better than nothing.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = fallbackEnabled,
-                            onCheckedChange = onFallbackToggle
                         )
                     }
                 }
