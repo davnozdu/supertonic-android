@@ -346,15 +346,17 @@ class LexiconActivity : ComponentActivity() {
      */
     private fun downloadErrorMessage(code: Int): String = when (code) {
         AccentDictionaryManager.ERR_OOM ->
-            "Out of memory while parsing the dictionary. The Full dictionary needs ~500 MB of heap; pick Standard (36 MB / ~150 MB RAM) or Compact (21 MB / ~85 MB RAM) instead."
+            "Out of memory while parsing the dictionary. Either pick the binary variant of the same size (mmap, no heap) or switch to Standard (36 MB / ~150 MB heap) / Compact (21 MB / ~85 MB heap)."
         AccentDictionaryManager.ERR_NETWORK ->
             "Network error. Check your connection and try again."
         AccentDictionaryManager.ERR_TOO_LARGE ->
             "Downloaded file is larger than 250 MB cap and was discarded."
         AccentDictionaryManager.ERR_PARSE ->
-            "Couldn't parse the JSON. The file may be corrupt or in an unexpected format."
+            "Couldn't read the dictionary. The file may be corrupt, truncated, or in an unsupported format."
         AccentDictionaryManager.ERR_IO ->
             "I/O error while reading the source. Try again."
+        AccentDictionaryManager.ERR_BUSY ->
+            "Another dictionary download or import is already in progress. Wait for it to finish and try again."
         else -> "Unknown error (code $code)."
     }
 

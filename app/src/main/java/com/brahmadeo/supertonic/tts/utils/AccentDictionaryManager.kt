@@ -453,6 +453,10 @@ object AccentDictionaryManager {
      * @return number of entries loaded (or a negative ImportError code on failure).
      */
     fun importFromUri(context: Context, uri: Uri): Int {
+        synchronized(loadLock) {
+            if (isDownloading) return ERR_BUSY
+            isDownloading = true
+        }
         val tmp = File(context.cacheDir, "accent_import.tmp")
         return try {
             val written = context.contentResolver.openInputStream(uri)?.use { input ->
@@ -474,6 +478,8 @@ object AccentDictionaryManager {
             Log.e(TAG, "Import failed", e)
             tmp.delete()
             ERR_PARSE
+        } finally {
+            synchronized(loadLock) { isDownloading = false }
         }
     }
 
@@ -520,7 +526,14 @@ object AccentDictionaryManager {
     const val ERR_PARSE = -3
     const val ERR_TOO_LARGE = -4
     const val ERR_NETWORK = -5
+    const val ERR_BUSY = -6
     const val ERR_EMPTY = 0
+
+    // Guards the cacheDir/accent_download.tmp file and the install path so a
+    // config change (rotation, dark-mode flip) that nukes the modal progress
+    // dialog can't accidentally let the user start a second concurrent
+    // download — both writers stomping on the same tmp file would corrupt it.
+    @Volatile private var isDownloading = false
 
     /**
      * Downloads and installs the pre-built dictionary for [lang] (currently only "ru").
@@ -536,6 +549,10 @@ object AccentDictionaryManager {
         sourceName: String,
         onProgress: (bytesDownloaded: Long, totalBytes: Long) -> Unit
     ): Int {
+        synchronized(loadLock) {
+            if (isDownloading) return ERR_BUSY
+            isDownloading = true
+        }
         val tmp = File(context.cacheDir, "accent_download.tmp")
         try {
             val conn = URL(urlStr).openConnection().apply {
@@ -590,6 +607,8 @@ object AccentDictionaryManager {
             Log.e(TAG, "downloadPrebuilt failed from $urlStr", e)
             tmp.delete()
             return ERR_PARSE
+        } finally {
+            synchronized(loadLock) { isDownloading = false }
         }
     }
 
@@ -635,7 +654,12 @@ object AccentDictionaryManager {
             entries = parsed
             isLoaded = true
         }
-        writeMetadata(context, sourceName, parsed.size, size)
+        val labelled = if (sourceName.contains("[text]") || sourceName.contains("(text)")) {
+            sourceName
+        } else {
+            "[text] $sourceName"
+        }
+        writeMetadata(context, labelled, parsed.size, size)
     }
 
     /**
@@ -674,7 +698,15 @@ object AccentDictionaryManager {
             entries = emptyMap()
             isLoaded = true
         }
-        writeMetadata(context, sourceName, count, size)
+        // Prefix the displayed source with a [binary] tag so the banner shows
+        // which backend is in use — important for users who import their own
+        // file and otherwise only see "Imported from file" without format.
+        val labelled = if (sourceName.contains("[binary]") || sourceName.contains("(binary)")) {
+            sourceName
+        } else {
+            "[binary] $sourceName"
+        }
+        writeMetadata(context, labelled, count, size)
         return count
     }
 
