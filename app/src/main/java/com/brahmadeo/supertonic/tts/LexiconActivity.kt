@@ -61,6 +61,7 @@ class LexiconActivity : ComponentActivity() {
     private val chunkModeState = mutableStateOf(com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.ChunkMode.DEFAULT)
     private val preRollEnabledState = mutableStateOf(false)
     private val preRollSentencesState = mutableStateOf(2)
+    private val autoStepsState = mutableStateOf(false)
     private var playbackService: IPlaybackService? = null
     private var isBound = false
 
@@ -245,6 +246,7 @@ class LexiconActivity : ComponentActivity() {
                     chunkMode = chunkModeState.value,
                     preRollEnabled = preRollEnabledState.value,
                     preRollSentences = preRollSentencesState.value,
+                    autoStepsEnabled = autoStepsState.value,
                     onBackClick = { finish() },
                     onImportClick = { importLauncher.launch("application/json") },
                     onExportClick = { performExport() },
@@ -296,6 +298,10 @@ class LexiconActivity : ComponentActivity() {
                         com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setPreRollSentences(this@LexiconActivity, count)
                         preRollSentencesState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollSentences
                     },
+                    onAutoStepsToggle = { enabled ->
+                        com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.setAutoSteps(this@LexiconActivity, enabled)
+                        autoStepsState.value = enabled
+                    },
                     onAddClick = {
                         editingItem = null
                         showEditDialog = true
@@ -335,6 +341,7 @@ class LexiconActivity : ComponentActivity() {
         chunkModeState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.chunkMode
         preRollEnabledState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollEnabled
         preRollSentencesState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.preRollSentences
+        autoStepsState.value = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.autoSteps
     }
 
     private fun performImportAccentDict(uri: Uri) {

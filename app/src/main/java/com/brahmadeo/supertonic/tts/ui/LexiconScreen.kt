@@ -40,6 +40,7 @@ fun LexiconScreen(
     chunkMode: PlaybackPrefs.ChunkMode,
     preRollEnabled: Boolean,
     preRollSentences: Int,
+    autoStepsEnabled: Boolean,
     onBackClick: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -57,6 +58,7 @@ fun LexiconScreen(
     onChunkModeChange: (PlaybackPrefs.ChunkMode) -> Unit,
     onPreRollToggle: (Boolean) -> Unit,
     onPreRollSentencesChange: (Int) -> Unit,
+    onAutoStepsToggle: (Boolean) -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (LexiconItem) -> Unit,
     onDeleteClick: (LexiconItem) -> Unit
@@ -378,6 +380,15 @@ fun LexiconScreen(
                     sentences = preRollSentences,
                     onToggle = onPreRollToggle,
                     onSentencesChange = onPreRollSentencesChange
+                )
+            }
+
+            item {
+                PunctuationToggleRow(
+                    title = "Auto-tune diffusion steps",
+                    description = "Pick diffusion steps based on your phone's SoC class (3 for low-end, 4 for mid, 5 for high-end). Cuts first-word latency by ~30-40% on weak devices, with a barely-audible quality dip on bright voices. Overrides the manual Steps slider on the main screen.",
+                    checked = autoStepsEnabled,
+                    onToggle = onAutoStepsToggle
                 )
             }
 

@@ -159,6 +159,58 @@ object SupertonicTTS {
         return getSampleRate(nativePtr)
     }
 
+    // True once the engine has run one full synthesize() pass since process
+    // start. That first pass is where XNNPACK JITs its kernels for the current
+    // SoC's instruction set and where ORT lays out activation buffers. Both
+    // costs are paid only once per process; subsequent calls inherit the
+    // warmed state. We track this so the two services don't double-prewarm.
+    @Volatile
+    private var prewarmed: Boolean = false
+
+    /**
+     * Run a throwaway synthesis to warm ORT graph / XNNPACK kernels.
+     *
+     * Best-effort and idempotent — silently no-ops if the engine isn't
+     * initialised, the voice file is missing, or a prewarm has already
+     * happened. Designed to be called once per service onCreate.
+     *
+     * Heavy: blocks the calling thread for ~500ms-1.5s on weak SoCs. Call
+     * from a background thread, not from onCreate's main-thread context.
+     */
+    fun prewarm(stylePath: String) {
+        if (prewarmed) return
+        if (nativePtr == 0L) {
+            Log.w("SupertonicTTS", "prewarm skipped: engine not initialized")
+            return
+        }
+        if (!java.io.File(stylePath).exists()) {
+            Log.w("SupertonicTTS", "prewarm skipped: missing voice style $stylePath")
+            return
+        }
+        // Use lang="en" + steps=3 for fastest possible warmup pass — the goal
+        // is to compile kernels, not to produce useful audio. Result is
+        // discarded by passing through generateAudio's regular path which
+        // returns the PCM as a ByteArray we drop on the floor.
+        try {
+            val t0 = System.currentTimeMillis()
+            generateAudio(
+                text = ".",
+                lang = "en",
+                stylePath = stylePath,
+                speed = 1.0f,
+                bufferDuration = 0.0f,
+                steps = 3,
+                gain = 1.0f,
+                listener = null
+            )
+            val dt = System.currentTimeMillis() - t0
+            prewarmed = true
+            Log.i("SupertonicTTS", "Prewarm complete in ${dt}ms")
+        } catch (e: Throwable) {
+            Log.w("SupertonicTTS", "Prewarm failed (ignored)", e)
+        }
+    }
+
     @Synchronized
     fun release() {
         if (nativePtr != 0L) {

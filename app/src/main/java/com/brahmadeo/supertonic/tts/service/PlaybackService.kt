@@ -221,6 +221,19 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
         SupertonicTTS.initialize(modelPath, libPath)
+        // Prewarm: synthesize a throwaway "." in the background so XNNPACK
+        // JITs its kernels and ORT lays out activation buffers before the
+        // user's first real request. Saves ~300-700 ms off the first audible
+        // word on weak SoCs. Best-effort; idempotent (SupertonicTTS guards
+        // against double-prewarming).
+        serviceScope.launch(Dispatchers.IO) {
+            val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
+            val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
+            val stylePath = File(filesDir,
+                "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/voice_styles/$voiceFile"
+            ).absolutePath
+            SupertonicTTS.prewarm(stylePath)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -253,6 +266,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     private var synthesisJob: Job? = null
 
     fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int = 0) {
+        // Auto-tune: when PlaybackPrefs.autoSteps is ON, override the
+        // caller-supplied steps with the SoC-class-appropriate value.
+        // Resolved here so the original `steps` parameter signature stays the
+        // same for IPC compatibility with MainActivity.
+        val effectiveSteps = PlaybackPrefs.resolveSteps(SupertonicTTS.getSoC(), steps)
         serviceScope.launch {
             // Cancel any in-flight synthesis, but keep the AudioTrack alive so the
             // next sentence can stream straight in without a re-init delay.
@@ -349,6 +367,21 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 // streaming. This is the gate that lets the buffer fill up
                 // without playback racing ahead and underrunning.
                 val playerJob = launch(Dispatchers.IO) {
+                    // Bump this thread's scheduling priority to AUDIO (-16
+                    // nice). Android's audio framework gives such threads
+                    // first-class treatment — they preempt regular user
+                    // threads and even background GC where possible. Without
+                    // this, the consumer competes with whatever else is on
+                    // Dispatchers.IO and an unlucky scheduling slot can
+                    // cause AudioTrack underrun (= clicking/skipping). Set
+                    // once per playerJob; reverts when the coroutine exits.
+                    try {
+                        android.os.Process.setThreadPriority(
+                            android.os.Process.THREAD_PRIORITY_AUDIO
+                        )
+                    } catch (_: Throwable) {
+                        // Some OEMs deny the priority change; harmless.
+                    }
                     if (preRollSignal != null) {
                         preRollSignal.await()
                         if (SupertonicTTS.isCancelled() || !isActive) return@launch
@@ -391,7 +424,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         // pushed via streamingListener.onAudioChunk into the
                         // channel, where the consumer above picks it up.
                         val result = SupertonicTTS.generateAudio(
-                            normalizedText, effectiveLang, stylePath, speed, 0.0f, steps,
+                            normalizedText, effectiveLang, stylePath, speed, 0.0f, effectiveSteps,
                             VOLUME_BOOST_FACTOR, streamingListener
                         )
 

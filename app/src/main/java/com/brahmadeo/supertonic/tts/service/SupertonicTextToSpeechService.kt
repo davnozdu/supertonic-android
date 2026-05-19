@@ -119,6 +119,13 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
             SupertonicTTS.initialize(modelPath, libPath)
+            // Prewarm (see PlaybackService for rationale). Idempotent — if
+            // PlaybackService was up first and warmed, this is a no-op.
+            val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
+            val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
+            val stylePath = File(filesDir,
+                "${AssetManager.MODEL_VERSION}/voice_styles/$voiceFile").absolutePath
+            SupertonicTTS.prewarm(stylePath)
         }
     }
 
@@ -267,7 +274,11 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
 
-        val steps = prefs.getInt("diffusion_steps", 5)
+        val userSteps = prefs.getInt("diffusion_steps", 5)
+        // Apply auto-tune if the user enabled it. resolveSteps falls back to
+        // userSteps when the engine isn't ready yet or autoSteps is off.
+        val steps = com.brahmadeo.supertonic.tts.utils.PlaybackPrefs
+            .resolveSteps(SupertonicTTS.getSoC(), userSteps)
 
         if (SupertonicTTS.getSoC() == -1) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
@@ -303,6 +314,15 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
 
         val consumerJob = serviceScope.launch(Dispatchers.IO) {
+            // AUDIO priority for the thread that drains PCM chunks into
+            // Android's TTS callback — same rationale as in PlaybackService.
+            try {
+                android.os.Process.setThreadPriority(
+                    android.os.Process.THREAD_PRIORITY_AUDIO
+                )
+            } catch (_: Throwable) {
+                // Best-effort.
+            }
             for (data in ttsChannel) {
                 if (SupertonicTTS.isCancelled()) break
                 var offset = 0
