@@ -111,6 +111,12 @@
                 <action android:name="android.intent.action.TTS_SERVICE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- Standard TTS-engine descriptor. Apps reading TTS metadata via
+                 PackageManager.GET_META_DATA expect this on every engine
+                 service; without it, some clients refuse to enumerate us. -->
+            <meta-data
+                android:name="android.speech.tts"
+                android:resource="@xml/tts_engine" />
         </service>
     </application>
 </manifest>

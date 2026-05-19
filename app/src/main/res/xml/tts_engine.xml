@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+TTS engine descriptor referenced from AndroidManifest via the
+<meta-data android:name="android.speech.tts" ...> tag inside the service.
+
+Required by the standard TTS-engine contract so that Android's text-to-speech
+settings UI can show a "Settings" button next to our engine. The settings
+activity here is the same MainActivity users would open from the launcher —
+keeps the surface area small and avoids a separate config screen.
+-->
+<tts-engine xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.brahmadeo.supertonic.tts.MainActivity" />
