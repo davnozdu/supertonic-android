@@ -315,7 +315,7 @@ object AccentDictionaryManager {
             val lower = original.lowercase()
             // Look up in whichever backend is live. The .sacc reader takes
             // UTF-8 bytes; the JSON HashMap is keyed by the lowercased String.
-            val dictHit: String? = if (bin != null) {
+            val dictHit = if (bin != null) {
                 bin.lookup(lower.toByteArray(Charsets.UTF_8))
             } else {
                 map[lower]
