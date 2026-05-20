@@ -44,6 +44,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import androidx.core.content.edit
 
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.*
+
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
@@ -217,7 +220,7 @@ class MainActivity : ComponentActivity() {
 
         // Single unified model (Supertonic 3): download on first launch, initialize otherwise.
         if (!AssetManager.isReady(this)) {
-            startDownload()
+            viewModel.showModelSelection.value = true
         } else {
             initializeEngine()
         }
@@ -226,7 +229,62 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             SupertonicTheme(voiceFile = viewModel.selectedVoiceFile.value) {
-                if (viewModel.isDownloading.value) {
+                if (viewModel.showModelSelection.value) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { /* Don't dismiss without choice on first launch */ },
+                        title = { Text(getString(R.string.model_selection_title)) },
+                        text = {
+                            androidx.compose.foundation.layout.Column {
+                                // Standard
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = viewModel.selectedModel.value == "standard",
+                                        onClick = { viewModel.selectedModel.value = "standard" }
+                                    )
+                                    Column {
+                                        Text(getString(R.string.model_standard_title), style = MaterialTheme.typography.titleMedium)
+                                        Text(getString(R.string.model_standard_desc), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                
+                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                                
+                                // Android Optimized INT8
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = viewModel.selectedModel.value == "android_optimized_int8",
+                                        onClick = { viewModel.selectedModel.value = "android_optimized_int8" }
+                                    )
+                                    Column {
+                                        Text(getString(R.string.model_android_int8_title), style = MaterialTheme.typography.titleMedium)
+                                        Text(getString(R.string.model_android_int8_desc), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+
+                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+
+                                // Android Optimized FP32
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = viewModel.selectedModel.value == "android_optimized_fp32",
+                                        onClick = { viewModel.selectedModel.value = "android_optimized_fp32" }
+                                    )
+                                    Column {
+                                        Text(getString(R.string.model_android_fp32_title), style = MaterialTheme.typography.titleMedium)
+                                        Text(getString(R.string.model_android_fp32_desc), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                AssetManager.setModelType(this@MainActivity, viewModel.selectedModel.value)
+                                viewModel.showModelSelection.value = false
+                                startDownload()
+                            }) { Text(getString(R.string.model_download_button)) }
+                        }
+                    )
+                } else if (viewModel.isDownloading.value) {
                     DownloadScreen(
                         status = viewModel.downloadStatus.value,
                         progress = viewModel.downloadProgress.floatValue,
@@ -440,6 +498,7 @@ class MainActivity : ComponentActivity() {
         viewModel.currentSpeed.floatValue = prefs.getFloat("speed", MainViewModel.DEFAULT_SPEED)
         viewModel.currentSteps.intValue = prefs.getInt("diffusion_steps", MainViewModel.DEFAULT_STEPS)
         viewModel.isAdvancedNormalizationEnabled.value = prefs.getBoolean("is_advanced_normalization", false)
+        viewModel.selectedModel.value = AssetManager.getModelType(this)
     }
 
     private fun checkNotificationPermission() {

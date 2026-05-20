@@ -33,6 +33,8 @@ class MainViewModel : ViewModel() {
     var downloadProgress = mutableFloatStateOf(0f)
     var downloadStatus = mutableStateOf("Checking assets...")
     var downloadError = mutableStateOf<String?>(null)
+    var showModelSelection = mutableStateOf(false)
+    var selectedModel = mutableStateOf("standard")
 
     // Dialog State
     var showQueueDialog = mutableStateOf(false)

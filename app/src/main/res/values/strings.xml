@@ -101,6 +101,16 @@
     <string name="action_import">Import JSON</string>
     <string name="action_export">Export JSON</string>
     
+    <string name="model_selection_title">Select TTS Model</string>
+    <string name="model_standard_title">Standard (Supertone)</string>
+    <string name="model_standard_desc">Original Supertonic 3 models. Stable and reliable.</string>
+    <string name="model_android_optimized_title">Android Optimized (Reza2kn)</string>
+    <string name="model_android_optimized_desc">Optimized fork with multiple precision options.</string>
+    <string name="model_android_int8_title">INT8 (Small &amp; Fast)</string>
+    <string name="model_android_int8_desc">Recommended for most devices. Fast and lightweight (~65MB).</string>
+    <string name="model_android_fp32_title">FP32 (Large &amp; Original)</string>
+    <string name="model_android_fp32_desc">Full precision version from the fork (~250MB).</string>
+
     <string name="synthesize_content_description">Synthesize and play speech</string>
     <string name="input_label">Input</string>
     <string name="language_label">Language</string>
