@@ -211,7 +211,7 @@
     <string name="clear_history_msg">Are you sure you want to delete all history items?</string>
     <string name="search_history_placeholder">Search history...</string>
     <string name="action_retry_download">Retry Download</string>
-    <string name="download_intro">Downloading Supertonic 3 TTS models (~400MB). Supports 31 languages — this download happens only once.</string>
+    <string name="download_intro">Downloading Supertonic 3 TTS models. Supports 31 languages — this download happens only once.</string>
     <string name="download_failed">Download Failed</string>
     <string name="download_in_progress">Downloading Models</string>
     <string name="edit_rule_title">Edit Rule</string>
