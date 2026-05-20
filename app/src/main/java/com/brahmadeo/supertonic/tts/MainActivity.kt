@@ -323,8 +323,8 @@ class MainActivity : ComponentActivity() {
                                         AssetManager.delete(this@MainActivity)
                                         viewModel.showModelDeleteDialog.value = false
                                         Toast.makeText(this@MainActivity, getString(R.string.model_deleted_msg), Toast.LENGTH_SHORT).show()
-                                        // Restart download flow so the app remains usable.
-                                        startDownload()
+                                        // Show model selection again so user can choose before re-downloading
+                                        viewModel.showModelSelection.value = true
                                     },
                                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                                 ) { Text(getString(R.string.delete)) }
