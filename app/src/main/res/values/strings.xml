@@ -98,6 +98,7 @@
     <string name="accent_dict_clear_msg">All imported pronunciation entries will be removed. Your hand-edited rules above are kept.</string>
     <string name="accent_dict_cleared">Accent dictionary cleared</string>
     <string name="action_delete_model">Delete TTS Models</string>
+    <string name="action_test_litert">Test LiteRT</string>
     <string name="action_import">Import JSON</string>
     <string name="action_export">Export JSON</string>
     

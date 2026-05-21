@@ -79,6 +79,7 @@ fun MainScreen(
     onTtsSettingsClick: () -> Unit,
     onDeleteModelClick: () -> Unit,
     onOpenEbookClick: () -> Unit,
+    onTestLiteRtClick: () -> Unit,
 
     canResume: Boolean,
     onResumeClick: () -> Unit,
@@ -138,6 +139,10 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_tts_settings)) },
                             onClick = { showMenu = false; onTtsSettingsClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(AppR.string.action_test_litert)) },
+                            onClick = { showMenu = false; onTestLiteRtClick() }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_delete_model), color = MaterialTheme.colorScheme.error) },
@@ -585,6 +590,7 @@ fun MainScreenPreview() {
             onTtsSettingsClick = {},
             onDeleteModelClick = {},
             onOpenEbookClick = {},
+            onTestLiteRtClick = {},
             canResume = true,
             onResumeClick = {},
             showMiniPlayer = true,

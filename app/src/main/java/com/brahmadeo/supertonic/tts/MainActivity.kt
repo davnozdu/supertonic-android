@@ -439,6 +439,9 @@ class MainActivity : ComponentActivity() {
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },
                         onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
+                        onTestLiteRtClick = {
+                            com.brahmadeo.supertonic.tts.tflite.TFLiteSmokeTest.run(this@MainActivity)
+                        },
                         onOpenEbookClick = {
                             try {
                                 if (EbookManager.getRecentBooks(this).isEmpty()) {

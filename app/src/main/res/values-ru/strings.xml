@@ -98,6 +98,7 @@
     <string name="accent_dict_clear_msg">Все импортированные записи произношения будут удалены. Ваши правила, заданные вручную, останутся.</string>
     <string name="accent_dict_cleared">Словарь ударений удалён</string>
     <string name="action_delete_model">Удалить TTS-модели</string>
+    <string name="action_test_litert">Тест LiteRT</string>
     <string name="action_import">Импорт JSON</string>
     <string name="action_export">Экспорт JSON</string>
 
