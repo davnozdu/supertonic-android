@@ -34,17 +34,23 @@ object HybridPipeline {
     private const val VOICE = "F1"
     private const val TOTAL_STEPS = 5
 
-    fun runRussianSynthesis(context: Context, text: String) {
+    enum class VocoderImpl { TFLITE_INT4, ORT_FP32 }
+
+    fun runRussianSynthesis(
+        context: Context,
+        text: String,
+        vocoderImpl: VocoderImpl = VocoderImpl.TFLITE_INT4,
+    ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                doRun(context, text)
+                doRun(context, text, vocoderImpl)
             } catch (t: Throwable) {
                 DebugLog.e("Hybrid crashed: ${t.javaClass.simpleName}: ${t.message}")
             }
         }
     }
 
-    private fun doRun(context: Context, text: String) {
+    private fun doRun(context: Context, text: String, vocoderImpl: VocoderImpl) {
         val tfliteDir = File(context.cacheDir, "tflite_smoke").apply { mkdirs() }
         ensureTfliteAssets(tfliteDir)
 
@@ -108,19 +114,38 @@ object HybridPipeline {
         }
         DebugLog.i("  VE: $TOTAL_STEPS steps in $veMs ms")
 
-        // Stage 5: TFLite vocoder
+        // Stage 5: vocoder — TFLite INT4 (fixed 320) or ORT FP32 (dynamic prefix)
         val wavFull: FloatArray
+        val vocLabel: String
         val vocMs = measureTimeMillis {
-            TFLiteVocoder(File(tfliteDir, "vocoder.tflite")).use { m ->
-                wavFull = m.run(xt)
+            when (vocoderImpl) {
+                VocoderImpl.TFLITE_INT4 -> {
+                    TFLiteVocoder(File(tfliteDir, "vocoder.tflite")).use { m ->
+                        wavFull = m.run(xt)
+                    }
+                    vocLabel = "INT4"
+                }
+                VocoderImpl.ORT_FP32 -> {
+                    // Crop xt [144 * 320] -> [144 * latentLen] for the dynamic graph
+                    val L = sample.latentLen.coerceAtLeast(1)
+                    val cropped = FloatArray(144 * L)
+                    for (d in 0 until 144) {
+                        System.arraycopy(xt, d * LatentSampler.FIXED_LATENT_LEN, cropped, d * L, L)
+                    }
+                    OrtVocoder(File(onnxDir, "vocoder.onnx")).use { m ->
+                        wavFull = m.run(cropped, L)
+                    }
+                    vocLabel = "FP32"
+                }
             }
         }
         val keep = (durationSec * SAMPLE_RATE).toInt().coerceIn(0, wavFull.size)
-        DebugLog.i("  Vocoder: $vocMs ms, keeping $keep/${wavFull.size} samples")
+        DebugLog.i("  Vocoder($vocLabel): $vocMs ms, keep $keep/${wavFull.size}")
 
         // Save WAV to cache
         val wavBytes = floatPcmToBytes(wavFull, keep)
-        val out = File(context.cacheDir, "hybrid_${System.currentTimeMillis()}.wav")
+        val suffix = if (vocoderImpl == VocoderImpl.ORT_FP32) "ort" else "tflite"
+        val out = File(context.cacheDir, "hybrid_${suffix}_${System.currentTimeMillis()}.wav")
         WavUtils.saveWav(out, wavBytes, SAMPLE_RATE)
         DebugLog.i("Hybrid done -> ${out.name} (${wavBytes.size / 1024} KB)")
     }

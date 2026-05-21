@@ -445,7 +445,15 @@ class MainActivity : ComponentActivity() {
                         onRunHybridClick = {
                             val text = viewModel.inputText.value.ifBlank { "Привет, мир. Это тест гибридного синтеза." }
                             com.brahmadeo.supertonic.tts.tflite.HybridPipeline.runRussianSynthesis(
-                                this@MainActivity, text
+                                this@MainActivity, text,
+                                com.brahmadeo.supertonic.tts.tflite.HybridPipeline.VocoderImpl.TFLITE_INT4,
+                            )
+                        },
+                        onRunHybridOrtVocClick = {
+                            val text = viewModel.inputText.value.ifBlank { "Привет, мир. Это тест гибридного синтеза." }
+                            com.brahmadeo.supertonic.tts.tflite.HybridPipeline.runRussianSynthesis(
+                                this@MainActivity, text,
+                                com.brahmadeo.supertonic.tts.tflite.HybridPipeline.VocoderImpl.ORT_FP32,
                             )
                         },
                         onOpenEbookClick = {

@@ -81,6 +81,7 @@ fun MainScreen(
     onOpenEbookClick: () -> Unit,
     onTestLiteRtClick: () -> Unit,
     onRunHybridClick: () -> Unit,
+    onRunHybridOrtVocClick: () -> Unit,
 
     canResume: Boolean,
     onResumeClick: () -> Unit,
@@ -148,6 +149,10 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_run_hybrid)) },
                             onClick = { showMenu = false; onRunHybridClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(AppR.string.action_run_hybrid_ort_voc)) },
+                            onClick = { showMenu = false; onRunHybridOrtVocClick() }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_delete_model), color = MaterialTheme.colorScheme.error) },
@@ -597,6 +602,7 @@ fun MainScreenPreview() {
             onOpenEbookClick = {},
             onTestLiteRtClick = {},
             onRunHybridClick = {},
+            onRunHybridOrtVocClick = {},
             canResume = true,
             onResumeClick = {},
             showMiniPlayer = true,

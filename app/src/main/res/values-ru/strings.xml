@@ -100,6 +100,7 @@
     <string name="action_delete_model">Удалить TTS-модели</string>
     <string name="action_test_litert">Тест LiteRT</string>
     <string name="action_run_hybrid">Запустить гибрид (INT4 + INT8 VE)</string>
+    <string name="action_run_hybrid_ort_voc">Гибрид с ORT FP32 вокодером</string>
     <string name="action_import">Импорт JSON</string>
     <string name="action_export">Экспорт JSON</string>
 

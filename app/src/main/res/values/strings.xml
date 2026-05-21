@@ -100,6 +100,7 @@
     <string name="action_delete_model">Delete TTS Models</string>
     <string name="action_test_litert">Test LiteRT</string>
     <string name="action_run_hybrid">Run Hybrid (INT4 + INT8 VE)</string>
+    <string name="action_run_hybrid_ort_voc">Run Hybrid (INT4 + ORT FP32 vocoder)</string>
     <string name="action_import">Import JSON</string>
     <string name="action_export">Export JSON</string>
     
