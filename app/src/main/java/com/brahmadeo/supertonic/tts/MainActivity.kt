@@ -442,6 +442,12 @@ class MainActivity : ComponentActivity() {
                         onTestLiteRtClick = {
                             com.brahmadeo.supertonic.tts.tflite.TFLiteSmokeTest.run(this@MainActivity)
                         },
+                        onRunHybridClick = {
+                            val text = viewModel.inputText.value.ifBlank { "Привет, мир. Это тест гибридного синтеза." }
+                            com.brahmadeo.supertonic.tts.tflite.HybridPipeline.runRussianSynthesis(
+                                this@MainActivity, text
+                            )
+                        },
                         onOpenEbookClick = {
                             try {
                                 if (EbookManager.getRecentBooks(this).isEmpty()) {

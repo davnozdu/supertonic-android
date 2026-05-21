@@ -80,6 +80,7 @@ fun MainScreen(
     onDeleteModelClick: () -> Unit,
     onOpenEbookClick: () -> Unit,
     onTestLiteRtClick: () -> Unit,
+    onRunHybridClick: () -> Unit,
 
     canResume: Boolean,
     onResumeClick: () -> Unit,
@@ -143,6 +144,10 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_test_litert)) },
                             onClick = { showMenu = false; onTestLiteRtClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(AppR.string.action_run_hybrid)) },
+                            onClick = { showMenu = false; onRunHybridClick() }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_delete_model), color = MaterialTheme.colorScheme.error) },
@@ -591,6 +596,7 @@ fun MainScreenPreview() {
             onDeleteModelClick = {},
             onOpenEbookClick = {},
             onTestLiteRtClick = {},
+            onRunHybridClick = {},
             canResume = true,
             onResumeClick = {},
             showMiniPlayer = true,
