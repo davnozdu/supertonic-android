@@ -206,6 +206,7 @@ class MainActivity : ComponentActivity() {
 
         loadPreferences()
         checkNotificationPermission()
+        com.brahmadeo.supertonic.tts.tflite.TFLiteAvailability.probe()
 
         val bindIntent = Intent(this, PlaybackService::class.java)
         bindService(bindIntent, connection, BIND_AUTO_CREATE)
@@ -498,10 +499,9 @@ class MainActivity : ComponentActivity() {
         viewModel.currentSpeed.floatValue = prefs.getFloat("speed", MainViewModel.DEFAULT_SPEED)
         viewModel.currentSteps.intValue = prefs.getInt("diffusion_steps", MainViewModel.DEFAULT_STEPS)
         viewModel.isAdvancedNormalizationEnabled.value = prefs.getBoolean("is_advanced_normalization", false)
-        val savedModel = AssetManager.getModelType(this)
-        viewModel.selectedModel.value = if (savedModel.isEmpty()) "android_optimized_int8" else savedModel
+        viewModel.selectedModel.value = AssetManager.getModelType(this)
+    }
 
-        setContent {
     private fun checkNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {

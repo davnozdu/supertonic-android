@@ -41,7 +41,7 @@
     <string name="model_download_message">Supertonic 3 поддерживает 31 язык и требует одноразовой загрузки (~400 МБ). Скачать сейчас?</string>
     <string name="model_download_button">Скачать</string>
     <string name="model_delete_title">Удалить TTS-модели?</string>
-    <string name="model_delete_message">Это удалит все модели Supertonic 3 и стили голосов, чтобы освободить место (~400 МБ). Их можно будет скачать заново позже.</string>
+    <string name="model_delete_message">Это удалит все модели Supertonic 3 и стили голосов. Их можно будет скачать заново позже.</string>
     <string name="model_deleted_msg">TTS-модели удалены</string>
 
     <!-- Playback Activity -->
@@ -100,6 +100,16 @@
     <string name="action_delete_model">Удалить TTS-модели</string>
     <string name="action_import">Импорт JSON</string>
     <string name="action_export">Экспорт JSON</string>
+
+    <string name="model_selection_title">Выбор TTS-модели</string>
+    <string name="model_standard_title">Стандартная (Supertone)</string>
+    <string name="model_standard_desc">Оригинальные модели Supertonic 3. Стабильно и надёжно.</string>
+    <string name="model_android_optimized_title">Оптимизировано для Android (Reza2kn)</string>
+    <string name="model_android_optimized_desc">Оптимизированный форк с несколькими вариантами точности.</string>
+    <string name="model_android_int8_title">INT8 (компактная и быстрая)</string>
+    <string name="model_android_int8_desc">Тестовая модель. Быстрая и лёгкая.</string>
+    <string name="model_android_fp32_title">FP32 (большая, исходная)</string>
+    <string name="model_android_fp32_desc">Версия из форка с полной точностью.</string>
 
     <string name="synthesize_content_description">Озвучить и проиграть</string>
     <string name="input_label">Текст</string>
@@ -213,7 +223,7 @@
     <string name="clear_history_msg">Удалить все записи из истории?</string>
     <string name="search_history_placeholder">Поиск в истории…</string>
     <string name="action_retry_download">Повторить загрузку</string>
-    <string name="download_intro">Загрузка моделей Supertonic 3 (~400 МБ). Поддерживает 31 язык — это разовая загрузка.</string>
+    <string name="download_intro">Загрузка модели Supertonic 3. Поддерживает 31 язык — это разовая загрузка.</string>
     <string name="download_failed">Ошибка загрузки</string>
     <string name="download_in_progress">Загрузка моделей</string>
     <string name="edit_rule_title">Изменить правило</string>

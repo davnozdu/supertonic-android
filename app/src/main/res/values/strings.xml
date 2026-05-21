@@ -41,7 +41,7 @@
     <string name="model_download_message">Supertonic 3 supports 31 languages and requires a one-time download (~400MB). Do you want to download it now?</string>
     <string name="model_download_button">Download</string>
     <string name="model_delete_title">Delete TTS Models?</string>
-    <string name="model_delete_message">This will remove all Supertonic 3 models and voice styles to free up space (~400MB). You can download them again later if needed.</string>
+    <string name="model_delete_message">This will remove all Supertonic 3 models and voice styles. You can download them again later if needed.</string>
     <string name="model_deleted_msg">TTS models deleted</string>
 
     <!-- Playback Activity -->
@@ -107,9 +107,9 @@
     <string name="model_android_optimized_title">Android Optimized (Reza2kn)</string>
     <string name="model_android_optimized_desc">Optimized fork with multiple precision options.</string>
     <string name="model_android_int8_title">INT8 (Small &amp; Fast)</string>
-    <string name="model_android_int8_desc">Recommended for most devices. Fast and lightweight (~65MB).</string>
+    <string name="model_android_int8_desc">Test model. Fast and lightweight.</string>
     <string name="model_android_fp32_title">FP32 (Large &amp; Original)</string>
-    <string name="model_android_fp32_desc">Full precision version from the fork (~250MB).</string>
+    <string name="model_android_fp32_desc">Full precision version from the fork.</string>
 
     <string name="synthesize_content_description">Synthesize and play speech</string>
     <string name="input_label">Input</string>

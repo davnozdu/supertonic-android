@@ -20,9 +20,11 @@ object AssetManager {
         "voice_styles/F1.json", "voice_styles/F2.json", "voice_styles/F3.json", "voice_styles/F4.json", "voice_styles/F5.json"
     )
 
+    const val DEFAULT_MODEL = "android_optimized_int8"
+
     fun getModelType(context: Context): String {
         return context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
-            .getString("selected_model", "standard") ?: "standard"
+            .getString("selected_model", DEFAULT_MODEL) ?: DEFAULT_MODEL
     }
 
     fun setModelType(context: Context, type: String) {

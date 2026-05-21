@@ -168,6 +168,9 @@ android {
             useLegacyPackaging = true
             pickFirst '**/libonnxruntime.so'
             pickFirst '**/libsupertonic_tts.so'
+            pickFirst '**/libLiteRt.so'
+            pickFirst '**/libLiteRtClGlAccelerator.so'
+            pickFirst '**/libc++_shared.so'
         }
     }
 }
@@ -205,6 +208,11 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-extended'
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.26.0'
     onnxRuntime 'com.microsoft.onnxruntime:onnxruntime-android:1.26.0'
+
+    // LiteRT (TensorFlow Lite rebrand) for running INT4 .tflite assets on Android.
+    // Iteration 1: only verify the AAR drops into the build cleanly alongside ORT.
+    // Pipeline integration arrives in a later iteration.
+    implementation 'com.google.ai.edge.litert:litert:2.1.5'
     
     // Readium Toolkit
     implementation ("org.readium.kotlin-toolkit:readium-shared:$readium_version")
