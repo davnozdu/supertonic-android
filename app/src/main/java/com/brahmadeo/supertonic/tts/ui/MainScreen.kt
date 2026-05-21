@@ -205,7 +205,7 @@ fun MainScreen(
                     .imePadding()
                     .navigationBarsPadding()
                     .verticalScroll(scrollState)
-                    .padding(16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 160.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 // Text Input Section
@@ -422,6 +422,12 @@ fun MainScreen(
                     }
                 }
             }
+
+            DebugLogPanel(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+            )
         }
     }
 }

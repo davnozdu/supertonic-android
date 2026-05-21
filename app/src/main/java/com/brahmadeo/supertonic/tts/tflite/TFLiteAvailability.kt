@@ -1,6 +1,6 @@
 package com.brahmadeo.supertonic.tts.tflite
 
-import android.util.Log
+import com.brahmadeo.supertonic.tts.ui.DebugLog
 
 /**
  * Compile-time and runtime probe for LiteRT (TensorFlow Lite).
@@ -9,15 +9,12 @@ import android.util.Log
  * exclusively on ORT.
  */
 object TFLiteAvailability {
-    private const val TAG = "TFLiteAvailability"
-
     fun probe() {
         try {
-            // Touch the real class so the linker resolves libLiteRt.so on first use.
             val opts = org.tensorflow.lite.Interpreter.Options()
-            Log.i(TAG, "LiteRT available, Options class loaded: $opts")
+            DebugLog.i("LiteRT classes OK: ${opts.javaClass.simpleName}")
         } catch (t: Throwable) {
-            Log.w(TAG, "LiteRT not available: ${t.javaClass.simpleName}: ${t.message}")
+            DebugLog.e("LiteRT not available: ${t.javaClass.simpleName}: ${t.message}")
         }
     }
 }
