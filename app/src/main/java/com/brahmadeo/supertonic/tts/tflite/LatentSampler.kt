@@ -35,12 +35,14 @@ object LatentSampler {
 
         val rng = if (seed != null) Random(seed) else Random.Default
 
-        val noisy = FloatArray(LATENT_DIM_VAL * FIXED_LATENT_LEN)
-        for (d in 0 until LATENT_DIM_VAL) {
-            for (t in 0 until FIXED_LATENT_LEN) {
-                val sample = if (t < latentLen) gaussian(rng, std = 0.667f) else 0f
-                noisy[d * FIXED_LATENT_LEN + t] = sample
-            }
+        // Fill the entire 320-length latent with gaussian noise — the TFLite
+        // graphs were retrained on this fixed shape and the diffusion model
+        // expects valid noise everywhere, with the mask alone signalling which
+        // timesteps are valid speech. Zeroing the tail introduced harmonic
+        // boundary artifacts (metallic hum on the otherwise recognizable
+        // speech).
+        val noisy = FloatArray(LATENT_DIM_VAL * FIXED_LATENT_LEN) {
+            gaussian(rng, std = 0.667f)
         }
 
         val mask = FloatArray(FIXED_LATENT_LEN) { if (it < latentLen) 1f else 0f }
