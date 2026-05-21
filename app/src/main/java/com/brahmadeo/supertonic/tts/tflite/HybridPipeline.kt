@@ -72,16 +72,16 @@ object HybridPipeline {
         }
         DebugLog.i("  DP: %.3fs duration, %dms".format(durationSec, dpMs))
 
-        // Stage 2: TFLite text encoder (output channels-first [1, 256, 320])
-        val textEmbCF: FloatArray
+        // Stage 2: TFLite text encoder (output channels-first [1, 256, 320]).
+        // The Reza2kn INT8 VE expects text_emb in the SAME channels-first
+        // layout, so no transpose is needed here.
+        val textEmb: FloatArray
         val txtEncMs = measureTimeMillis {
             TFLiteTextEncoder(File(tfliteDir, "text_encoder.tflite")).use { m ->
-                textEmbCF = m.run(tok.textIds, voice.styleTtl, tok.textMask)
+                textEmb = m.run(tok.textIds, voice.styleTtl, tok.textMask)
             }
         }
-        // Transpose to channels-last [1, 320, 256] for VE
-        val textEmbCL = transposeCFtoCL(textEmbCF, channels = 256, time = FIXED_TEXT_LEN)
-        DebugLog.i("  TextEnc: ${textEmbCF.size} floats, $txtEncMs ms")
+        DebugLog.i("  TextEnc: ${textEmb.size} floats, $txtEncMs ms")
 
         // Stage 3: noisy latent + mask
         val sample = LatentSampler.sample(durationSec)
@@ -95,7 +95,7 @@ object HybridPipeline {
                 for (step in 0 until TOTAL_STEPS) {
                     xt = ve.step(
                         noisyLatent = xt,
-                        textEmb = textEmbCL,
+                        textEmb = textEmb,
                         styleTtl = voice.styleTtl,
                         latentMask = latentMask3d,
                         textMask = tok.textMask,
@@ -135,18 +135,6 @@ object HybridPipeline {
                 }
             }
         }
-    }
-
-    /** [channels, time] flat row-major -> [time, channels] flat row-major */
-    private fun transposeCFtoCL(src: FloatArray, channels: Int, time: Int): FloatArray {
-        require(src.size == channels * time)
-        val out = FloatArray(channels * time)
-        for (c in 0 until channels) {
-            for (t in 0 until time) {
-                out[t * channels + c] = src[c * time + t]
-            }
-        }
-        return out
     }
 
     /** Float PCM [-1,1] -> little-endian 16-bit signed bytes, first [keep] samples. */

@@ -12,9 +12,10 @@ import java.nio.LongBuffer
  * Used by the TFLite-hybrid pipeline to run the diffusion loop with fixed
  * latent_length=320 to match the TFLite text_encoder / vocoder shapes.
  *
- * Inputs (per the ONNX graph):
+ * Inputs (per the ONNX graph — note text_emb is channels-first to match
+ * the Reza2kn INT8 layout, same as TFLite text_encoder output):
  *   noisy_latent:  float32 [1, 144, 320]
- *   text_emb:      float32 [1, T, 256]
+ *   text_emb:      float32 [1, 256, T]
  *   style_ttl:     float32 [1, 50, 256]
  *   latent_mask:   float32 [1, 1, 320]
  *   text_mask:     float32 [1, 1, T]
@@ -44,7 +45,7 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
      */
     fun step(
         noisyLatent: FloatArray,
-        textEmb: FloatArray,         // [1, textLen, 256]
+        textEmb: FloatArray,         // [1, 256, textLen] channels-first
         styleTtl: FloatArray,        // [1, 50, 256]
         latentMask: FloatArray,      // [1, 1, 320]
         textMask: FloatArray,        // [1, 1, textLen]
@@ -58,7 +59,7 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
                 env, FloatBuffer.wrap(noisyLatent), longArrayOf(1, 144, 320)
             )
             inputs["text_emb"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(textEmb), longArrayOf(1, textLen.toLong(), 256)
+                env, FloatBuffer.wrap(textEmb), longArrayOf(1, 256, textLen.toLong())
             )
             inputs["style_ttl"] = OnnxTensor.createTensor(
                 env, FloatBuffer.wrap(styleTtl), longArrayOf(1, 50, 256)

@@ -553,6 +553,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startDownload() {
+        // The native engine caches a pointer keyed by modelPath, but the path
+        // is the same directory across presets — only the files inside change.
+        // Without an explicit release, isInitialized() would short-circuit
+        // initializeEngine() after a model switch and we'd keep running the
+        // previous preset's weights.
+        SupertonicTTS.release()
         viewModel.isDownloading.value = true
         viewModel.downloadError.value = null
         CoroutineScope(Dispatchers.IO).launch {
