@@ -40,9 +40,12 @@ object AssetManager {
 
         return when (modelType) {
             "android_optimized_int8" -> {
+                // Hybrid INT4 .tflite + INT8 VE .onnx + FP32 vocoder .onnx.
+                // INT4 vocoder.tflite is intentionally skipped — it adds an
+                // audible 7-11 kHz metallic ringing the FP32 vocoder doesn't.
                 listOf(
-                    AssetFile("onnx/duration_predictor.onnx", "onnx/duration_predictor.onnx", standardBase),
-                    AssetFile("onnx/text_encoder.onnx", "onnx/text_encoder.onnx", standardBase),
+                    AssetFile("int4/duration_predictor.tflite", "onnx/duration_predictor.tflite", androidBase),
+                    AssetFile("int4/text_encoder.tflite", "onnx/text_encoder.tflite", androidBase),
                     AssetFile("vector_estimator_int8.onnx", "onnx/vector_estimator.onnx", androidBase),
                     AssetFile("onnx/vocoder.onnx", "onnx/vocoder.onnx", standardBase),
                     AssetFile("onnx/tts.json", "onnx/tts.json", standardBase),

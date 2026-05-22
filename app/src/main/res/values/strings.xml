@@ -98,9 +98,6 @@
     <string name="accent_dict_clear_msg">All imported pronunciation entries will be removed. Your hand-edited rules above are kept.</string>
     <string name="accent_dict_cleared">Accent dictionary cleared</string>
     <string name="action_delete_model">Delete TTS Models</string>
-    <string name="action_test_litert">Test LiteRT</string>
-    <string name="action_run_hybrid">Run Hybrid (INT4 + INT8 VE)</string>
-    <string name="action_run_hybrid_ort_voc">Run Hybrid (INT4 + ORT FP32 vocoder)</string>
     <string name="action_import">Import JSON</string>
     <string name="action_export">Export JSON</string>
     
@@ -109,8 +106,8 @@
     <string name="model_standard_desc">Original Supertonic 3 models. Stable and reliable.</string>
     <string name="model_android_optimized_title">Android Optimized (Reza2kn)</string>
     <string name="model_android_optimized_desc">Optimized fork with multiple precision options.</string>
-    <string name="model_android_int8_title">INT8 (Small &amp; Fast)</string>
-    <string name="model_android_int8_desc">Test model. Fast and lightweight.</string>
+    <string name="model_android_int8_title">Android (recommended)</string>
+    <string name="model_android_int8_desc">Optimized hybrid for Android: INT4 + INT8 VE + FP32 vocoder.</string>
     <string name="model_android_fp32_title">FP32 (Large &amp; Original)</string>
     <string name="model_android_fp32_desc">Full precision version from the fork.</string>
 

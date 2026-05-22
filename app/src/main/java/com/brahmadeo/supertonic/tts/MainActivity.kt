@@ -206,7 +206,7 @@ class MainActivity : ComponentActivity() {
 
         loadPreferences()
         checkNotificationPermission()
-        com.brahmadeo.supertonic.tts.tflite.TFLiteAvailability.probe()
+        SupertonicTTS.setApplicationContext(this)
 
         val bindIntent = Intent(this, PlaybackService::class.java)
         bindService(bindIntent, connection, BIND_AUTO_CREATE)
@@ -439,27 +439,6 @@ class MainActivity : ComponentActivity() {
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },
                         onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
-                        onTestLiteRtClick = {
-                            com.brahmadeo.supertonic.tts.tflite.TFLiteSmokeTest.run(this@MainActivity)
-                        },
-                        onRunHybridClick = {
-                            val text = viewModel.inputText.value.ifBlank { "Привет, мир. Это тест гибридного синтеза." }
-                            val voice = viewModel.selectedVoiceFile.value.removeSuffix(".json")
-                            val lang = viewModel.currentLang.value
-                            com.brahmadeo.supertonic.tts.tflite.HybridPipeline.runSynthesis(
-                                this@MainActivity, text, voice, lang,
-                                com.brahmadeo.supertonic.tts.tflite.HybridPipeline.VocoderImpl.TFLITE_INT4,
-                            )
-                        },
-                        onRunHybridOrtVocClick = {
-                            val text = viewModel.inputText.value.ifBlank { "Привет, мир. Это тест гибридного синтеза." }
-                            val voice = viewModel.selectedVoiceFile.value.removeSuffix(".json")
-                            val lang = viewModel.currentLang.value
-                            com.brahmadeo.supertonic.tts.tflite.HybridPipeline.runSynthesis(
-                                this@MainActivity, text, voice, lang,
-                                com.brahmadeo.supertonic.tts.tflite.HybridPipeline.VocoderImpl.ORT_FP32,
-                            )
-                        },
                         onOpenEbookClick = {
                             try {
                                 if (EbookManager.getRecentBooks(this).isEmpty()) {
@@ -595,6 +574,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun initializeEngine() {
+        // The INT4 hybrid preset has no duration_predictor.onnx /
+        // text_encoder.onnx for the Rust native engine to load — the .tflite
+        // versions live in the same folder. Skip native init for that preset;
+        // HybridEngine builds itself lazily on the first generateAudio call.
+        if (AssetManager.getModelType(this) == "android_optimized_int8") {
+            viewModel.isInitializing.value = false
+            setupVoicesMap(viewModel.currentLang.value)
+            return
+        }
+
         val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
 

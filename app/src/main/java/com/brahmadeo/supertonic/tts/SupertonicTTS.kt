@@ -1,6 +1,10 @@
 package com.brahmadeo.supertonic.tts
 
+import android.content.Context
 import android.util.Log
+import com.brahmadeo.supertonic.tts.tflite.HybridEngine
+import com.brahmadeo.supertonic.tts.utils.AssetManager
+import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
 object SupertonicTTS {
@@ -8,6 +12,38 @@ object SupertonicTTS {
     private var nativePtr: Long = 0
     @Volatile
     private var currentModelPath: String? = null
+    @Volatile
+    private var appContext: Context? = null
+    @Volatile
+    private var hybridEngine: HybridEngine? = null
+
+    /**
+     * Hand the app context to SupertonicTTS once at startup so generateAudio
+     * can route to the hybrid Kotlin engine for INT4 presets without
+     * threading a Context through every caller (SupertonicTextToSpeechService,
+     * PlaybackService, etc.).
+     */
+    fun setApplicationContext(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    @Synchronized
+    private fun maybeHybridEngine(): HybridEngine? {
+        val ctx = appContext ?: return null
+        if (AssetManager.getModelType(ctx) != "android_optimized_int8") {
+            // Other presets (Standard / FP32) run on the Rust path.
+            hybridEngine?.let { it.close(); hybridEngine = null }
+            return null
+        }
+        hybridEngine?.let { return it }
+        val modelDir = File(ctx.filesDir, AssetManager.MODEL_VERSION)
+        return try {
+            HybridEngine(modelDir).also { hybridEngine = it }
+        } catch (t: Throwable) {
+            Log.e("SupertonicTTS", "Failed to open HybridEngine: ${t.message}", t)
+            null
+        }
+    }
 
     init {
         try {
@@ -128,15 +164,26 @@ object SupertonicTTS {
 
     @Synchronized
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null): ByteArray? {
-        if (nativePtr == 0L) {
-            Log.e("SupertonicTTS", "Engine not initialized")
-            return null
-        }
-        
         val sid = ++sessionIdCounter
         currentSession.set(SessionContext(sid, listener))
-        
         try {
+            // Route to the hybrid Kotlin engine if the active preset is the
+            // INT4 + INT8 VE bundle; the native Rust pipeline can't read
+            // .tflite models.
+            maybeHybridEngine()?.let { engine ->
+                return try {
+                    val data = engine.synthesize(text, lang, stylePath, speed, steps, gain, listener, sid)
+                    if (data.isNotEmpty()) data else null
+                } catch (e: Exception) {
+                    Log.e("SupertonicTTS", "Hybrid synthesis exception: ${e.message}", e)
+                    null
+                }
+            }
+
+            if (nativePtr == 0L) {
+                Log.e("SupertonicTTS", "Engine not initialized")
+                return null
+            }
             val data = synthesize(nativePtr, text, lang, stylePath, speed, bufferDuration, steps, gain)
             return if (data.isNotEmpty()) data else null
         } catch (e: Exception) {
@@ -213,6 +260,10 @@ object SupertonicTTS {
 
     @Synchronized
     fun release() {
+        hybridEngine?.let {
+            try { it.close() } catch (t: Throwable) { Log.w("SupertonicTTS", "HybridEngine close failed", t) }
+            hybridEngine = null
+        }
         if (nativePtr != 0L) {
             Log.i("SupertonicTTS", "Releasing engine: $nativePtr")
             close(nativePtr)

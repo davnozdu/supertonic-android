@@ -98,9 +98,6 @@
     <string name="accent_dict_clear_msg">Все импортированные записи произношения будут удалены. Ваши правила, заданные вручную, останутся.</string>
     <string name="accent_dict_cleared">Словарь ударений удалён</string>
     <string name="action_delete_model">Удалить TTS-модели</string>
-    <string name="action_test_litert">Тест LiteRT</string>
-    <string name="action_run_hybrid">Запустить гибрид (INT4 + INT8 VE)</string>
-    <string name="action_run_hybrid_ort_voc">Гибрид с ORT FP32 вокодером</string>
     <string name="action_import">Импорт JSON</string>
     <string name="action_export">Экспорт JSON</string>
 
@@ -109,8 +106,8 @@
     <string name="model_standard_desc">Оригинальные модели Supertonic 3. Стабильно и надёжно.</string>
     <string name="model_android_optimized_title">Оптимизировано для Android (Reza2kn)</string>
     <string name="model_android_optimized_desc">Оптимизированный форк с несколькими вариантами точности.</string>
-    <string name="model_android_int8_title">INT8 (компактная и быстрая)</string>
-    <string name="model_android_int8_desc">Тестовая модель. Быстрая и лёгкая.</string>
+    <string name="model_android_int8_title">Android (рекомендуется)</string>
+    <string name="model_android_int8_desc">Оптимизированный гибрид: INT4 + INT8 VE + FP32 вокодер.</string>
     <string name="model_android_fp32_title">FP32 (большая, исходная)</string>
     <string name="model_android_fp32_desc">Версия из форка с полной точностью.</string>
 

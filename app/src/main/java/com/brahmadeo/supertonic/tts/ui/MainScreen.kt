@@ -79,9 +79,6 @@ fun MainScreen(
     onTtsSettingsClick: () -> Unit,
     onDeleteModelClick: () -> Unit,
     onOpenEbookClick: () -> Unit,
-    onTestLiteRtClick: () -> Unit,
-    onRunHybridClick: () -> Unit,
-    onRunHybridOrtVocClick: () -> Unit,
 
     canResume: Boolean,
     onResumeClick: () -> Unit,
@@ -141,18 +138,6 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_tts_settings)) },
                             onClick = { showMenu = false; onTtsSettingsClick() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(AppR.string.action_test_litert)) },
-                            onClick = { showMenu = false; onTestLiteRtClick() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(AppR.string.action_run_hybrid)) },
-                            onClick = { showMenu = false; onRunHybridClick() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(AppR.string.action_run_hybrid_ort_voc)) },
-                            onClick = { showMenu = false; onRunHybridOrtVocClick() }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_delete_model), color = MaterialTheme.colorScheme.error) },
@@ -220,7 +205,7 @@ fun MainScreen(
                     .imePadding()
                     .navigationBarsPadding()
                     .verticalScroll(scrollState)
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 160.dp),
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 // Text Input Section
@@ -438,11 +423,6 @@ fun MainScreen(
                 }
             }
 
-            DebugLogPanel(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-            )
         }
     }
 }
@@ -600,9 +580,6 @@ fun MainScreenPreview() {
             onTtsSettingsClick = {},
             onDeleteModelClick = {},
             onOpenEbookClick = {},
-            onTestLiteRtClick = {},
-            onRunHybridClick = {},
-            onRunHybridOrtVocClick = {},
             canResume = true,
             onResumeClick = {},
             showMiniPlayer = true,
