@@ -32,6 +32,14 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
         val opts = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(4)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            // Match the Rust pipeline: XNNPACK kernels for ARM Conv/MatMul.
+            // Without this EP the Java CPU EP is 5-10x slower on the
+            // diffusion loop.
+            try {
+                addXnnpack(mapOf("intra_op_num_threads" to "4"))
+            } catch (_: Throwable) {
+                // Older ORT builds expose addCPU only — fall back silently.
+            }
         }
         session = env.createSession(modelFile.absolutePath, opts)
     }

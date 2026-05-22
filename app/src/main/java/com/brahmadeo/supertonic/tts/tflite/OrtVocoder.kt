@@ -24,6 +24,12 @@ class OrtVocoder(modelFile: File) : AutoCloseable {
         val opts = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(4)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            // XNNPACK EP for ARM-optimized Conv kernels — without it the
+            // FP32 vocoder runs 5-10x slower than the Rust path.
+            try {
+                addXnnpack(mapOf("intra_op_num_threads" to "4"))
+            } catch (_: Throwable) {
+            }
         }
         session = env.createSession(modelFile.absolutePath, opts)
     }

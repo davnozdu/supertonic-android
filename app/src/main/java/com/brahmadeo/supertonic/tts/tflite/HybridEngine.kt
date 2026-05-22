@@ -30,8 +30,8 @@ class HybridEngine(
     private val onnxDir = File(modelDir, "onnx")
     private val tokenizer = UnicodeTokenizer(File(onnxDir, "unicode_indexer.json"))
 
-    private val dp = Interpreter(File(onnxDir, "duration_predictor.tflite"), Interpreter.Options())
-    private val txtEnc = Interpreter(File(onnxDir, "text_encoder.tflite"), Interpreter.Options())
+    private val dp = Interpreter(File(onnxDir, "duration_predictor.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
+    private val txtEnc = Interpreter(File(onnxDir, "text_encoder.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
     private val ve = OrtVectorEstimator(File(onnxDir, "vector_estimator.onnx"))
     private val voc = OrtVocoder(File(onnxDir, "vocoder.onnx"))
 
