@@ -202,7 +202,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        PDFBoxResourceLoader.init(this)
 
         loadPreferences()
         checkNotificationPermission()
@@ -211,13 +210,28 @@ class MainActivity : ComponentActivity() {
         val bindIntent = Intent(this, PlaybackService::class.java)
         bindService(bindIntent, connection, BIND_AUTO_CREATE)
 
+        // EbookParser constructor is cheap (only stores a context), keep it on
+        // the main thread so handleIntent below can dispatch ebook intents
+        // without waiting for the heavier loaders.
         ebookParser = EbookParser(this)
-        LexiconManager.load(this)
-        com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
-        QueueManager.initialize(this)
 
-        // Wipe v1/v2 leftovers from prior versions of the app so we don't waste storage.
-        AssetManager.cleanupOldVersions(this)
+        // Defer the heavy initializers (~500 ms - 1.5 s combined) to a
+        // background coroutine so the first frame paints immediately. Each
+        // is independent and safe to call after the UI is up — synthesis
+        // simply doesn't benefit from lexicon / accent overrides until the
+        // dictionary finishes loading, which is acceptable for the first
+        // sentence after cold start.
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                PDFBoxResourceLoader.init(this@MainActivity)
+                LexiconManager.load(this@MainActivity)
+                com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this@MainActivity)
+                QueueManager.initialize(this@MainActivity)
+                AssetManager.cleanupOldVersions(this@MainActivity)
+            } catch (t: Throwable) {
+                Log.w("MainActivity", "Background init failed", t)
+            }
+        }
 
         // Single unified model (Supertonic 3): download on first launch, initialize otherwise.
         if (!AssetManager.isReady(this)) {
