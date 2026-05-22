@@ -28,8 +28,8 @@ class HybridEngine(
     private val onnxDir = File(modelDir, "onnx")
     private val tokenizer = UnicodeTokenizer(File(onnxDir, "unicode_indexer.json"))
 
-    private val dp = Interpreter(File(onnxDir, "duration_predictor.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
-    private val txtEnc = Interpreter(File(onnxDir, "text_encoder.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
+    private val dp = Interpreter(File(onnxDir, "duration_predictor.tflite"), Interpreter.Options().setNumThreads(6).setUseXNNPACK(true))
+    private val txtEnc = Interpreter(File(onnxDir, "text_encoder.tflite"), Interpreter.Options().setNumThreads(6).setUseXNNPACK(true))
     private val ve = OrtVectorEstimator(File(onnxDir, "vector_estimator.onnx"))
     private val voc = OrtVocoder(File(onnxDir, "vocoder.onnx"))
 
@@ -99,22 +99,20 @@ class HybridEngine(
         val sample = LatentSampler.sample(durationSec)
         val latentLen = sample.latentLen
 
-        // VE diffusion (ORT INT8) — N steps
-        var xt = sample.noisyLatent
-        for (step in 0 until steps) {
-            xt = ve.step(
-                noisyLatent = xt,
-                textEmb = textEmb,
-                styleTtl = voice.styleTtl,
-                latentMask = sample.latentMask,
-                textMask = textMask,
-                textLen = validLen,
-                latentLen = latentLen,
-                currentStep = step,
-                totalStep = steps,
-            )
-            if (SupertonicTTS.isCancelled()) return ByteArray(0)
-        }
+        // VE diffusion (ORT INT8) — all N steps in one call, constant
+        // tensors marshalled to native memory once.
+        val xt = ve.runDiffusion(
+            initialLatent = sample.noisyLatent,
+            textEmb = textEmb,
+            styleTtl = voice.styleTtl,
+            latentMask = sample.latentMask,
+            textMask = textMask,
+            textLen = validLen,
+            latentLen = latentLen,
+            totalSteps = steps,
+            shouldCancel = { SupertonicTTS.isCancelled() },
+        )
+        if (SupertonicTTS.isCancelled()) return ByteArray(0)
 
         // vocoder (ORT FP32) — already dynamic latent_length
         val wavFull = voc.run(xt, latentLen)

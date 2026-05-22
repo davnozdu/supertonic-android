@@ -226,8 +226,11 @@ object SupertonicTTS {
      */
     fun prewarm(stylePath: String) {
         if (prewarmed) return
-        if (nativePtr == 0L) {
-            Log.w("SupertonicTTS", "prewarm skipped: engine not initialized")
+        // For the hybrid INT4 preset the Rust nativePtr is intentionally 0 —
+        // gate on either path being ready so XNNPACK kernel compilation runs
+        // once at startup instead of on the user's first sentence.
+        if (nativePtr == 0L && maybeHybridEngine() == null) {
+            Log.w("SupertonicTTS", "prewarm skipped: engine not ready")
             return
         }
         if (!java.io.File(stylePath).exists()) {

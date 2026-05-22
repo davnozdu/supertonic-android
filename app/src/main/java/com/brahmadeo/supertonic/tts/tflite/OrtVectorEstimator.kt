@@ -29,18 +29,71 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
 
     init {
         val opts = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(4)
+            setIntraOpNumThreads(6)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             // Match the Rust pipeline: XNNPACK kernels for ARM Conv/MatMul.
-            // Without this EP the Java CPU EP is 5-10x slower on the
-            // diffusion loop.
             try {
-                addXnnpack(mapOf("intra_op_num_threads" to "4"))
+                addXnnpack(mapOf("intra_op_num_threads" to "6"))
             } catch (_: Throwable) {
-                // Older ORT builds expose addCPU only — fall back silently.
             }
         }
         session = env.createSession(modelFile.absolutePath, opts)
+    }
+
+    /**
+     * Run the full diffusion loop in one call so the constant tensors
+     * (text_emb, style_ttl, latent_mask, text_mask, total_step) only get
+     * marshalled to native ORT memory once instead of N×7 times.
+     *
+     * @param shouldCancel polled before each step; returning true breaks
+     * the loop and the partial denoised latent is returned.
+     */
+    fun runDiffusion(
+        initialLatent: FloatArray,
+        textEmb: FloatArray,
+        styleTtl: FloatArray,
+        latentMask: FloatArray,
+        textMask: FloatArray,
+        textLen: Int,
+        latentLen: Int,
+        totalSteps: Int,
+        shouldCancel: () -> Boolean = { false },
+    ): FloatArray {
+        val textEmbT = OnnxTensor.createTensor(env, FloatBuffer.wrap(textEmb), longArrayOf(1, 256, textLen.toLong()))
+        val styleTtlT = OnnxTensor.createTensor(env, FloatBuffer.wrap(styleTtl), longArrayOf(1, 50, 256))
+        val latentMaskT = OnnxTensor.createTensor(env, FloatBuffer.wrap(latentMask), longArrayOf(1, 1, latentLen.toLong()))
+        val textMaskT = OnnxTensor.createTensor(env, FloatBuffer.wrap(textMask), longArrayOf(1, 1, textLen.toLong()))
+        val totalStepT = OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(totalSteps.toFloat())), longArrayOf(1))
+        try {
+            var xt = initialLatent
+            val outBuf = FloatArray(144 * latentLen)
+            for (step in 0 until totalSteps) {
+                if (shouldCancel()) break
+                val noisyT = OnnxTensor.createTensor(env, FloatBuffer.wrap(xt), longArrayOf(1, 144, latentLen.toLong()))
+                val curStepT = OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(step.toFloat())), longArrayOf(1))
+                try {
+                    val feed = HashMap<String, OnnxTensor>(7).apply {
+                        put("noisy_latent", noisyT)
+                        put("text_emb", textEmbT)
+                        put("style_ttl", styleTtlT)
+                        put("latent_mask", latentMaskT)
+                        put("text_mask", textMaskT)
+                        put("current_step", curStepT)
+                        put("total_step", totalStepT)
+                    }
+                    session.run(feed).use { result ->
+                        val tensor = result.get("denoised_latent").get() as OnnxTensor
+                        tensor.floatBuffer.get(outBuf)
+                        xt = outBuf.copyOf()
+                    }
+                } finally {
+                    noisyT.close(); curStepT.close()
+                }
+            }
+            return xt
+        } finally {
+            textEmbT.close(); styleTtlT.close(); latentMaskT.close(); textMaskT.close(); totalStepT.close()
+        }
     }
 
     /**
@@ -50,52 +103,6 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
      *
      * @return new denoised latent, shape [144 * 320] flat
      */
-    fun step(
-        noisyLatent: FloatArray,
-        textEmb: FloatArray,         // [1, 256, textLen] channels-first
-        styleTtl: FloatArray,        // [1, 50, 256]
-        latentMask: FloatArray,      // [1, 1, latentLen]
-        textMask: FloatArray,        // [1, 1, textLen]
-        textLen: Int,
-        latentLen: Int,
-        currentStep: Int,
-        totalStep: Int,
-    ): FloatArray {
-        val inputs = HashMap<String, OnnxTensor>(7)
-        try {
-            inputs["noisy_latent"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(noisyLatent), longArrayOf(1, 144, latentLen.toLong())
-            )
-            inputs["text_emb"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(textEmb), longArrayOf(1, 256, textLen.toLong())
-            )
-            inputs["style_ttl"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(styleTtl), longArrayOf(1, 50, 256)
-            )
-            inputs["latent_mask"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(latentMask), longArrayOf(1, 1, latentLen.toLong())
-            )
-            inputs["text_mask"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(textMask), longArrayOf(1, 1, textLen.toLong())
-            )
-            inputs["current_step"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(floatArrayOf(currentStep.toFloat())), longArrayOf(1)
-            )
-            inputs["total_step"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(floatArrayOf(totalStep.toFloat())), longArrayOf(1)
-            )
-
-            session.run(inputs).use { result ->
-                val tensor = result.get("denoised_latent").get() as OnnxTensor
-                val flat = FloatArray(144 * latentLen)
-                tensor.floatBuffer.get(flat)
-                return flat
-            }
-        } finally {
-            inputs.values.forEach { it.close() }
-        }
-    }
-
     override fun close() {
         session.close()
     }
