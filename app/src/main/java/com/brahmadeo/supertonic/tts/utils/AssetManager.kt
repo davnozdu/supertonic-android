@@ -3,10 +3,16 @@ package com.brahmadeo.supertonic.tts.utils
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
+import java.util.concurrent.atomic.AtomicInteger
 
 object AssetManager {
     private const val TAG = "AssetManager"
@@ -114,33 +120,39 @@ object AssetManager {
                 baseDir.mkdirs()
             }
 
-            files.forEachIndexed { index, asset ->
-                val targetFile = File(baseDir, asset.localPath)
-                
-                if (targetFile.exists()) {
-                    onProgress("Checking ${asset.localPath}...", (index.toFloat() / files.size))
-                    return@forEachIndexed
-                }
-
-                targetFile.parentFile?.let {
-                    if (!it.exists()) it.mkdirs()
-                }
-
-                val url = "$ASSETS_BASE_URL/${asset.remoteName}"
-                try {
-                    onProgress("Downloading ${asset.localPath}...", (index.toFloat() / files.size))
-                    Log.d(TAG, "Downloading $url to ${targetFile.absolutePath}")
-
-                    URL(url).openStream().use { input ->
-                        FileOutputStream(targetFile).use { output ->
-                            input.copyTo(output)
+            // Up to 4 files in flight simultaneously — big files like
+            // vector_estimator.onnx (~64 MB) and vocoder.onnx (~97 MB) used
+            // to download serially after every small voice JSON. Parallel
+            // saturates the GitHub Releases CDN and the device's bandwidth,
+            // typically 2-3x faster end-to-end on a healthy connection.
+            val sema = Semaphore(4)
+            val finished = AtomicInteger(0)
+            coroutineScope {
+                files.map { asset ->
+                    async {
+                        sema.withPermit {
+                            val targetFile = File(baseDir, asset.localPath)
+                            if (!targetFile.exists()) {
+                                targetFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
+                                val url = "$ASSETS_BASE_URL/${asset.remoteName}"
+                                try {
+                                    Log.d(TAG, "Downloading $url -> ${targetFile.absolutePath}")
+                                    URL(url).openStream().use { input ->
+                                        FileOutputStream(targetFile).use { output ->
+                                            input.copyTo(output)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to download ${asset.remoteName}", e)
+                                    targetFile.delete()
+                                    throw e
+                                }
+                            }
                         }
+                        val n = finished.incrementAndGet()
+                        onProgress("Downloading ${asset.localPath}...", n.toFloat() / files.size)
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to download ${asset.remoteName}", e)
-                    targetFile.delete()
-                    throw e
-                }
+                }.awaitAll()
             }
             
             prefs.edit().putString("last_downloaded_model", modelType).apply()
