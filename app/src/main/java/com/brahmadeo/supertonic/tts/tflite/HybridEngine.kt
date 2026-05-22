@@ -5,6 +5,8 @@ import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 
 /**
  * Production hybrid TTS backend: INT4 .tflite for duration_predictor and
@@ -13,8 +15,9 @@ import java.nio.ByteOrder
  * resonances).
  *
  * Holds open sessions and a parsed unicode indexer for the lifetime of the
- * preset selection — re-init only happens when SupertonicTTS.release() is
- * called (model switch / delete + redownload).
+ * preset selection. Scratch direct ByteBuffers are pre-allocated for the
+ * fixed-shape TFLite inputs/outputs so we don't allocateDirect ~325 KB of
+ * off-heap memory on every synthesise call.
  */
 class HybridEngine(
     private val modelDir: File,
@@ -28,18 +31,39 @@ class HybridEngine(
     private val onnxDir = File(modelDir, "onnx")
     private val tokenizer = UnicodeTokenizer(File(onnxDir, "unicode_indexer.json"))
 
-    private val dp = Interpreter(File(onnxDir, "duration_predictor.tflite"), Interpreter.Options().setNumThreads(6).setUseXNNPACK(true))
-    private val txtEnc = Interpreter(File(onnxDir, "text_encoder.tflite"), Interpreter.Options().setNumThreads(6).setUseXNNPACK(true))
+    // 4 threads per Interpreter (not 6): they run in parallel below, so the
+    // combined budget targets ~8 active workers on 6-8 core phones rather
+    // than oversubscribing with 2x6=12.
+    private val dp = Interpreter(File(onnxDir, "duration_predictor.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
+    private val txtEnc = Interpreter(File(onnxDir, "text_encoder.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
     private val ve = OrtVectorEstimator(File(onnxDir, "vector_estimator.onnx"))
     private val voc = OrtVocoder(File(onnxDir, "vocoder.onnx"))
 
     private val voiceCache = HashMap<String, VoiceStyle>()
 
+    // Two-thread pool to run DP and text_encoder in parallel — they're
+    // independent of each other and use separate Interpreter instances.
+    private val parallel = Executors.newFixedThreadPool(2) { r ->
+        Thread(r, "HybridEngine-tflite").apply { isDaemon = true }
+    }
+
+    // Persistent direct ByteBuffers — allocateDirect off the call path.
+    private val dpInIds = directBuf(FIXED_TEXT_LEN * 8)
+    private val dpInStyle = directBuf(8 * 16 * 4)
+    private val dpInMask = directBuf(FIXED_TEXT_LEN * 4)
+    private val dpOut = directBuf(4)
+    private val teInIds = directBuf(FIXED_TEXT_LEN * 8)
+    private val teInStyle = directBuf(50 * 256 * 4)
+    private val teInMask = directBuf(FIXED_TEXT_LEN * 4)
+    private val teOut = directBuf(256 * FIXED_TEXT_LEN * 4)
+    private val textEmbFull = FloatArray(256 * FIXED_TEXT_LEN)
+
     /**
      * Synthesize one sentence. Result is the same little-endian 16-bit
-     * signed mono PCM at 44.1 kHz that the Rust path produces, so the
-     * PlaybackService channel doesn't need to care which engine made it.
+     * signed mono PCM at 44.1 kHz that the Rust path produces. Synchronised
+     * because the scratch buffers are shared state.
      */
+    @Synchronized
     fun synthesize(
         text: String,
         lang: String,
@@ -53,38 +77,40 @@ class HybridEngine(
         val voice = loadVoice(stylePath)
         val tok = tokenizer.tokenize(text, lang, FIXED_TEXT_LEN)
 
-        // duration_predictor (TFLite INT4) -> scalar seconds
-        val durBuf = directBuf(4)
-        dp.runForMultipleInputsOutputs(
-            arrayOf<Any>(
-                directBuf(FIXED_TEXT_LEN * 8).also { it.asLongBuffer().put(tok.textIds); it.rewind() },
-                directBuf(8 * 16 * 4).also { it.asFloatBuffer().put(voice.styleDp); it.rewind() },
-                directBuf(FIXED_TEXT_LEN * 4).also { it.asFloatBuffer().put(tok.textMask); it.rewind() },
-            ),
-            mapOf(0 to durBuf),
-        )
-        durBuf.rewind()
-        val durationSec = durBuf.asFloatBuffer().get(0) / speed.coerceAtLeast(0.1f)
+        // DP and text_encoder are mutually independent — run them on two
+        // background threads so the wall time is max(dp, text_enc) instead
+        // of dp + text_enc. Both pin their own scratch buffers so there's
+        // no shared mutable state between them.
+        dpInIds.rewind(); dpInIds.asLongBuffer().put(tok.textIds); dpInIds.rewind()
+        dpInStyle.rewind(); dpInStyle.asFloatBuffer().put(voice.styleDp); dpInStyle.rewind()
+        dpInMask.rewind(); dpInMask.asFloatBuffer().put(tok.textMask); dpInMask.rewind()
+        dpOut.rewind()
+        teInIds.rewind(); teInIds.asLongBuffer().put(tok.textIds); teInIds.rewind()
+        teInStyle.rewind(); teInStyle.asFloatBuffer().put(voice.styleTtl); teInStyle.rewind()
+        teInMask.rewind(); teInMask.asFloatBuffer().put(tok.textMask); teInMask.rewind()
+        teOut.rewind()
+        val dpFuture: Future<*> = parallel.submit {
+            dp.runForMultipleInputsOutputs(
+                arrayOf<Any>(dpInIds, dpInStyle, dpInMask),
+                mapOf(0 to dpOut),
+            )
+        }
+        val teFuture: Future<*> = parallel.submit {
+            txtEnc.runForMultipleInputsOutputs(
+                arrayOf<Any>(teInIds, teInStyle, teInMask),
+                mapOf(0 to teOut),
+            )
+        }
+        dpFuture.get()
+        teFuture.get()
 
-        // text_encoder (TFLite INT4) -> [1, 256, 320] channels-first
-        val textEmbOut = directBuf(256 * FIXED_TEXT_LEN * 4)
-        txtEnc.runForMultipleInputsOutputs(
-            arrayOf<Any>(
-                directBuf(FIXED_TEXT_LEN * 8).also { it.asLongBuffer().put(tok.textIds); it.rewind() },
-                directBuf(50 * 256 * 4).also { it.asFloatBuffer().put(voice.styleTtl); it.rewind() },
-                directBuf(FIXED_TEXT_LEN * 4).also { it.asFloatBuffer().put(tok.textMask); it.rewind() },
-            ),
-            mapOf(0 to textEmbOut),
-        )
+        dpOut.rewind()
+        val durationSec = dpOut.asFloatBuffer().get(0) / speed.coerceAtLeast(0.1f)
 
-        // Truncate text_emb [1, 256, 320] -> [1, 256, validLen] and the text
-        // mask to validLen, so VE/vocoder only do work proportional to real
-        // content. The TFLite text_encoder still pays for fixed 320 (its
-        // graph is hard-coded), but VE × diffusion steps dwarfs that.
+        // Crop text_emb [1, 256, 320] -> [1, 256, validLen] channels-first.
         val validLen = tok.validLen.coerceAtLeast(1)
-        val textEmbFull = FloatArray(256 * FIXED_TEXT_LEN)
-        textEmbOut.rewind()
-        textEmbOut.asFloatBuffer().get(textEmbFull)
+        teOut.rewind()
+        teOut.asFloatBuffer().get(textEmbFull)
         val textEmb = FloatArray(256 * validLen)
         for (c in 0 until 256) {
             System.arraycopy(
@@ -145,6 +171,7 @@ class HybridEngine(
     }
 
     override fun close() {
+        try { parallel.shutdownNow() } catch (_: Throwable) {}
         try { dp.close() } catch (_: Throwable) {}
         try { txtEnc.close() } catch (_: Throwable) {}
         try { ve.close() } catch (_: Throwable) {}

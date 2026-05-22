@@ -65,11 +65,17 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
         val textMaskT = OnnxTensor.createTensor(env, FloatBuffer.wrap(textMask), longArrayOf(1, 1, textLen.toLong()))
         val totalStepT = OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(totalSteps.toFloat())), longArrayOf(1))
         try {
-            var xt = initialLatent
-            val outBuf = FloatArray(144 * latentLen)
+            // Double-buffer the latent so we never have to copyOf() the
+            // denoised output back into a fresh array per step — ORT writes
+            // to one buffer, the next iteration reads from it.
+            val size = 144 * latentLen
+            val bufA = FloatArray(size).also { System.arraycopy(initialLatent, 0, it, 0, size) }
+            val bufB = FloatArray(size)
+            var inBuf = bufA
+            var outBuf = bufB
             for (step in 0 until totalSteps) {
                 if (shouldCancel()) break
-                val noisyT = OnnxTensor.createTensor(env, FloatBuffer.wrap(xt), longArrayOf(1, 144, latentLen.toLong()))
+                val noisyT = OnnxTensor.createTensor(env, FloatBuffer.wrap(inBuf), longArrayOf(1, 144, latentLen.toLong()))
                 val curStepT = OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(step.toFloat())), longArrayOf(1))
                 try {
                     val feed = HashMap<String, OnnxTensor>(7).apply {
@@ -84,13 +90,13 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
                     session.run(feed).use { result ->
                         val tensor = result.get("denoised_latent").get() as OnnxTensor
                         tensor.floatBuffer.get(outBuf)
-                        xt = outBuf.copyOf()
                     }
                 } finally {
                     noisyT.close(); curStepT.close()
                 }
+                val tmp = inBuf; inBuf = outBuf; outBuf = tmp
             }
-            return xt
+            return inBuf
         } finally {
             textEmbT.close(); styleTtlT.close(); latentMaskT.close(); textMaskT.close(); totalStepT.close()
         }
