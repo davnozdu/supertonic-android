@@ -1,6 +1,7 @@
 package com.brahmadeo.supertonic.tts.tflite
 
 import android.content.Context
+import android.media.MediaPlayer
 import com.brahmadeo.supertonic.tts.ui.DebugLog
 import com.brahmadeo.supertonic.tts.utils.AssetManager
 import com.brahmadeo.supertonic.tts.utils.WavUtils
@@ -30,43 +31,71 @@ object HybridPipeline {
     private const val SAMPLE_RATE = 44100
     private const val REZA_INT4_BASE =
         "https://huggingface.co/Reza2kn/supertonic-3-litert/resolve/main/int4"
-    private const val LANG = "ru"
-    private const val VOICE = "F1"
     private const val TOTAL_STEPS = 5
 
     enum class VocoderImpl { TFLITE_INT4, ORT_FP32 }
 
-    fun runRussianSynthesis(
+    /**
+     * Run the hybrid synthesis pipeline.
+     * @param voiceName voice file basename without extension (e.g. "F1", "M3")
+     * @param lang language tag for the model's <lang>...</lang> wrap (e.g. "ru", "en")
+     */
+    fun runSynthesis(
         context: Context,
         text: String,
-        vocoderImpl: VocoderImpl = VocoderImpl.TFLITE_INT4,
+        voiceName: String,
+        lang: String,
+        vocoderImpl: VocoderImpl = VocoderImpl.ORT_FP32,
     ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                doRun(context, text, vocoderImpl)
+                val wav = doRun(context, text, voiceName, lang, vocoderImpl)
+                playWav(wav)
             } catch (t: Throwable) {
                 DebugLog.e("Hybrid crashed: ${t.javaClass.simpleName}: ${t.message}")
             }
         }
     }
 
-    private fun doRun(context: Context, text: String, vocoderImpl: VocoderImpl) {
+    private fun playWav(wavFile: File) {
+        try {
+            val mp = MediaPlayer()
+            mp.setDataSource(wavFile.absolutePath)
+            mp.prepare()
+            mp.setOnCompletionListener { it.release() }
+            mp.setOnErrorListener { p, what, extra ->
+                DebugLog.w("MediaPlayer error: what=$what extra=$extra")
+                p.release(); true
+            }
+            mp.start()
+        } catch (t: Throwable) {
+            DebugLog.w("MediaPlayer failed: ${t.javaClass.simpleName}: ${t.message}")
+        }
+    }
+
+    private fun doRun(
+        context: Context,
+        text: String,
+        voiceName: String,
+        lang: String,
+        vocoderImpl: VocoderImpl,
+    ): File {
         val tfliteDir = File(context.cacheDir, "tflite_smoke").apply { mkdirs() }
         ensureTfliteAssets(tfliteDir)
 
         val modelDir = File(context.filesDir, AssetManager.MODEL_VERSION)
         val onnxDir = File(modelDir, "onnx")
-        val voiceFile = File(modelDir, "voice_styles/$VOICE.json")
+        val voiceFile = File(modelDir, "voice_styles/$voiceName.json")
         val indexerFile = File(onnxDir, "unicode_indexer.json")
         val veFile = File(onnxDir, "vector_estimator.onnx")
         for (f in listOf(voiceFile, indexerFile, veFile)) {
             require(f.exists()) { "Missing required asset: ${f.absolutePath}" }
         }
 
-        DebugLog.i("Hybrid: tokenize+load (text='${text.take(40)}')")
+        DebugLog.i("Hybrid[$voiceName/$lang]: tokenize+load (text='${text.take(40)}')")
         val tokenizer = UnicodeTokenizer(indexerFile)
         val voice = VoiceStyle.load(voiceFile)
-        val tok = tokenizer.tokenize(text, LANG, FIXED_TEXT_LEN)
+        val tok = tokenizer.tokenize(text, lang, FIXED_TEXT_LEN)
         DebugLog.i("  tokens=${tok.validLen}/$FIXED_TEXT_LEN")
 
         // Stage 1: TFLite duration predictor
@@ -148,6 +177,7 @@ object HybridPipeline {
         val out = File(context.cacheDir, "hybrid_${suffix}_${System.currentTimeMillis()}.wav")
         WavUtils.saveWav(out, wavBytes, SAMPLE_RATE)
         DebugLog.i("Hybrid done -> ${out.name} (${wavBytes.size / 1024} KB)")
+        return out
     }
 
     private fun ensureTfliteAssets(dir: File) {
