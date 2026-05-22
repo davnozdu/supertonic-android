@@ -23,29 +23,20 @@ object LatentSampler {
     const val FIXED_LATENT_LEN = 320
 
     /**
-     * Build the initial noisy latent and latent_mask for a single utterance.
-     * @param durationSec total speech duration in seconds (DP scalar output)
-     * @return Triple(noisyLatent, latentMask, latentLen) — latentLen is the
-     *   number of valid latent timesteps; positions [latentLen .. 320) are
-     *   masked zero. noisyLatent is [144 * 320] row-major, latentMask is [320].
+     * Build the initial noisy latent + latent_mask sized exactly to the
+     * actual content (no fixed 320 padding). The downstream ORT VE and
+     * ORT vocoder accept dynamic latent_length, so we pay compute only
+     * for the real audio length — closely matching the Rust pipeline.
      */
     fun sample(durationSec: Float, seed: Long? = null): Sample {
         val wavLen = (durationSec * SAMPLE_RATE).toInt().coerceAtLeast(0)
-        val latentLen = ((wavLen + CHUNK_SIZE - 1) / CHUNK_SIZE).coerceAtMost(FIXED_LATENT_LEN)
-
+        val latentLen = ((wavLen + CHUNK_SIZE - 1) / CHUNK_SIZE).coerceAtLeast(1)
         val rng = if (seed != null) Random(seed) else Random.Default
-
-        // Fill the entire 320-length latent with gaussian noise — the TFLite
-        // graphs were retrained on this fixed shape and the diffusion model
-        // expects valid noise everywhere, with the mask alone signalling which
-        // timesteps are valid speech. Zeroing the tail introduced harmonic
-        // boundary artifacts (metallic hum on the otherwise recognizable
-        // speech).
-        val noisy = FloatArray(LATENT_DIM_VAL * FIXED_LATENT_LEN) {
+        val noisy = FloatArray(LATENT_DIM_VAL * latentLen) {
             gaussian(rng, std = 0.667f)
         }
-
-        val mask = FloatArray(FIXED_LATENT_LEN) { if (it < latentLen) 1f else 0f }
+        // For an exactly-sized latent the mask is all ones (no padding tail).
+        val mask = FloatArray(latentLen) { 1f }
         return Sample(noisy, mask, latentLen)
     }
 

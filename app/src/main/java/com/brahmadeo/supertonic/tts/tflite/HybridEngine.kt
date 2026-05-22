@@ -21,10 +21,8 @@ class HybridEngine(
 ) : AutoCloseable {
 
     private companion object {
-        const val FIXED_TEXT_LEN = 320
+        const val FIXED_TEXT_LEN = 320  // baked into the .tflite dp / text_enc graphs
         const val SAMPLE_RATE = 44100
-        const val LATENT_DIM = 144
-        const val FIXED_LATENT_LEN = 320
     }
 
     private val onnxDir = File(modelDir, "onnx")
@@ -78,12 +76,28 @@ class HybridEngine(
             ),
             mapOf(0 to textEmbOut),
         )
-        val textEmb = FloatArray(256 * FIXED_TEXT_LEN)
-        textEmbOut.rewind()
-        textEmbOut.asFloatBuffer().get(textEmb)
 
-        // sample noisy latent + mask for the actual content length
+        // Truncate text_emb [1, 256, 320] -> [1, 256, validLen] and the text
+        // mask to validLen, so VE/vocoder only do work proportional to real
+        // content. The TFLite text_encoder still pays for fixed 320 (its
+        // graph is hard-coded), but VE × diffusion steps dwarfs that.
+        val validLen = tok.validLen.coerceAtLeast(1)
+        val textEmbFull = FloatArray(256 * FIXED_TEXT_LEN)
+        textEmbOut.rewind()
+        textEmbOut.asFloatBuffer().get(textEmbFull)
+        val textEmb = FloatArray(256 * validLen)
+        for (c in 0 until 256) {
+            System.arraycopy(
+                textEmbFull, c * FIXED_TEXT_LEN,
+                textEmb, c * validLen,
+                validLen,
+            )
+        }
+        val textMask = FloatArray(validLen) { 1f }
+
+        // sample noisy latent + mask sized exactly to the content
         val sample = LatentSampler.sample(durationSec)
+        val latentLen = sample.latentLen
 
         // VE diffusion (ORT INT8) — N steps
         var xt = sample.noisyLatent
@@ -93,22 +107,17 @@ class HybridEngine(
                 textEmb = textEmb,
                 styleTtl = voice.styleTtl,
                 latentMask = sample.latentMask,
-                textMask = tok.textMask,
-                textLen = FIXED_TEXT_LEN,
+                textMask = textMask,
+                textLen = validLen,
+                latentLen = latentLen,
                 currentStep = step,
                 totalStep = steps,
             )
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
         }
 
-        // vocoder (ORT FP32) — crop to valid latent prefix to avoid leaking
-        // post-content samples
-        val latentLen = sample.latentLen.coerceAtLeast(1)
-        val cropped = FloatArray(LATENT_DIM * latentLen)
-        for (d in 0 until LATENT_DIM) {
-            System.arraycopy(xt, d * FIXED_LATENT_LEN, cropped, d * latentLen, latentLen)
-        }
-        val wavFull = voc.run(cropped, latentLen)
+        // vocoder (ORT FP32) — already dynamic latent_length
+        val wavFull = voc.run(xt, latentLen)
 
         val keep = (durationSec * SAMPLE_RATE).toInt().coerceIn(0, wavFull.size)
         val pcm = floatPcmToBytes(wavFull, keep, gain)

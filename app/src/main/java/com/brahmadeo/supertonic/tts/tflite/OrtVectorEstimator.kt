@@ -12,16 +12,15 @@ import java.nio.LongBuffer
  * Used by the TFLite-hybrid pipeline to run the diffusion loop with fixed
  * latent_length=320 to match the TFLite text_encoder / vocoder shapes.
  *
- * Inputs (per the ONNX graph — note text_emb is channels-first to match
- * the Reza2kn INT8 layout, same as TFLite text_encoder output):
- *   noisy_latent:  float32 [1, 144, 320]
- *   text_emb:      float32 [1, 256, T]
+ * Inputs (per the ONNX graph — all dynamic except style_ttl):
+ *   noisy_latent:  float32 [1, 144, latentLen]
+ *   text_emb:      float32 [1, 256, textLen]  (channels-first)
  *   style_ttl:     float32 [1, 50, 256]
- *   latent_mask:   float32 [1, 1, 320]
- *   text_mask:     float32 [1, 1, T]
+ *   latent_mask:   float32 [1, 1, latentLen]
+ *   text_mask:     float32 [1, 1, textLen]
  *   current_step:  float32 [1]
  *   total_step:    float32 [1]
- * Output: denoised_latent [1, 144, 320]
+ * Output: denoised_latent [1, 144, latentLen]
  */
 class OrtVectorEstimator(modelFile: File) : AutoCloseable {
 
@@ -55,16 +54,17 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
         noisyLatent: FloatArray,
         textEmb: FloatArray,         // [1, 256, textLen] channels-first
         styleTtl: FloatArray,        // [1, 50, 256]
-        latentMask: FloatArray,      // [1, 1, 320]
+        latentMask: FloatArray,      // [1, 1, latentLen]
         textMask: FloatArray,        // [1, 1, textLen]
         textLen: Int,
+        latentLen: Int,
         currentStep: Int,
         totalStep: Int,
     ): FloatArray {
         val inputs = HashMap<String, OnnxTensor>(7)
         try {
             inputs["noisy_latent"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(noisyLatent), longArrayOf(1, 144, 320)
+                env, FloatBuffer.wrap(noisyLatent), longArrayOf(1, 144, latentLen.toLong())
             )
             inputs["text_emb"] = OnnxTensor.createTensor(
                 env, FloatBuffer.wrap(textEmb), longArrayOf(1, 256, textLen.toLong())
@@ -73,7 +73,7 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
                 env, FloatBuffer.wrap(styleTtl), longArrayOf(1, 50, 256)
             )
             inputs["latent_mask"] = OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(latentMask), longArrayOf(1, 1, 320)
+                env, FloatBuffer.wrap(latentMask), longArrayOf(1, 1, latentLen.toLong())
             )
             inputs["text_mask"] = OnnxTensor.createTensor(
                 env, FloatBuffer.wrap(textMask), longArrayOf(1, 1, textLen.toLong())
@@ -87,7 +87,7 @@ class OrtVectorEstimator(modelFile: File) : AutoCloseable {
 
             session.run(inputs).use { result ->
                 val tensor = result.get("denoised_latent").get() as OnnxTensor
-                val flat = FloatArray(144 * 320)
+                val flat = FloatArray(144 * latentLen)
                 tensor.floatBuffer.get(flat)
                 return flat
             }
