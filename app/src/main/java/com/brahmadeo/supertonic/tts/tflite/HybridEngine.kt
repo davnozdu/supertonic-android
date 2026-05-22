@@ -29,20 +29,57 @@ class HybridEngine(
     }
 
     private val onnxDir = File(modelDir, "onnx")
-    private val tokenizer = UnicodeTokenizer(File(onnxDir, "unicode_indexer.json"))
 
-    // 4 threads per Interpreter (not 6): they run in parallel below, so the
-    // combined budget targets ~8 active workers on 6-8 core phones rather
-    // than oversubscribing with 2x6=12.
-    private val dp = Interpreter(File(onnxDir, "duration_predictor.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
-    private val txtEnc = Interpreter(File(onnxDir, "text_encoder.tflite"), Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
-    private val ve = OrtVectorEstimator(File(onnxDir, "vector_estimator.onnx"))
-    private val voc = OrtVocoder(File(onnxDir, "vocoder.onnx"))
+    // Open all four sessions and the indexer in parallel — XNNPACK kernel
+    // compile for the big graphs (VE ~500 ms, vocoder ~1 s) dominates first
+    // synthesis wall time. Loading concurrently turns the sum into the max,
+    // halving cold-start latency on the hybrid path.
+    private val tokenizer: UnicodeTokenizer
+    private val dp: Interpreter
+    private val txtEnc: Interpreter
+    private val ve: OrtVectorEstimator
+    private val voc: OrtVocoder
+
+    init {
+        // 4 threads per Interpreter — they share the inference cores with
+        // the ORT sessions at runtime, and at load time we use a separate
+        // 5-wide pool just for parallel construction.
+        val loaderPool = Executors.newFixedThreadPool(5) { r ->
+            Thread(r, "HybridEngine-loader").apply { isDaemon = true }
+        }
+        try {
+            val tokF = loaderPool.submit<UnicodeTokenizer> {
+                UnicodeTokenizer(File(onnxDir, "unicode_indexer.json"))
+            }
+            val dpF = loaderPool.submit<Interpreter> {
+                Interpreter(File(onnxDir, "duration_predictor.tflite"),
+                    Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
+            }
+            val teF = loaderPool.submit<Interpreter> {
+                Interpreter(File(onnxDir, "text_encoder.tflite"),
+                    Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
+            }
+            val veF = loaderPool.submit<OrtVectorEstimator> {
+                OrtVectorEstimator(File(onnxDir, "vector_estimator.onnx"))
+            }
+            val vocF = loaderPool.submit<OrtVocoder> {
+                OrtVocoder(File(onnxDir, "vocoder.onnx"))
+            }
+            tokenizer = tokF.get()
+            dp = dpF.get()
+            txtEnc = teF.get()
+            ve = veF.get()
+            voc = vocF.get()
+        } finally {
+            loaderPool.shutdown()
+        }
+    }
 
     private val voiceCache = HashMap<String, VoiceStyle>()
 
-    // Two-thread pool to run DP and text_encoder in parallel — they're
-    // independent of each other and use separate Interpreter instances.
+    // Two-thread pool to run DP and text_encoder in parallel during
+    // synthesize() — they're independent of each other and use separate
+    // Interpreter instances.
     private val parallel = Executors.newFixedThreadPool(2) { r ->
         Thread(r, "HybridEngine-tflite").apply { isDaemon = true }
     }
