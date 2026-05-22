@@ -12,8 +12,11 @@ object AssetManager {
     private const val TAG = "AssetManager"
     const val MODEL_VERSION = "v3"
 
-    private const val STANDARD_BASE_URL = "https://huggingface.co/Supertone/supertonic-3/resolve/main"
-    private const val ANDROID_BASE_URL = "https://huggingface.co/Reza2kn/supertonic-3-litert/resolve/main"
+    // Mirror of Supertone/supertonic-3 and Reza2kn/supertonic-3-litert assets
+    // hosted as a GitHub Release on this app's own repo. Single source of truth
+    // for first-launch downloads — Hugging Face is no longer reached.
+    private const val ASSETS_BASE_URL =
+        "https://github.com/davnozdu/supertonic-android/releases/download/assets-v1"
 
     private val VOICE_FILES = listOf(
         "voice_styles/M1.json", "voice_styles/M2.json", "voice_styles/M3.json", "voice_styles/M4.json", "voice_styles/M5.json",
@@ -32,48 +35,54 @@ object AssetManager {
             .edit().putString("selected_model", type).apply()
     }
 
-    private data class AssetFile(val remotePath: String, val localPath: String, val baseUrl: String)
+    /**
+     * @param remoteName flat filename on the GitHub Release (e.g. "supertone_vocoder.onnx")
+     * @param localPath path under filesDir/v3/ — keeps the same layout the engines
+     *                   expect (onnx/<file>, voice_styles/<file>)
+     */
+    private data class AssetFile(val remoteName: String, val localPath: String)
 
-    private fun getFilesForModel(modelType: String): List<AssetFile> {
-        val standardBase = STANDARD_BASE_URL
-        val androidBase = ANDROID_BASE_URL
+    private fun voiceFilesFrom(prefix: String): List<AssetFile> =
+        VOICE_FILES.map { local ->
+            // local = "voice_styles/M1.json" -> remote = "<prefix>_voice_M1.json"
+            val basename = local.removePrefix("voice_styles/").removeSuffix(".json")
+            AssetFile("${prefix}_voice_${basename}.json", local)
+        }
 
-        return when (modelType) {
+    private fun getFilesForModel(modelType: String): List<AssetFile> =
+        when (modelType) {
             "android_optimized_int8" -> {
                 // Hybrid INT4 .tflite + INT8 VE .onnx + FP32 vocoder .onnx.
-                // INT4 vocoder.tflite is intentionally skipped — it adds an
-                // audible 7-11 kHz metallic ringing the FP32 vocoder doesn't.
                 listOf(
-                    AssetFile("int4/duration_predictor.tflite", "onnx/duration_predictor.tflite", androidBase),
-                    AssetFile("int4/text_encoder.tflite", "onnx/text_encoder.tflite", androidBase),
-                    AssetFile("vector_estimator_int8.onnx", "onnx/vector_estimator.onnx", androidBase),
-                    AssetFile("onnx/vocoder.onnx", "onnx/vocoder.onnx", standardBase),
-                    AssetFile("onnx/tts.json", "onnx/tts.json", standardBase),
-                    AssetFile("onnx/unicode_indexer.json", "onnx/unicode_indexer.json", standardBase)
-                ) + VOICE_FILES.map { AssetFile(it, it, androidBase) }
+                    AssetFile("reza_int4_duration_predictor.tflite", "onnx/duration_predictor.tflite"),
+                    AssetFile("reza_int4_text_encoder.tflite",       "onnx/text_encoder.tflite"),
+                    AssetFile("reza_vector_estimator_int8.onnx",     "onnx/vector_estimator.onnx"),
+                    AssetFile("supertone_vocoder.onnx",              "onnx/vocoder.onnx"),
+                    AssetFile("supertone_tts.json",                  "onnx/tts.json"),
+                    AssetFile("supertone_unicode_indexer.json",      "onnx/unicode_indexer.json"),
+                ) + voiceFilesFrom("reza")
             }
             "android_optimized_fp32" -> {
                 listOf(
-                    AssetFile("onnx/duration_predictor.onnx", "onnx/duration_predictor.onnx", standardBase),
-                    AssetFile("onnx/text_encoder.onnx", "onnx/text_encoder.onnx", standardBase),
-                    AssetFile("vector_estimator.onnx", "onnx/vector_estimator.onnx", androidBase),
-                    AssetFile("onnx/vocoder.onnx", "onnx/vocoder.onnx", standardBase),
-                    AssetFile("onnx/tts.json", "onnx/tts.json", standardBase),
-                    AssetFile("onnx/unicode_indexer.json", "onnx/unicode_indexer.json", standardBase)
-                ) + VOICE_FILES.map { AssetFile(it, it, androidBase) }
+                    AssetFile("supertone_duration_predictor.onnx",   "onnx/duration_predictor.onnx"),
+                    AssetFile("supertone_text_encoder.onnx",         "onnx/text_encoder.onnx"),
+                    AssetFile("reza_vector_estimator.onnx",          "onnx/vector_estimator.onnx"),
+                    AssetFile("supertone_vocoder.onnx",              "onnx/vocoder.onnx"),
+                    AssetFile("supertone_tts.json",                  "onnx/tts.json"),
+                    AssetFile("supertone_unicode_indexer.json",      "onnx/unicode_indexer.json"),
+                ) + voiceFilesFrom("reza")
             }
             else -> { // standard
                 listOf(
-                    AssetFile("onnx/duration_predictor.onnx", "onnx/duration_predictor.onnx", standardBase),
-                    AssetFile("onnx/text_encoder.onnx", "onnx/text_encoder.onnx", standardBase),
-                    AssetFile("onnx/vector_estimator.onnx", "onnx/vector_estimator.onnx", standardBase),
-                    AssetFile("onnx/vocoder.onnx", "onnx/vocoder.onnx", standardBase),
-                    AssetFile("onnx/tts.json", "onnx/tts.json", standardBase),
-                    AssetFile("onnx/unicode_indexer.json", "onnx/unicode_indexer.json", standardBase)
-                ) + VOICE_FILES.map { AssetFile(it, it, standardBase) }
+                    AssetFile("supertone_duration_predictor.onnx",   "onnx/duration_predictor.onnx"),
+                    AssetFile("supertone_text_encoder.onnx",         "onnx/text_encoder.onnx"),
+                    AssetFile("supertone_vector_estimator.onnx",     "onnx/vector_estimator.onnx"),
+                    AssetFile("supertone_vocoder.onnx",              "onnx/vocoder.onnx"),
+                    AssetFile("supertone_tts.json",                  "onnx/tts.json"),
+                    AssetFile("supertone_unicode_indexer.json",      "onnx/unicode_indexer.json"),
+                ) + voiceFilesFrom("supertone")
             }
         }
-    }
 
     fun isReady(context: Context): Boolean {
         val baseDir = File(context.filesDir, MODEL_VERSION)
@@ -117,7 +126,7 @@ object AssetManager {
                     if (!it.exists()) it.mkdirs()
                 }
 
-                val url = "${asset.baseUrl}/${asset.remotePath}"
+                val url = "$ASSETS_BASE_URL/${asset.remoteName}"
                 try {
                     onProgress("Downloading ${asset.localPath}...", (index.toFloat() / files.size))
                     Log.d(TAG, "Downloading $url to ${targetFile.absolutePath}")
@@ -128,7 +137,7 @@ object AssetManager {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to download ${asset.remotePath}", e)
+                    Log.e(TAG, "Failed to download ${asset.remoteName}", e)
                     targetFile.delete()
                     throw e
                 }
