@@ -8,7 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -72,13 +71,11 @@ fun MainScreen(
     onAdvancedNormalizationEnabledChange: (Boolean) -> Unit,
 
     onResetClick: () -> Unit,
-    onSavedAudioClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onQueueClick: () -> Unit,
     onLexiconClick: () -> Unit,
     onTtsSettingsClick: () -> Unit,
     onDeleteModelClick: () -> Unit,
-    onOpenEbookClick: () -> Unit,
 
     canResume: Boolean,
     onResumeClick: () -> Unit,
@@ -112,21 +109,11 @@ fun MainScreen(
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text(stringResource(AppR.string.action_reset)) }, 
+                            text = { Text(stringResource(AppR.string.action_reset)) },
                             onClick = { showMenu = false; onResetClick() }
                         )
                         DropdownMenuItem(
-                            text = { Text(stringResource(AppR.string.action_open_ebook)) }, 
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null) },
-                            onClick = { showMenu = false; onOpenEbookClick() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(AppR.string.action_saved)) }, 
-                            leadingIcon = { Icon(Icons.Default.Save, contentDescription = null) },
-                            onClick = { showMenu = false; onSavedAudioClick() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(AppR.string.action_queue)) }, 
+                            text = { Text(stringResource(AppR.string.action_queue)) },
                             leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) },
                             onClick = { showMenu = false; onQueueClick() }
                         )
@@ -573,13 +560,11 @@ fun MainScreenPreview() {
             isAdvancedNormalizationEnabled = false,
             onAdvancedNormalizationEnabledChange = {},
             onResetClick = {},
-            onSavedAudioClick = {},
             onHistoryClick = {},
             onQueueClick = {},
             onLexiconClick = {},
             onTtsSettingsClick = {},
             onDeleteModelClick = {},
-            onOpenEbookClick = {},
             canResume = true,
             onResumeClick = {},
             showMiniPlayer = true,

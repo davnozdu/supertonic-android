@@ -46,18 +46,10 @@
 
     <!-- Playback Activity -->
     <string name="now_playing_title">Now Playing</string>
-    <string name="saving_audio">Saving Audio…</string>
-    <string name="saved_to_fmt">Saved to %1$s</string>
-    <string name="export_failed">Export Failed</string>
 
     <!-- History Activity -->
     <string name="history_title">History</string>
     <string name="clear_all_button">Clear All</string>
-
-    <!-- Saved Audio Activity -->
-    <string name="saved_audio_title">Saved Audio</string>
-    <string name="delete_audio_title">Delete Audio</string>
-    <string name="delete_audio_message_fmt">Are you sure you want to delete %1$s?</string>
 
     <!-- Lexicon Activity -->
     <string name="lexicon_title">Pronunciation Dictionary</string>
@@ -83,8 +75,6 @@
 
     <!-- Menus -->
     <string name="action_reset">Reset</string>
-    <string name="action_open_ebook">Open Ebook (EPUB/PDF)</string>
-    <string name="action_saved">Saved Audio</string>
     <string name="action_history">History</string>
     <string name="action_queue">Queue</string>
     <string name="action_lexicon">Lexicon</string>
@@ -153,7 +143,6 @@
     <string name="notif_synthesizing">Synthesizing…</string>
     <string name="notif_playing">Playing Audio</string>
     <string name="notif_paused">Paused</string>
-    <string name="notif_exporting">Exporting Audio…</string>
 
     <!-- Lexicon / Playback section labels -->
     <string name="section_punctuation">Punctuation</string>

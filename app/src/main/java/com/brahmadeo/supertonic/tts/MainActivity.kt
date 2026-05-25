@@ -15,7 +15,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.remember
 import androidx.compose.material3.ButtonDefaults
@@ -30,13 +29,10 @@ import com.brahmadeo.supertonic.tts.ui.DownloadScreen
 import com.brahmadeo.supertonic.tts.ui.MainScreen
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 import com.brahmadeo.supertonic.tts.utils.AssetManager
-import com.brahmadeo.supertonic.tts.utils.EbookManager
-import com.brahmadeo.supertonic.tts.utils.EbookParser
 import com.brahmadeo.supertonic.tts.utils.HistoryManager
 import com.brahmadeo.supertonic.tts.utils.LexiconManager
 import com.brahmadeo.supertonic.tts.utils.QueueManager
 import com.brahmadeo.supertonic.tts.viewmodel.MainViewModel
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,7 +46,6 @@ import androidx.compose.foundation.layout.*
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
-    private lateinit var ebookParser: EbookParser
 
     // Data — Supertonic 3 supports 31 languages + an "na" fallback for unknown.
     private val languages = mapOf(
@@ -115,7 +110,6 @@ class MainActivity : ComponentActivity() {
                 viewModel.miniPlayerIsPlaying.value = false
             }
         }
-        override fun onExportComplete(success: Boolean, path: String) { }
     }
 
     private val connection = object : ServiceConnection {
@@ -137,43 +131,6 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
-
-    private val ebookLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            val localPath = EbookManager.importBook(this, it)
-            if (localPath != null) {
-                val intent = Intent(this, EbookOutlineActivity::class.java).apply {
-                    putExtra(EbookOutlineActivity.EXTRA_URI, localPath)
-                }
-                ebookOutlineLauncher.launch(intent)
-            } else {
-                Toast.makeText(this, "Failed to import book", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private val ebookOutlineLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        Log.d("MainActivity", "ebookOutlineLauncher result: ${result.resultCode}")
-        if (result.resultCode == RESULT_OK) {
-            val text = result.data?.getStringExtra(EbookOutlineActivity.EXTRA_TEXT)
-            Log.d("MainActivity", "Received text length: ${text?.length ?: 0}")
-            if (!text.isNullOrEmpty()) {
-                // Reset state before loading new ebook text
-                viewModel.inputText.value = ""
-                val stopIntent = Intent(this, PlaybackService::class.java).apply { action = "STOP_PLAYBACK" }
-                startService(stopIntent)
-                
-                viewModel.inputText.value = prepareTextForTts(text, viewModel.currentLang.value)
-                Toast.makeText(this, "Chapter loaded", Toast.LENGTH_SHORT).show()
-            } else {
-                Log.e("MainActivity", "Received empty or null text from ebook activity")
-            }
-        }
-    }
 
     private fun prepareTextForTts(text: String?, lang: String): String {
         if (text.isNullOrEmpty()) return ""
@@ -210,11 +167,6 @@ class MainActivity : ComponentActivity() {
         val bindIntent = Intent(this, PlaybackService::class.java)
         bindService(bindIntent, connection, BIND_AUTO_CREATE)
 
-        // EbookParser constructor is cheap (only stores a context), keep it on
-        // the main thread so handleIntent below can dispatch ebook intents
-        // without waiting for the heavier loaders.
-        ebookParser = EbookParser(this)
-
         // Defer the heavy initializers (~500 ms - 1.5 s combined) to a
         // background coroutine so the first frame paints immediately. Each
         // is independent and safe to call after the UI is up — synthesis
@@ -223,7 +175,6 @@ class MainActivity : ComponentActivity() {
         // sentence after cold start.
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                PDFBoxResourceLoader.init(this@MainActivity)
                 LexiconManager.load(this@MainActivity)
                 com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this@MainActivity)
                 QueueManager.initialize(this@MainActivity)
@@ -447,25 +398,11 @@ class MainActivity : ComponentActivity() {
                             val stopIntent = Intent(this, PlaybackService::class.java).apply { action = "STOP_PLAYBACK" }
                             startService(stopIntent)
                         },
-                        onSavedAudioClick = { startActivity(Intent(this, SavedAudioActivity::class.java)) },
                         onHistoryClick = { historyLauncher.launch(Intent(this, HistoryActivity::class.java)) },
                         onQueueClick = { startActivity(Intent(this, QueueActivity::class.java)) },
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },
                         onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
-                        onOpenEbookClick = {
-                            try {
-                                if (EbookManager.getRecentBooks(this).isEmpty()) {
-                                    ebookLauncher.launch(arrayOf("application/epub+zip", "application/pdf"))
-                                } else {
-                                    val intent = Intent(this, EbookLibraryActivity::class.java)
-                                    ebookOutlineLauncher.launch(intent)
-                                }
-                            } catch (e: Exception) {
-                                Log.e("MainActivity", "Failed to open ebook library", e)
-                                ebookLauncher.launch(arrayOf("application/epub+zip", "application/pdf"))
-                            }
-                        },
 
                         canResume = viewModel.canResume.value,
                         onResumeClick = {

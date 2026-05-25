@@ -103,8 +103,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 33
-        versionName "4.0.0-beta3"
+        versionCode 34
+        versionName "4.0.0-beta4"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
@@ -130,14 +130,8 @@ android {
 
     configurations.configureEach {
         resolutionStrategy.eachDependency { details ->
-            if (details.requested.group == 'androidx.media3' && details.requested.name != 'media3-common-ktx') {
-                details.useVersion '1.3.1'
-            }
             if (details.requested.group == 'androidx.core' && details.requested.name != 'core-viewtree') {
                 details.useVersion '1.18.0'
-            }
-            if (details.requested.group == 'androidx.recyclerview') {
-                details.useVersion '1.3.2'
             }
             if (details.requested.group == 'androidx.lifecycle') {
                 details.useVersion '2.8.4'
@@ -184,8 +178,6 @@ kotlin {
         jvmTarget.set(JvmTarget.JVM_17)
         freeCompilerArgs.addAll(
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-opt-in=org.readium.r2.shared.InternalReadiumApi",
-            "-opt-in=org.readium.r2.shared.util.InternalReadiumApi"
         )
     }
 }
@@ -213,15 +205,6 @@ dependencies {
     // Iteration 1: only verify the AAR drops into the build cleanly alongside ORT.
     // Pipeline integration arrives in a later iteration.
     implementation 'com.google.ai.edge.litert:litert:2.1.5'
-    
-    // Readium Toolkit
-    implementation ("org.readium.kotlin-toolkit:readium-shared:$readium_version")
-    implementation ("org.readium.kotlin-toolkit:readium-streamer:$readium_version")
-    implementation ("org.readium.kotlin-toolkit:readium-adapter-pdfium:$readium_version") {
-        exclude group: 'androidx.media3', module: 'media3-common-ktx'
-    }
-
-    implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
 }

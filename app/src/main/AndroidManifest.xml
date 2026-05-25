@@ -73,21 +73,9 @@
             android:parentActivityName=".MainActivity"
             android:label="Queue" />
 
-        <activity android:name=".SavedAudioActivity"
-            android:parentActivityName=".MainActivity"
-            android:label="Saved Audio" />
-
         <activity android:name=".LexiconActivity"
             android:parentActivityName=".MainActivity"
             android:label="Pronunciation Dictionary" />
-
-        <activity android:name=".EbookOutlineActivity"
-            android:parentActivityName=".MainActivity"
-            android:label="Ebook Chapters" />
-
-        <activity android:name=".EbookLibraryActivity"
-            android:parentActivityName=".MainActivity"
-            android:label="Ebook Library" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

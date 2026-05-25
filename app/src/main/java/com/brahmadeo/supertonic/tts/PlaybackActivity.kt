@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
-import android.os.Environment
 import android.os.IBinder
 import android.os.RemoteException
 import android.widget.Toast
@@ -19,10 +18,6 @@ import com.brahmadeo.supertonic.tts.service.PlaybackService
 import com.brahmadeo.supertonic.tts.ui.PlaybackScreen
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 import com.brahmadeo.supertonic.tts.utils.TextNormalizer
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.core.content.edit
 
 class PlaybackActivity : ComponentActivity() {
@@ -35,9 +30,6 @@ class PlaybackActivity : ComponentActivity() {
     private var currentIndexState = mutableIntStateOf(-1)
     private var isPlayingState = mutableStateOf(false)
     private var isServiceActiveState = mutableStateOf(false)
-    private var isExportingState = mutableStateOf(false)
-    private var exportCurrentState = mutableIntStateOf(0)
-    private var exportTotalState = mutableIntStateOf(0)
 
     // State persistence
     private var currentText = ""
@@ -64,15 +56,10 @@ class PlaybackActivity : ComponentActivity() {
 
         override fun onProgress(current: Int, total: Int) {
             runOnUiThread {
-                if (isExportingState.value) {
-                    exportCurrentState.intValue = current
-                    exportTotalState.intValue = total
-                } else {
-                    currentIndexState.intValue = current
-                    updateIndexState(current)
-                    if (total > 0 && current !in 0 until total) {
-                        clearState()
-                    }
+                currentIndexState.intValue = current
+                updateIndexState(current)
+                if (total > 0 && current !in 0 until total) {
+                    clearState()
                 }
             }
         }
@@ -84,17 +71,6 @@ class PlaybackActivity : ComponentActivity() {
             }
         }
 
-        override fun onExportComplete(success: Boolean, path: String) {
-            runOnUiThread {
-                if (!isExportingState.value) return@runOnUiThread
-                isExportingState.value = false
-                if (success) {
-                    Toast.makeText(this@PlaybackActivity, getString(R.string.saved_to_fmt, path), Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(this@PlaybackActivity, getString(R.string.export_failed), Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
     }
 
     private val connection = object : ServiceConnection {
@@ -160,21 +136,10 @@ class PlaybackActivity : ComponentActivity() {
                     currentIndex = currentIndexState.intValue,
                     isPlaying = isPlayingState.value,
                     isServiceActive = isServiceActiveState.value,
-                    isExporting = isExportingState.value,
-                    exportCurrent = exportCurrentState.intValue,
-                    exportTotal = exportTotalState.intValue,
                     onBackClick = { finish() },
                     onItemClick = { index -> playFromIndex(index) },
                     onPlayPauseClick = { handlePlayPause() },
                     onStopClick = { handleStop() },
-                    onExportClick = { startExport() },
-                    onCancelExportClick = {
-                        try { playbackService?.stop() } catch (e: Exception) {}
-                        if (isExportingState.value) {
-                            isExportingState.value = false
-                            Toast.makeText(this@PlaybackActivity, "Audio saving cancelled", Toast.LENGTH_SHORT).show()
-                        }
-                    }
                 )
             }
         }
@@ -293,32 +258,6 @@ class PlaybackActivity : ComponentActivity() {
                  playbackListenerStub.onStateChanged(false, true, false)
             }
         } catch (e: RemoteException) { }
-    }
-
-    private fun startExport() {
-        if (currentText.isEmpty()) {
-            Toast.makeText(this, "No text to save", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        exportCurrentState.intValue = 0
-        exportTotalState.intValue = sentencesState.value.size
-        isExportingState.value = true
-
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val filename = "Supertonic_TTS_$timestamp.wav"
-        val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-        val appDir = File(musicDir, "Supertonic Audio")
-        if (!appDir.exists()) appDir.mkdirs()
-        val file = File(appDir, filename)
-
-        try {
-            playbackService?.exportAudio(currentText, currentLang, currentVoicePath, currentSpeed, currentSteps, file.absolutePath)
-        } catch (e: RemoteException) {
-            e.printStackTrace()
-            isExportingState.value = false
-            Toast.makeText(this, getString(R.string.export_failed), Toast.LENGTH_SHORT).show()
-        }
     }
 
     override fun onDestroy() {

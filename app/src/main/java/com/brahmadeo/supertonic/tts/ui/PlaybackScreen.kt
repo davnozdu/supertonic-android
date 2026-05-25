@@ -22,8 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.R as AppR
-import com.brahmadeo.supertonic.tts.ui.components.IndeterminateWavyProgressIndicator
-import com.brahmadeo.supertonic.tts.ui.components.WavyCircularProgressIndicator
 import com.brahmadeo.supertonic.tts.ui.components.WavyLinearProgressIndicator
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,15 +31,10 @@ fun PlaybackScreen(
     currentIndex: Int,
     isPlaying: Boolean,
     isServiceActive: Boolean,
-    isExporting: Boolean,
-    exportCurrent: Int,
-    exportTotal: Int,
     onBackClick: () -> Unit,
     onItemClick: (Int) -> Unit,
     onPlayPauseClick: () -> Unit,
     onStopClick: () -> Unit,
-    onExportClick: () -> Unit,
-    onCancelExportClick: () -> Unit
 ) {
     val listState = rememberLazyListState()
 
@@ -165,82 +158,6 @@ fun PlaybackScreen(
                             )
                         }
 
-                        if (isServiceActive || !isPlaying) {
-                            IconButton(
-                                onClick = onExportClick,
-                                enabled = !isExporting,
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.primary
-                                )
-                            ) {
-                                Icon(Icons.Default.Save, contentDescription = "Export")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Export Overlay
-            if (isExporting) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Card(
-                            modifier = Modifier
-                                .width(300.dp)
-                                .padding(16.dp),
-                            shape = MaterialTheme.shapes.extraLarge
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "Saving Audio...",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Spacer(modifier = Modifier.height(24.dp))
-                                if (exportTotal > 0) {
-                                    val progress = exportCurrent.toFloat() / exportTotal
-                                    Box(contentAlignment = Alignment.Center) {
-                                        WavyCircularProgressIndicator(
-                                            progress = { progress },
-                                            modifier = Modifier.size(80.dp),
-                                            strokeWidth = 6.dp,
-                                            waveAmplitude = 3.dp
-                                        )
-                                        Text(
-                                            text = "${(progress * 100).toInt()}%",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        text = "$exportCurrent / $exportTotal chunks",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                } else {
-                                    IndeterminateWavyProgressIndicator(
-                                        modifier = Modifier.size(80.dp),
-                                        strokeWidth = 6.dp
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(24.dp))
-                                TextButton(
-                                    onClick = onCancelExportClick,
-                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                                ) {
-                                    Text(stringResource(AppR.string.cancel_action))
-                                }
-                            }
-                        }
                     }
                 }
             }

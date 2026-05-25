@@ -28,7 +28,6 @@ import com.brahmadeo.supertonic.tts.utils.PlaybackPrefs
 import com.brahmadeo.supertonic.tts.utils.QueueItem
 import com.brahmadeo.supertonic.tts.utils.QueueManager
 import com.brahmadeo.supertonic.tts.utils.TextNormalizer
-import com.brahmadeo.supertonic.tts.utils.WavUtils
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +42,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 
 class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.OnAudioFocusChangeListener {
@@ -79,10 +77,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
         override fun removeListener(listener: IPlaybackListener?) {
             this@PlaybackService.removeListener(listener)
-        }
-
-        override fun exportAudio(text: String, lang: String, stylePath: String, speed: Float, steps: Int, outputPath: String) {
-            this@PlaybackService.exportAudio(text, lang, stylePath, speed, steps, File(outputPath))
         }
 
         override fun getCurrentIndex(): Int {
@@ -769,16 +763,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         listeners.finishBroadcast()
     }
 
-    private fun notifyListenerExportComplete(success: Boolean, path: String) {
-        val n = listeners.beginBroadcast()
-        for (i in 0 until n) {
-            try {
-                listeners.getBroadcastItem(i).onExportComplete(success, path)
-            } catch (_: RemoteException) {}
-        }
-        listeners.finishBroadcast()
-    }
-
     private fun requestAudioFocus(): Boolean {
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -834,66 +818,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     audioTrack?.setVolume(1.0f)
                 } catch (_: Exception) {}
                 if (resumeOnFocusGain) play()
-            }
-        }
-    }
-
-    fun exportAudio(text: String, lang: String, stylePath: String, speed: Float, steps: Int, outputFile: File) {
-        serviceScope.launch {
-            if (synthesisJob?.isActive == true) {
-                SupertonicTTS.setCancelled(true)
-                synthesisJob?.cancelAndJoin()
-            }
-            
-            stopPlayback(removeNotification = false)
-            SupertonicTTS.setCancelled(false)
-            isSynthesizing = true
-            notifyListenerState(false)
-            startForegroundService(getString(R.string.notif_exporting), false)
-            
-            synthesisJob = launch(Dispatchers.IO) {
-                var exportSuccess = false
-                try {
-                    val sentences = textNormalizer.splitIntoSentences(text, lang)
-                    if (sentences.isEmpty()) {
-                        Log.w(TAG, "Export: No sentences found")
-                        return@launch
-                    }
-
-                    val outputStream = ByteArrayOutputStream()
-                    for ((index, sentence) in sentences.withIndex()) {
-                        if (!isActive || SupertonicTTS.isCancelled()) break
-                        
-                        withContext(Dispatchers.Main) {
-                            notifyListenerProgress(index + 1, sentences.size)
-                        }
-
-                        val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-                        val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
-                        val normalizedText = textNormalizer.normalize(sentence, lang, isAdvancedEnabled)
-
-                        val audioData = SupertonicTTS.generateAudio(normalizedText, lang, stylePath, speed, 0.0f, steps, VOLUME_BOOST_FACTOR, null)
-                        if (audioData != null && audioData.isNotEmpty()) {
-                            outputStream.write(audioData)
-                        } else if (SupertonicTTS.isCancelled()) {
-                            break
-                        }
-                    }
-                    
-                    if (isActive && !SupertonicTTS.isCancelled() && outputStream.size() > 0) {
-                        WavUtils.saveWav(outputFile, outputStream.toByteArray(), SupertonicTTS.getAudioSampleRate())
-                        exportSuccess = true
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Export failed", e)
-                } finally {
-                    withContext(Dispatchers.Main) {
-                        isSynthesizing = false
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        notifyListenerExportComplete(exportSuccess, outputFile.absolutePath)
-                        notifyListenerState(false)
-                    }
-                }
             }
         }
     }

@@ -46,18 +46,10 @@
 
     <!-- Playback Activity -->
     <string name="now_playing_title">Сейчас играет</string>
-    <string name="saving_audio">Сохранение аудио…</string>
-    <string name="saved_to_fmt">Сохранено в %1$s</string>
-    <string name="export_failed">Ошибка экспорта</string>
 
     <!-- History Activity -->
     <string name="history_title">История</string>
     <string name="clear_all_button">Очистить всё</string>
-
-    <!-- Saved Audio Activity -->
-    <string name="saved_audio_title">Сохранённое аудио</string>
-    <string name="delete_audio_title">Удалить аудио</string>
-    <string name="delete_audio_message_fmt">Удалить файл %1$s?</string>
 
     <!-- Lexicon Activity -->
     <string name="lexicon_title">Словарь произношения</string>
@@ -83,8 +75,6 @@
 
     <!-- Menus -->
     <string name="action_reset">Сбросить</string>
-    <string name="action_open_ebook">Открыть книгу (EPUB/PDF)</string>
-    <string name="action_saved">Сохранённое аудио</string>
     <string name="action_history">История</string>
     <string name="action_queue">Очередь</string>
     <string name="action_lexicon">Словарь</string>
@@ -153,7 +143,6 @@
     <string name="notif_synthesizing">Синтез…</string>
     <string name="notif_playing">Воспроизведение</string>
     <string name="notif_paused">Пауза</string>
-    <string name="notif_exporting">Экспорт аудио…</string>
 
     <!-- Voices -->
     <string name="voice_m1">Алекс — живой, бодрый</string>
