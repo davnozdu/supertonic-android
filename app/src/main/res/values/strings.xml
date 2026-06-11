@@ -100,6 +100,8 @@
     <string name="model_android_int8_desc">Optimized hybrid for Android: INT4 + INT8 VE + FP32 vocoder.</string>
     <string name="model_android_fp32_title">FP32 (Large &amp; Original)</string>
     <string name="model_android_fp32_desc">Full precision version from the fork.</string>
+    <string name="model_android_fp16_title">FP16 (Kyumdroid)</string>
+    <string name="model_android_fp16_desc">Half-size fp16 weights, near-identical quality to FP32.</string>
 
     <string name="synthesize_content_description">Synthesize and play speech</string>
     <string name="input_label">Input</string>

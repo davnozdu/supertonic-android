@@ -100,6 +100,8 @@
     <string name="model_android_int8_desc">Оптимизированный гибрид: INT4 + INT8 VE + FP32 вокодер.</string>
     <string name="model_android_fp32_title">FP32 (большая, исходная)</string>
     <string name="model_android_fp32_desc">Версия из форка с полной точностью.</string>
+    <string name="model_android_fp16_title">FP16 (Kyumdroid)</string>
+    <string name="model_android_fp16_desc">Вдвое меньше FP32 при почти том же качестве.</string>
 
     <string name="synthesize_content_description">Озвучить и проиграть</string>
     <string name="input_label">Текст</string>

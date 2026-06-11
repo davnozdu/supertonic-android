@@ -78,6 +78,19 @@ object AssetManager {
                     AssetFile("supertone_unicode_indexer.json",      "onnx/unicode_indexer.json"),
                 ) + voiceFilesFrom("reza")
             }
+            "android_optimized_fp16" -> {
+                // Kyumdroid/supertonic-3-quant: fp16 weights with fp32 I/O
+                // (keep_io_types=True), so it runs on the same Rust ORT path
+                // as the fp32 presets at roughly half the download size.
+                listOf(
+                    AssetFile("kyum_fp16_duration_predictor.onnx",   "onnx/duration_predictor.onnx"),
+                    AssetFile("kyum_fp16_text_encoder.onnx",         "onnx/text_encoder.onnx"),
+                    AssetFile("kyum_fp16_vector_estimator.onnx",     "onnx/vector_estimator.onnx"),
+                    AssetFile("kyum_fp16_vocoder.onnx",              "onnx/vocoder.onnx"),
+                    AssetFile("supertone_tts.json",                  "onnx/tts.json"),
+                    AssetFile("supertone_unicode_indexer.json",      "onnx/unicode_indexer.json"),
+                ) + voiceFilesFrom("supertone")
+            }
             else -> { // standard
                 listOf(
                     AssetFile("supertone_duration_predictor.onnx",   "onnx/duration_predictor.onnx"),

@@ -241,6 +241,20 @@ class MainActivity : ComponentActivity() {
                                         Text(getString(R.string.model_android_fp32_desc), style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
+
+                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+
+                                // FP16 (Kyumdroid quantized)
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = viewModel.selectedModel.value == "android_optimized_fp16",
+                                        onClick = { viewModel.selectedModel.value = "android_optimized_fp16" }
+                                    )
+                                    Column {
+                                        Text(getString(R.string.model_android_fp16_title), style = MaterialTheme.typography.titleMedium)
+                                        Text(getString(R.string.model_android_fp16_desc), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                             }
                         },
                         confirmButton = {
