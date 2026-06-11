@@ -67,8 +67,17 @@ object SupertonicTTS {
         return getSocClass(nativePtr) != -1
     }
 
+    // XNNPACK executes the bulk of the ONNX graphs (Conv/MatMul) on the
+    // Standard/FP32/FP16 presets, so its pool size — not ORT's — bounds
+    // Rust-path synthesis speed. The old default of 1 left the heavy
+    // vector_estimator/vocoder single-threaded while the hybrid Kotlin
+    // path runs the same kernels with 6-thread XNNPACK (OrtVocoder /
+    // OrtVectorEstimator). Match it, capped by the actual core count.
+    private fun defaultXnnThreads(): Int =
+        Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
+
     @Synchronized
-    fun initialize(modelPath: String, libPath: String, ortThreads: Int = 4, xnnThreads: Int = 1): Boolean {
+    fun initialize(modelPath: String, libPath: String, ortThreads: Int = 4, xnnThreads: Int = defaultXnnThreads()): Boolean {
         if (nativePtr != 0L) {
             // Health check: Can we still talk to the engine?
             if (getSocClass(nativePtr) != -1) {

@@ -451,7 +451,7 @@ class TextNormalizer {
                 restored = restored.replace(placeholder, abbr, ignoreCase = true)
             }
             restored.trim()
-        }.filter { it.isNotEmpty() }
+        }.filter { it.isNotEmpty() }.toMutableList()
 
         // Chunking Logic: Accumulate sentences up to chunkLimit
         // (chunkLimit was computed above from PlaybackPrefs.chunkMode).
@@ -472,6 +472,15 @@ class TextNormalizer {
             } else null
         } else null
 
+        // Fast first chunk: the synthesis time of chunk #0 is the
+        // time-to-first-audio of every call — and reader apps send each
+        // paragraph as its own call, so this latency is exactly the audible
+        // gap between paragraphs. Cap the opening chunk at SMALL size (and
+        // peel an over-long opening sentence at a comma) so the voice starts
+        // sooner; later chunks use the configured limit, leaving the prosody
+        // of the body unaffected.
+        val firstChunkLimit = minOf(chunkLimit, PlaybackPrefs.ChunkMode.SMALL.limit)
+
         var i = 0
         while (i < processedSentences.size) {
             var sentence = processedSentences[i]
@@ -484,23 +493,56 @@ class TextNormalizer {
                 sentence = sentence.replaceFirst(volatilePunctuationRegex, " $1$2")
             }
 
+            // Limit for the chunk being assembled right now — small while
+            // chunk #0 is still open, configured size afterwards.
+            val limit = if (chunkedSentences.isEmpty()) firstChunkLimit else chunkLimit
+
             // HANDLE STABLE SENTENCE (Standard Accumulation)
-            if (currentChunk.length + sentence.length + 1 <= chunkLimit) {
+            if (currentChunk.length + sentence.length + 1 <= limit) {
                 if (currentChunk.isNotEmpty()) {
                     currentChunk.append(" ")
                 }
                 currentChunk.append(sentence)
+                i++
+                continue
+            }
+
+            if (currentChunk.isNotEmpty()) {
+                chunkedSentences.add(currentChunk.toString())
+                currentChunk.clear()
+                // Re-evaluate the same sentence against the next chunk's limit.
+                continue
+            }
+
+            if (chunkedSentences.isEmpty()) {
+                // Opening sentence alone exceeds the fast-start budget: peel
+                // its leading comma-clauses into chunk #0 and hand the rest
+                // back for normal accumulation. If the first clause is itself
+                // over budget there is no natural cut — fall through and keep
+                // the sentence whole rather than breaking mid-clause.
+                val parts = commaSplitPattern.split(sentence)
+                if (parts.size > 1 && parts[0].length <= firstChunkLimit) {
+                    val head = StringBuilder()
+                    var k = 0
+                    while (k < parts.size && head.length + parts[k].length + 1 <= firstChunkLimit) {
+                        if (head.isNotEmpty()) head.append(" ")
+                        head.append(parts[k])
+                        k++
+                    }
+                    if (head.endsWith(",") || head.endsWith(";")) {
+                        head.deleteCharAt(head.length - 1)
+                    }
+                    chunkedSentences.add(head.toString())
+                    processedSentences[i] = parts.drop(k).joinToString(" ")
+                    continue
+                }
+            }
+
+            // If a single sentence is huge, add it directly
+            if (sentence.length > chunkLimit) {
+                chunkedSentences.add(sentence)
             } else {
-                if (currentChunk.isNotEmpty()) {
-                    chunkedSentences.add(currentChunk.toString())
-                    currentChunk.clear()
-                }
-                // If a single sentence is huge, add it directly
-                if (sentence.length > chunkLimit) {
-                    chunkedSentences.add(sentence)
-                } else {
-                    currentChunk.append(sentence)
-                }
+                currentChunk.append(sentence)
             }
             i++
         }

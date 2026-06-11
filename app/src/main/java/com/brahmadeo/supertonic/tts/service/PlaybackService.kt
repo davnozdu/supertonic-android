@@ -315,10 +315,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             val effectiveLang = autoDetectRussian(text, lang)
 
             synthesisJob = launch(Dispatchers.IO) {
-                val sentences = textNormalizer.splitIntoSentences(text, effectiveLang)
-                val totalSentences = sentences.size
-                val validStartIndex = if (startIndex in 0 until totalSentences) startIndex else 0
-
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
                 val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
 
@@ -389,64 +385,102 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     }
                 }
 
+                // Queue continuation: when the current text is fully
+                // synthesized, pull the next queue item and keep producing
+                // into the same channel/AudioTrack instead of recursing into
+                // synthesizeAndPlay after the audio drained. The next item's
+                // first sentence is synthesized while the current item's tail
+                // is still playing, so the audible gap between queue items
+                // shrinks from "drain + first-sentence synthesis" to a fixed
+                // paragraph-sized breath.
+                var curText = text
+                var curLang = effectiveLang
+                var curStyle = stylePath
+                var curSpeed = speed
+                var curSteps = steps
+                var curStart = startIndex
                 var producedSentences = 0
+                var lastTotal = 0
                 try {
-                    for (index in validStartIndex until totalSentences) {
-                        if (SupertonicTTS.isCancelled() || !isActive) break
+                    itemLoop@ while (true) {
+                        val sentences = textNormalizer.splitIntoSentences(curText, curLang)
+                        val totalSentences = sentences.size
+                        lastTotal = totalSentences
+                        val validStartIndex = if (curStart in 0 until totalSentences) curStart else 0
 
-                        // Honour pause without consuming CPU. Producer can pause
-                        // even though consumer is still draining the buffer —
-                        // the buffer fills up, sends block, all clean.
-                        while (!isPlaying && isSynthesizing && isActive) {
-                            delay(100)
+                        // Re-arm the wakelock per item: it's acquired with a
+                        // 10-minute timeout, which a long queue can outlive.
+                        wakeLock?.acquire(10 * 60 * 1000L)
+
+                        for (index in validStartIndex until totalSentences) {
+                            if (SupertonicTTS.isCancelled() || !isActive) break@itemLoop
+
+                            // Honour pause without consuming CPU. Producer can pause
+                            // even though consumer is still draining the buffer —
+                            // the buffer fills up, sends block, all clean.
+                            while (!isPlaying && isSynthesizing && isActive) {
+                                delay(100)
+                            }
+                            if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break@itemLoop
+
+                            withContext(Dispatchers.Main) {
+                                currentSentenceIndex = index
+                                notifyListenerProgress(index, totalSentences)
+                            }
+
+                            val normalizedText = textNormalizer.normalize(sentences[index], curLang, isAdvancedEnabled)
+
+                            // Streaming: each finished chunk inside generateAudio is
+                            // pushed via streamingListener.onAudioChunk into the
+                            // channel, where the consumer above picks it up.
+                            val result = SupertonicTTS.generateAudio(
+                                normalizedText, curLang, curStyle, curSpeed, 0.0f, curSteps,
+                                VOLUME_BOOST_FACTOR, streamingListener
+                            )
+
+                            if (result != null && result.isNotEmpty()) {
+                                sawAnyAudio = true
+                                producedSentences++
+                                // Pre-roll: release the consumer once enough
+                                // sentences are queued. Also release if input
+                                // turned out to be shorter than the target — we
+                                // don't want to wait forever for a 5th sentence
+                                // that doesn't exist.
+                                if (preRollSignal != null &&
+                                    !preRollSignal.isCompleted &&
+                                    producedSentences >= preRollSentences
+                                ) {
+                                    preRollSignal.complete(Unit)
+                                }
+                                if (!statePromotedToPlaying) {
+                                    statePromotedToPlaying = true
+                                    withContext(Dispatchers.Main) {
+                                        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                                        notifyListenerState(true)
+                                    }
+                                }
+                                // Inter-sentence breath. Suspending send — never
+                                // blocks the inference thread itself, just makes
+                                // the producer wait if the buffer is full.
+                                if (index < totalSentences - 1) {
+                                    try { channel.send(silenceBytes(80)) } catch (_: Exception) { break@itemLoop }
+                                }
+                            } else if (SupertonicTTS.isCancelled()) {
+                                break@itemLoop
+                            }
                         }
+
                         if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break
 
-                        withContext(Dispatchers.Main) {
-                            currentSentenceIndex = index
-                            notifyListenerProgress(index, totalSentences)
-                        }
-
-                        val normalizedText = textNormalizer.normalize(sentences[index], effectiveLang, isAdvancedEnabled)
-
-                        // Streaming: each finished chunk inside generateAudio is
-                        // pushed via streamingListener.onAudioChunk into the
-                        // channel, where the consumer above picks it up.
-                        val result = SupertonicTTS.generateAudio(
-                            normalizedText, effectiveLang, stylePath, speed, 0.0f, steps,
-                            VOLUME_BOOST_FACTOR, streamingListener
-                        )
-
-                        if (result != null && result.isNotEmpty()) {
-                            sawAnyAudio = true
-                            producedSentences++
-                            // Pre-roll: release the consumer once enough
-                            // sentences are queued. Also release if input
-                            // turned out to be shorter than the target — we
-                            // don't want to wait forever for a 5th sentence
-                            // that doesn't exist.
-                            if (preRollSignal != null &&
-                                !preRollSignal.isCompleted &&
-                                producedSentences >= preRollSentences
-                            ) {
-                                preRollSignal.complete(Unit)
-                            }
-                            if (!statePromotedToPlaying) {
-                                statePromotedToPlaying = true
-                                withContext(Dispatchers.Main) {
-                                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                                    notifyListenerState(true)
-                                }
-                            }
-                            // Inter-sentence breath. Suspending send — never
-                            // blocks the inference thread itself, just makes
-                            // the producer wait if the buffer is full.
-                            if (index < totalSentences - 1) {
-                                try { channel.send(silenceBytes(80)) } catch (_: Exception) { break }
-                            }
-                        } else if (SupertonicTTS.isCancelled()) {
-                            break
-                        }
+                        val nextItem = QueueManager.next() ?: break
+                        SupertonicTTS.reset()
+                        try { channel.send(silenceBytes(300)) } catch (_: Exception) { break }
+                        curText = nextItem.text
+                        curLang = autoDetectRussian(nextItem.text, nextItem.lang)
+                        curStyle = nextItem.stylePath
+                        curSpeed = nextItem.speed
+                        curSteps = nextItem.steps
+                        curStart = nextItem.startIndex
                     }
                 } finally {
                     // Edge cases for the pre-roll gate:
@@ -470,17 +504,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         val wasCancelled = SupertonicTTS.isCancelled()
                         isSynthesizing = false
                         if (!wasCancelled) {
-                            notifyListenerProgress(totalSentences, totalSentences)
+                            notifyListenerProgress(lastTotal, lastTotal)
                         }
                         notifyListenerState(true)
                         if (!wasCancelled) {
-                            val nextItem = QueueManager.next()
-                            if (nextItem != null) {
-                                SupertonicTTS.reset()
-                                synthesizeAndPlay(nextItem.text, nextItem.lang, nextItem.stylePath, nextItem.speed, nextItem.steps, nextItem.startIndex)
-                            } else {
-                                stopPlayback()
-                            }
+                            stopPlayback()
                         }
                     }
                 }
