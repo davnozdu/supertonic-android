@@ -118,7 +118,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         initJob = serviceScope.launch(Dispatchers.IO) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            SupertonicTTS.initialize(modelPath, libPath)
+            SupertonicTTS.initialize(modelPath, libPath,
+                xnnThreads = SupertonicTTS.recommendedXnnThreads(this@SupertonicTextToSpeechService))
             // Prewarm (see PlaybackService for rationale). Idempotent — if
             // PlaybackService was up first and warmed, this is a no-op.
             val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
@@ -279,7 +280,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (SupertonicTTS.getSoC() == -1) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            SupertonicTTS.initialize(modelPath, libPath)
+            SupertonicTTS.initialize(modelPath, libPath,
+                xnnThreads = SupertonicTTS.recommendedXnnThreads(this@SupertonicTextToSpeechService))
         }
 
         // Streaming + queue pipeline, mirroring PlaybackService.

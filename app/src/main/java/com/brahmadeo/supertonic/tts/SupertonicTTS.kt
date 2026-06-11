@@ -76,6 +76,18 @@ object SupertonicTTS {
     private fun defaultXnnThreads(): Int =
         Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
 
+    /**
+     * XNNPACK pool size for the active preset, or 0 to disable XNNPACK.
+     *
+     * The fp16 preset must run on plain CPU EP: XNNPACK is fp32-only and ORT
+     * fails to build a session for fp16 graphs, which left the engine
+     * uninitialised (synthesis silently produced nothing — a reader app just
+     * scrolled through the text). The native side treats 0 as "no XNNPACK".
+     */
+    fun recommendedXnnThreads(context: Context): Int =
+        if (AssetManager.getModelType(context) == "android_optimized_fp16") 0
+        else defaultXnnThreads()
+
     @Synchronized
     fun initialize(modelPath: String, libPath: String, ortThreads: Int = 4, xnnThreads: Int = defaultXnnThreads()): Boolean {
         if (nativePtr != 0L) {

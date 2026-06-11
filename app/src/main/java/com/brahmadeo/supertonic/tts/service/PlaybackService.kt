@@ -214,7 +214,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
         val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-        SupertonicTTS.initialize(modelPath, libPath)
+        SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
         // Prewarm: synthesize a throwaway "." in the background so XNNPACK
         // JITs its kernels and ORT lays out activation buffers before the
         // user's first real request. Saves ~300-700 ms off the first audible
@@ -237,7 +237,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             SupertonicTTS.release()
             val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            SupertonicTTS.initialize(modelPath, libPath)
+            SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
         }
         return START_NOT_STICKY
     }

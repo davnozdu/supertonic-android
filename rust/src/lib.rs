@@ -48,7 +48,13 @@ pub extern "system" fn Java_com_brahmadeo_supertonic_tts_SupertonicTTS_init(
         log::warn!("ORT environment already initialized");
     }
 
-    let tts = match load_text_to_speech(&model_path, false, true, ort_threads as usize, xnn_threads as usize) {
+    // xnn_threads == 0 is the caller's signal to disable XNNPACK entirely.
+    // The fp16 preset (Kyumdroid) needs this: XNNPACK is fp32-only and ORT
+    // fails session creation when asked to partition fp16 graphs, so the
+    // engine would never initialise. fp16 can't be XNNPACK-accelerated
+    // anyway (CPU upcasts it), so plain CPU EP is the correct path.
+    let use_xnnpack = xnn_threads > 0;
+    let tts = match load_text_to_speech(&model_path, false, use_xnnpack, ort_threads as usize, xnn_threads as usize) {
         Ok(t) => t,
         Err(e) => {
             log::error!("Failed to load TTS: {:?}", e);

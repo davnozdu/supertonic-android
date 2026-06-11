@@ -605,7 +605,7 @@ class MainActivity : ComponentActivity() {
                 setupVoicesMap(viewModel.currentLang.value)
             }
 
-            if (SupertonicTTS.initialize(modelPath, libPath)) {
+            if (SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this@MainActivity))) {
                 withContext(Dispatchers.Main) {
                     viewModel.isInitializing.value = false
                 }
