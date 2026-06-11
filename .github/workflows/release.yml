@@ -71,23 +71,43 @@ jobs:
       - name: Build unsigned release APK
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: Generate signing keystore
+      - name: Prepare signing keystore
         id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          # CI signs every build with an ephemeral RSA-4096 key. Side-effect:
-          # users updating from one release to the next must uninstall first
-          # (a Play Store / F-Droid pipeline with a stable key would avoid this).
-          keytool -genkeypair \
-            -keystore "$RUNNER_TEMP/release.jks" \
-            -storetype JKS \
-            -alias supertonic \
-            -keyalg RSA \
-            -keysize 4096 \
-            -validity 10000 \
-            -storepass supertonic-ci \
-            -keypass supertonic-ci \
-            -dname "CN=Supertonic v3 fork, OU=davnozdu, O=davnozdu, L=NA, S=NA, C=NA"
-          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            # Stable PKCS12 keystore from repository secrets — every release
+            # carries the same signature, so users update in place without
+            # uninstalling.
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+            echo "path=$RUNNER_TEMP/release.p12" >> "$GITHUB_OUTPUT"
+            echo "type=PKCS12" >> "$GITHUB_OUTPUT"
+            echo "alias=${KEY_ALIAS:-supertonic}" >> "$GITHUB_OUTPUT"
+            echo "storepass=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "keypass=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" >> "$GITHUB_OUTPUT"
+          else
+            # Fallback for forks without secrets: ephemeral RSA-4096 key.
+            # Side-effect: users must uninstall before installing such a build.
+            keytool -genkeypair \
+              -keystore "$RUNNER_TEMP/release.jks" \
+              -storetype JKS \
+              -alias supertonic \
+              -keyalg RSA \
+              -keysize 4096 \
+              -validity 10000 \
+              -storepass supertonic-ci \
+              -keypass supertonic-ci \
+              -dname "CN=Supertonic v3 fork, OU=davnozdu, O=davnozdu, L=NA, S=NA, C=NA"
+            echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+            echo "type=JKS" >> "$GITHUB_OUTPUT"
+            echo "alias=supertonic" >> "$GITHUB_OUTPUT"
+            echo "storepass=supertonic-ci" >> "$GITHUB_OUTPUT"
+            echo "keypass=supertonic-ci" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Locate Android build-tools
         id: buildtools
@@ -115,9 +135,10 @@ jobs:
             "${{ steps.buildtools.outputs.path }}/zipalign" -v -p 4 "$UNSIGNED" "$ALIGNED"
             "${{ steps.buildtools.outputs.path }}/apksigner" sign \
               --ks "${{ steps.keystore.outputs.path }}" \
-              --ks-key-alias supertonic \
-              --ks-pass pass:supertonic-ci \
-              --key-pass pass:supertonic-ci \
+              --ks-type "${{ steps.keystore.outputs.type }}" \
+              --ks-key-alias "${{ steps.keystore.outputs.alias }}" \
+              --ks-pass "pass:${{ steps.keystore.outputs.storepass }}" \
+              --key-pass "pass:${{ steps.keystore.outputs.keypass }}" \
               --out "$SIGNED" \
               "$ALIGNED"
             "${{ steps.buildtools.outputs.path }}/apksigner" verify --verbose "$SIGNED"
@@ -158,4 +179,4 @@ jobs:
             Settings → Accessibility → Text-to-speech output → Preferred engine → **Supertonic TTS (Fork)**.
 
             ### Note on signing
-            This release is signed with an **ephemeral CI keystore** that changes every build. To upgrade you must uninstall the previous version first. For long-term distribution, configure a stable keystore via repository secrets `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`.
+            Releases are signed with a **stable keystore** (repository secrets `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`), so updates install in place. Versions up to and including v4.0.0-beta3 were signed with ephemeral per-build keys — upgrading from those requires uninstalling once.

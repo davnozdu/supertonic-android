@@ -1,6 +1,12 @@
 <resources>
     <string name="app_name">Supertonic TTS (Fork)</string>
-    
+
+    <!-- App updates -->
+    <string name="update_available_title">업데이트 사용 가능</string>
+    <string name="update_available_message">%1$s 버전을 사용할 수 있습니다 (현재 %2$s). 새 버전을 다운로드하시겠습니까?</string>
+    <string name="update_download_button">다운로드</string>
+    <string name="update_skip_button">건너뛰기</string>
+
     <!-- Main Activity -->
     <string name="default_input_text">안녕하세요, 안드로이드용 Supertonic TTS입니다. 아래에서 목소리와 속도를 선택하세요!</string>
     <string name="voice_style_label">목소리 스타일</string>
@@ -39,18 +45,12 @@
 
     <!-- Playback Activity -->
     <string name="now_playing_title">현재 재생 중</string>
-    <string name="saving_audio">오디오 저장 중…</string>
-    <string name="saved_to_fmt">%1$s에 저장됨</string>
-    <string name="export_failed">내보내기 실패</string>
 
     <!-- History Activity -->
     <string name="history_title">기록</string>
     <string name="clear_all_button">모두 삭제</string>
 
     <!-- Saved Audio Activity -->
-    <string name="saved_audio_title">저장된 오디오</string>
-    <string name="delete_audio_title">오디오 삭제</string>
-    <string name="delete_audio_message_fmt">%1$s을(를) 삭제하시겠습니까?</string>
 
     <!-- Lexicon Activity -->
     <string name="lexicon_title">발음 사전</string>
@@ -78,8 +78,6 @@
 
     <!-- Menus -->
     <string name="action_reset">초기화</string>
-    <string name="action_open_ebook">이북 열기 (EPUB/PDF)</string>
-    <string name="action_saved">저장된 오디오</string>
     <string name="action_history">기록</string>
     <string name="action_queue">대기열</string>
     <string name="action_lexicon">사전</string>
@@ -101,7 +99,6 @@
     <string name="notif_synthesizing">음성 합성 중…</string>
     <string name="notif_playing">오디오 재생 중</string>
     <string name="notif_paused">일시 정지됨</string>
-    <string name="notif_exporting">오디오 내보내는 중…</string>
 
     <!-- Voices -->
     <string name="voice_m1">Alex - 활기차고 경쾌한</string>

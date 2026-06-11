@@ -41,6 +41,9 @@ class MainViewModel : ViewModel() {
     var queueDialogText = ""
     var showModelDeleteDialog = mutableStateOf(false)
 
+    // Update State — non-null when a newer GitHub release is available.
+    var availableUpdate = mutableStateOf<com.brahmadeo.supertonic.tts.utils.UpdateChecker.Update?>(null)
+
     // Data
     val voiceFiles = mutableStateMapOf<String, String>()
 

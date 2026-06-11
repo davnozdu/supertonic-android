@@ -1,6 +1,12 @@
 <resources>
     <string name="app_name">Supertonic TTS (Fork)</string>
-    
+
+    <!-- App updates -->
+    <string name="update_available_title">Mise à jour disponible</string>
+    <string name="update_available_message">%1$s est disponible (vous avez %2$s). Télécharger la nouvelle version ?</string>
+    <string name="update_download_button">Télécharger</string>
+    <string name="update_skip_button">Ignorer</string>
+
     <!-- Main Activity -->
     <string name="default_input_text">Bonjour tout le monde, c\'est Supertonic TTS sur Android. Sélectionnez une voix et une vitesse ci-dessous !</string>
     <string name="voice_style_label">Style de Voix</string>
@@ -39,18 +45,12 @@
 
     <!-- Playback Activity -->
     <string name="now_playing_title">Lecture en cours</string>
-    <string name="saving_audio">Enregistrement de l\'audio…</string>
-    <string name="saved_to_fmt">Enregistré sous %1$s</string>
-    <string name="export_failed">Échec de l\'exportation</string>
 
     <!-- History Activity -->
     <string name="history_title">Historique</string>
     <string name="clear_all_button">Tout effacer</string>
 
     <!-- Saved Audio Activity -->
-    <string name="saved_audio_title">Audio enregistré</string>
-    <string name="delete_audio_title">Supprimer l\'audio</string>
-    <string name="delete_audio_message_fmt">Êtes-vous sûr de vouloir supprimer %1$s ?</string>
 
     <!-- Lexicon Activity -->
     <string name="lexicon_title">Dictionnaire de prononciation</string>
@@ -76,8 +76,6 @@
 
     <!-- Menus -->
     <string name="action_reset">Réinitialiser</string>
-    <string name="action_open_ebook">Ouvrir un livre électronique (EPUB/PDF)</string>
-    <string name="action_saved">Audio enregistré</string>
     <string name="action_history">Historique</string>
     <string name="action_queue">File d\'attente</string>
     <string name="action_lexicon">Lexique</string>
@@ -99,7 +97,6 @@
     <string name="notif_synthesizing">Synthèse en cours…</string>
     <string name="notif_playing">Lecture audio</string>
     <string name="notif_paused">En pause</string>
-    <string name="notif_exporting">Exportation audio…</string>
 
     <!-- Voices -->
     <string name="voice_m1">Alex - Vif, Enjoué</string>

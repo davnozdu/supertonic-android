@@ -44,6 +44,12 @@
     <string name="model_delete_message">Это удалит все модели Supertonic 3 и стили голосов. Их можно будет скачать заново позже.</string>
     <string name="model_deleted_msg">TTS-модели удалены</string>
 
+    <!-- App updates -->
+    <string name="update_available_title">Доступно обновление</string>
+    <string name="update_available_message">Доступна версия %1$s (у вас %2$s). Скачать новую версию?</string>
+    <string name="update_download_button">Скачать</string>
+    <string name="update_skip_button">Пропустить</string>
+
     <!-- Playback Activity -->
     <string name="now_playing_title">Сейчас играет</string>
 

@@ -1,6 +1,12 @@
 <resources>
     <string name="app_name">Supertonic TTS (Fork)</string>
-    
+
+    <!-- App updates -->
+    <string name="update_available_title">Atualização disponível</string>
+    <string name="update_available_message">%1$s está disponível (você tem %2$s). Baixar a nova versão?</string>
+    <string name="update_download_button">Baixar</string>
+    <string name="update_skip_button">Pular</string>
+
     <!-- Main Activity -->
     <string name="default_input_text">Olá mundo, este é o Supertonic TTS no Android. Selecione uma voz e velocidade abaixo!</string>
     <string name="voice_style_label">Estilo de Voz</string>
@@ -39,18 +45,12 @@
 
     <!-- Playback Activity -->
     <string name="now_playing_title">Reproduzindo agora</string>
-    <string name="saving_audio">Salvando áudio…</string>
-    <string name="saved_to_fmt">Salvo em %1$s</string>
-    <string name="export_failed">Falha na exportação</string>
 
     <!-- History Activity -->
     <string name="history_title">Histórico</string>
     <string name="clear_all_button">Limpar tudo</string>
 
     <!-- Saved Audio Activity -->
-    <string name="saved_audio_title">Áudio salvo</string>
-    <string name="delete_audio_title">Excluir áudio</string>
-    <string name="delete_audio_message_fmt">Tem certeza que deseja excluir %1$s?</string>
 
     <!-- Lexicon Activity -->
     <string name="lexicon_title">Dicionário de pronúncia</string>
@@ -76,8 +76,6 @@
 
     <!-- Menus -->
     <string name="action_reset">Redefinir</string>
-    <string name="action_open_ebook">Abrir ebook (EPUB/PDF)</string>
-    <string name="action_saved">Áudio salvo</string>
     <string name="action_history">Histórico</string>
     <string name="action_queue">Fila</string>
     <string name="action_lexicon">Léxico</string>
@@ -99,7 +97,6 @@
     <string name="notif_synthesizing">Sintetizando…</string>
     <string name="notif_playing">Reproduzindo áudio</string>
     <string name="notif_paused">Pausado</string>
-    <string name="notif_exporting">Exportando áudio…</string>
 
     <!-- Voices -->
     <string name="voice_m1">Alex - Animado, Otimista</string>

@@ -185,6 +185,19 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Once-a-day check against GitHub Releases. Throttled and silent on
+        // failure; surfaces an in-app dialog only when a newer tag exists.
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val update = com.brahmadeo.supertonic.tts.utils.UpdateChecker.check(this@MainActivity)
+                if (update != null) {
+                    withContext(Dispatchers.Main) { viewModel.availableUpdate.value = update }
+                }
+            } catch (t: Throwable) {
+                Log.w("MainActivity", "Update check failed", t)
+            }
+        }
+
         // Single unified model (Supertonic 3): download on first launch, initialize otherwise.
         if (!AssetManager.isReady(this)) {
             viewModel.showModelSelection.value = true
@@ -312,6 +325,31 @@ class MainActivity : ComponentActivity() {
                             },
                             dismissButton = {
                                 TextButton(onClick = { viewModel.showModelDeleteDialog.value = false }) { Text(getString(R.string.cancel)) }
+                            }
+                        )
+                    }
+
+                    viewModel.availableUpdate.value?.let { update ->
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { viewModel.availableUpdate.value = null },
+                            title = { Text(getString(R.string.update_available_title)) },
+                            text = {
+                                Text(
+                                    getString(R.string.update_available_message, update.name, BuildConfig.VERSION_NAME)
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val url = update.apkUrl ?: update.htmlUrl
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    viewModel.availableUpdate.value = null
+                                }) { Text(getString(R.string.update_download_button)) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = {
+                                    com.brahmadeo.supertonic.tts.utils.UpdateChecker.skipVersion(this@MainActivity, update.tag)
+                                    viewModel.availableUpdate.value = null
+                                }) { Text(getString(R.string.update_skip_button)) }
                             }
                         )
                     }
