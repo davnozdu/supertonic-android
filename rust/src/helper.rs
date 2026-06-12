@@ -873,8 +873,8 @@ pub fn load_and_mix_voice_styles(path1: &str, path2: &str, alpha: f32) -> Result
     Ok(Style { ttl, dp })
 }
 
-/// Create an ONNX session with the specified execution providers
-fn create_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_threads: usize) -> Result<Session> {
+/// Build a session, optionally registering the XNNPACK EP.
+fn build_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_threads: usize) -> Result<Session> {
     #[allow(unused_mut)]
     let mut builder = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)?
@@ -888,25 +888,40 @@ fn create_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_
     if use_xnnpack {
         #[cfg(feature = "xnnpack")]
         {
-            if let Some(xnn_threads_nz) = std::num::NonZeroUsize::new(_xnn_threads) {
-                builder = builder.with_execution_providers([
-                    XNNPACKExecutionProvider::default()
-                        .with_intra_op_num_threads(xnn_threads_nz)
-                        .build(),
-                    CPUExecutionProvider::default().build(),
-                ])?;
-            } else {
-                builder = builder.with_execution_providers([
-                    XNNPACKExecutionProvider::default()
-                        .with_intra_op_num_threads(std::num::NonZeroUsize::MIN)
-                        .build(),
-                    CPUExecutionProvider::default().build(),
-                ])?;
-            }
+            let nz = std::num::NonZeroUsize::new(_xnn_threads)
+                .unwrap_or(std::num::NonZeroUsize::MIN);
+            builder = builder.with_execution_providers([
+                XNNPACKExecutionProvider::default()
+                    .with_intra_op_num_threads(nz)
+                    .build(),
+                CPUExecutionProvider::default().build(),
+            ])?;
         }
     }
 
     builder.commit_from_file(model_path).context(format!("Failed to load model: {}", model_path))
+}
+
+/// Create an ONNX session with the specified execution providers.
+///
+/// XNNPACK is fp32-only; ORT fails to build a session when asked to
+/// partition an fp16 graph (e.g. the Kyumdroid fp16 preset). Rather than
+/// leave the engine dead, fall back to a plain CPU-EP session so synthesis
+/// still runs — just without XNNPACK acceleration, which fp16 can't use
+/// anyway. This also future-proofs any model XNNPACK can't handle.
+fn create_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_threads: usize) -> Result<Session> {
+    if use_xnnpack {
+        match build_session(model_path, true, ort_threads, _xnn_threads) {
+            Ok(s) => return Ok(s),
+            Err(e) => {
+                log::warn!(
+                    "XNNPACK session failed for {} ({:?}); retrying on CPU EP",
+                    model_path, e
+                );
+            }
+        }
+    }
+    build_session(model_path, false, ort_threads, _xnn_threads)
 }
 
 /// Load TTS components
