@@ -2,7 +2,7 @@ package com.brahmadeo.supertonic.tts.tera
 
 /** Converts book punctuation to characters present in Tera's vocabulary. */
 internal object TeraTextPreparation {
-    private val spacedDash = Regex("[—]|(?<=\\s)[–-](?=\\s)|^[–-](?=\\s)")
+    private val spacedDash = Regex("[ \\t]*—[ \\t]*|[ \\t]+[–-][ \\t]+|^[–-][ \\t]+", RegexOption.MULTILINE)
     private val punctuationNeedsSpace = Regex("[,.!?;:](?=[\\p{L}\\p{N}])")
 
     fun punctuation(text: String): String {
