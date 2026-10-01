@@ -2,6 +2,7 @@ package com.brahmadeo.supertonic.tts.utils
 
 import android.content.Context
 import android.util.Log
+import com.brahmadeo.supertonic.tts.R
 import com.brahmadeo.supertonic.tts.tera.TeraStressDictionary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -196,17 +197,17 @@ object AssetManager {
                         }
                         val n = finished.incrementAndGet()
                         val downloadShare = if (modelType == TERA_MODEL) 0.9f else 1f
-                        onProgress("Downloading ${asset.localPath}...", n.toFloat() / files.size * downloadShare)
+                        onProgress(context.getString(R.string.download_file_status, asset.localPath), n.toFloat() / files.size * downloadShare)
                     }
                 }.awaitAll()
             }
             if (modelType == TERA_MODEL) {
-                onProgress("Indexing Russian stress dictionary...", 0.95f)
+                onProgress(context.getString(R.string.download_index_status), 0.95f)
                 TeraStressDictionary.prepare(File(baseDir, "tera"))
             }
             
             prefs.edit().putString("last_downloaded_model", modelType).apply()
-            onProgress("Ready", 1.0f)
+            onProgress(context.getString(R.string.download_ready_status), 1.0f)
         }
     }
 

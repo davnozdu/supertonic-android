@@ -225,6 +225,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         // word on weak SoCs. Best-effort; idempotent (SupertonicTTS guards
         // against double-prewarming).
         serviceScope.launch(Dispatchers.IO) {
+            if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isReady(this@PlaybackService)) return@launch
             val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
             val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
             val stylePath = com.brahmadeo.supertonic.tts.utils.AssetManager.voiceFile(this@PlaybackService, voiceFile).absolutePath

@@ -14,10 +14,11 @@ import com.brahmadeo.supertonic.tts.ui.components.WavyLinearProgressIndicator
 fun DownloadScreen(
     status: String,
     progress: Float,
+    isTeraModel: Boolean = false,
     error: String? = null,
     onRetry: () -> Unit = {}
 ) {
-    val message = stringResource(AppR.string.download_intro)
+    val message = stringResource(if (isTeraModel) AppR.string.download_intro_tera else AppR.string.download_intro)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -31,7 +32,13 @@ fun DownloadScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = stringResource(if (error != null) AppR.string.download_failed else AppR.string.download_in_progress),
+                text = stringResource(
+                    when {
+                        error != null -> AppR.string.download_failed
+                        isTeraModel -> AppR.string.download_tera_in_progress
+                        else -> AppR.string.download_in_progress
+                    }
+                ),
                 style = MaterialTheme.typography.headlineMedium,
                 color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
             )

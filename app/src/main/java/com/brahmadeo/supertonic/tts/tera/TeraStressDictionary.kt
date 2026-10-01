@@ -32,8 +32,6 @@ object TeraStressDictionary {
         try {
             // SQLite is a temporary external sort. Synthesis uses the SACC
             // binary search reader without a SQLite connection or Java map.
-            database.execSQL("PRAGMA journal_mode=OFF")
-            database.execSQL("PRAGMA synchronous=OFF")
             database.execSQL("CREATE TABLE accents (word TEXT NOT NULL, stressed TEXT NOT NULL)")
             val insert = database.compileStatement("INSERT INTO accents(word, stressed) VALUES (?, ?)")
             try {

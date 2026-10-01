@@ -308,6 +308,7 @@ class MainActivity : ComponentActivity() {
                     DownloadScreen(
                         status = viewModel.downloadStatus.value,
                         progress = viewModel.downloadProgress.floatValue,
+                        isTeraModel = AssetManager.isTera(this@MainActivity),
                         error = viewModel.downloadError.value,
                         onRetry = { startDownload() }
                     )
@@ -336,7 +337,7 @@ class MainActivity : ComponentActivity() {
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { viewModel.showModelDeleteDialog.value = false },
                             title = { Text(getString(R.string.model_delete_title)) },
-                            text = { Text(getString(R.string.model_delete_message)) },
+                            text = { Text(getString(if (AssetManager.isTera(this@MainActivity)) R.string.model_delete_tera_message else R.string.model_delete_message)) },
                             confirmButton = {
                                 TextButton(
                                     onClick = {

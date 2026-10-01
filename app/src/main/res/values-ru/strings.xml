@@ -42,6 +42,7 @@
     <string name="model_download_button">Скачать</string>
     <string name="model_delete_title">Удалить TTS-модели?</string>
     <string name="model_delete_message">Это удалит все модели Supertonic 3 и стили голосов. Их можно будет скачать заново позже.</string>
+    <string name="model_delete_tera_message">Это удалит TeraTTSv2, русские голоса и словарь ударений. Позже их можно скачать заново.</string>
     <string name="model_deleted_msg">TTS-модели удалены</string>
 
     <!-- App updates -->
@@ -223,6 +224,11 @@
     <string name="search_history_placeholder">Поиск в истории…</string>
     <string name="action_retry_download">Повторить загрузку</string>
     <string name="download_intro">Загрузка модели Supertonic 3. Поддерживает 31 язык — это разовая загрузка.</string>
+    <string name="download_intro_tera">Загрузка TeraTTSv2 для русского языка (около 410 МБ), затем подготовка словаря ударений. При повторе уже скачанные файлы сохранятся.</string>
+    <string name="download_tera_in_progress">Подготовка TeraTTSv2</string>
+    <string name="download_file_status">Загрузка %1$s</string>
+    <string name="download_index_status">Создание быстрого индекса ударений</string>
+    <string name="download_ready_status">Модель готова</string>
     <string name="download_failed">Ошибка загрузки</string>
     <string name="download_in_progress">Загрузка моделей</string>
     <string name="edit_rule_title">Изменить правило</string>

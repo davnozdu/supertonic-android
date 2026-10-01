@@ -42,6 +42,7 @@
     <string name="model_download_button">Download</string>
     <string name="model_delete_title">Delete TTS Models?</string>
     <string name="model_delete_message">This will remove all Supertonic 3 models and voice styles. You can download them again later if needed.</string>
+    <string name="model_delete_tera_message">This will remove TeraTTSv2, its Russian voices, and the stress dictionary. You can download them again later.</string>
     <string name="model_deleted_msg">TTS models deleted</string>
 
     <!-- App updates -->
@@ -211,6 +212,11 @@
     <string name="search_history_placeholder">Search history...</string>
     <string name="action_retry_download">Retry Download</string>
     <string name="download_intro">Downloading Supertonic 3 TTS models. Supports 31 languages — this download happens only once.</string>
+    <string name="download_intro_tera">Downloading TeraTTSv2 for Russian (about 410 MB), then preparing the stress dictionary. Existing files are reused if you retry.</string>
+    <string name="download_tera_in_progress">Preparing TeraTTSv2</string>
+    <string name="download_file_status">Downloading %1$s</string>
+    <string name="download_index_status">Building fast Russian stress index</string>
+    <string name="download_ready_status">Model ready</string>
     <string name="download_failed">Download Failed</string>
     <string name="download_in_progress">Downloading Models</string>
     <string name="edit_rule_title">Edit Rule</string>
