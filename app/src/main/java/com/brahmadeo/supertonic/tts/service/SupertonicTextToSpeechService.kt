@@ -254,6 +254,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
         val incomingText = request.charSequenceText?.toString() ?: return
         val rawText = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this, incomingText)
+        if (SupertonicTTS.isCancelled()) { callback.error(); callback.done(); return }
         val requestStarted = android.os.SystemClock.elapsedRealtime()
         Log.i("SupertonicTTS", "TTS request started: chars=${rawText.length}, model=${AssetManager.getModelType(this)}")
         val effectiveSpeed = (request.speechRate / 100.0f).coerceIn(0.5f, 2.5f)

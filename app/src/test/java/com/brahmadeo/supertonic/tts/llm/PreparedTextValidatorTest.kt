@@ -5,7 +5,7 @@ import org.junit.Test
 
 class PreparedTextValidatorTest {
     @Test fun acceptsStressAndPunctuation() {
-        assertEquals("По-прежнему светло́. Ты гото́в?", PreparedTextValidator.validate("По-прежнему светло ты готов", "По-прежнему светло́. Ты гото́в?"))
+        assertEquals("По-прежнему светло́. ты гото́в?", PreparedTextValidator.validate("По-прежнему светло ты готов", "По-прежнему светло́. Ты гото́в?"))
     }
     @Test fun rejectsChangedWordsAndNumbers() {
         assertNull(PreparedTextValidator.validate("Открой окно", "Открой дверь."))
@@ -20,6 +20,11 @@ class PreparedTextValidatorTest {
     @Test fun preservesExplicitStressAndCase() {
         assertEquals("СВЕТЛ+О.", PreparedTextValidator.validate("СВЕТЛ+О", "све́тло."))
         assertEquals("Светло́.", PreparedTextValidator.validate("Светло́", "све́тло."))
+        assertEquals("+окно.", PreparedTextValidator.validate("+окно", "окно́."))
+    }
+    @Test fun preservesQuotesAndParagraphs() {
+        assertNull(PreparedTextValidator.validate("«окно»", "окно́"))
+        assertNull(PreparedTextValidator.validate("Окно\nСветло", "Окно́. Светло́."))
     }
     @Test fun switchesWorkIndependently() {
         assertEquals("светло́ ты гото́в", PreparedTextValidator.validate("светло ты готов", "светло́, ты гото́в?", allowPunctuation = false))

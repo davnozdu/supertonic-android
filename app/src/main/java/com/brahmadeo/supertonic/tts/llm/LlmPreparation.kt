@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Background preparation of text already submitted by any Android TTS client. */
 object LlmPreparation {
     data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean)
-    private data class Entry(val id: Long, val caller: Any, val text: String,
+    private data class Entry(val id: Long, val caller: Any, val text: String, val input: String,
         val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false)
     private val lock = Any()
     private val entries = linkedMapOf<Long, Entry>()
@@ -23,6 +23,7 @@ object LlmPreparation {
     private var nextId = 0L
     @Volatile private var context: Context? = null
     @Volatile private var epoch = 0L
+    @Volatile private var activeBatch: List<Entry> = emptyList()
     private val cooldown = mutableMapOf<String, Long>() // Only the worker accesses this.
     private val appCaller = Any()
     @Synchronized fun initialize(ctx: Context) {
@@ -33,6 +34,7 @@ object LlmPreparation {
     fun enabled(ctx: Context) = LlmSettings.load(ctx).let { it.mode != LlmMode.OFF && (it.stress || it.punctuation) }
     fun settingsChanged() {
         synchronized(lock) { epoch++; entries.values.forEach { it.future.cancel(false) }; entries.clear() }
+        LlmProviders.cancelActive()
         executor.execute { cooldown.clear(); LlmProviders.unload() }
     }
     fun submit(ctx: Context, caller: Any, text: String, flush: Boolean = false): Long? {
@@ -46,7 +48,7 @@ object LlmPreparation {
                 entries.remove(victim.id); victim.future.cancel(false)
             }
             if (text.length > 6000) return null
-            val entry = Entry(++nextId, caller, text)
+            val entry = Entry(++nextId, caller, text, com.brahmadeo.supertonic.tts.utils.LexiconManager.apply(text))
             entries[entry.id] = entry
             entry.id
         }
@@ -58,7 +60,10 @@ object LlmPreparation {
         val keys = entries.values.filter { it.caller == caller }.map { it.id }
         keys.forEach { entries.remove(it)?.future?.cancel(false) }
     }
-    fun cancel(caller: Any) { synchronized(lock) { cancelLocked(caller) } }
+    fun cancel(caller: Any) {
+        synchronized(lock) { cancelLocked(caller) }
+        if (activeBatch.isNotEmpty() && activeBatch.all { it.future.isCancelled }) LlmProviders.cancelActive()
+    }
     fun prefetch(ctx: Context, texts: List<String>): List<Long?> = texts.map { submit(ctx, appCaller, it) }
     fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 30_000): String {
         if (!enabled(ctx)) return text
@@ -96,11 +101,14 @@ object LlmPreparation {
                             .onEach { it.processing = true }
                     }
                     val ctx = context ?: return@execute
-                    val results = process(ctx, LlmSettings.load(ctx), batch.map { it.text })
+                    activeBatch = batch
+                    val results = process(ctx, LlmSettings.load(ctx), batch.map { it.input }, batchEpoch)
+                    activeBatch = emptyList()
                     if (batchEpoch == epoch) batch.zip(results).forEach { (entry, result) -> entry.future.complete(result) }
                     else batch.forEach { it.future.cancel(false) }
                 }
             } finally {
+                activeBatch = emptyList()
                 running.set(false)
                 if (synchronized(lock) { entries.values.any { !it.processing && !it.future.isDone } }) startWorker()
             }
@@ -111,7 +119,7 @@ object LlmPreparation {
         val network = manager.activeNetwork ?: return@runCatching false
         manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }.getOrDefault(false)
-    private fun process(ctx: Context, c: LlmConfig, texts: List<String>): List<Result> {
+    private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch): List<Result> {
         val started = SystemClock.elapsedRealtime()
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()
@@ -121,6 +129,7 @@ object LlmPreparation {
             LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
         }
         for (provider in providers) {
+            if (expectedEpoch != epoch) break
             if (provider != "local" && !connected(ctx)) continue
             if (provider == "ollama" && c.ollamaModel.isBlank()) continue
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
