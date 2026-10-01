@@ -7,7 +7,12 @@ object PreparedTextValidator {
     private val vowels = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
     private fun plain(s: String) = s.replace("+", "").replace("\u0301", "")
     private fun symbols(s: String) = s.filter { !it.isLetterOrDigit() && !it.isWhitespace() && it !in "+\u0301,.;:!?…—–-\"'«»“”„()[]" }
-    fun validate(original: String, proposed: String, allowPunctuation: Boolean = true, allowStress: Boolean = true): String? {
+    fun validate(original: String, response: String, allowPunctuation: Boolean = true, allowStress: Boolean = true): String? {
+        // Some providers insert dialogue quotes despite the instruction. If the
+        // source has none, discard those formatting additions before validation.
+        // Existing source quotes/brackets must still retain their exact anchors.
+        val delimiters = "\"'«»“”„()[]"
+        val proposed = if (original.none { it in delimiters }) response.filterNot { it in delimiters } else response
         if (proposed.length > original.length * 2 + 100 || proposed.isBlank()) return null
         val a = words.findAll(original).toList()
         val b = words.findAll(proposed).toList()

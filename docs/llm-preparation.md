@@ -43,6 +43,8 @@ guarantee correct linguistic analysis or stress for every homograph.
 
 The instruction permits only punctuation and stress placement, with temperature
 zero. Quotes, brackets and paragraph boundaries must retain their positions.
+Invented quote/bracket formatting is stripped when the original fragment contains
+none; original quoted text still requires exact delimiter positions.
 After validation, Russian number normalization reads whole integers (including
 grouped thousands and numbers before punctuation) and decimal fractions as words.
 LLMs retain digits verbatim; the app performs number spelling deterministically.
@@ -61,6 +63,14 @@ These are individual requests, not a throughput guarantee. Local loading,
 download resume, GPU performance and the Binder observation path require device
 verification. Beta 8 has not yet been installed on the test phone while its user
 is reading in Moon+ Reader.
+
+Six synthetic paragraphs (2138 characters) took 4.75–9.70 seconds with DeepSeek
+Flash and no reported thinking trace. All six responses from the strict prompt
+passed the application's Kotlin validator after discarding invented quotes.
+Gemini took 6.21–6.85 seconds but changed words/numbers in that larger sample;
+such output is rejected and falls back. Eleven deterministic number cases passed
+locally, covering punctuation, grouped thousands, decimal fractions, dates and
+ordinal suffixes. These checks did not generate speech.
 
 Primary API documentation:
 
