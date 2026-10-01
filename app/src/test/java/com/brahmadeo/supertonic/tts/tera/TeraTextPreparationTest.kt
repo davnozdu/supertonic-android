@@ -24,4 +24,22 @@ class TeraTextPreparationTest {
     @Test fun ellipsisAndSmartQuotesUseSupportedCharacters() {
         assertEquals("\"Подожди...\"", TeraTextPreparation.punctuation("“Подожди…”"))
     }
+
+    private val dictionary = mapOf("светло" to "св+етло", "готов" to "г+отов",
+        "потом" to "п+отом", "улыбнулся" to "улыбн+улся")
+    private fun stress(text: String) = TeraTextPreparation.stress(text, dictionary::get,
+        mapOf("все" to "всё", "елка" to "ёлка"),
+        setOf("светло", "готов", "потом"), setOf("все"))
+
+    @Test fun dictionaryDoesNotForceWrongHomographStress() {
+        assertEquals("Потом он готов. Светло, улыбн+улся.", stress("Потом он готов. Светло, улыбнулся."))
+    }
+
+    @Test fun explicitStressStillWinsForAmbiguousWords() {
+        assertEquals("светл+о гот+ов пот+ом", stress("светло\u0301 гот+ов пото\u0301м"))
+    }
+
+    @Test fun ambiguousYoReplacementIsNotForced() {
+        assertEquals("Все ёлка.", stress("Все елка."))
+    }
 }

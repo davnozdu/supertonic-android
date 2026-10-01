@@ -147,7 +147,8 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2 for Russian and Supertonic 3 for other languages.
 
-            ### Beta 6 changes
+            ### Beta 7 changes
+            - The dictionary no longer forces an arbitrary stress for 19,741 Russian homographs or ambiguous е/ё substitutions. Explicit user stress rules still take priority.
             - TeraTTSv2 is recommended for Russian. Commas and sentence punctuation are preserved when text is split for synthesis.
             - The Russian stress index downloads prebuilt from `davnozdu/supertonic-dictionaries`. New installs no longer build the index on the phone.
             - Russian voice styles and stress marking remain available offline after the first download.

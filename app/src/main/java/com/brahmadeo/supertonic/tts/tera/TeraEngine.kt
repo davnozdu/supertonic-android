@@ -3,6 +3,7 @@ package com.brahmadeo.supertonic.tts.tera
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import android.content.Context
 import android.util.JsonReader
 import com.brahmadeo.supertonic.tts.SupertonicTTS
 import org.json.JSONArray
@@ -14,7 +15,6 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
 import java.text.Normalizer
-import java.util.Locale
 import java.util.Random
 import java.util.zip.GZIPInputStream
 import kotlin.math.ceil
@@ -22,7 +22,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** Android port of the distilled TeraTTSv2 ONNX pipeline. */
-class TeraEngine(private val root: File) : AutoCloseable {
+class TeraEngine(private val root: File, context: Context) : AutoCloseable {
     private val env = OrtEnvironment.getEnvironment()
     private val sessions = HashMap<String, OrtSession>()
     private val options = OrtSession.SessionOptions().apply {
@@ -35,7 +35,10 @@ class TeraEngine(private val root: File) : AutoCloseable {
     private val styles = HashMap<String, Pair<FloatArray, FloatArray>>()
     private val accents = TeraStressLookup(root)
     private val yoWords by lazy { readDictionary("yo_words.json.gz") }
-    private val wordPattern = Regex("[+А-Яа-яЁё]+")
+    private val ambiguousStress = context.assets.open("tera_ambiguous_stress.txt")
+        .bufferedReader(Charsets.UTF_8).use { it.readLines().toSet() }
+    private val ambiguousYo = context.assets.open("tera_ambiguous_yo.txt")
+        .bufferedReader(Charsets.UTF_8).use { it.readLines().toSet() }
 
     init {
         require(indexer.size == 65536)
@@ -55,23 +58,7 @@ class TeraEngine(private val root: File) : AutoCloseable {
     }
 
     private fun accentText(text: String): String {
-        // Lexicon entries use U+0301 after the vowel; Tera uses '+' before it.
-        val manual = Regex("([АЕЁИОУЫЭЮЯаеёиоуыэюя])\u0301").replace(text) { "+${it.groupValues[1]}" }
-        return wordPattern.replace(manual) { match ->
-            val original = match.value
-            if ('+' in original) return@replace original
-            val yo = yoWords[original.lowercase(Locale.ROOT)]?.let { replacement ->
-                replacement.mapIndexed { i, c -> if (original.getOrNull(i)?.isUpperCase() == true) c.uppercaseChar() else c }.joinToString("")
-            } ?: original
-            val marked = accents.lookup(yo.lowercase(Locale.ROOT)) ?: return@replace yo
-            if (marked.replace("+", "").length != yo.length) return@replace yo
-            val out = StringBuilder()
-            var index = 0
-            for (c in marked) {
-                if (c == '+') out.append('+') else out.append(yo[index++])
-            }
-            out.toString()
-        }
+        return TeraTextPreparation.stress(text, accents::lookup, yoWords, ambiguousStress, ambiguousYo)
     }
 
     private fun tokenize(text: String): LongArray {

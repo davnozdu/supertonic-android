@@ -1,7 +1,11 @@
 package com.brahmadeo.supertonic.tts.tera
 
+import java.util.Locale
+
 /** Converts book punctuation to characters present in Tera's vocabulary. */
 internal object TeraTextPreparation {
+    private val wordPattern = Regex("[+А-Яа-яЁё]+")
+    private val acute = Regex("([АЕЁИОУЫЭЮЯаеёиоуыэюя])\\u0301")
     private val spacedDash = Regex("[ \\t]*—[ \\t]*|[ \\t]+[–-][ \\t]+|^[–-][ \\t]+", RegexOption.MULTILINE)
     private val punctuationNeedsSpace = Regex("[,.!?;:](?=[\\p{L}\\p{N}])")
 
@@ -25,5 +29,29 @@ internal object TeraTextPreparation {
                 prepared[index - 1].isDigit() && prepared[index + 1].isDigit()) match.value
             else "${match.value} "
         }.replace(Regex("[ \\t]+"), " ").trim()
+    }
+
+    fun stress(text: String, lookup: (String) -> String?, yoWords: Map<String, String>,
+               ambiguousStress: Set<String>, ambiguousYo: Set<String>): String {
+        val manual = acute.replace(text) { "+${it.groupValues[1]}" }
+        return wordPattern.replace(manual) { match ->
+            val original = match.value
+            if ('+' in original) return@replace original
+            val key = original.lowercase(Locale.ROOT)
+            val replacement = if (key in ambiguousYo) null else yoWords[key]
+            val yo = replacement?.mapIndexed { i, c ->
+                if (original.getOrNull(i)?.isUpperCase() == true) c.uppercaseChar() else c
+            }?.joinToString("") ?: original
+            val normalized = yo.lowercase(Locale.ROOT)
+            if (normalized in ambiguousStress) return@replace yo
+            val marked = lookup(normalized) ?: return@replace yo
+            if (marked.replace("+", "").length != yo.length) return@replace yo
+            val out = StringBuilder()
+            var index = 0
+            for (c in marked) {
+                if (c == '+') out.append('+') else out.append(yo[index++])
+            }
+            out.toString()
+        }
     }
 }

@@ -57,7 +57,7 @@ object SupertonicTTS {
         }
         teraEngine?.let { return it }
         return try {
-            TeraEngine(File(ctx.filesDir, "${AssetManager.MODEL_VERSION}/tera")).also { teraEngine = it }
+            TeraEngine(File(ctx.filesDir, "${AssetManager.MODEL_VERSION}/tera"), ctx).also { teraEngine = it }
         } catch (t: Throwable) {
             Log.e("SupertonicTTS", "Failed to open TeraEngine", t)
             null
