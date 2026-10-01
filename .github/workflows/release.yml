@@ -68,8 +68,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build unsigned release APK
-        run: ./gradlew assembleRelease --stacktrace
+      - name: Verify and build release APK
+        run: ./gradlew testReleaseUnitTest assembleRelease --stacktrace
 
       - name: Prepare signing keystore
         id: keystore
