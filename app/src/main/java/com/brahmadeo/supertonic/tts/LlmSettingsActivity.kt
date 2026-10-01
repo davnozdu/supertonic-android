@@ -63,6 +63,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             save()
                         }
                         Text("Ударения и пунктуация готовятся до синтеза. При ошибке или превышении времени ожидания используется обычная обработка со словарём.")
+                        Text("LLM только расставляет знаки препинания и ударения. Изменение слов, чисел или границ абзацев запрещено; такой ответ отклоняется.", style = MaterialTheme.typography.bodySmall)
                         if (config.mode != LlmMode.OFF) {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->
                                 config = config.copy(mode = LlmMode.entries.first { it.title == title }); save()

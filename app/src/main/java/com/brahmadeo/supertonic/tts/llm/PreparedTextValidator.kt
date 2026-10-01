@@ -21,7 +21,12 @@ object PreparedTextValidator {
             val sourceGap = original.substring(a[i].range.last + 1, a[i + 1].range.first)
             val targetGap = proposed.substring(b[i].range.last + 1, b[i + 1].range.first)
             if ((sourceGap == "-") != (targetGap == "-")) return null
+            if (sourceGap.count { it == '\n' } != targetGap.count { it == '\n' }) return null
+            if (sourceGap.filter { it in "\"'«»“”„()[]" } != targetGap.filter { it in "\"'«»“”„()[]" }) return null
         }
+        fun anchors(s: String) = s.filter { it == '\n' || it in "\"'«»“”„()[]" }
+        if (anchors(original.substring(0, a.first().range.first)) != anchors(proposed.substring(0, b.first().range.first))) return null
+        if (anchors(original.substring(a.last().range.last + 1)) != anchors(proposed.substring(b.last().range.last + 1))) return null
         val replacements = mutableListOf<Pair<IntRange, String>>()
         for (i in a.indices) {
             val source = a[i].value

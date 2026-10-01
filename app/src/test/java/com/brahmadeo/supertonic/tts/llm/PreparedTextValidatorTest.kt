@@ -27,6 +27,8 @@ class PreparedTextValidatorTest {
         assertNull(PreparedTextValidator.validate("Окно\nСветло", "Окно́. Светло́."))
         assertNull(PreparedTextValidator.validate("по-прежнему", "по пре́жнему"))
         assertNull(PreparedTextValidator.validate("он готов", "он-гото́в"))
+        assertNull(PreparedTextValidator.validate("Он\nоткрыл окно", "Он откры́л\nокно́"))
+        assertNull(PreparedTextValidator.validate("Он сказал «готов»", "Он «сказа́л гото́в»"))
     }
     @Test fun switchesWorkIndependently() {
         assertEquals("светло́ ты гото́в", PreparedTextValidator.validate("светло ты готов", "светло́, ты гото́в?", allowPunctuation = false))

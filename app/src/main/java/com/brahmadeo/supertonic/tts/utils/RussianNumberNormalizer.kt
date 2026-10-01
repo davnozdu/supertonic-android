@@ -1,7 +1,5 @@
 package com.brahmadeo.supertonic.tts.utils
 
-import java.util.regex.Pattern
-
 /**
  * Russian number-to-words converter for TTS pre-processing.
  *
@@ -10,8 +8,8 @@ import java.util.regex.Pattern
  *
  * Scope:
  * - Integers up to 10^12 with correct тысяч/миллион/миллиард agreement.
- * - Decimal numbers with a comma: "3,14" -> "три целых четырнадцать сотых"
- *   for short decimals, otherwise digit-by-digit after the comma.
+ * - Grouped integers: "1 101" -> "одна тысяча сто один".
+ * - Decimal numbers with comma or point, up to nine fractional digits.
  * - "N%" -> "N процентов" (genitive plural form covers most cases).
  * - "N°C" -> "N градусов Цельсия".
  * - Ordinal-looking suffixes ("1-й", "2-я") are left alone — they're
@@ -22,9 +20,6 @@ import java.util.regex.Pattern
  * - Case agreement (always emits nominative).
  * - Phone numbers, IBANs, ranges with hyphens beyond simple "10-15".
  *
- * Practical tradeoff: in 95% of book/article text the nominative reading
- * sounds natural; in legal/technical text with heavy case agreement the
- * model already gets some words wrong regardless.
  */
 class RussianNumberNormalizer {
 
@@ -36,8 +31,9 @@ class RussianNumberNormalizer {
     private val percentRegex = Regex("\\b(\\d+(?:[,.]\\d+)?)\\s*%")
     private val celsiusRegex = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°\\s*[CС]\\b")
     private val degreesRegex = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°")
-    private val decimalRegex = Regex("(?<![\\p{L}\\d])(-?\\d+),(\\d+)(?!\\d)")
-    private val integerRegex = Regex("(?<![\\p{L}\\d.,])(-?\\d{1,12})(?![\\p{L}\\d.,])")
+    private val groupedIntegerRegex = Regex("(?<![\\p{L}\\d])(-?\\d{1,3}(?:[ \\u00A0\\u202F]\\d{3})+)(?![\\p{L}\\d]|[.,]\\d)")
+    private val decimalRegex = Regex("(?<![\\p{L}\\d.,])(-?\\d{1,12})[,.](\\d{1,9})(?![\\p{L}\\d]|[.,]\\d)")
+    private val integerRegex = Regex("(?<![\\p{L}\\d])(?<!\\d[.,])(-?\\d{1,12})(?![\\p{L}\\d]|[.,]\\d|-\\p{L})")
     private val whitespaceRegex = Regex("\\s+")
 
     private val units = arrayOf(
@@ -129,23 +125,22 @@ class RussianNumberNormalizer {
     }
 
     /**
-     * Decimal: "3,14" -> "три целых четырнадцать сотых"; for longer fractional
-     * parts we fall back to "три целых один четыре один пять девять два шесть"
-     * to avoid extremely awkward agreement.
+     * Decimal: "3,14" -> "три целых четырнадцать сотых".
+     * Fractional digits are also read as one number, up to billionths.
      */
     fun spellDecimal(integerPart: Long, fractional: String): String {
         val intWords = spellInteger(integerPart)
         val intSuffix = pluralForm(integerPart, "целая", "целых", "целых")
-        if (fractional.length in 1..2 && fractional.all { it.isDigit() }) {
+        if (fractional.length in 1..9 && fractional.all { it.isDigit() }) {
             val fracValue = fractional.toLong()
-            val fracWords = spellInteger(fracValue)
+            val fracWords = spellIntegerFeminine(fracValue)
             // Use feminine for the integer triad here too (целая is feminine).
             val intWordsFem = spellIntegerFeminine(integerPart)
-            val denomWord = if (fractional.length == 1) {
-                pluralForm(fracValue, "десятая", "десятых", "десятых")
-            } else {
-                pluralForm(fracValue, "сотая", "сотых", "сотых")
-            }
+            val denominators = arrayOf("десятая", "сотая", "тысячная", "десятитысячная",
+                "стотысячная", "миллионная", "десятимиллионная", "стомиллионная", "миллиардная")
+            val denominator = denominators[fractional.length - 1]
+            val plural = denominator.removeSuffix("ая") + "ых"
+            val denomWord = pluralForm(fracValue, denominator, plural, plural)
             return whitespaceRegex
                 .replace("$intWordsFem ${pluralForm(integerPart, "целая", "целых", "целых")} $fracWords $denomWord", " ")
                 .trim()
@@ -194,7 +189,9 @@ class RussianNumberNormalizer {
      * spelled out separately.
      */
     fun normalize(text: String): String {
-        var t = text
+        var t = groupedIntegerRegex.replace(text) { m ->
+            m.value.filterNot { it == ' ' || it == '\u00A0' || it == '\u202F' }
+        }
 
         // Range: "10-15" / "10—15" -> "от 10 до 15" (then numbers spelled out below).
         t = rangeRegex.replace(t) { m ->
@@ -214,7 +211,7 @@ class RussianNumberNormalizer {
             "${m.groupValues[1]} градусов"
         }
 
-        // Decimals with comma: "3,14"
+        // Decimals with comma or point: "3,14" / "3.14".
         t = decimalRegex.replace(t) { m ->
             val sign = if (m.groupValues[1].startsWith("-")) { "минус " } else ""
             val intPart = m.groupValues[1].trimStart('-').toLongOrNull() ?: return@replace m.value

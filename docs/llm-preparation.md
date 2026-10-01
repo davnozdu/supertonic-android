@@ -41,6 +41,12 @@ compound-word hyphens and malformed stress marks. Explicit original stresses and
 user lexicon overrides take priority. This protects text integrity; it does not
 guarantee correct linguistic analysis or stress for every homograph.
 
+The instruction permits only punctuation and stress placement, with temperature
+zero. Quotes, brackets and paragraph boundaries must retain their positions.
+After validation, Russian number normalization reads whole integers (including
+grouped thousands and numbers before punctuation) and decimal fractions as words.
+LLMs retain digits verbatim; the app performs number spelling deterministically.
+
 ## Verification
 
 GitHub CI builds the Android APK and runs text preparation, update and thinking
