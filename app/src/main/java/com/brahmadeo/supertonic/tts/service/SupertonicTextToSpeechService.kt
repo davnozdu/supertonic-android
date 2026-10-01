@@ -326,7 +326,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         runBlocking {
             val producer = launch(Dispatchers.IO) {
                 try {
-                    val sentences = textNormalizer.splitIntoSentences(rawText, requestedLang)
+                    val sentences = textNormalizer.splitIntoSentences(
+                        rawText, requestedLang, preservePunctuation = AssetManager.isTera(this@SupertonicTextToSpeechService)
+                    )
                     for (sentence in sentences) {
                         if (SupertonicTTS.isCancelled()) { success = false; break }
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)

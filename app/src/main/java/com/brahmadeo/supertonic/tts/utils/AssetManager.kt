@@ -35,6 +35,8 @@ object AssetManager {
     const val TERA_MODEL = "teratts_v2"
     private const val TERA_REVISION = "f05ea799094571a3553904a555df3834fb0b963b"
     private const val TERA_BASE_URL = "https://huggingface.co/TeraSpace/TeraTTSv2/resolve/$TERA_REVISION"
+    private const val TERA_DICTIONARY_URL =
+        "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.1"
     val TERA_VOICES = listOf("ru_f1", "ru_f2", "ru_m1", "ru_m5")
 
     fun isTera(context: Context): Boolean = getModelType(context) == TERA_MODEL
@@ -77,12 +79,13 @@ object AssetManager {
                 val paths = listOf(
                     "models/duration_predictor.onnx", "models/text_encoder.onnx",
                     "models/sampler_distilled_cfg3_8step.onnx", "models/vocoder.onnx",
-                    "unicode_indexer.json", "ruaccent/dictionary/accents.json.gz",
+                    "unicode_indexer.json",
                     "ruaccent/dictionary/yo_words.json.gz"
                 ) + TERA_VOICES.flatMap { voice ->
                     listOf("styles/$voice/style_dp.npy", "styles/$voice/style_ttl.npy")
                 }
-                paths.map { AssetFile(it, "tera/$it", TERA_BASE_URL) }
+                paths.map { AssetFile(it, "tera/$it", TERA_BASE_URL) } +
+                    AssetFile("tera_accents.sacc", "tera/accents.sacc", TERA_DICTIONARY_URL)
             }
             "android_optimized_int8" -> {
                 // Hybrid INT4 .tflite + INT8 VE .onnx + FP32 vocoder .onnx.
@@ -142,7 +145,8 @@ object AssetManager {
         
         val files = getFilesForModel(currentModelType)
         return files.all { File(baseDir, it.localPath).exists() } &&
-            (currentModelType != TERA_MODEL || TeraStressDictionary.databaseFile(File(baseDir, "tera")).exists())
+            (currentModelType != TERA_MODEL ||
+                BinaryAccentDictionary.looksLikeSacc(TeraStressDictionary.databaseFile(File(baseDir, "tera"))))
     }
 
     suspend fun download(context: Context, onProgress: (String, Float) -> Unit) {
@@ -202,8 +206,13 @@ object AssetManager {
                 }.awaitAll()
             }
             if (modelType == TERA_MODEL) {
-                onProgress(context.getString(R.string.download_index_status), 0.95f)
-                TeraStressDictionary.prepare(File(baseDir, "tera"))
+                val teraRoot = File(baseDir, "tera")
+                if (!BinaryAccentDictionary.looksLikeSacc(TeraStressDictionary.databaseFile(teraRoot))) {
+                    // Existing interrupted installs may still have the old JSON.
+                    // New installs download the ready-to-use binary from GitHub.
+                    onProgress(context.getString(R.string.download_index_status), 0.95f)
+                    TeraStressDictionary.prepare(teraRoot)
+                }
             }
             
             prefs.edit().putString("last_downloaded_model", modelType).apply()

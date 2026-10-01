@@ -103,14 +103,14 @@
     <string name="model_standard_desc">Original Supertonic 3 models. Stable and reliable.</string>
     <string name="model_android_optimized_title">Android Optimized (Reza2kn)</string>
     <string name="model_android_optimized_desc">Optimized fork with multiple precision options.</string>
-    <string name="model_android_int8_title">Android (recommended)</string>
+    <string name="model_android_int8_title">Android (INT8)</string>
     <string name="model_android_int8_desc">Optimized hybrid for Android: INT4 + INT8 VE + FP32 vocoder.</string>
     <string name="model_android_fp32_title">FP32 (Large &amp; Original)</string>
     <string name="model_android_fp32_desc">Full precision version from the fork.</string>
     <string name="model_android_fp16_title">FP16 (Kyumdroid)</string>
     <string name="model_android_fp16_desc">Half-size fp16 weights, near-identical quality to FP32.</string>
-    <string name="model_tera_title">TeraTTSv2 (Russian)</string>
-    <string name="model_tera_desc">Russian voices with automatic dictionary stress. About 410 MB download; speed varies by device.</string>
+    <string name="model_tera_title">TeraTTSv2 (recommended for Russian)</string>
+    <string name="model_tera_desc">Russian voices with automatic dictionary stress. Downloads a ready-to-use stress index; no preparation wait.</string>
 
     <string name="synthesize_content_description">Synthesize and play speech</string>
     <string name="input_label">Input</string>
@@ -212,7 +212,7 @@
     <string name="search_history_placeholder">Search history...</string>
     <string name="action_retry_download">Retry Download</string>
     <string name="download_intro">Downloading Supertonic 3 TTS models. Supports 31 languages — this download happens only once.</string>
-    <string name="download_intro_tera">Downloading TeraTTSv2 for Russian (about 410 MB), then preparing the stress dictionary. Existing files are reused if you retry.</string>
+    <string name="download_intro_tera">Downloading TeraTTSv2 for Russian and a ready-to-use stress dictionary. Existing files are reused if you retry.</string>
     <string name="download_tera_in_progress">Preparing TeraTTSv2</string>
     <string name="download_file_status">Downloading %1$s</string>
     <string name="download_index_status">Building fast Russian stress index</string>

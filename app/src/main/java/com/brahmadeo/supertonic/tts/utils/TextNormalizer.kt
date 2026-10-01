@@ -392,7 +392,7 @@ class TextNormalizer {
         return normalized
     }
 
-    fun splitIntoSentences(text: String, lang: String = "en"): List<String> {
+    fun splitIntoSentences(text: String, lang: String = "en", preservePunctuation: Boolean = false): List<String> {
         // Per-call chunk limit. SMALL gives sub-second first-audio for short
         // notifications; LARGE merges multiple sentences for audiobook
         // narration with continuous intonation; DEFAULT is the legacy 300-char
@@ -427,9 +427,9 @@ class TextNormalizer {
                         currentPart.append(part)
                     } else {
                         if (currentPart.isNotEmpty()) {
-                            // Fix audio cutoff: If breaking at a comma or semi-colon, strip it
-                            // to prevent hard stops or artifacts.
-                            if (currentPart.endsWith(",") || currentPart.endsWith(";")) {
+                            // Legacy Supertonic workaround. Tera needs the
+                            // comma to retain the author's phrasing.
+                            if (!preservePunctuation && (currentPart.endsWith(",") || currentPart.endsWith(";"))) {
                                 currentPart.deleteCharAt(currentPart.length - 1)
                             }
                             refinedSentences.add(currentPart.toString())
@@ -463,7 +463,7 @@ class TextNormalizer {
         // synthesis batch — we just need to recompute when the user flips a
         // toggle in the Lexicon screen, which they can only do between calls.
         val isKorean = lang.lowercase().startsWith("ko")
-        val volatilePunctuationRegex: Regex? = if (!isKorean) {
+        val volatilePunctuationRegex: Regex? = if (!isKorean && !preservePunctuation) {
             val marks = StringBuilder()
             if (!PunctuationPrefs.tightQuestionExclamation) marks.append("!?")
             if (!PunctuationPrefs.tightCommasAndPeriods) marks.append(",;")
@@ -529,7 +529,7 @@ class TextNormalizer {
                         head.append(parts[k])
                         k++
                     }
-                    if (head.endsWith(",") || head.endsWith(";")) {
+                    if (!preservePunctuation && (head.endsWith(",") || head.endsWith(";"))) {
                         head.deleteCharAt(head.length - 1)
                     }
                     chunkedSentences.add(head.toString())

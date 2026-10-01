@@ -178,7 +178,9 @@ class PlaybackActivity : ComponentActivity() {
 
     private fun setupList(text: String) {
         val normalizer = TextNormalizer()
-        val sentences = normalizer.splitIntoSentences(text, currentLang)
+        val sentences = normalizer.splitIntoSentences(
+            text, currentLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this)
+        )
         sentencesState.value = sentences
     }
 

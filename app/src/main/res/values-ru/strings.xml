@@ -103,14 +103,14 @@
     <string name="model_standard_desc">Оригинальные модели Supertonic 3. Стабильно и надёжно.</string>
     <string name="model_android_optimized_title">Оптимизировано для Android (Reza2kn)</string>
     <string name="model_android_optimized_desc">Оптимизированный форк с несколькими вариантами точности.</string>
-    <string name="model_android_int8_title">Android (рекомендуется)</string>
+    <string name="model_android_int8_title">Android (INT8)</string>
     <string name="model_android_int8_desc">Оптимизированный гибрид: INT4 + INT8 VE + FP32 вокодер.</string>
     <string name="model_android_fp32_title">FP32 (большая, исходная)</string>
     <string name="model_android_fp32_desc">Версия из форка с полной точностью.</string>
     <string name="model_android_fp16_title">FP16 (Kyumdroid)</string>
     <string name="model_android_fp16_desc">Вдвое меньше FP32 при почти том же качестве.</string>
-    <string name="model_tera_title">TeraTTSv2 (русский)</string>
-    <string name="model_tera_desc">Русские голоса с автоматическими ударениями по словарю. Загрузка около 410 МБ; скорость зависит от устройства.</string>
+    <string name="model_tera_title">TeraTTSv2 (рекомендуется для русского)</string>
+    <string name="model_tera_desc">Русские голоса с автоматическими ударениями. Готовый словарь загружается без долгой подготовки.</string>
 
     <string name="synthesize_content_description">Озвучить и проиграть</string>
     <string name="input_label">Текст</string>
@@ -224,7 +224,7 @@
     <string name="search_history_placeholder">Поиск в истории…</string>
     <string name="action_retry_download">Повторить загрузку</string>
     <string name="download_intro">Загрузка модели Supertonic 3. Поддерживает 31 язык — это разовая загрузка.</string>
-    <string name="download_intro_tera">Загрузка TeraTTSv2 для русского языка (около 410 МБ), затем подготовка словаря ударений. При повторе уже скачанные файлы сохранятся.</string>
+    <string name="download_intro_tera">Загрузка TeraTTSv2 для русского языка и готового словаря ударений. При повторе уже скачанные файлы сохранятся.</string>
     <string name="download_tera_in_progress">Подготовка TeraTTSv2</string>
     <string name="download_file_status">Загрузка %1$s</string>
     <string name="download_index_status">Создание быстрого индекса ударений</string>

@@ -402,7 +402,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 var lastTotal = 0
                 try {
                     itemLoop@ while (true) {
-                        val sentences = textNormalizer.splitIntoSentences(curText, curLang)
+                        val sentences = textNormalizer.splitIntoSentences(
+                            curText, curLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@PlaybackService)
+                        )
                         val totalSentences = sentences.size
                         lastTotal = totalSentences
                         val validStartIndex = if (curStart in 0 until totalSentences) curStart else 0

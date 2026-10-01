@@ -36,6 +36,7 @@ class TeraEngine(private val root: File) : AutoCloseable {
     private val accents = TeraStressLookup(root)
     private val yoWords by lazy { readDictionary("yo_words.json.gz") }
     private val wordPattern = Regex("[+А-Яа-яЁё]+")
+    private val punctuationNeedsSpace = Regex("[,.!?;:…](?=[^\\s<])")
 
     init {
         require(indexer.size == 65536)
@@ -73,6 +74,16 @@ class TeraEngine(private val root: File) : AutoCloseable {
             out.toString()
         }
     }
+
+    /** Match upstream Tera normalization: punctuation is followed by a space. */
+    private fun normalizePunctuation(text: String): String =
+        punctuationNeedsSpace.replace(text) { match ->
+            val index = match.range.first
+            val mark = match.value[0]
+            if ((mark == '.' || mark == ',') && index > 0 && index + 1 < text.length &&
+                text[index - 1].isDigit() && text[index + 1].isDigit()) match.value
+            else "${match.value} "
+        }
 
     private fun tokenize(text: String): LongArray {
         val ids = ArrayList<Long>(text.length)
@@ -139,7 +150,7 @@ class TeraEngine(private val root: File) : AutoCloseable {
                    listener: SupertonicTTS.ProgressListener?, sessionId: Long): ByteArray {
         require(lang == "ru") { "TeraTTSv2 preset supports Russian only" }
         val (styleDp, styleTtl) = voice(stylePath)
-        val prepared = Normalizer.normalize("<ru>${accentText(text)}</ru>", Normalizer.Form.NFKD)
+        val prepared = Normalizer.normalize("<ru>${accentText(normalizePunctuation(text))}</ru>", Normalizer.Form.NFKD)
         val ids = tokenize(prepared)
         val durationIds = tokenize(prepared.replace("+", ""))
         val textLen = ids.size.toLong()
