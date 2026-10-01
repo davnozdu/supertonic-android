@@ -50,6 +50,8 @@
     <string name="update_available_message">%1$s is available (you have %2$s). Download the new version?</string>
     <string name="update_download_button">Download</string>
     <string name="update_skip_button">Skip</string>
+    <string name="update_downloading">Downloading verified update…</string>
+    <string name="update_download_failed">Could not download the update. Tap Download to retry.</string>
 
     <!-- Playback Activity -->
     <string name="now_playing_title">Now Playing</string>

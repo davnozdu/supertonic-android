@@ -10,8 +10,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
@@ -30,6 +32,8 @@ import com.brahmadeo.supertonic.tts.ui.DownloadScreen
 import com.brahmadeo.supertonic.tts.ui.MainScreen
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 import com.brahmadeo.supertonic.tts.utils.AssetManager
+import com.brahmadeo.supertonic.tts.utils.UpdateChecker
+import com.brahmadeo.supertonic.tts.utils.UpdateInstaller
 import com.brahmadeo.supertonic.tts.utils.HistoryManager
 import com.brahmadeo.supertonic.tts.utils.LexiconManager
 import com.brahmadeo.supertonic.tts.utils.QueueManager
@@ -89,6 +93,9 @@ class MainActivity : ComponentActivity() {
     // Service
     private var playbackService: IPlaybackService? = null
     private var isBound = false
+    private var pendingUpdateFile: File? = null
+    private var awaitingInstallPermission = false
+    private var updateDownloadStarted = false
 
     private val playbackListener = object : IPlaybackListener.Stub() {
         override fun onStateChanged(isPlaying: Boolean, hasContent: Boolean, isSynthesizing: Boolean) {
@@ -138,6 +145,7 @@ class MainActivity : ComponentActivity() {
     private fun prepareTextForTts(text: String?, lang: String): String {
         if (text.isNullOrEmpty()) return ""
         val trimmed = text.trim()
+        if (AssetManager.isTera(this)) return trimmed
         
         // Append " ." to prevent diffusion model from cutting off abruptly at the end
         // RESTRICTED for Korean
@@ -187,13 +195,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Once-a-day check against GitHub Releases. Throttled and silent on
-        // failure; surfaces an in-app dialog only when a newer tag exists.
+        // Once-a-day check. Download a newer signed release in the background,
+        // then let Android's package installer request its required consent.
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val update = com.brahmadeo.supertonic.tts.utils.UpdateChecker.check(this@MainActivity)
+                val update = UpdateChecker.check(this@MainActivity)
                 if (update != null) {
-                    withContext(Dispatchers.Main) { viewModel.availableUpdate.value = update }
+                    withContext(Dispatchers.Main) { downloadUpdate(update) }
                 }
             } catch (t: Throwable) {
                 Log.w("MainActivity", "Update check failed", t)
@@ -367,8 +375,11 @@ class MainActivity : ComponentActivity() {
                             },
                             confirmButton = {
                                 TextButton(onClick = {
-                                    val url = update.apkUrl ?: update.htmlUrl
-                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    if (update.apkUrl != null && update.apkSha256 != null) {
+                                        downloadUpdate(update)
+                                    } else {
+                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl)))
+                                    }
                                     viewModel.availableUpdate.value = null
                                 }) { Text(getString(R.string.update_download_button)) }
                             },
@@ -520,6 +531,54 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkResumeState()
+        if (awaitingInstallPermission && android.os.Build.VERSION.SDK_INT >= 26 &&
+            packageManager.canRequestPackageInstalls()) {
+            awaitingInstallPermission = false
+            pendingUpdateFile?.let { openPackageInstaller(it) }
+        }
+    }
+
+    private fun downloadUpdate(update: UpdateChecker.Update) {
+        if (updateDownloadStarted) return
+        if (update.apkUrl == null || update.apkSha256 == null) {
+            viewModel.availableUpdate.value = update
+            return
+        }
+        updateDownloadStarted = true
+        Toast.makeText(this, R.string.update_downloading, Toast.LENGTH_SHORT).show()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val apk = UpdateInstaller.download(this@MainActivity, update)
+                withContext(Dispatchers.Main) {
+                    pendingUpdateFile = apk
+                    openPackageInstaller(apk)
+                }
+            } catch (t: Throwable) {
+                Log.e("MainActivity", "Update download failed", t)
+                withContext(Dispatchers.Main) {
+                    updateDownloadStarted = false
+                    Toast.makeText(this@MainActivity, R.string.update_download_failed, Toast.LENGTH_LONG).show()
+                    viewModel.availableUpdate.value = update
+                }
+            }
+        }
+    }
+
+    private fun openPackageInstaller(apk: File) {
+        if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            awaitingInstallPermission = true
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:$packageName")))
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apk)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
+        pendingUpdateFile = null
+        updateDownloadStarted = false
     }
 
     private fun loadPreferences() {

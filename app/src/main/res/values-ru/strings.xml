@@ -50,6 +50,8 @@
     <string name="update_available_message">Доступна версия %1$s (у вас %2$s). Скачать новую версию?</string>
     <string name="update_download_button">Скачать</string>
     <string name="update_skip_button">Пропустить</string>
+    <string name="update_downloading">Загружается проверенное обновление…</string>
+    <string name="update_download_failed">Не удалось загрузить обновление. Нажмите «Скачать» для повтора.</string>
 
     <!-- Playback Activity -->
     <string name="now_playing_title">Сейчас играет</string>

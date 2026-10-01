@@ -26,9 +26,8 @@ object UpdateChecker {
     private const val PREFS = "SupertonicPrefs"
     private const val KEY_LAST_CHECK = "update_last_check_ms"
     private const val KEY_SKIPPED_TAG = "update_skipped_tag"
-    // One check per 24h is enough for a sideloaded app; avoids hammering the
-    // anonymous GitHub rate limit when the user reopens the app repeatedly.
-    private const val CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
+    // At most one check per hour, even if the app is opened repeatedly.
+    private const val CHECK_INTERVAL_MS = 60L * 60 * 1000
 
     data class Update(
         val tag: String,
@@ -37,6 +36,8 @@ object UpdateChecker {
         val htmlUrl: String,
         /** Direct APK matching this device's primary ABI, or null if absent. */
         val apkUrl: String?,
+        /** GitHub's SHA-256 digest of the selected APK. */
+        val apkSha256: String?,
     )
 
     /**
@@ -104,6 +105,7 @@ object UpdateChecker {
         val assets = optJSONArray("assets")
         val abis = android.os.Build.SUPPORTED_ABIS
         var apkUrl: String? = null
+        var apkSha256: String? = null
         if (assets != null) {
             // Prefer the asset whose name contains this device's top ABI;
             // fall back to the universal APK; finally any .apk at all.
@@ -117,10 +119,23 @@ object UpdateChecker {
                     val dl = a.optString("browser_download_url")
                     if (anyApk == null) anyApk = dl
                     if (name.contains("universal")) universal = dl
-                    if (name.contains(abi)) { apkUrl = dl; break@outer }
+                    if (name.contains(abi)) {
+                        apkUrl = dl
+                        apkSha256 = a.optString("digest").removePrefix("sha256:").takeIf { it.length == 64 }
+                        break@outer
+                    }
                 }
             }
-            if (apkUrl == null) apkUrl = universal ?: anyApk
+            if (apkUrl == null) {
+                apkUrl = universal ?: anyApk
+                for (j in 0 until assets.length()) {
+                    val a = assets.getJSONObject(j)
+                    if (a.optString("browser_download_url") == apkUrl) {
+                        apkSha256 = a.optString("digest").removePrefix("sha256:").takeIf { it.length == 64 }
+                        break
+                    }
+                }
+            }
         }
         return Update(
             tag = tag,
@@ -128,6 +143,7 @@ object UpdateChecker {
             notes = optString("body"),
             htmlUrl = optString("html_url"),
             apkUrl = apkUrl,
+            apkSha256 = apkSha256,
         )
     }
 

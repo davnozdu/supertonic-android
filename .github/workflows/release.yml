@@ -79,35 +79,18 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            # Stable PKCS12 keystore from repository secrets — every release
-            # carries the same signature, so users update in place without
-            # uninstalling.
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
-            echo "path=$RUNNER_TEMP/release.p12" >> "$GITHUB_OUTPUT"
-            echo "type=PKCS12" >> "$GITHUB_OUTPUT"
-            echo "alias=${KEY_ALIAS:-supertonic}" >> "$GITHUB_OUTPUT"
-            echo "storepass=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
-            echo "keypass=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" >> "$GITHUB_OUTPUT"
-          else
-            # Fallback for forks without secrets: ephemeral RSA-4096 key.
-            # Side-effect: users must uninstall before installing such a build.
-            keytool -genkeypair \
-              -keystore "$RUNNER_TEMP/release.jks" \
-              -storetype JKS \
-              -alias supertonic \
-              -keyalg RSA \
-              -keysize 4096 \
-              -validity 10000 \
-              -storepass supertonic-ci \
-              -keypass supertonic-ci \
-              -dname "CN=Supertonic v3 fork, OU=davnozdu, O=davnozdu, L=NA, S=NA, C=NA"
-            echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
-            echo "type=JKS" >> "$GITHUB_OUTPUT"
-            echo "alias=supertonic" >> "$GITHUB_OUTPUT"
-            echo "storepass=supertonic-ci" >> "$GITHUB_OUTPUT"
-            echo "keypass=supertonic-ci" >> "$GITHUB_OUTPUT"
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "Stable signing secrets are required for release builds" >&2
+            exit 1
           fi
+          # Stable PKCS12 keystore from repository secrets — every release
+          # carries the same signature, so users update in place.
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          echo "path=$RUNNER_TEMP/release.p12" >> "$GITHUB_OUTPUT"
+          echo "type=PKCS12" >> "$GITHUB_OUTPUT"
+          echo "alias=${KEY_ALIAS:-supertonic}" >> "$GITHUB_OUTPUT"
+          echo "storepass=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "keypass=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" >> "$GITHUB_OUTPUT"
 
       - name: Locate Android build-tools
         id: buildtools
@@ -164,10 +147,12 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2 for Russian and Supertonic 3 for other languages.
 
-            ### Beta 5 changes
+            ### Beta 6 changes
             - TeraTTSv2 is recommended for Russian. Commas and sentence punctuation are preserved when text is split for synthesis.
             - The Russian stress index downloads prebuilt from `davnozdu/supertonic-dictionaries`. New installs no longer build the index on the phone.
             - Russian voice styles and stress marking remain available offline after the first download.
+            - The app downloads new signed releases from GitHub, verifies their SHA-256 digest, and opens Android's installer automatically. Android may request permission for installs from this source.
+            - Release builds require the permanent signing key; CI fails if it is missing.
 
             ### Which APK to download
             - **`Supertonic-<tag>-arm64-v8a.apk`** — modern phones (recommended for almost everyone). Smallest download.
