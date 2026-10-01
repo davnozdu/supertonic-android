@@ -23,6 +23,9 @@ data class LlmConfig(
     val ollamaKey: String = "",
     val geminiKey: String = "",
     val preferGemini: Boolean = false,
+    val ollamaThinking: Boolean = false,
+    val geminiThinking: Boolean = false,
+    val localThinking: Boolean = false,
     val gpu: Boolean = true,
     val idleSeconds: Int = 120,
     val punctuation: Boolean = true,
@@ -64,6 +67,9 @@ object LlmSettings {
             ollamaModel = p.getString("ollama_model", "")!!, geminiModel = p.getString("gemini_model", "")!!,
             ollamaKey = decrypt(p.getString("ollama_key", "")!!), geminiKey = decrypt(p.getString("gemini_key", "")!!),
             preferGemini = p.getBoolean("prefer_gemini", false), gpu = p.getBoolean("gpu", true),
+            ollamaThinking = p.getBoolean("ollama_thinking", false),
+            geminiThinking = p.getBoolean("gemini_thinking", false),
+            localThinking = p.getBoolean("local_thinking", false),
             idleSeconds = p.getInt("idle_seconds", 120).coerceIn(30, 600),
             punctuation = p.getBoolean("punctuation", true), stress = p.getBoolean("stress", true)
         )
@@ -76,6 +82,9 @@ object LlmSettings {
             .putString("ollama_model", c.ollamaModel.trim()).putString("gemini_model", c.geminiModel.trim().removePrefix("models/"))
             .putString("ollama_key", encrypt(c.ollamaKey.trim())).putString("gemini_key", encrypt(c.geminiKey.trim()))
             .putBoolean("prefer_gemini", c.preferGemini).putBoolean("gpu", c.gpu)
+            .putBoolean("ollama_thinking", c.ollamaThinking)
+            .putBoolean("gemini_thinking", c.geminiThinking)
+            .putBoolean("local_thinking", c.localThinking)
             .putInt("idle_seconds", c.idleSeconds.coerceIn(30, 600))
             .putBoolean("punctuation", c.punctuation).putBoolean("stress", c.stress).apply()
         LlmPreparation.settingsChanged()

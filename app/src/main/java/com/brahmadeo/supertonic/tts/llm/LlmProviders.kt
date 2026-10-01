@@ -16,6 +16,7 @@ object LlmProviders {
     @Volatile private var activeConversation: Conversation? = null
     @Volatile private var activeHttp: HttpURLConnection? = null
     private val cancelGeneration = java.util.concurrent.atomic.AtomicLong()
+    private val thinkingControls = java.util.concurrent.ConcurrentHashMap<String, List<Any>>()
     private val timer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "LLM-deadline").apply { isDaemon = true } }
     fun cancelActive() {
         cancelGeneration.incrementAndGet()
@@ -85,16 +86,31 @@ object LlmProviders {
         val answer = if (gemini) {
             require(c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()) { "Выберите модель Gemini и укажите ключ" }
             require(c.geminiModel.matches(Regex("[A-Za-z0-9._-]+"))) { "Некорректное имя модели" }
+            val generationConfig = JSONObject().put("temperature", 0.1).put("maxOutputTokens", 6000)
+                .put("responseMimeType", "application/json").put("responseJsonSchema", schema())
+            ThinkingPolicy.gemini(c.geminiModel, c.geminiThinking)?.let {
+                generationConfig.put("thinkingConfig", JSONObject().put(it.field, it.value).put("includeThoughts", false))
+            }
             val body = JSONObject().put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", INSTRUCTION))))
                 .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
-                .put("generationConfig", JSONObject().put("temperature", 0.1).put("maxOutputTokens", 6000)
-                    .put("responseMimeType", "application/json").put("responseJsonSchema", schema()))
+                .put("generationConfig", generationConfig)
             val response = http("https://generativelanguage.googleapis.com/v1beta/models/${c.geminiModel}:generateContent", c.geminiKey, body, true)
             val parts = response.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts")
             (0 until parts.length()).filter { !parts.getJSONObject(it).optBoolean("thought") }.joinToString("") { parts.getJSONObject(it).optString("text") }
         } else {
             require(c.ollamaModel.isNotBlank()) { "Выберите модель Ollama" }
+            val controlKey = c.ollamaEndpoint + "/" + c.ollamaModel
+            val controls = thinkingControls[controlKey] ?: run {
+                val values = runCatching {
+                    val array = http(c.ollamaEndpoint.trimEnd('/') + "/api/show", c.ollamaKey,
+                        JSONObject().put("model", c.ollamaModel)).optJSONObject("thinking")?.optJSONArray("values")
+                    if (array == null) emptyList() else (0 until array.length()).map { array.get(it) }
+                }.getOrDefault(emptyList())
+                thinkingControls[controlKey] = values
+                values
+            }
             val body = JSONObject().put("model", c.ollamaModel).put("stream", false)
+                .put("think", ThinkingPolicy.ollama(controls, c.ollamaThinking, c.ollamaModel))
                 .put("options", JSONObject().put("temperature", 0.1).put("num_predict", 6000))
                 .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", INSTRUCTION))
                     .put(JSONObject().put("role", "user").put("content", prompt)))
@@ -124,7 +140,7 @@ object LlmProviders {
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
         return local!!.createConversation(ConversationConfig(systemInstruction = Contents.of(INSTRUCTION),
-            samplerConfig = SamplerConfig(1, 0.95, 0.1), thinkingConfig = ThinkingConfig(false, 0), maxOutputToken = 6000)).use {
+            samplerConfig = SamplerConfig(1, 0.95, 0.1), thinkingConfig = ThinkingConfig(c.localThinking, if (c.localThinking) 512 else 0), maxOutputToken = 6000)).use {
             activeConversation = it
             val deadline = timer.schedule({ runCatching { it.cancelProcess() } }, 45, java.util.concurrent.TimeUnit.SECONDS)
             try { parse(it.sendMessage(JSONObject().put("texts", JSONArray(texts)).toString()).toString(), texts.size) }

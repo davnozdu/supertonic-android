@@ -20,6 +20,7 @@ object LocalModelDownload {
     const val URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1/gemma-4-E2B-it.litertlm"
     val status = MutableStateFlow("Gemma 4 не скачана")
     val downloading = MutableStateFlow(false)
+    fun supported() = android.os.Build.SUPPORTED_ABIS.any { it == "arm64-v8a" || it == "x86_64" }
     fun modelFile(ctx: Context) = File(ctx.noBackupFilesDir, "llm/gemma-4-E2B-it.litertlm")
     fun ready(ctx: Context) = modelFile(ctx).let { it.isFile && it.length() == SIZE && File(it.parentFile, "verified-$SHA256").exists() }
     fun start(ctx: Context) { androidx.core.content.ContextCompat.startForegroundService(ctx, Intent(ctx, LocalModelDownloadService::class.java)) }
@@ -43,10 +44,12 @@ class LocalModelDownloadService : Service() {
         job = scope.launch {
             try {
                 val target = LocalModelDownload.modelFile(this@LocalModelDownloadService)
+                require(LocalModelDownload.supported()) { "Gemma 4 требует 64-битный Android" }
                 target.parentFile!!.mkdirs()
                 val partial = File(target.path + ".part")
                 if (partial.length() > LocalModelDownload.SIZE) partial.delete()
                 var offset = partial.length()
+                require(android.os.StatFs(target.parentFile!!.path).availableBytes > LocalModelDownload.SIZE - offset + 100_000_000L) { "Недостаточно места: нужно около 2,7 ГБ" }
                 if (offset < LocalModelDownload.SIZE) {
                     val c = URL(LocalModelDownload.URL).openConnection() as HttpURLConnection
                     connection = c; c.connectTimeout = 15_000; c.readTimeout = 30_000

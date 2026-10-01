@@ -16,6 +16,12 @@ object PreparedTextValidator {
         if (symbols(original) != symbols(proposed)) return null
         if (original.count { it == '\n' } != proposed.count { it == '\n' }) return null
         if (original.filter { it in "\"'«»“”„()[]" } != proposed.filter { it in "\"'«»“”„()[]" }) return null
+        // A hyphen inside a word is spelling, not freely editable punctuation.
+        for (i in 0 until a.lastIndex) {
+            val sourceGap = original.substring(a[i].range.last + 1, a[i + 1].range.first)
+            val targetGap = proposed.substring(b[i].range.last + 1, b[i + 1].range.first)
+            if ((sourceGap == "-") != (targetGap == "-")) return null
+        }
         val replacements = mutableListOf<Pair<IntRange, String>>()
         for (i in a.indices) {
             val source = a[i].value

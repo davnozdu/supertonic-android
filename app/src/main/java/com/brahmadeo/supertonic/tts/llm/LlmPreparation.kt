@@ -65,6 +65,7 @@ object LlmPreparation {
         if (activeBatch.isNotEmpty() && activeBatch.all { it.future.isCancelled }) LlmProviders.cancelActive()
     }
     fun prefetch(ctx: Context, texts: List<String>): List<Long?> = texts.map { submit(ctx, appCaller, it) }
+    fun cancelApp() = cancel(appCaller)
     fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 30_000): String {
         if (!enabled(ctx)) return text
         initialize(ctx)

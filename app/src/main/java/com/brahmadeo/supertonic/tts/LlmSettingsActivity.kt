@@ -77,11 +77,20 @@ class LlmSettingsActivity : ComponentActivity() {
                         OutlinedTextField(config.ollamaKey, { config = config.copy(ollamaKey = it) }, label = { Text("Ключ Ollama") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
                         Button(onClick = { refresh(false) }, enabled = !busy) { Text("Считать актуальные модели Ollama") }
                         Choice("Модель Ollama", config.ollamaModel.ifBlank { "Выберите модель" }, ollamaModels) { config = config.copy(ollamaModel = it) }
+                        Toggle("Размышление в Ollama (медленнее)", config.ollamaThinking) { config = config.copy(ollamaThinking = it) }
+                        Text("По умолчанию выключено. Если модель разрешает только уровни размышления, при выключении выбирается минимальный доступный уровень.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Gemini", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.geminiKey, { config = config.copy(geminiKey = it) }, label = { Text("Ключ Gemini API") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
                         Button(onClick = { refresh(true) }, enabled = !busy) { Text("Считать актуальные модели Gemini") }
                         Choice("Модель Gemini", config.geminiModel.ifBlank { "Выберите модель" }, geminiModels) { config = config.copy(geminiModel = it) }
+                        Toggle("Размышление в Gemini (медленнее)", config.geminiThinking) { config = config.copy(geminiThinking = it) }
+                        if (ThinkingPolicy.gemini(config.geminiModel, false)?.minimumOnly == true) {
+                            Text("У этой модели API не позволяет полностью отключить размышление. Выключенный тумблер устанавливает минимальный уровень.", style = MaterialTheme.typography.bodySmall)
+                        } else if (config.geminiModel.isNotBlank() && ThinkingPolicy.gemini(config.geminiModel, false) == null) {
+                            Text("Для этой модели API не предоставляет известной настройки размышления; тумблер к ней не применяется.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text("API может вернуть также модели звука и изображений. Для подготовки текста выберите текстовую LLM.", style = MaterialTheme.typography.bodySmall)
                         Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it) }
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
@@ -92,9 +101,11 @@ class LlmSettingsActivity : ComponentActivity() {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                             OutlinedButton(onClick = { LocalModelDownload.cancel(this@LlmSettingsActivity) }) { Text("Приостановить скачивание") }
                         } else if (!LocalModelDownload.ready(this@LlmSettingsActivity)) {
-                            Button(onClick = { LocalModelDownload.start(this@LlmSettingsActivity) }) { Text("Поставить / скачать локальную модель") }
+                            Button(enabled = LocalModelDownload.supported(), onClick = { LocalModelDownload.start(this@LlmSettingsActivity) }) { Text("Поставить / скачать локальную модель") }
+                            if (!LocalModelDownload.supported()) Text("Для локальной Gemma 4 требуется 64-битный Android")
                         }
                         Toggle("GPU для Gemma 4 (при ошибке — CPU)", config.gpu) { config = config.copy(gpu = it) }
+                        Toggle("Размышление в локальной Gemma 4 (медленнее)", config.localThinking) { config = config.copy(localThinking = it) }
                         Choice("Выгрузка из RAM после простоя", "${config.idleSeconds} секунд", listOf("30 секунд", "60 секунд", "120 секунд", "300 секунд", "600 секунд")) {
                             config = config.copy(idleSeconds = it.substringBefore(' ').toInt())
                         }

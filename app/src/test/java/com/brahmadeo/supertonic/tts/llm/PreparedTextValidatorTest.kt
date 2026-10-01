@@ -25,6 +25,8 @@ class PreparedTextValidatorTest {
     @Test fun preservesQuotesAndParagraphs() {
         assertNull(PreparedTextValidator.validate("«окно»", "окно́"))
         assertNull(PreparedTextValidator.validate("Окно\nСветло", "Окно́. Светло́."))
+        assertNull(PreparedTextValidator.validate("по-прежнему", "по пре́жнему"))
+        assertNull(PreparedTextValidator.validate("он готов", "он-гото́в"))
     }
     @Test fun switchesWorkIndependently() {
         assertEquals("светло́ ты гото́в", PreparedTextValidator.validate("светло ты готов", "светло́, ты гото́в?", allowPunctuation = false))

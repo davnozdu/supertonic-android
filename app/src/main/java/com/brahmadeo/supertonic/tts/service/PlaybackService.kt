@@ -751,6 +751,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     fun stopServicePlayback() {
         isPlaying = false
+        com.brahmadeo.supertonic.tts.llm.LlmPreparation.cancelApp()
         try {
             if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
                 audioTrack?.pause()
