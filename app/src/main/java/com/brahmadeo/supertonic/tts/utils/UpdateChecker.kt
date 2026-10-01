@@ -88,13 +88,17 @@ object UpdateChecker {
             }
             val body = conn.inputStream.bufferedReader().use { it.readText() }
             val arr = org.json.JSONArray(body)
-            // Releases come newest-first; take the first that isn't a draft.
+            // Model asset releases are not app updates. Select the highest
+            // version with an APK, regardless of publication order.
+            var newest: Update? = null
             for (i in 0 until arr.length()) {
                 val rel = arr.getJSONObject(i)
                 if (rel.optBoolean("draft", false)) continue
-                return rel.toUpdate()
+                val candidate = rel.toUpdate()
+                if (parse(candidate.tag) == null || candidate.apkUrl == null) continue
+                if (newest == null || isNewer(candidate.tag, newest.tag)) newest = candidate
             }
-            return null
+            return newest
         } finally {
             conn.disconnect()
         }
@@ -171,6 +175,7 @@ object UpdateChecker {
         val v = version.trim().removePrefix("v").removePrefix("V")
         val dash = v.indexOf('-')
         val core = if (dash >= 0) v.substring(0, dash) else v
+        if (!core.matches(Regex("\\d+(?:\\.\\d+){0,2}"))) return null
         val suffix = if (dash >= 0) v.substring(dash + 1) else null
         val parts = core.split('.')
         if (parts.isEmpty()) return null
