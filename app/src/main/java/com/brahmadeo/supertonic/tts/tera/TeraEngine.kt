@@ -25,6 +25,10 @@ import kotlin.math.roundToInt
 class TeraEngine(private val root: File) : AutoCloseable {
     private val env = OrtEnvironment.getEnvironment()
     private val sessions = HashMap<String, OrtSession>()
+    private val options = OrtSession.SessionOptions().apply {
+        setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 6))
+        setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+    }
     private val indexer = JSONArray(File(root, "unicode_indexer.json").readText()).let { array ->
         IntArray(array.length()) { array.getInt(it) }
     }
@@ -35,14 +39,9 @@ class TeraEngine(private val root: File) : AutoCloseable {
 
     init {
         require(indexer.size == 65536)
-        val options = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 6))
-            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-        }
         for (name in listOf("text_encoder", "duration_predictor", "sampler_distilled_cfg3_8step", "vocoder")) {
             sessions[name] = env.createSession(File(root, "models/$name.onnx").absolutePath, options)
         }
-        options.close()
     }
 
     private fun readDictionary(name: String): Map<String, String> {
@@ -206,6 +205,7 @@ class TeraEngine(private val root: File) : AutoCloseable {
     override fun close() {
         sessions.values.forEach { it.close() }
         sessions.clear()
+        options.close()
         styles.clear()
         accents.close()
     }
