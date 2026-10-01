@@ -54,6 +54,7 @@ fun MainScreen(
     voices: Map<String, String>,
     selectedVoiceFile: String,
     onVoiceChange: (String) -> Unit,
+    isTeraModel: Boolean,
 
     isMixingEnabled: Boolean,
     onMixingEnabledChange: (Boolean) -> Unit,
@@ -275,7 +276,7 @@ fun MainScreen(
                             onOptionSelected = { name -> onVoiceChange(voices[name] ?: "M1.json") }
                         )
 
-                        Row(
+                        if (!isTeraModel) Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -287,7 +288,7 @@ fun MainScreen(
                             Switch(checked = isMixingEnabled, onCheckedChange = onMixingEnabledChange)
                         }
 
-                        AnimatedVisibility(visible = isMixingEnabled) {
+                        AnimatedVisibility(visible = isMixingEnabled && !isTeraModel) {
                             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 DropdownSelector(
                                     label = stringResource(AppR.string.voice_style_2_label),
@@ -324,7 +325,7 @@ fun MainScreen(
                             leadingIcon = Icons.Default.Speed
                         )
 
-                        SliderWithLabel(
+                        if (!isTeraModel) SliderWithLabel(
                             label = stringResource(AppR.string.quality_label),
                             value = steps.toFloat(),
                             onValueChange = { onStepsChange(it.toInt()) },
@@ -332,7 +333,7 @@ fun MainScreen(
                             steps = 8,
                             displayValue = "$steps steps"
                         )
-                        Text(
+                        if (!isTeraModel) Text(
                             text = stringResource(AppR.string.quality_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -547,6 +548,7 @@ fun MainScreenPreview() {
             voices = mapOf("Voice 1" to "F1.json", "Voice 2" to "M1.json"),
             selectedVoiceFile = "F1.json",
             onVoiceChange = {},
+            isTeraModel = false,
             isMixingEnabled = true,
             onMixingEnabledChange = {},
             selectedVoiceFile2 = "M1.json",

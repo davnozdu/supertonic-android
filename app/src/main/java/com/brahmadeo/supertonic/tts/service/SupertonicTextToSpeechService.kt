@@ -167,6 +167,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (voiceName == null) return TextToSpeech.ERROR
         if (!voiceName.contains("-supertonic-")) return TextToSpeech.ERROR
         val styleName = voiceName.substringAfter("-supertonic-")
+        if (AssetManager.isTera(this) && styleName !in AssetManager.TERA_VOICES) return TextToSpeech.ERROR
         val file = AssetManager.voiceFile(this, "$styleName.json")
         return if (file.exists()) TextToSpeech.SUCCESS else TextToSpeech.ERROR
     }
@@ -175,7 +176,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
         val selected = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         val voiceName = if (selected.endsWith(".json")) selected.substringBeforeLast(".") else selected
-        val prefix = normalizeLanguage(lang)
+        val prefix = if (AssetManager.isTera(this)) "ru" else normalizeLanguage(lang)
         return "$prefix-supertonic-$voiceName"
     }
 
@@ -296,15 +297,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                 xnnThreads = SupertonicTTS.recommendedXnnThreads(this@SupertonicTextToSpeechService))
         }
 
-        // Streaming + queue pipeline, mirroring PlaybackService.
-        // Producer (Rust callback) -> Channel<ByteArray> -> Consumer (audioAvailable).
-        //
-        // Without this, onSynthesizeText used to wait for an entire sentence
-        // of audio (3-5 s) before handing anything over to Android's TTS
-        // system. With clients like Moon+ Reader that means a multi-second
-        // gap at the start of every block. Now bytes go to audioAvailable
-        // chunk-by-chunk as soon as the vocoder produces them, and the
-        // 50-chunk buffer lets the producer race ahead while Android plays.
+        // Synthesize on a worker and pass PCM through a bounded channel.
+        // The synthesis thread calls audioAvailable as each chunk arrives;
+        // Android forbids calling that callback from the worker thread.
         // Keep several sentences of already generated PCM in RAM while the
         // framework drains earlier audio. The next Android TTS request itself
         // cannot be seen until the framework calls onSynthesizeText again.

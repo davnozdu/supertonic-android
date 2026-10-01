@@ -37,6 +37,18 @@ Every app that uses Android's TTS API (Voice Aloud, TalkBack, reader apps, navig
 
 ## Pronunciation control
 
+### TeraTTSv2 Russian preset
+
+The model picker also offers [TeraTTSv2](https://huggingface.co/TeraSpace/TeraTTSv2) for Russian. It downloads the pinned distilled ONNX sampler, encoder, duration predictor, vocoder, four Russian voice styles, and the RUAccent dictionaries on first use (about 410 MB). Model files are downloaded from the pinned Hugging Face revision and are not included in the APK. `ru_f1` is the default voice.
+
+The Android implementation uses TeraTTSv2's **dictionary** stress mode. Its 3.2-million-entry dictionary is converted once after download to the app's memory-mapped `.sacc` format; lookups do not load the whole dictionary into Java memory. This conversion needs extra temporary storage and can take several minutes. Known words receive a stress marker automatically. A manual `+` before the stressed vowel or a combining acute accent after it takes priority. Unknown words and ambiguous homographs may remain unmarked. The upstream model's full neural RUAccent mode requires additional large ONNX models and tokenizers and is not enabled in this preset.
+
+TeraTTSv2's sampler generates the latent for a sentence before its vocoder can stream the first PCM chunk. It may take longer to start than an optimized Supertonic preset; compare on your device before using it as the system engine for a reader.
+
+### Reading in Moon+ Reader
+
+The system TTS service streams PCM chunks as soon as they are available. A bounded in-memory queue holds already generated chunks while Android consumes earlier audio. The in-app player likewise synthesizes later sentences while earlier sentences play. Android calls `onSynthesizeText` serially, so the engine can pre-generate only text that Moon+ Reader has already submitted; it cannot fetch future paragraphs from the reader on its own.
+
 Two layers of user rules, both applied before the text reaches the model:
 
 1. **Lexicon** (menu → Lexicon) — small set of hand-edited rules with regex or whole-word matching. Highest priority.

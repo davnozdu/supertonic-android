@@ -415,6 +415,7 @@ class MainActivity : ComponentActivity() {
 
                         voices = viewModel.voiceFiles,
                         selectedVoiceFile = viewModel.selectedVoiceFile.value,
+                        isTeraModel = AssetManager.isTera(this@MainActivity),
                         onVoiceChange = {
                             if (viewModel.selectedVoiceFile.value != it) {
                                 viewModel.selectedVoiceFile.value = it

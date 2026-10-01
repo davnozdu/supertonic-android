@@ -29,7 +29,7 @@ class TeraEngine(private val root: File) : AutoCloseable {
         IntArray(array.length()) { array.getInt(it) }
     }
     private val styles = HashMap<String, Pair<FloatArray, FloatArray>>()
-    private val accents by lazy { readDictionary("accents.json.gz") }
+    private val accents = TeraStressLookup(root)
     private val yoWords by lazy { readDictionary("yo_words.json.gz") }
     private val wordPattern = Regex("[+А-Яа-яЁё]+")
 
@@ -64,7 +64,7 @@ class TeraEngine(private val root: File) : AutoCloseable {
             val yo = yoWords[original.lowercase(Locale.ROOT)]?.let { replacement ->
                 replacement.mapIndexed { i, c -> if (original.getOrNull(i)?.isUpperCase() == true) c.uppercaseChar() else c }.joinToString("")
             } ?: original
-            val marked = accents[yo.lowercase(Locale.ROOT)] ?: return@replace yo
+            val marked = accents.lookup(yo.lowercase(Locale.ROOT)) ?: return@replace yo
             if (marked.replace("+", "").length != yo.length) return@replace yo
             val out = StringBuilder()
             var index = 0
@@ -76,13 +76,13 @@ class TeraEngine(private val root: File) : AutoCloseable {
     }
 
     private fun tokenize(text: String): LongArray {
-        val ids = LongArray(text.length)
-        for (i in text.indices) {
-            val cp = text[i].code
-            require(cp < indexer.size && indexer[cp] >= 0) { "Unsupported TeraTTS character U+${cp.toString(16)}" }
-            ids[i] = indexer[cp].toLong()
+        val ids = ArrayList<Long>(text.length)
+        for (character in text) {
+            val cp = character.code
+            if (cp < indexer.size && indexer[cp] >= 0) ids.add(indexer[cp].toLong())
         }
-        return ids
+        require(ids.isNotEmpty()) { "Text contains no TeraTTS tokens" }
+        return ids.toLongArray()
     }
 
     private fun loadNpy(file: File, expected: Int): FloatArray {
@@ -207,5 +207,6 @@ class TeraEngine(private val root: File) : AutoCloseable {
         sessions.values.forEach { it.close() }
         sessions.clear()
         styles.clear()
+        accents.close()
     }
 }
