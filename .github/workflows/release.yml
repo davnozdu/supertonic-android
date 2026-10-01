@@ -149,6 +149,8 @@ jobs:
 
             ### Beta 8 changes
             - Optional LLM text preparation: contextual Russian stress and punctuation, with validation that words and numbers are unchanged.
+            - Separate thinking switches for Ollama, Gemini and local Gemma are off by default. Where a provider cannot disable thinking completely, settings explain the minimum-level limitation.
+            - Strict preparation changes only punctuation and stress; words, digits, quotes and paragraph boundaries are protected. Russian integers and decimal fractions are read as complete numbers, including numbers next to punctuation and grouped thousands.
             - Ollama and Gemini API keys can be entered in the new LLM settings. Available cloud models are fetched from each provider's API; none are hardcoded.
             - Download and verify Gemma 4 E2B from Hugging Face for offline preparation. GPU with CPU fallback; the model is unloaded from RAM after configurable idle time.
             - Auto tries configured clouds, then the downloaded local model. Local mode never contacts clouds; the master switch completely disables LLM preparation.
