@@ -160,8 +160,14 @@ jobs:
         with:
           files: ${{ env.SIGNED_DIR }}/*.apk
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-beta') }}
           body: |
-            **Supertonic 3 multilingual TTS for Android** — 31-language fork of `DevGitPit/supertonic-android`.
+            **Supertonic TTS for Android** — TeraTTSv2 for Russian and Supertonic 3 for other languages.
+
+            ### Beta 5 changes
+            - TeraTTSv2 is recommended for Russian. Commas and sentence punctuation are preserved when text is split for synthesis.
+            - The Russian stress index downloads prebuilt from `davnozdu/supertonic-dictionaries`. New installs no longer build the index on the phone.
+            - Russian voice styles and stress marking remain available offline after the first download.
 
             ### Which APK to download
             - **`Supertonic-<tag>-arm64-v8a.apk`** — modern phones (recommended for almost everyone). Smallest download.
@@ -173,7 +179,7 @@ jobs:
             1. Download the right APK above (arm64-v8a in 99% of cases).
             2. On the phone: Settings → Apps → Install unknown apps → allow your file manager / browser.
             3. Tap the APK to install. If `adb install` returns `INSTALL_FAILED_VERIFICATION_FAILURE`, disable `Verify apps over USB` in Developer Options.
-            4. First launch downloads ~400 MB of ONNX models from Hugging Face — needs Wi-Fi once.
+            4. First use downloads the selected model. TeraTTSv2 fetches its ONNX files from Hugging Face and the ready-to-use stress index from GitHub.
 
             ### Make it the system TTS
             Settings → Accessibility → Text-to-speech output → Preferred engine → **Supertonic TTS (Fork)**.
