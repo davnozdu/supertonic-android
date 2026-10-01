@@ -87,7 +87,9 @@ class LocalModelDownloadService : Service() {
                 File(target.parentFile, "verified-${LocalModelDownload.SHA256}").writeText(hash)
                 LocalModelDownload.status.value = "Gemma 4 скачана и проверена"
             } catch (_: CancellationException) { LocalModelDownload.status.value = "Скачивание приостановлено; можно продолжить" }
-            catch (e: Exception) { LocalModelDownload.status.value = "Ошибка: ${e.message?.take(140)}" }
+            catch (e: Exception) {
+                LocalModelDownload.status.value = if (!isActive) "Скачивание приостановлено; можно продолжить" else "Ошибка: ${e.message?.take(140)}"
+            }
             finally {
                 connection?.disconnect(); connection = null
                 LocalModelDownload.downloading.value = false

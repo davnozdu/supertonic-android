@@ -94,10 +94,13 @@ object LlmProviders {
             (0 until parts.length()).filter { !parts.getJSONObject(it).optBoolean("thought") }.joinToString("") { parts.getJSONObject(it).optString("text") }
         } else {
             require(c.ollamaModel.isNotBlank()) { "Выберите модель Ollama" }
-            val body = JSONObject().put("model", c.ollamaModel).put("stream", false).put("think", false)
-                .put("format", schema()).put("options", JSONObject().put("temperature", 0.1).put("num_predict", 6000))
+            val body = JSONObject().put("model", c.ollamaModel).put("stream", false)
+                .put("options", JSONObject().put("temperature", 0.1).put("num_predict", 6000))
                 .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", INSTRUCTION))
                     .put(JSONObject().put("role", "user").put("content", prompt)))
+            // Ollama Cloud does not support the format/schema parameter.
+            // JSON is requested in the instruction and validated after receipt.
+            if (URL(c.ollamaEndpoint).host != "ollama.com") body.put("format", schema())
             http(c.ollamaEndpoint.trimEnd('/') + "/api/chat", c.ollamaKey, body).getJSONObject("message").getString("content")
         }
         return parse(answer, texts.size)

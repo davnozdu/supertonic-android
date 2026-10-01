@@ -59,7 +59,7 @@ class LlmSettingsActivity : ComponentActivity() {
                     Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Toggle("LLM-обработка", config.mode != LlmMode.OFF) {
-                            config = config.copy(mode = if (it) LlmMode.AUTO else LlmMode.OFF)
+                            config = config.copy(mode = if (it) LlmSettings.previousMode(this@LlmSettingsActivity) else LlmMode.OFF)
                             save()
                         }
                         Text("Ударения и пунктуация готовятся до синтеза. При ошибке или превышении времени ожидания используется обычная обработка со словарём.")

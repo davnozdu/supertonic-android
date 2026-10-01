@@ -69,7 +69,9 @@ object LlmSettings {
         )
     }
     fun save(context: Context, c: LlmConfig) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        val edit = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (c.mode != LlmMode.OFF) edit.putString("last_mode", c.mode.name)
+        edit
             .putString("mode", c.mode.name).putString("ollama_endpoint", c.ollamaEndpoint.trim().trimEnd('/'))
             .putString("ollama_model", c.ollamaModel.trim()).putString("gemini_model", c.geminiModel.trim().removePrefix("models/"))
             .putString("ollama_key", encrypt(c.ollamaKey.trim())).putString("gemini_key", encrypt(c.geminiKey.trim()))
@@ -78,4 +80,7 @@ object LlmSettings {
             .putBoolean("punctuation", c.punctuation).putBoolean("stress", c.stress).apply()
         LlmPreparation.settingsChanged()
     }
+    fun previousMode(context: Context) = runCatching {
+        LlmMode.valueOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("last_mode", "AUTO")!!)
+    }.getOrDefault(LlmMode.AUTO).takeUnless { it == LlmMode.OFF } ?: LlmMode.AUTO
 }
