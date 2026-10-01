@@ -43,6 +43,8 @@ import androidx.core.content.edit
 
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 
 class MainActivity : ComponentActivity() {
 
@@ -214,7 +216,9 @@ class MainActivity : ComponentActivity() {
                         onDismissRequest = { /* Don't dismiss without choice on first launch */ },
                         title = { Text(getString(R.string.model_selection_title)) },
                         text = {
-                            androidx.compose.foundation.layout.Column {
+                            androidx.compose.foundation.layout.Column(
+                                modifier = androidx.compose.ui.Modifier.verticalScroll(rememberScrollState())
+                            ) {
                                 // Standard
                                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                     androidx.compose.material3.RadioButton(
@@ -268,11 +272,33 @@ class MainActivity : ComponentActivity() {
                                         Text(getString(R.string.model_android_fp16_desc), style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
+
+                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = viewModel.selectedModel.value == AssetManager.TERA_MODEL,
+                                        onClick = { viewModel.selectedModel.value = AssetManager.TERA_MODEL }
+                                    )
+                                    Column {
+                                        Text(getString(R.string.model_tera_title), style = MaterialTheme.typography.titleMedium)
+                                        Text(getString(R.string.model_tera_desc), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                             }
                         },
                         confirmButton = {
                             TextButton(onClick = {
                                 AssetManager.setModelType(this@MainActivity, viewModel.selectedModel.value)
+                                if (AssetManager.isTera(this@MainActivity)) {
+                                    viewModel.currentLang.value = "ru"
+                                    viewModel.selectedVoiceFile.value = "ru_f1.json"
+                                    saveStringPref("selected_lang", "ru")
+                                    saveStringPref("selected_voice", "ru_f1.json")
+                                    viewModel.isMixingEnabled.value = false
+                                } else if (viewModel.selectedVoiceFile.value.startsWith("ru_")) {
+                                    viewModel.selectedVoiceFile.value = "F3.json"
+                                    saveStringPref("selected_voice", "F3.json")
+                                }
                                 viewModel.showModelSelection.value = false
                                 startDownload()
                             }) { Text(getString(R.string.model_download_button)) }
@@ -358,8 +384,10 @@ class MainActivity : ComponentActivity() {
                     val placeholder = remember(viewModel.currentLang.value) {
                         getLocalizedResource(this@MainActivity, viewModel.currentLang.value, R.string.default_input_text)
                     }
-                    val localizedLanguages = remember(viewModel.currentLang.value) {
-                        languages.mapKeys { getLocalizedResource(this@MainActivity, viewModel.currentLang.value, it.key) }
+                    val localizedLanguages = remember(viewModel.currentLang.value, viewModel.selectedModel.value) {
+                        val available = if (AssetManager.isTera(this@MainActivity))
+                            languages.filterValues { it == "ru" } else languages
+                        available.mapKeys { getLocalizedResource(this@MainActivity, viewModel.currentLang.value, it.key) }
                     }
 
                     MainScreen(
@@ -396,7 +424,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
 
-                        isMixingEnabled = viewModel.isMixingEnabled.value,
+                        isMixingEnabled = viewModel.isMixingEnabled.value && !AssetManager.isTera(this@MainActivity),
                         onMixingEnabledChange = { 
                             viewModel.isMixingEnabled.value = it
                             getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
@@ -582,7 +610,7 @@ class MainActivity : ComponentActivity() {
         // text_encoder.onnx for the Rust native engine to load — the .tflite
         // versions live in the same folder. Skip native init for that preset;
         // HybridEngine builds itself lazily on the first generateAudio call.
-        if (AssetManager.getModelType(this) == "android_optimized_int8") {
+        if (AssetManager.getModelType(this) == "android_optimized_int8" || AssetManager.isTera(this)) {
             viewModel.isInitializing.value = false
             setupVoicesMap(viewModel.currentLang.value)
             return
@@ -615,6 +643,10 @@ class MainActivity : ComponentActivity() {
 
     private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
+        if (AssetManager.isTera(this)) {
+            AssetManager.TERA_VOICES.forEach { viewModel.voiceFiles[it] = "$it.json" }
+            return
+        }
         val voiceResources = mapOf(
             "M1.json" to R.string.voice_m1,
             "M2.json" to R.string.voice_m2,
@@ -653,15 +685,14 @@ class MainActivity : ComponentActivity() {
 
         if (viewModel.isInitializing.value) return
 
-        val voiceDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
-        var stylePath = File(voiceDir, viewModel.selectedVoiceFile.value).absolutePath
+        var stylePath = AssetManager.voiceFile(this, viewModel.selectedVoiceFile.value).absolutePath
         if (!File(stylePath).exists()) {
              startDownload()
              return
         }
 
-        if (viewModel.isMixingEnabled.value) {
-            val stylePath2 = File(voiceDir, viewModel.selectedVoiceFile2.value).absolutePath
+        if (viewModel.isMixingEnabled.value && !AssetManager.isTera(this)) {
+            val stylePath2 = AssetManager.voiceFile(this, viewModel.selectedVoiceFile2.value).absolutePath
             if (File(stylePath2).exists()) {
                 stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
             }
@@ -693,10 +724,9 @@ class MainActivity : ComponentActivity() {
 
         if (viewModel.isInitializing.value) return
 
-        val voiceDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
-        var stylePath = File(voiceDir, viewModel.selectedVoiceFile.value).absolutePath
-        if (viewModel.isMixingEnabled.value) {
-            val stylePath2 = File(voiceDir, viewModel.selectedVoiceFile2.value).absolutePath
+        var stylePath = AssetManager.voiceFile(this, viewModel.selectedVoiceFile.value).absolutePath
+        if (viewModel.isMixingEnabled.value && !AssetManager.isTera(this)) {
+            val stylePath2 = AssetManager.voiceFile(this, viewModel.selectedVoiceFile2.value).absolutePath
             stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
         }
 
@@ -723,10 +753,9 @@ class MainActivity : ComponentActivity() {
 
         if (viewModel.isInitializing.value) return
 
-        val voiceDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
-        var stylePath = File(voiceDir, viewModel.selectedVoiceFile.value).absolutePath
-        if (viewModel.isMixingEnabled.value) {
-            val stylePath2 = File(voiceDir, viewModel.selectedVoiceFile2.value).absolutePath
+        var stylePath = AssetManager.voiceFile(this, viewModel.selectedVoiceFile.value).absolutePath
+        if (viewModel.isMixingEnabled.value && !AssetManager.isTera(this)) {
+            val stylePath2 = AssetManager.voiceFile(this, viewModel.selectedVoiceFile2.value).absolutePath
             stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
         }
         launchPlaybackActivity(text, stylePath)

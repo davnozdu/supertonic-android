@@ -184,6 +184,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     override fun onCreate() {
         super.onCreate()
+        SupertonicTTS.setApplicationContext(this)
         createNotificationChannel()
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
@@ -214,7 +215,10 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
         val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-        SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
+        if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this) &&
+            com.brahmadeo.supertonic.tts.utils.AssetManager.getModelType(this) != "android_optimized_int8") {
+            SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
+        }
         // Prewarm: synthesize a throwaway "." in the background so XNNPACK
         // JITs its kernels and ORT lays out activation buffers before the
         // user's first real request. Saves ~300-700 ms off the first audible
@@ -223,9 +227,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         serviceScope.launch(Dispatchers.IO) {
             val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
             val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
-            val stylePath = File(filesDir,
-                "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/voice_styles/$voiceFile"
-            ).absolutePath
+            val stylePath = com.brahmadeo.supertonic.tts.utils.AssetManager.voiceFile(this@PlaybackService, voiceFile).absolutePath
             SupertonicTTS.prewarm(stylePath)
         }
     }
@@ -237,7 +239,10 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             SupertonicTTS.release()
             val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
+            if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this) &&
+                com.brahmadeo.supertonic.tts.utils.AssetManager.getModelType(this) != "android_optimized_int8") {
+                SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
+            }
         }
         return START_NOT_STICKY
     }
@@ -318,18 +323,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
                 val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
 
-                // Channel sizing:
-                //  pre-roll OFF: 50 chunks ~ 5 s look-ahead — enough to hide
-                //                per-sentence inference startup, small enough
-                //                that cancel still feels responsive (worst
-                //                case: 5 s of buffered audio before silence).
-                //  pre-roll ON:  ~50 s capacity. We deliberately let the
-                //                producer race ahead and accumulate several
-                //                sentences worth of PCM in RAM before
-                //                AudioTrack starts. RAM cost: ~1-3 MB for
-                //                typical voice settings, never spills to disk.
+                // Keep up to 500 chunks of synthesized audio in RAM so the
+                // producer can prepare later sentences while AudioTrack plays
+                // earlier ones. Cancellation closes this channel immediately.
                 val preRollSentences = PlaybackPrefs.preRollSentences
-                val channelCapacity = if (preRollEnabled) 500 else 50
+                val channelCapacity = 500
                 val channel = Channel<ByteArray>(capacity = channelCapacity)
                 currentAudioChannel = channel
 

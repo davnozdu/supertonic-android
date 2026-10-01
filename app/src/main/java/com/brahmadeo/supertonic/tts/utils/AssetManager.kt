@@ -30,6 +30,20 @@ object AssetManager {
     )
 
     const val DEFAULT_MODEL = "android_optimized_int8"
+    const val TERA_MODEL = "teratts_v2"
+    private const val TERA_REVISION = "f05ea799094571a3553904a555df3834fb0b963b"
+    private const val TERA_BASE_URL = "https://huggingface.co/TeraSpace/TeraTTSv2/resolve/$TERA_REVISION"
+    val TERA_VOICES = listOf("ru_f1", "ru_f2", "ru_m1", "ru_m5")
+
+    fun isTera(context: Context): Boolean = getModelType(context) == TERA_MODEL
+
+    fun voiceFile(context: Context, selected: String): File {
+        val base = File(context.filesDir, MODEL_VERSION)
+        if (!isTera(context)) return File(base, "voice_styles/${File(selected).name}")
+        val voice = File(selected).name.removeSuffix(".json")
+            .takeIf { it in TERA_VOICES } ?: "ru_f1"
+        return File(base, "tera/styles/$voice/style_ttl.npy")
+    }
 
     fun getModelType(context: Context): String {
         return context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
@@ -46,7 +60,7 @@ object AssetManager {
      * @param localPath path under filesDir/v3/ — keeps the same layout the engines
      *                   expect (onnx/<file>, voice_styles/<file>)
      */
-    private data class AssetFile(val remoteName: String, val localPath: String)
+    private data class AssetFile(val remoteName: String, val localPath: String, val baseUrl: String = ASSETS_BASE_URL)
 
     private fun voiceFilesFrom(prefix: String): List<AssetFile> =
         VOICE_FILES.map { local ->
@@ -57,6 +71,17 @@ object AssetManager {
 
     private fun getFilesForModel(modelType: String): List<AssetFile> =
         when (modelType) {
+            TERA_MODEL -> {
+                val paths = listOf(
+                    "models/duration_predictor.onnx", "models/text_encoder.onnx",
+                    "models/sampler_distilled_cfg3_8step.onnx", "models/vocoder.onnx",
+                    "unicode_indexer.json", "ruaccent/dictionary/accents.json.gz",
+                    "ruaccent/dictionary/yo_words.json.gz"
+                ) + TERA_VOICES.flatMap { voice ->
+                    listOf("styles/$voice/style_dp.npy", "styles/$voice/style_ttl.npy")
+                }
+                paths.map { AssetFile(it, "tera/$it", TERA_BASE_URL) }
+            }
             "android_optimized_int8" -> {
                 // Hybrid INT4 .tflite + INT8 VE .onnx + FP32 vocoder .onnx.
                 listOf(
@@ -147,17 +172,22 @@ object AssetManager {
                             val targetFile = File(baseDir, asset.localPath)
                             if (!targetFile.exists()) {
                                 targetFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
-                                val url = "$ASSETS_BASE_URL/${asset.remoteName}"
+                                val url = "${asset.baseUrl}/${asset.remoteName}"
+                                val partFile = File(targetFile.absolutePath + ".part")
                                 try {
                                     Log.d(TAG, "Downloading $url -> ${targetFile.absolutePath}")
+                                    partFile.delete()
                                     URL(url).openStream().use { input ->
-                                        FileOutputStream(targetFile).use { output ->
+                                        FileOutputStream(partFile).use { output ->
                                             input.copyTo(output)
                                         }
                                     }
+                                    check(partFile.length() > 0 && partFile.renameTo(targetFile)) {
+                                        "Could not finish download of ${asset.remoteName}"
+                                    }
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Failed to download ${asset.remoteName}", e)
-                                    targetFile.delete()
+                                    partFile.delete()
                                     throw e
                                 }
                             }

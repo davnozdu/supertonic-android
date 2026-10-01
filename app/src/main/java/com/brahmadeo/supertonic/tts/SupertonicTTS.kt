@@ -3,6 +3,7 @@ package com.brahmadeo.supertonic.tts
 import android.content.Context
 import android.util.Log
 import com.brahmadeo.supertonic.tts.tflite.HybridEngine
+import com.brahmadeo.supertonic.tts.tera.TeraEngine
 import com.brahmadeo.supertonic.tts.utils.AssetManager
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
@@ -16,6 +17,7 @@ object SupertonicTTS {
     private var appContext: Context? = null
     @Volatile
     private var hybridEngine: HybridEngine? = null
+    @Volatile private var teraEngine: TeraEngine? = null
 
     /**
      * Hand the app context to SupertonicTTS once at startup so generateAudio
@@ -41,6 +43,23 @@ object SupertonicTTS {
             HybridEngine(modelDir).also { hybridEngine = it }
         } catch (t: Throwable) {
             Log.e("SupertonicTTS", "Failed to open HybridEngine: ${t.message}", t)
+            null
+        }
+    }
+
+    @Synchronized
+    private fun maybeTeraEngine(): TeraEngine? {
+        val ctx = appContext ?: return null
+        if (!AssetManager.isTera(ctx)) {
+            teraEngine?.close()
+            teraEngine = null
+            return null
+        }
+        teraEngine?.let { return it }
+        return try {
+            TeraEngine(File(ctx.filesDir, "${AssetManager.MODEL_VERSION}/tera")).also { teraEngine = it }
+        } catch (t: Throwable) {
+            Log.e("SupertonicTTS", "Failed to open TeraEngine", t)
             null
         }
     }
@@ -188,6 +207,15 @@ object SupertonicTTS {
         val sid = ++sessionIdCounter
         currentSession.set(SessionContext(sid, listener))
         try {
+            if (appContext?.let { AssetManager.isTera(it) } == true) {
+                val engine = maybeTeraEngine() ?: return null
+                return try {
+                    engine.synthesize(text, lang, stylePath, speed, gain, listener, sid).takeIf { it.isNotEmpty() }
+                } catch (t: Throwable) {
+                    Log.e("SupertonicTTS", "Tera synthesis failed", t)
+                    null
+                }
+            }
             // Route to the hybrid Kotlin engine if the active preset is the
             // INT4 + INT8 VE bundle; the native Rust pipeline can't read
             // .tflite models.
@@ -223,6 +251,7 @@ object SupertonicTTS {
 
     @Synchronized
     fun getAudioSampleRate(): Int {
+        if (appContext?.let { AssetManager.isTera(it) } == true) return 44100
         if (nativePtr == 0L) return 44100
         return getSampleRate(nativePtr)
     }
@@ -250,7 +279,7 @@ object SupertonicTTS {
         // For the hybrid INT4 preset the Rust nativePtr is intentionally 0 —
         // gate on either path being ready so XNNPACK kernel compilation runs
         // once at startup instead of on the user's first sentence.
-        if (nativePtr == 0L && maybeHybridEngine() == null) {
+        if (nativePtr == 0L && maybeHybridEngine() == null && maybeTeraEngine() == null) {
             Log.w("SupertonicTTS", "prewarm skipped: engine not ready")
             return
         }
@@ -266,7 +295,7 @@ object SupertonicTTS {
             val t0 = System.currentTimeMillis()
             generateAudio(
                 text = ".",
-                lang = "en",
+                lang = if (appContext?.let { AssetManager.isTera(it) } == true) "ru" else "en",
                 stylePath = stylePath,
                 speed = 1.0f,
                 bufferDuration = 0.0f,
@@ -284,6 +313,10 @@ object SupertonicTTS {
 
     @Synchronized
     fun release() {
+        teraEngine?.let {
+            try { it.close() } catch (t: Throwable) { Log.w("SupertonicTTS", "TeraEngine close failed", t) }
+            teraEngine = null
+        }
         hybridEngine?.let {
             try { it.close() } catch (t: Throwable) { Log.w("SupertonicTTS", "HybridEngine close failed", t) }
             hybridEngine = null

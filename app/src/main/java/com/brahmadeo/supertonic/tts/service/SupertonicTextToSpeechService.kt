@@ -109,6 +109,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onCreate() {
         super.onCreate()
+        SupertonicTTS.setApplicationContext(this)
         Log.i("SupertonicTTS", "Service created")
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
@@ -118,14 +119,16 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         initJob = serviceScope.launch(Dispatchers.IO) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            SupertonicTTS.initialize(modelPath, libPath,
-                xnnThreads = SupertonicTTS.recommendedXnnThreads(this@SupertonicTextToSpeechService))
+            if (!AssetManager.isTera(this@SupertonicTextToSpeechService) &&
+                AssetManager.getModelType(this@SupertonicTextToSpeechService) != "android_optimized_int8") {
+                SupertonicTTS.initialize(modelPath, libPath,
+                    xnnThreads = SupertonicTTS.recommendedXnnThreads(this@SupertonicTextToSpeechService))
+            }
             // Prewarm (see PlaybackService for rationale). Idempotent — if
             // PlaybackService was up first and warmed, this is a no-op.
             val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
             val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
-            val stylePath = File(filesDir,
-                "${AssetManager.MODEL_VERSION}/voice_styles/$voiceFile").absolutePath
+            val stylePath = AssetManager.voiceFile(this@SupertonicTextToSpeechService, voiceFile).absolutePath
             SupertonicTTS.prewarm(stylePath)
         }
     }
@@ -137,7 +140,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         val language = lang?.lowercase(Locale.ROOT) ?: return TextToSpeech.LANG_NOT_SUPPORTED
-        val supported = LANG_PREFIX_MAP.keys.any { language.startsWith(it) }
+        val supported = if (AssetManager.isTera(this)) language.startsWith("ru") || language.startsWith("rus")
+            else LANG_PREFIX_MAP.keys.any { language.startsWith(it) }
         if (!supported) return TextToSpeech.LANG_NOT_SUPPORTED
 
         return if (AssetManager.isReady(this)) {
@@ -163,7 +167,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (voiceName == null) return TextToSpeech.ERROR
         if (!voiceName.contains("-supertonic-")) return TextToSpeech.ERROR
         val styleName = voiceName.substringAfter("-supertonic-")
-        val file = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles/$styleName.json")
+        val file = AssetManager.voiceFile(this, "$styleName.json")
         return if (file.exists()) TextToSpeech.SUCCESS else TextToSpeech.ERROR
     }
 
@@ -177,10 +181,12 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onGetVoices(): List<Voice> {
         val voicesList = mutableListOf<Voice>()
-        val voiceNames = listOf("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
+        val voiceNames = if (AssetManager.isTera(this)) AssetManager.TERA_VOICES
+            else listOf("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
         if (!AssetManager.isReady(this)) return voicesList
 
         ANDROID_LOCALE_TRIPLES.forEach { (twoLetter, _, _) ->
+            if (AssetManager.isTera(this) && twoLetter != "ru") return@forEach
             val locale = Locale.forLanguageTag(twoLetter)
             voiceNames.forEach { name ->
                 voicesList.add(
@@ -242,11 +248,17 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
         val rawText = request.charSequenceText?.toString() ?: return
+        val requestStarted = android.os.SystemClock.elapsedRealtime()
+        Log.i("SupertonicTTS", "TTS request started: chars=${rawText.length}, model=${AssetManager.getModelType(this)}")
         val effectiveSpeed = (request.speechRate / 100.0f).coerceIn(0.5f, 2.5f)
         callback.start(SupertonicTTS.getAudioSampleRate(), android.media.AudioFormat.ENCODING_PCM_16BIT, 1)
 
         val requestedVoice = request.voiceName
         val requestedLang = detectLanguage(rawText, normalizeLanguage(request.language))
+        if (AssetManager.isTera(this) && requestedLang != "ru") {
+            callback.error()
+            return
+        }
         val prefs = attributionContext.getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
 
         val voiceFile = if (requestedVoice != null && requestedVoice.contains("-supertonic-")) {
@@ -258,15 +270,15 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
 
         val voiceStyleDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
-        var stylePath = File(voiceStyleDir, voiceFile).absolutePath
+        var stylePath = AssetManager.voiceFile(this, voiceFile).absolutePath
 
         // Ensure stylePath is within the intended directory
-        if (!File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
-            stylePath = File(voiceStyleDir, "F3.json").absolutePath
+        if (!AssetManager.isTera(this) && !File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
+            stylePath = AssetManager.voiceFile(this, "F3.json").absolutePath
         }
 
         val isMixing = prefs.getBoolean("is_mixing_enabled", false)
-        if (isMixing) {
+        if (isMixing && !AssetManager.isTera(this)) {
             val voice2 = prefs.getString("selected_voice_2", "M2.json") ?: "M2.json"
             val stylePath2 = File(voiceStyleDir, voice2).absolutePath
             val alpha = prefs.getFloat("mix_alpha", 0.5f)
@@ -277,7 +289,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
         val steps = prefs.getInt("diffusion_steps", 5)
 
-        if (SupertonicTTS.getSoC() == -1) {
+        if (!AssetManager.isTera(this) && AssetManager.getModelType(this) != "android_optimized_int8" && SupertonicTTS.getSoC() == -1) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
             SupertonicTTS.initialize(modelPath, libPath,
@@ -293,7 +305,10 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         // gap at the start of every block. Now bytes go to audioAvailable
         // chunk-by-chunk as soon as the vocoder produces them, and the
         // 50-chunk buffer lets the producer race ahead while Android plays.
-        val ttsChannel = kotlinx.coroutines.channels.Channel<ByteArray>(capacity = 50)
+        // Keep several sentences of already generated PCM in RAM while the
+        // framework drains earlier audio. The next Android TTS request itself
+        // cannot be seen until the framework calls onSynthesizeText again.
+        val ttsChannel = kotlinx.coroutines.channels.Channel<ByteArray>(capacity = 500)
         val streamingListener = object : SupertonicTTS.ProgressListener {
             override fun onProgress(sessionId: Long, current: Int, total: Int) {}
             override fun onAudioChunk(sessionId: Long, data: ByteArray) {
@@ -311,47 +326,51 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
 
-        val consumerJob = serviceScope.launch(Dispatchers.IO) {
-            // AUDIO priority for the thread that drains PCM chunks into
-            // Android's TTS callback — same rationale as in PlaybackService.
-            try {
-                android.os.Process.setThreadPriority(
-                    android.os.Process.THREAD_PRIORITY_AUDIO
-                )
-            } catch (_: Throwable) {
-                // Best-effort.
+        var success = true
+        var firstAudioLogged = false
+        runBlocking {
+            val producer = launch(Dispatchers.IO) {
+                try {
+                    val sentences = textNormalizer.splitIntoSentences(rawText, requestedLang)
+                    for (sentence in sentences) {
+                        if (SupertonicTTS.isCancelled()) { success = false; break }
+                        val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
+                        val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled)
+                        val result = SupertonicTTS.generateAudio(
+                            normalizedText, requestedLang, stylePath, effectiveSpeed, 0.0f,
+                            steps, VOLUME_BOOST_FACTOR, streamingListener
+                        )
+                        if (result == null || SupertonicTTS.isCancelled()) { success = false; break }
+                    }
+                } catch (t: Throwable) {
+                    Log.e("SupertonicTTS", "System TTS synthesis failed", t)
+                    success = false
+                } finally {
+                    ttsChannel.close()
+                }
             }
+            // Android requires audioAvailable on this synthesis thread.
             for (data in ttsChannel) {
-                if (SupertonicTTS.isCancelled()) break
+                if (SupertonicTTS.isCancelled()) { success = false; ttsChannel.close(); break }
+                if (!firstAudioLogged) {
+                    firstAudioLogged = true
+                    Log.i("SupertonicTTS", "TTS first audio after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms")
+                }
                 var offset = 0
                 while (offset < data.size) {
-                    val length = 4096.coerceAtMost(data.size - offset)
-                    callback.audioAvailable(data, offset, length)
+                    val length = callback.maxBufferSize.coerceIn(1, 4096).coerceAtMost(data.size - offset)
+                    if (callback.audioAvailable(data, offset, length) != TextToSpeech.SUCCESS) {
+                        success = false
+                        SupertonicTTS.setCancelled(true)
+                        ttsChannel.close()
+                        break
+                    }
                     offset += length
                 }
             }
+            producer.join()
         }
-
-        var success = true
-        try {
-            val sentences = textNormalizer.splitIntoSentences(rawText, requestedLang)
-            for (sentence in sentences) {
-                if (SupertonicTTS.isCancelled()) { success = false; break }
-
-                val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
-                val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled)
-
-                SupertonicTTS.generateAudio(
-                    normalizedText, requestedLang, stylePath, effectiveSpeed, 0.0f,
-                    steps, VOLUME_BOOST_FACTOR, streamingListener
-                )
-
-                if (SupertonicTTS.isCancelled()) { success = false; break }
-            }
-        } finally {
-            ttsChannel.close()
-            runBlocking { consumerJob.join() }
-        }
+        Log.i("SupertonicTTS", "TTS request finished after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms, success=$success")
         if (success) callback.done() else callback.error()
     }
 }

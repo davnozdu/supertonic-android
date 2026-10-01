@@ -547,7 +547,7 @@ class LexiconActivity : ComponentActivity() {
         }
 
         val voiceFile = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
-        val stylePath = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles/$voiceFile").absolutePath
+        val stylePath = AssetManager.voiceFile(this, voiceFile).absolutePath
         val steps = prefs.getInt("diffusion_steps", 5)
 
         // Use higher steps (10) for test to ensure short words are audible and clear

@@ -108,6 +108,8 @@
     <string name="model_android_fp32_desc">Версия из форка с полной точностью.</string>
     <string name="model_android_fp16_title">FP16 (Kyumdroid)</string>
     <string name="model_android_fp16_desc">Вдвое меньше FP32 при почти том же качестве.</string>
+    <string name="model_tera_title">TeraTTSv2 (русский)</string>
+    <string name="model_tera_desc">Русские голоса с автоматическими ударениями по словарю. Загрузка около 410 МБ; скорость зависит от устройства.</string>
 
     <string name="synthesize_content_description">Озвучить и проиграть</string>
     <string name="input_label">Текст</string>
