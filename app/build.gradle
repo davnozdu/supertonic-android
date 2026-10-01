@@ -103,8 +103,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 38
-        versionName "4.1.0-beta7"
+        versionCode 39
+        versionName "4.1.0-beta8"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
@@ -207,6 +207,7 @@ dependencies {
     // Iteration 1: only verify the AAR drops into the build cleanly alongside ORT.
     // Pipeline integration arrives in a later iteration.
     implementation 'com.google.ai.edge.litert:litert:2.1.5'
+    implementation 'com.google.ai.edge.litertlm:litertlm-android:0.17.1'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
 }

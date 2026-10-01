@@ -85,7 +85,8 @@ fun MainScreen(
     miniPlayerTitle: String,
     miniPlayerIsPlaying: Boolean,
     onMiniPlayerClick: () -> Unit,
-    onMiniPlayerPlayPauseClick: () -> Unit
+    onMiniPlayerPlayPauseClick: () -> Unit,
+    onLlmSettingsClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -109,6 +110,10 @@ fun MainScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Подготовка текста LLM") },
+                            onClick = { showMenu = false; onLlmSettingsClick() }
+                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_reset)) },
                             onClick = { showMenu = false; onResetClick() }

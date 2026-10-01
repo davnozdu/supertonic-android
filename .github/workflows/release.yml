@@ -147,7 +147,13 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2 for Russian and Supertonic 3 for other languages.
 
-            ### Beta 7 changes
+            ### Beta 8 changes
+            - Optional LLM text preparation: contextual Russian stress and punctuation, with validation that words and numbers are unchanged.
+            - Ollama and Gemini API keys can be entered in the new LLM settings. Available cloud models are fetched from each provider's API; none are hardcoded.
+            - Download and verify Gemma 4 E2B from Hugging Face for offline preparation. GPU with CPU fallback; the model is unloaded from RAM after configurable idle time.
+            - Auto tries configured clouds, then the downloaded local model. Local mode never contacts clouds; the master switch completely disables LLM preparation.
+            - Background preparation observes text already queued by Android TTS clients. Unsent future text cannot be fetched from arbitrary readers.
+            - LLM is disabled by default. First use of local preparation can take time to load the model; dictionary fallback keeps reading available on failure.
             - The dictionary no longer forces an arbitrary stress for 19,741 Russian homographs or ambiguous е/ё substitutions. Explicit user stress rules still take priority.
             - TeraTTSv2 is recommended for Russian. Commas and sentence punctuation are preserved when text is split for synthesis.
             - The Russian stress index downloads prebuilt from `davnozdu/supertonic-dictionaries`. New installs no longer build the index on the phone.

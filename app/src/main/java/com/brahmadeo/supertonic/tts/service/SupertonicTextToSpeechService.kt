@@ -21,6 +21,10 @@ import java.io.File
 import java.util.Locale
 
 class SupertonicTextToSpeechService : TextToSpeechService() {
+    override fun onBind(intent: android.content.Intent): android.os.IBinder? {
+        val binder = super.onBind(intent) ?: return null
+        return com.brahmadeo.supertonic.tts.llm.TtsQueueObserver(this, binder)
+    }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var initJob: Job? = null
@@ -248,7 +252,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                 initJob?.join()
             }
         }
-        val rawText = request.charSequenceText?.toString() ?: return
+        val incomingText = request.charSequenceText?.toString() ?: return
+        val rawText = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this, incomingText)
         val requestStarted = android.os.SystemClock.elapsedRealtime()
         Log.i("SupertonicTTS", "TTS request started: chars=${rawText.length}, model=${AssetManager.getModelType(this)}")
         val effectiveSpeed = (request.speechRate / 100.0f).coerceIn(0.5f, 2.5f)

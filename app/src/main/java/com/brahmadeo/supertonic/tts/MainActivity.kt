@@ -495,6 +495,7 @@ class MainActivity : ComponentActivity() {
                         onHistoryClick = { historyLauncher.launch(Intent(this, HistoryActivity::class.java)) },
                         onQueueClick = { startActivity(Intent(this, QueueActivity::class.java)) },
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
+                        onLlmSettingsClick = { startActivity(Intent(this, LlmSettingsActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },
                         onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
 

@@ -406,6 +406,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             curText, curLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@PlaybackService)
                         )
                         val totalSentences = sentences.size
+                        val llmIds = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prefetch(this@PlaybackService, sentences)
                         lastTotal = totalSentences
                         val validStartIndex = if (curStart in 0 until totalSentences) curStart else 0
 
@@ -429,7 +430,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                                 notifyListenerProgress(index, totalSentences)
                             }
 
-                            val normalizedText = textNormalizer.normalize(sentences[index], curLang, isAdvancedEnabled)
+                            val preparedSentence = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this@PlaybackService, sentences[index], llmIds[index])
+                            val normalizedText = textNormalizer.normalize(preparedSentence, curLang, isAdvancedEnabled)
 
                             // Streaming: each finished chunk inside generateAudio is
                             // pushed via streamingListener.onAudioChunk into the
