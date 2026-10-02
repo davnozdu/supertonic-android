@@ -19,6 +19,21 @@ object SupertonicTTS {
     private var hybridEngine: HybridEngine? = null
     @Volatile private var teraEngine: TeraEngine? = null
     private var sileroEngine: com.brahmadeo.supertonic.tts.silero.SileroEngine? = null
+    private val audioCache = LinkedHashMap<String,ByteArray>(32,.75f,true)
+    private var audioCacheBytes=0L
+    private fun audioKey(context: Context, text: String, lang: String, style: String, speed: Float, steps: Int, gain: Float): String {
+        val prefs=context.getSharedPreferences("SupertonicPrefs",0)
+        val settings=listOf("tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
+        return listOf(AssetManager.getModelType(context),text,lang,style,speed,steps,gain,settings).joinToString("\u0000")
+    }
+    private fun cacheAudio(key: String, bytes: ByteArray?) {
+        if(bytes==null || bytes.isEmpty() || bytes.size>16*1024*1024 || isCancelled()) return
+        audioCache.remove(key)?.let { audioCacheBytes-=it.size }
+        audioCache[key]=bytes;audioCacheBytes+=bytes.size
+        while(audioCacheBytes>128L*1024*1024 || audioCache.size>256) {
+            val first=audioCache.entries.first();audioCacheBytes-=first.value.size;audioCache.remove(first.key)
+        }
+    }
     private val foreignFallbackNormalizer by lazy { com.brahmadeo.supertonic.tts.utils.TextNormalizer() }
 
     /**
@@ -29,6 +44,7 @@ object SupertonicTTS {
      */
     fun setApplicationContext(context: Context) {
         appContext = context.applicationContext
+        com.brahmadeo.supertonic.tts.utils.TextNormalizer.context = context.applicationContext
     }
 
     @Synchronized
@@ -208,6 +224,16 @@ object SupertonicTTS {
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null): ByteArray? {
         val sid = ++sessionIdCounter
         currentSession.set(SessionContext(sid, listener))
+        val cacheKey = appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain) }
+        if(cacheKey != null) audioCache[cacheKey]?.let { cached ->
+            android.util.Log.i("ReaderAhead","PCM cache hit chars=${text.length} bytes=${cached.size}")
+            var offset=0
+            while(offset<cached.size && !isCancelled()) {
+                val end=minOf(offset+48000,cached.size);listener?.onAudioChunk(sid,cached.copyOfRange(offset,end));offset=end
+            }
+            return if(isCancelled()) null else cached
+        }
+
         try {
             val context = appContext
             if (context != null && AssetManager.isRussianModel(context)) {
@@ -244,18 +270,18 @@ object SupertonicTTS {
                             output.write(pcm)
                         }
                     }
-                    return output.toByteArray().takeIf { it.isNotEmpty() && !isCancelled() }
+                    return output.toByteArray().also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() && !isCancelled() }
                 }
             }
             if (appContext?.let { AssetManager.isSilero(it) } == true) {
                 val ctx = appContext!!
                 val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(ctx).also { sileroEngine = it }
-                return engine.synthesize(text, stylePath, speed, gain, listener, sid).takeIf { it.isNotEmpty() }
+                return engine.synthesize(text, stylePath, speed, gain, listener, sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isTera(it) } == true) {
                 val engine = maybeTeraEngine() ?: return null
                 return try {
-                    engine.synthesize(text, lang, stylePath, speed, gain, listener, sid).takeIf { it.isNotEmpty() }
+                    engine.synthesize(text, lang, stylePath, speed, gain, listener, sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
                 } catch (t: Throwable) {
                     Log.e("SupertonicTTS", "Tera synthesis failed", t)
                     null

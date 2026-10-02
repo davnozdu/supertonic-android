@@ -304,6 +304,16 @@ class MainActivity : ComponentActivity() {
                                             Text(getString(R.string.model_silero_desc), style = MaterialTheme.typography.bodySmall)
                                         }
                                     }
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        androidx.compose.material3.RadioButton(
+                                            selected = viewModel.selectedModel.value == AssetManager.SILERO_CIS_MODEL,
+                                            onClick = { viewModel.selectedModel.value = AssetManager.SILERO_CIS_MODEL }
+                                        )
+                                        Column {
+                                            Text("Silero CIS · 29 русских голосов", style = MaterialTheme.typography.titleMedium)
+                                            Text("Пак ≈82 МБ · MIT · экспериментальный. Без специальных вопросительных и восклицательных интонаций.", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -312,11 +322,11 @@ class MainActivity : ComponentActivity() {
                                 AssetManager.setModelType(this@MainActivity, viewModel.selectedModel.value)
                                 if (AssetManager.isRussianModel(this@MainActivity)) {
                                     viewModel.currentLang.value = "ru"
-                                    viewModel.selectedVoiceFile.value = if (AssetManager.isSilero(this@MainActivity)) "kseniya.json" else "ru_f1.json"
+                                    viewModel.selectedVoiceFile.value = if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else "ru_f1.json"
                                     saveStringPref("selected_lang", "ru")
                                     saveStringPref("selected_voice", viewModel.selectedVoiceFile.value)
                                     viewModel.isMixingEnabled.value = false
-                                } else if (viewModel.selectedVoiceFile.value.startsWith("ru_") || viewModel.selectedVoiceFile.value.removeSuffix(".json") in com.brahmadeo.supertonic.tts.silero.SileroDownload.voices) {
+                                } else if (viewModel.selectedVoiceFile.value.startsWith("ru_") || viewModel.selectedVoiceFile.value.removeSuffix(".json") in com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this@MainActivity)) {
                                     viewModel.selectedVoiceFile.value = "F3.json"
                                     saveStringPref("selected_voice", "F3.json")
                                 }
@@ -331,6 +341,7 @@ class MainActivity : ComponentActivity() {
                         progress = viewModel.downloadProgress.floatValue,
                         isTeraModel = AssetManager.isTera(this@MainActivity),
                         isSileroModel = AssetManager.isSilero(this@MainActivity),
+                        isCisModel = com.brahmadeo.supertonic.tts.silero.SileroDownload.cis(this@MainActivity),
                         error = viewModel.downloadError.value,
                         onRetry = { startDownload() }
                     )
@@ -720,7 +731,7 @@ class MainActivity : ComponentActivity() {
     private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
         if (AssetManager.isSilero(this)) {
-            com.brahmadeo.supertonic.tts.silero.SileroDownload.voices.forEach { viewModel.voiceFiles[it] = "$it.json" }
+            com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this).forEach { viewModel.voiceFiles[it] = "$it.json" }
             return
         }
         if (AssetManager.isTera(this)) {

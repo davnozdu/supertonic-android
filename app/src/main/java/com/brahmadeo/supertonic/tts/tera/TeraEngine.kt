@@ -128,7 +128,7 @@ class TeraEngine(private val root: File, context: Context) : AutoCloseable {
         if (!pausePrefs.getBoolean("tera_punctuation_pauses", true)) return synthesizePart(text, lang, stylePath, speed, gain, listener, sessionId)
         val parts = TeraPunctuationPauses.split(text,
             pausePrefs.getInt("tera_comma_pause_ms", 180).coerceIn(80, 400),
-            pausePrefs.getInt("tera_sentence_pause_ms", 420).coerceIn(200, 900))
+            pausePrefs.getInt("tera_sentence_pause_ms", 420).coerceIn(0, 900))
         val output = java.io.ByteArrayOutputStream()
         for (part in parts) {
             if (SupertonicTTS.isCancelled()) return ByteArray(0)

@@ -7,6 +7,7 @@ import java.util.regex.Pattern
  * Handles currencies, numbers, abbreviations, and more for natural TTS
  */
 class TextNormalizer {
+    companion object { @Volatile var context: android.content.Context? = null }
     private val currencyNormalizer = CurrencyNormalizer()
     private val russianNumbers = RussianNumberNormalizer()
 
@@ -313,7 +314,8 @@ class TextNormalizer {
     fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false): String {
         val lowerLang = lang.lowercase()
         if (lowerLang.startsWith("ru")) {
-            val parts = com.brahmadeo.supertonic.tts.foreign.ForeignText.split(text)
+            val preprocessed = RussianBookNormalizer.normalize(text, expandNumbers = false)
+            val parts = com.brahmadeo.supertonic.tts.foreign.ForeignText.split(preprocessed)
             if (parts.any { it.foreign }) return parts.joinToString("") { part ->
                 if (part.foreign) part.text else normalize(part.text, lang, isAdvancedEnabled)
             }
@@ -335,7 +337,8 @@ class TextNormalizer {
         var processedText = if (lowerLang != "ko") {
             var t = LexiconManager.apply(inputText)
             if (lowerLang.startsWith("ru")) {
-                t = russianNumbers.normalize(t)
+                t = RussianBookNormalizer.normalize(t)
+                context?.let { t = com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(it, t) }
             }
             AccentDictionaryManager.apply(t, lowerLang)
         } else {

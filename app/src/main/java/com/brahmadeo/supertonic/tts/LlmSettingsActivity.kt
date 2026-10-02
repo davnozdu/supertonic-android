@@ -50,6 +50,11 @@ class LlmSettingsActivity : ComponentActivity() {
                 var foreignEngine by remember { mutableStateOf(pausePrefs.getString("foreign_engine", "") ?: "") }
                 var foreignLanguage by remember { mutableStateOf(pausePrefs.getString("foreign_language", "auto") ?: "auto") }
                 var sileroIntonation by remember { mutableStateOf(pausePrefs.getBoolean("silero_intonation", true)) }
+                var offlineReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.local.LocalRussianAssets.ready(this)) }
+                var offlineBusy by remember { mutableStateOf(false) }
+                var offlineStatus by remember { mutableStateOf("") }
+                var offlineStress by remember { mutableStateOf(pausePrefs.getBoolean("local_russian_stress",true)) }
+                var readerAhead by remember { mutableStateOf(pausePrefs.getBoolean("reader_early_prepare",true)) }
                 var punctuationPauses by remember { mutableStateOf(pausePrefs.getBoolean("tera_punctuation_pauses", true)) }
                 var commaPause by remember { mutableIntStateOf(pausePrefs.getInt("tera_comma_pause_ms", 180)) }
                 var sentencePause by remember { mutableIntStateOf(pausePrefs.getInt("tera_sentence_pause_ms", 420)) }
@@ -91,6 +96,27 @@ class LlmSettingsActivity : ComponentActivity() {
                             }
                         }
                         if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
+                            Text("Локальная подготовка книг", style = MaterialTheme.typography.titleMedium)
+                            Text("Числа, даты, время, годы, единицы, валюты, дроби, сокращения и сноски обрабатываются на телефоне даже при выключенной LLM.")
+                            Toggle("Локальные ударения и ё по контексту", offlineStress) {
+                                offlineStress = it; pausePrefs.edit().putBoolean("local_russian_stress",it).apply()
+                            }
+                            Button(enabled = !offlineBusy && !offlineReady, onClick = {
+                                offlineBusy = true
+                                scope.launch {
+                                    try {
+                                        com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(this@LlmSettingsActivity) { status,_ -> runOnUiThread { offlineStatus = status } }
+                                        offlineReady = true
+                                    } catch (t: Exception) { offlineStatus = "Ошибка установки: ${t.message}" }
+                                    finally { offlineBusy = false }
+                                }
+                            }) { Text(if (offlineReady) "Локальный акцентор установлен" else "Скачать локальные ударения и ё · 37 МБ") }
+                            if (offlineStatus.isNotBlank()) Text(offlineStatus)
+                            Toggle("Готовить текст читалки заранее", readerAhead) {
+                                readerAhead = it; pausePrefs.edit().putBoolean("reader_early_prepare",it).apply()
+                            }
+                            Text("Подготавливаются только фрагменты, уже поставленные читалкой в очередь. Пауза считается минимальной: тишина модели засчитывается.", style = MaterialTheme.typography.bodySmall)
+
                             Toggle("Иностранные фрагменты через другой Android TTS", foreignEnabled) {
                                 foreignEnabled = it; pausePrefs.edit().putBoolean("foreign_tts", it).apply()
                                 com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
@@ -113,7 +139,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             Text("Русский остаётся в выбранной модели. Для иностранного текста предпочитается установленный офлайн-голос другого движка; его настройки сети действуют отдельно. Неоднозначная латиница в авторежиме считается английской. При сбое — приблизительная транслитерация без остановки книги.", style = MaterialTheme.typography.bodySmall)
                             if (foreignEngines.isEmpty()) Text("Других движков TTS на телефоне не найдено.")
                         }
-                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity)) {
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity) && !com.brahmadeo.supertonic.tts.silero.SileroDownload.cis(this@LlmSettingsActivity)) {
                             Toggle("Silero: вопросительная и восклицательная интонация", sileroIntonation) {
                                 sileroIntonation = it; pausePrefs.edit().putBoolean("silero_intonation", it).apply()
                             }
@@ -131,14 +157,14 @@ class LlmSettingsActivity : ComponentActivity() {
                         Text("Подготовленный текст хранится в кэше RAM: до 8 млн символов вместе с исходным контекстом (около 16 МБ текста). Повторное чтение того же блока не требует LLM. Кэш очищается при изменении настроек и закрытии процесса.")
                         Text("Движущийся буфер заранее обрабатывает следующие части загруженного текста и пополняется во время чтения. Для сторонней читалки доступны только уже переданные ею фрагменты.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
-                        Text("Паузы Tera при чтении", style = MaterialTheme.typography.titleLarge)
+                        Text("Паузы русских моделей при чтении", style = MaterialTheme.typography.titleLarge)
                         Toggle("Слышимые паузы по пунктуации", punctuationPauses) {
                             punctuationPauses = it; pausePrefs.edit().putBoolean("tera_punctuation_pauses", it).apply()
                         }
                         Choice("Запятая", "$commaPause мс", listOf("100 мс", "140 мс", "180 мс", "220 мс", "300 мс")) {
                             commaPause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_comma_pause_ms", commaPause).apply()
                         }
-                        Choice("Точка, вопрос и восклицание", "$sentencePause мс", listOf("250 мс", "350 мс", "420 мс", "550 мс", "700 мс")) {
+                        Choice("Точка, вопрос и восклицание", "$sentencePause мс", listOf("0 мс", "250 мс", "350 мс", "420 мс", "550 мс", "700 мс")) {
                             sentencePause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_sentence_pause_ms", sentencePause).apply()
                         }
                         Text("Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу.", style = MaterialTheme.typography.bodySmall)

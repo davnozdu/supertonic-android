@@ -27,17 +27,11 @@ def fetch(name, url, digest):
         part.replace(path)
     return path
 
-apk = fetch('ruvoice.apk',
-    'https://github.com/kost-t-human/ruvoice-tts/releases/download/v0.18.0/ruvoice-tts-0.18.0-lite.apk',
-    '7ec33e97c2ea102db85025824b43f6dc514a5f1ed92e7cdfc94ae62c979ce555')
-aar = fetch('executorch.aar',
-    'https://ossci-android.s3.amazonaws.com/executorch/release/1.5.0-xnnpack/executorch.aar',
-    'dcb50be130e1e45d898b846f30dedf2d627fc410191b3fb4e870a2b104b89286')
 out = ROOT / 'app/libs/executorch-1.5.0-arm64.aar'
 out.parent.mkdir(exist_ok=True)
-with zipfile.ZipFile(aar) as src, zipfile.ZipFile(apk) as release, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as dst:
-    for entry in src.infolist():
-        if not entry.filename.startswith('jni/'):
-            dst.writestr(entry.filename, src.read(entry))
-    dst.writestr('jni/arm64-v8a/libexecutorch.so', release.read('lib/arm64-v8a/libexecutorch.so'))
-print('Prepared verified ARM64 ExecuTorch 1.5.0 runtime')
+verified = fetch('executorch-1.5.0-arm64.aar',
+    'https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1/executorch-1.5.0-arm64.aar',
+    '6c870ec2ad275afcd695957241763ce471a59398ffba31242acd24304427dc37')
+import shutil
+shutil.copyfile(verified,out)
+print('Prepared verified mirrored ARM64 ExecuTorch 1.5.0 runtime')

@@ -31,10 +31,10 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val model = intent.getStringExtra("model") ?: AssetManager.SILERO_MODEL
                 var tts: TextToSpeech? = null
                 try {
-                    require(model in setOf(AssetManager.SILERO_MODEL, AssetManager.TERA_MODEL))
+                    require(model in setOf(AssetManager.SILERO_MODEL, AssetManager.SILERO_CIS_MODEL, AssetManager.TERA_MODEL))
                     AssetManager.setModelType(this@SpeechDiagnosticsActivity, model)
                     prefs.edit().putString("selected_lang", "ru")
-                        .putString("selected_voice", if (model == AssetManager.SILERO_MODEL) "kseniya.json" else "ru_f1.json").apply()
+                        .putString("selected_voice", if (model == AssetManager.SILERO_CIS_MODEL) "ru_alexandr.json" else if (model == AssetManager.SILERO_MODEL) "kseniya.json" else "ru_f1.json").apply()
                     SupertonicTTS.release()
                     if (!AssetManager.isReady(this@SpeechDiagnosticsActivity)) {
                         AssetManager.download(this@SpeechDiagnosticsActivity) { _, progress ->
@@ -77,7 +77,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             check(String(header, 0, 4, Charsets.US_ASCII) == "RIFF")
                             val wave = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
                             val rate = wave.getInt(24); val channels = wave.getShort(22).toInt()
-                            check(rate == if (model == AssetManager.SILERO_MODEL) 48000 else 44100)
+                            check(rate == if (model != AssetManager.TERA_MODEL) 48000 else 44100)
                             check(channels == 1 && output.length() > 44)
                             Log.i("SpeechCheck", "PASS model=$model case=$index rate=$rate channels=$channels bytes=${output.length()} ms=${android.os.SystemClock.elapsedRealtime()-started}")
                         } finally { output.delete() }

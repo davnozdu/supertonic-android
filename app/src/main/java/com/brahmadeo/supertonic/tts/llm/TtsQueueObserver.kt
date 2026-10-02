@@ -16,6 +16,8 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
         val position = data.dataPosition()
         var id: Long? = null
+        var queuedText: String? = null
+        var queuedParams: android.os.Bundle? = null
         if (Build.VERSION.SDK_INT in 24..36 && (code == FIRST_CALL_TRANSACTION || code == FIRST_CALL_TRANSACTION + 5)) {
             try {
                 data.enforceInterface("android.speech.tts.ITextToSpeechService")
@@ -24,8 +26,14 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                     if (code == FIRST_CALL_TRANSACTION) {
                         val text = if (data.readInt() != 0) TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(data)?.toString() else null
                         val mode = data.readInt()
-                        if (text != null) id = LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
-                    } else LlmPreparation.cancel(caller)
+                        if (text != null) {
+                            id = LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
+                            if(mode == TextToSpeech.QUEUE_ADD) {
+                                queuedText=text
+                                queuedParams=if(data.readInt()!=0) android.os.Bundle.CREATOR.createFromParcel(data) else null
+                            } else ReaderAudioAhead.cancel()
+                        }
+                    } else { LlmPreparation.cancel(caller); ReaderAudioAhead.cancel() }
                 }
             } catch (_: Exception) {
                 Log.w("LlmPreparation", "Queue observation unavailable; using ordinary synthesis")
@@ -35,9 +43,10 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
             val result = delegate.transact(code, data, reply, flags)
             if (id != null && reply != null) {
                 val replyPosition = reply.dataPosition()
-                try { reply.setDataPosition(0); reply.readException(); if (reply.readInt() != TextToSpeech.SUCCESS) LlmPreparation.rejected(id) }
+                try { reply.setDataPosition(0); reply.readException(); if (reply.readInt() != TextToSpeech.SUCCESS) { LlmPreparation.rejected(id); queuedText=null } }
                 finally { reply.setDataPosition(replyPosition) }
             }
+            if(result && queuedText!=null) ReaderAudioAhead.submit(context,queuedText!!,queuedParams)
             return result
         } catch (t: Throwable) { LlmPreparation.rejected(id); throw t }
     }

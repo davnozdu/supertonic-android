@@ -172,7 +172,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (voiceName == null) return TextToSpeech.ERROR
         if (!voiceName.contains("-supertonic-")) return TextToSpeech.ERROR
         val styleName = voiceName.substringAfter("-supertonic-")
-        if (AssetManager.isRussianModel(this) && styleName !in (if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices else AssetManager.TERA_VOICES)) return TextToSpeech.ERROR
+        if (AssetManager.isRussianModel(this) && styleName !in (if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this) else AssetManager.TERA_VOICES)) return TextToSpeech.ERROR
         val file = AssetManager.voiceFile(this, "$styleName.json")
         return if (file.exists()) TextToSpeech.SUCCESS else TextToSpeech.ERROR
     }
@@ -188,7 +188,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onGetVoices(): List<Voice> {
         val voicesList = mutableListOf<Voice>()
-        val voiceNames = if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices
+        val voiceNames = if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this)
             else if (AssetManager.isTera(this)) AssetManager.TERA_VOICES
             else listOf("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
         if (!AssetManager.isReady(this)) return voicesList
@@ -214,6 +214,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
     }
 
     override fun onStop() {
+        com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
         SupertonicTTS.setCancelled(true)
     }
 
@@ -317,7 +318,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         // Android forbids calling that callback from the worker thread.
         // Keep several sentences of already generated PCM in RAM while the
         // framework drains earlier audio. The next Android TTS request itself
-        // cannot be seen until the framework calls onSynthesizeText again.
+        // is also observed when the reader queues it through the Binder proxy.
         val ttsChannel = kotlinx.coroutines.channels.Channel<ByteArray>(capacity = 500)
         val streamingListener = object : SupertonicTTS.ProgressListener {
             override fun onProgress(sessionId: Long, current: Int, total: Int) {}

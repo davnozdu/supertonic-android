@@ -16,10 +16,11 @@ fun DownloadScreen(
     progress: Float,
     isTeraModel: Boolean = false,
     isSileroModel: Boolean = false,
+    isCisModel: Boolean = false,
     error: String? = null,
     onRetry: () -> Unit = {}
 ) {
-    val message = stringResource(when { isSileroModel -> AppR.string.download_intro_silero; isTeraModel -> AppR.string.download_intro_tera; else -> AppR.string.download_intro })
+    val message = if (isCisModel) "29 русских голосов Silero CIS. После установки работают без интернета." else stringResource(when { isSileroModel -> AppR.string.download_intro_silero; isTeraModel -> AppR.string.download_intro_tera; else -> AppR.string.download_intro })
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -33,7 +34,7 @@ fun DownloadScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = stringResource(
+                text = if (isCisModel && error == null) "Установка пака Silero CIS" else stringResource(
                     when {
                         error != null -> AppR.string.download_failed
                         isSileroModel -> AppR.string.download_silero_in_progress

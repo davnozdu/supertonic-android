@@ -19,6 +19,10 @@ import java.util.concurrent.TimeUnit
 /** Direct Android inference using the exported v5.5 mel/backbone/head files. */
 class SileroEngine(context: Context) : AutoCloseable {
     private val root = SileroDownload.root(context)
+    private val metadata = JSONObject(File(root, "pack.json").readText())
+    private val nativeTypes = metadata.optBoolean("types", true)
+    private val symbolIds = metadata.getJSONObject("symbol_to_id")
+    private val speakers = metadata.getJSONObject("speakers")
     private val prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private var mel: Module? = null
     private var head: Module? = null
@@ -47,28 +51,40 @@ class SileroEngine(context: Context) : AutoCloseable {
         listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
         lastUsed = android.os.SystemClock.elapsedRealtime()
         try {
-            val prepared = SileroText.prepare(text)
+            val prepared = if (nativeTypes) SileroText.prepare(text) else SileroText.prepare(text).replace('–', '—')
             if (prepared.isEmpty() || SupertonicTTS.isCancelled()) return ByteArray(0)
             require(prepared.length <= 1200) { "Silero sentence is too long" }
             val voiceFile = File(voice)
             require(voiceFile.canonicalFile.parentFile == root.canonicalFile)
             val speaker = JSONObject(voiceFile.readText()).getInt("speaker")
-            require(speaker in 0..4)
+            require(speakers.keys().asSequence().any { speakers.getInt(it) == speaker })
             load()
-            val seq = SileroText.sequence(prepared); val n = seq.size.toLong()
+            val seq = longArrayOf(symbolIds.getLong(metadata.getString("sos"))) +
+                prepared.map { symbolIds.getLong(it.toString()) }.toLongArray() +
+                longArrayOf(symbolIds.getLong(metadata.getString("eos")))
+            val n = seq.size.toLong()
             val shape = longArrayOf(1, n)
             val rates = FloatArray(seq.size) { 1f / speed.coerceIn(.5f, 2.5f) }
             val pitches = FloatArray(seq.size) { 1f }
             val types = SileroText.typeIds(prepared, prefs.getBoolean("silero_intonation", true))
             val t = android.os.SystemClock.elapsedRealtime()
-            val out = mel!!.forward(
+            val pauses = prefs.getBoolean("tera_punctuation_pauses",true)
+            val commaMs = prefs.getInt("tera_comma_pause_ms",180).coerceIn(0,400)
+            val durations = prepared.mapIndexedNotNull { index, c ->
+                if (pauses && c in ",;:–—") (index+1).toLong() to IValue.from(((commaMs + if(c==',') 0 else 80) / 12.5).toLong()) else null
+            }.toMap()
+            val args = arrayListOf(
                 IValue.from(Tensor.fromBlob(seq, shape)),
                 IValue.from(Tensor.fromBlob(longArrayOf(speaker.toLong()), longArrayOf(1))),
-                IValue.from(48000L), IValue.optionalNull(),
+                IValue.from(48000L), if (durations.isEmpty()) IValue.optionalNull() else IValue.dictLongKeyFrom(durations),
                 IValue.from(Tensor.fromBlob(rates, shape)), IValue.from(Tensor.fromBlob(pitches, shape)),
-                IValue.optionalNull(), IValue.optionalNull(), IValue.from("cpu"), IValue.from(-1L), IValue.from(false),
-                IValue.from(Tensor.fromBlob(types, shape)), IValue.optionalNull()
-            ).toTuple()[0].toTensor()
+                IValue.optionalNull(), IValue.optionalNull(), IValue.from("cpu"), IValue.from(-1L), IValue.from(false)
+            )
+            if (nativeTypes) {
+                args += IValue.from(Tensor.fromBlob(types, shape))
+                args += IValue.optionalNull()
+            }
+            val out = mel!!.forward(*args.toTypedArray()).toTuple()[0].toTensor()
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             val hidden = backbone!!.forward(EValue.from(org.pytorch.executorch.Tensor.fromBlob(out.dataAsFloatArray, out.shape())))[0].toTensor()
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
@@ -80,7 +96,10 @@ class SileroEngine(context: Context) : AutoCloseable {
             val safeGain = if (peak > 0f) minOf(gain.coerceAtLeast(0f), .98f / peak) else 1f
             val pcm = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
             samples.forEach { pcm.putShort((it * safeGain * 32767).toInt().coerceIn(-32768, 32767).toShort()) }
-            val bytes = pcm.array()
+            val base = pcm.array()
+            val endPause = if (pauses && prepared.trimEnd().lastOrNull() in listOf('.', '!', '?', '…')) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
+            val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(base,endPause,48000)
+            val bytes = if (missing > 0) base + ByteArray(missing*2) else base
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             // Stream bounded PCM pieces into the existing reader/playback buffer.
             var pos = 0
