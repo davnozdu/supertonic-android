@@ -57,6 +57,8 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     )
                     for ((index, text) in cases.withIndex()) {
                         if (index == 1) delay(6000)
+                        val language = when (index) { 3 -> "en"; 4 -> "cs"; else -> "ru" }
+                        check(tts!!.setLanguage(Locale(language)) >= TextToSpeech.LANG_AVAILABLE)
                         val id = "speech-check-$index"; val done = CompletableFuture<Unit>()
                         tts!!.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                             override fun onStart(utteranceId: String?) {}

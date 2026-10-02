@@ -56,7 +56,10 @@ through the same bounded playback channel. The external engine does not speak
 independently. Installed offline voices are preferred; the external engine's own
 network policy applies. Connection wait is at most three seconds; synthesis eight
 seconds. Stop is observed every 50 ms while waiting. Failures have a one-minute
-cooldown and use approximate transliteration so reading can continue.
+cooldown per engine/language and use approximate transliteration so reading can
+continue. A missing Czech voice does not disable a working English voice.
+Transliterated fallback still expands complete numbers through our Russian
+normalizer. Disabling delegation uses that same fallback for Latin passages.
 
 The external audio LRU is limited to 32 MB / 128 entries. The engine disconnects
 after two minutes idle. Numbers in foreign spans stay intact for that engine;

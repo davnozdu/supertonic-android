@@ -44,7 +44,7 @@ object ForeignTts {
     private var clientEngine: String? = null
     private var init: CompletableFuture<Int>? = null
     private var lastUse = 0L
-    private var cooldown = 0L
+    private val cooldown = HashMap<String, Long>()
     private val cache = LinkedHashMap<String, ByteArray>(16, .75f, true)
     private var cacheBytes = 0
     private val idle = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "ForeignTtsIdle").apply { isDaemon = true } }
@@ -52,7 +52,7 @@ object ForeignTts {
         if (client != null && android.os.SystemClock.elapsedRealtime() - lastUse > 120000) closeClient()
     } }, 15, 15, TimeUnit.SECONDS) }
     fun reset() { idle.execute { synchronized(this) {
-        closeClient(); cache.clear(); cacheBytes = 0; cooldown = 0
+        closeClient(); cache.clear(); cacheBytes = 0; cooldown.clear()
     } } }
     private fun closeClient() { client?.shutdown(); client = null; clientEngine = null; init = null }
     private fun waitFor(future: CompletableFuture<*>, timeoutMs: Long) {
@@ -70,7 +70,8 @@ object ForeignTts {
         lastUse = android.os.SystemClock.elapsedRealtime()
         val key = "$engine\u0000$language\u0000$speed\u0000$targetRate\u0000$gain\u0000$text"
         cache[key]?.let { Log.i("ForeignTTS", "Audio cache hit lang=$language chars=${text.length}"); return it }
-        if (lastUse < cooldown) return null
+        val providerKey = "$engine:$language"
+        if (lastUse < (cooldown[providerKey] ?: 0)) return null
         var file: File? = null
         try {
             if (clientEngine != engine) {
@@ -120,8 +121,8 @@ object ForeignTts {
         } catch (t: Exception) {
             client?.stop(); closeClient()
             if (!SupertonicTTS.isCancelled()) {
-                cooldown = android.os.SystemClock.elapsedRealtime() + 60000
-                Log.w("ForeignTTS", "External engine unavailable: ${t.javaClass.simpleName}")
+                cooldown[providerKey] = android.os.SystemClock.elapsedRealtime() + 60000
+                Log.w("ForeignTTS", "External engine unavailable lang=$language: ${t.javaClass.simpleName}")
             }
             return null
         } finally { file?.delete(); lastUse = android.os.SystemClock.elapsedRealtime() }

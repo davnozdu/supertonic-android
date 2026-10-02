@@ -19,6 +19,7 @@ object SupertonicTTS {
     private var hybridEngine: HybridEngine? = null
     @Volatile private var teraEngine: TeraEngine? = null
     private var sileroEngine: com.brahmadeo.supertonic.tts.silero.SileroEngine? = null
+    private val foreignFallbackNormalizer by lazy { com.brahmadeo.supertonic.tts.utils.TextNormalizer() }
 
     /**
      * Hand the app context to SupertonicTTS once at startup so generateAudio
@@ -209,15 +210,16 @@ object SupertonicTTS {
         currentSession.set(SessionContext(sid, listener))
         try {
             val context = appContext
-            if (context != null && AssetManager.isRussianModel(context) &&
-                com.brahmadeo.supertonic.tts.foreign.ForeignTts.enabled(context)) {
-                val parts = com.brahmadeo.supertonic.tts.foreign.ForeignText.split(text)
+            if (context != null && AssetManager.isRussianModel(context)) {
+                val parts = if (lang in setOf("en", "cs", "eng", "ces", "cze") && !text.any { it in 'Ѐ'..'ӿ' })
+                    listOf(com.brahmadeo.supertonic.tts.foreign.ForeignText.Part(text, true))
+                    else com.brahmadeo.supertonic.tts.foreign.ForeignText.split(text)
                 if (parts.any { it.foreign }) {
                     val output = java.io.ByteArrayOutputStream()
                     for (part in parts) {
                         if (isCancelled()) return null
                         if (part.text.isBlank()) continue
-                        val foreign = if (part.foreign) com.brahmadeo.supertonic.tts.foreign.ForeignTts.synthesize(context,
+                        val foreign = if (part.foreign && com.brahmadeo.supertonic.tts.foreign.ForeignTts.enabled(context)) com.brahmadeo.supertonic.tts.foreign.ForeignTts.synthesize(context,
                             part.text, com.brahmadeo.supertonic.tts.foreign.ForeignTts.language(context, part.text, lang),
                             speed, getAudioSampleRate(), gain) else null
                         if (isCancelled()) return null
@@ -229,7 +231,8 @@ object SupertonicTTS {
                             }
                             output.write(foreign)
                         } else {
-                            val russian = if (part.foreign) com.brahmadeo.supertonic.tts.foreign.ForeignText.transliterate(part.text) else part.text
+                            val russian = if (part.foreign) foreignFallbackNormalizer.normalize(
+                                com.brahmadeo.supertonic.tts.foreign.ForeignText.transliterate(part.text), "ru") else part.text
                             val pcm = if (AssetManager.isSilero(context)) {
                                 val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(context).also { sileroEngine = it }
                                 engine.synthesize(russian, stylePath, speed, gain, listener, sid)
