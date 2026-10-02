@@ -101,6 +101,8 @@
     <string name="action_export">Export JSON</string>
     
     <string name="model_selection_title">Select TTS Model</string>
+    <string name="action_model_packs">Models and voice packs</string>
+    <string name="model_select_download">Select / download</string>
     <string name="model_standard_title">Standard (Supertone)</string>
     <string name="model_standard_desc">Original Supertonic 3 models. Stable and reliable.</string>
     <string name="model_android_optimized_title">Android Optimized (Reza2kn)</string>

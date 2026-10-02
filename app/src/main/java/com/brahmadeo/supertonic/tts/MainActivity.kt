@@ -221,7 +221,12 @@ class MainActivity : ComponentActivity() {
             SupertonicTheme(voiceFile = viewModel.selectedVoiceFile.value) {
                 if (viewModel.showModelSelection.value) {
                     androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { /* Don't dismiss without choice on first launch */ },
+                        onDismissRequest = {
+                            if (AssetManager.isReady(this@MainActivity)) {
+                                viewModel.selectedModel.value = AssetManager.getModelType(this@MainActivity)
+                                viewModel.showModelSelection.value = false
+                            }
+                        },
                         title = { Text(getString(R.string.model_selection_title)) },
                         text = {
                             androidx.compose.foundation.layout.Column(
@@ -332,7 +337,13 @@ class MainActivity : ComponentActivity() {
                                 }
                                 viewModel.showModelSelection.value = false
                                 startDownload()
-                            }) { Text(getString(R.string.model_download_button)) }
+                            }) { Text(getString(R.string.model_select_download)) }
+                        },
+                        dismissButton = {
+                            if (AssetManager.isReady(this@MainActivity)) TextButton(onClick = {
+                                viewModel.selectedModel.value = AssetManager.getModelType(this@MainActivity)
+                                viewModel.showModelSelection.value = false
+                            }) { Text(getString(R.string.cancel)) }
                         }
                     )
                 } else if (viewModel.isDownloading.value) {
@@ -428,6 +439,10 @@ class MainActivity : ComponentActivity() {
                     }
 
                     MainScreen(
+                        onModelSelectionClick = {
+                            viewModel.selectedModel.value = AssetManager.getModelType(this@MainActivity)
+                            viewModel.showModelSelection.value = true
+                        },
                         inputText = viewModel.inputText.value,
                         onInputTextChange = { 
                             viewModel.inputText.value = it

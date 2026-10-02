@@ -86,7 +86,8 @@ fun MainScreen(
     miniPlayerIsPlaying: Boolean,
     onMiniPlayerClick: () -> Unit,
     onMiniPlayerPlayPauseClick: () -> Unit,
-    onLlmSettingsClick: () -> Unit = {}
+    onLlmSettingsClick: () -> Unit = {},
+    onModelSelectionClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -110,6 +111,10 @@ fun MainScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(AppR.string.action_model_packs)) },
+                            onClick = { showMenu = false; onModelSelectionClick() }
+                        )
                         DropdownMenuItem(
                             text = { Text("Подготовка текста LLM") },
                             onClick = { showMenu = false; onLlmSettingsClick() }
@@ -267,6 +272,9 @@ fun MainScreen(
                     icon = Icons.Default.Settings
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        TextButton(onClick = onModelSelectionClick, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(AppR.string.action_model_packs))
+                        }
                         DropdownSelector(
                             label = stringResource(AppR.string.language_label),
                             options = languages.keys.toList(),

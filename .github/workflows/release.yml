@@ -162,6 +162,10 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 23 changes
+            - Visible Models and voice packs button on the main screen and in the menu; choose Silero CIS to access 29 Russian voices without deleting the current pack.
+            - Model picker can be cancelled; installed voice packs are reused when switching.
+
             ### Beta 22 changes
             - Model/voice downloads run in a data-sync foreground service, resume partial files and retry network interruptions with full size/SHA validation.
             - Install the additional Silero CIS pack with 29 Russian voices; all Russian voice packs and offline resources are mirrored in this repository.
