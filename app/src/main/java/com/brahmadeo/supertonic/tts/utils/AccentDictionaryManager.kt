@@ -315,7 +315,7 @@ object AccentDictionaryManager {
             // Both LLM combining accents and legacy '+' user accents win.
             // Consuming '+' with the entire word also prevents stressing only
             // a substring of a manually marked word.
-            if ('+' in original || '\u0301' in original) continue
+            if ('+' in original || '\u0301' in original || original.any { it in "ёЁ" }) continue
             val lower = original.lowercase()
             // Look up in whichever backend is live. The .sacc reader takes
             // UTF-8 bytes; the JSON HashMap is keyed by the lowercased String.

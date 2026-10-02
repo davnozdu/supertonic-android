@@ -59,4 +59,12 @@ class PreparedTextValidatorTest {
     }
     private fun validateNumber(input: com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer.LlmNumbers, output: String) =
         PreparedTextValidator.validate(input.text, output, numberRanges = input.ranges)
+    @Test fun restoresYoWithCaseAndIndependentSwitch() {
+        assertEquals("Всё!", PreparedTextValidator.validate("Все", "всё!"))
+        assertEquals("Ёлка.", PreparedTextValidator.validate("Елка", "ёлка."))
+        assertEquals("Все!", PreparedTextValidator.validate("Все", "всё!", allowStress = false, allowYo = false))
+        assertNull(PreparedTextValidator.validate("Всё готово", "Все гото́во."))
+        assertNull(PreparedTextValidator.validate("Он все знает", "Он всё понима́ет."))
+        assertEquals("Все лю́ди пришли́.", PreparedTextValidator.validate("Все люди пришли", "Все лю́ди пришли́."))
+    }
 }

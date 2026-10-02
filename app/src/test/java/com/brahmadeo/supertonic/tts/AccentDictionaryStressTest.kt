@@ -14,12 +14,13 @@ class AccentDictionaryStressTest {
         val savedBinary = binary.get(manager)
         try {
             binary.set(manager, null)
-            entries.set(manager, mapOf("окно" to "о́кно", "светло" to "све́тло"))
+            entries.set(manager, mapOf("окно" to "о́кно", "светло" to "све́тло", "всё" to "все"))
             val explicit = "окно́ светло́ +окно светл+о"
             assertEquals(explicit, manager.apply(explicit, "ru"))
             assertEquals("окн+о светл+о +окно светл+о", TeraTextPreparation.stress(manager.apply(explicit, "ru"),
                 { " +wrong" }, emptyMap(), emptySet(), emptySet()))
             assertEquals("о́кно", manager.apply("окно", "ru"))
+            assertEquals("Всё", manager.apply("Всё", "ru"))
         } finally {
             entries.set(manager, savedEntries)
             binary.set(manager, savedBinary)

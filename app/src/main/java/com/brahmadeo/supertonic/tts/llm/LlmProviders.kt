@@ -28,7 +28,7 @@ object LlmProviders {
 Копируй все слова и числа посимвольно. Не исправляй опечатки, грамматику, стиль или смысл. Не добавляй, не удаляй и не переставляй слова. Сохраняй регистр, имена, дефисы внутри слов и границы абзацев. Числа никогда не записывай словами.
 Обычные целые числа уже раскрыты приложением в слова с сохранением значения. Только внутри таких числительных согласуй род: один/одна/одно и два/две по соседнему существительному (одно имя, одна запись). Значение числа и все остальные слова числительного сохраняй: сто нельзя терять или добавлять.
 Не добавляй, не удаляй и не перемещай кавычки или скобки, даже в прямой речи.
-Расставляй словесные ударения символом U+0301 ПОСЛЕ ударной гласной. Разрешай омографы по контексту (светло́, пото́м, гото́в и т.д.). Не заменяй е на ё. Уже указанные ударения сохраняй.
+Расставляй словесные ударения символом U+0301 ПОСЛЕ ударной гласной. Разрешай омографы по контексту (светло́, пото́м, гото́в и т.д.). Уже указанные ударения сохраняй.
 В каждом слове допускается не более одного ударения, только после гласной. Если ударение уже есть, копируй его точно; не добавляй второе и не переноси. Например: «По-прежнему светло́», «В комнате светло́».
 Восстанавливай отсутствующие необходимые запятые, точки, двоеточия, тире, вопросительные и восклицательные знаки. Сохраняй корректную авторскую пунктуацию; не добавляй лишние знаки ради драматичности.
 Строки идут подряд; учитывай соседние строки как контекст. Никаких других действий, пояснений, комментариев, пересказа или рассуждений в ответе."""
@@ -38,6 +38,11 @@ object LlmProviders {
 Вход: {"texts":["Когда ветер стих мы открыли окно. В комнате светло.","Ты готов? Да я готов!"]}
 Выход: {"texts":["Когда́ ве́тер стих, мы откры́ли окно́. В ко́мнате светло́.","Ты гото́в? Да, я гото́в!"]}
 Недостаточно вернуть только запятые: поставь U+0301 в многосложных русских словах. Не используй SSML, теги эмоций, команды или метки голоса."""
+
+    private fun instruction(c: LlmConfig): String = INSTRUCTION + "\n" +
+        (if (c.restoreYo) "Восстанавливай пропущенную ё вместо е только по контексту: всё/все, узнаёт/узнает, нёбо/небо. Уже написанную ё сохраняй. Никакие другие буквы не меняй." else "Не заменяй е на ё. Уже написанную ё сохраняй.") +
+        (if (!c.stress) "\nРасстановка ударений выключена: новых U+0301 не добавляй." else "") +
+        (if (!c.punctuation) "\nИзменение пунктуации выключено: копируй все знаки точно." else "")
 
     private fun schema() = JSONObject("""{"type":"object","properties":{"texts":{"type":"array","items":{"type":"string"}}},"required":["texts"],"additionalProperties":false}""")
     private fun http(url: String, key: String, body: JSONObject? = null, gemini: Boolean = false): JSONObject {
@@ -109,7 +114,7 @@ object LlmProviders {
             ThinkingPolicy.gemini(c.geminiModel, c.geminiThinking)?.let {
                 generationConfig.put("thinkingConfig", JSONObject().put(it.field, it.value).put("includeThoughts", false))
             }
-            val body = JSONObject().put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", INSTRUCTION))))
+            val body = JSONObject().put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", instruction(c)))))
                 .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
                 .put("generationConfig", generationConfig)
             val response = http("https://generativelanguage.googleapis.com/v1beta/models/${c.geminiModel}:generateContent", c.geminiKey, body, true)
@@ -130,7 +135,7 @@ object LlmProviders {
             val body = JSONObject().put("model", c.ollamaModel).put("stream", false)
                 .put("think", ThinkingPolicy.ollama(controls, c.ollamaThinking, c.ollamaModel))
                 .put("options", JSONObject().put("temperature", 0).put("num_predict", 6000))
-                .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", INSTRUCTION))
+                .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", instruction(c)))
                     .put(JSONObject().put("role", "user").put("content", prompt)))
             // Ollama Cloud does not support the format/schema parameter.
             // JSON is requested in the instruction and validated after receipt.
@@ -157,7 +162,7 @@ object LlmProviders {
         }
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
-        return local!!.createConversation(ConversationConfig(systemInstruction = Contents.of(INSTRUCTION + LOCAL_EXAMPLES),
+        return local!!.createConversation(ConversationConfig(systemInstruction = Contents.of(instruction(c) + if (c.stress) LOCAL_EXAMPLES else ""),
             samplerConfig = SamplerConfig(1, 0.95, 0.0), thinkingConfig = ThinkingConfig(c.localThinking, if (c.localThinking) 512 else 0),
             enableResponseFormat = true, maxOutputToken = 6000)).use {
             activeConversation = it

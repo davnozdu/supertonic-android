@@ -87,6 +87,7 @@ class LlmSettingsActivity : ComponentActivity() {
                         }
                         Toggle("Расставлять ударения", config.stress) { config = config.copy(stress = it); save() }
                         Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it); save() }
+                        Toggle("Восстанавливать букву ё по контексту", config.restoreYo) { config = config.copy(restoreYo = it); save() }
                         Text("Текст, уже отправленный читалкой, подготавливается в фоне с контекстом до 4000 символов. Если читалка отправляет по одному фрагменту, первая подготовка каждого нового фрагмента может занять время.", style = MaterialTheme.typography.bodySmall)
                         Text("Чтение ждёт подготовку не более 1,5 секунды. Если результат ещё не готов, используется словарь, а очередь подготавливается дальше в фоне.", style = MaterialTheme.typography.bodySmall)
                         Choice("Подготовка текста вперёд в приложении", "${config.aheadChars} символов",

@@ -8,7 +8,7 @@ object PreparedTextValidator {
     private fun plain(s: String) = s.replace("+", "").replace("\u0301", "")
     private fun symbols(s: String) = s.filter { !it.isLetterOrDigit() && !it.isWhitespace() && it !in "+\u0301,.;:!?…—–-\"'«»“”„()[]" }
     fun validate(original: String, response: String, allowPunctuation: Boolean = true, allowStress: Boolean = true,
-                 numberRanges: List<IntRange> = emptyList()): String? {
+                 numberRanges: List<IntRange> = emptyList(), allowYo: Boolean = true): String? {
         // Some providers insert dialogue quotes despite the instruction. If the
         // source has none, discard those formatting additions before validation.
         // Existing source quotes/brackets must still retain their exact anchors.
@@ -50,19 +50,27 @@ object PreparedTextValidator {
             fun numericGender(word: String) = when (word) { "один", "одна", "одно" -> "один"; "два", "две" -> "два"; else -> word }
             val sourcePlain = plain(source)
             val targetPlain = plain(target)
-            val changedGender = sourcePlain.lowercase() != targetPlain.lowercase()
+            fun foldYo(s: String) = s.lowercase().replace('ё', 'е')
+            for (j in sourcePlain.indices) if (sourcePlain[j] in "ёЁ" && targetPlain.getOrNull(j)?.lowercaseChar() != 'ё') return null
+            val changedGender = foldYo(sourcePlain) != foldYo(targetPlain)
             if (changedGender && !(numberRanges.any { a[i].range.first in it && a[i].range.last in it } &&
-                        numericGender(sourcePlain.lowercase()) == numericGender(targetPlain.lowercase()))) return null
+                        numericGender(foldYo(sourcePlain)) == numericGender(foldYo(targetPlain)))) return null
             if (b[i].value.contains('+') && !source.contains('+')) return null
             val explicit = source.contains('+') || source.contains('\u0301')
-            if (!explicit && source.count { it in vowels } > 1) {
+            if (!explicit && source.none { it in "ёЁ" } && source.count { it in vowels } > 1) {
                 needsStress = true
-                if (target.contains('\u0301')) suppliedStress = true
+                if (target.contains('\u0301') || (allowYo && target.any { it in "ёЁ" })) suppliedStress = true
             }
             if (!explicit && target.count { it == '\u0301' } > 1) return null
             val mark = target.indexOf('\u0301')
             if (!explicit && mark >= 0 && (mark == 0 || target[mark - 1] !in vowels)) return null
-            val base = if (changedGender) targetPlain.lowercase().let { if (source.first().isUpperCase()) it.replaceFirstChar(Char::uppercaseChar) else it } else sourcePlain
+            val base = if (changedGender) targetPlain.lowercase().let { if (source.first().isUpperCase()) it.replaceFirstChar(Char::uppercaseChar) else it } else {
+                sourcePlain.mapIndexed { j, ch ->
+                    if (allowYo && ch in "еЕ" && targetPlain.getOrNull(j)?.lowercaseChar() == 'ё') {
+                        if (ch.isUpperCase()) 'Ё' else 'ё'
+                    } else ch
+                }.joinToString("")
+            }
             val replacement = if (source.contains('+') || source.contains('\u0301')) source else {
                 if (!allowStress || mark < 0) base else base.substring(0, mark) + '\u0301' + base.substring(mark)
             }

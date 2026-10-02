@@ -168,7 +168,7 @@ object LlmPreparation {
                 var accepted = 0
                 providerTexts.zip(output).forEachIndexed { index, (source, proposed) ->
                     if (results[index] == null) {
-                        PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress, numericInputs[index].ranges)?.let { validated ->
+                        PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress, numericInputs[index].ranges, c.restoreYo)?.let { validated ->
                             val result = Result(validated, provider, elapsed, false)
                             results[index] = result; accepted++
                             // A bad neighbour must not hold up already valid text
