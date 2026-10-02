@@ -210,6 +210,7 @@ dependencies {
     implementation 'com.google.ai.edge.litert:litert:2.1.5'
     implementation 'com.google.ai.edge.litertlm:litertlm-android:0.17.1'
     implementation 'org.pytorch:pytorch_android_lite:2.1.0'
+    implementation 'com.facebook.soloader:soloader:0.10.5'
     implementation files('libs/executorch-1.5.0-arm64.aar')
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
