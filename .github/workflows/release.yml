@@ -147,7 +147,15 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2 for Russian and Supertonic 3 for other languages.
 
-            ### Beta 8 changes
+            ### Beta 9 changes
+            - Cloud model refresh shows progress/results beside its button and opens the current list. Ollama Cloud's public catalogue loads without an API key; configured private endpoints still use their key.
+            - Tested recommendations are highlighted in the dynamically fetched list. Gemini 3.1 Flash Lite and DeepSeek v4.1 Flash are fast choices; Mistral Large 3 is a slower alternative.
+            - Tera inserts only missing punctuation silence: comma 180 ms and sentence end 420 ms by default, with adjustable settings and an off switch. Decimal numbers, dates and clock times retain their numeric boundaries.
+            - Reading waits at most 1.5 seconds for unfinished LLM preparation, then continues with dictionary processing while future queued text is prepared.
+            - Local Gemma uses JSON-constrained output. The text test reports provider errors instead of silently hiding fallback.
+            - Benchmark report and synthetic results are included in the repository; local Gemma E2B requires separate device verification.
+
+            ### Earlier beta changes
             - Optional LLM text preparation: contextual Russian stress and punctuation, with validation that words and numbers are unchanged.
             - Separate thinking switches for Ollama, Gemini and local Gemma are off by default. Where a provider cannot disable thinking completely, settings explain the minimum-level limitation.
             - Strict preparation changes only punctuation and stress; words, digits, quotes and paragraph boundaries are protected. Russian integers and decimal fractions are read as complete numbers, including numbers next to punctuation and grouped thousands.

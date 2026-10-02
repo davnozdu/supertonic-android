@@ -38,9 +38,10 @@ object PreparedTextValidator {
             val target = b[i].value.replace("+", "") // '+' is reserved for explicit input; LLM must return acute marks.
             if (plain(source).lowercase() != plain(target).lowercase()) return null
             if (b[i].value.contains('+')) return null
-            if (target.count { it == '\u0301' } > 1) return null
+            val explicit = source.contains('+') || source.contains('\u0301')
+            if (!explicit && target.count { it == '\u0301' } > 1) return null
             val mark = target.indexOf('\u0301')
-            if (mark >= 0 && (mark == 0 || target[mark - 1] !in vowels)) return null
+            if (!explicit && mark >= 0 && (mark == 0 || target[mark - 1] !in vowels)) return null
             val sourcePlain = plain(source)
             val replacement = if (!allowStress || source.contains('+') || source.contains('\u0301')) source else {
                 if (mark < 0) sourcePlain else sourcePlain.substring(0, mark) + '\u0301' + sourcePlain.substring(mark)

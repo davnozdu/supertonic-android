@@ -20,6 +20,7 @@ class PreparedTextValidatorTest {
     @Test fun preservesExplicitStressAndCase() {
         assertEquals("СВЕТЛ+О.", PreparedTextValidator.validate("СВЕТЛ+О", "све́тло."))
         assertEquals("Светло́.", PreparedTextValidator.validate("Светло́", "све́тло."))
+        assertEquals("Светло́.", PreparedTextValidator.validate("Светло́", "све́тло́."))
         assertEquals("+окно.", PreparedTextValidator.validate("+окно", "окно́."))
     }
     @Test fun preservesQuotesAndParagraphs() {

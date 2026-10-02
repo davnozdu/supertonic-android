@@ -1,4 +1,4 @@
-# LLM preparation (Beta 8)
+# LLM preparation (Beta 9)
 
 LLM processing is optional and disabled by default. It prepares Russian punctuation
 and contextual stress before the normal dictionary and TTS pipeline. Cloud keys
@@ -21,6 +21,10 @@ included in the APK. Local mode never sends text to a cloud provider.
   complete shutdown of reasoning, and settings explain the limitation.
   Local Gemma receives `ThinkingConfig(false, 0)` when off and a bounded budget when on.
   Unknown Gemini model families receive no unsupported thinking parameter.
+- Ollama Cloud's public catalogue is fetched without an authentication header.
+  Refresh results and errors appear beside the provider's button; successful refresh
+  opens the selector. Highlighted recommendations annotate only models present in
+  the fetched catalogue and do not add hardcoded model choices.
 
 ## Ahead preparation and limits
 
@@ -30,6 +34,8 @@ requests can be prepared while the current audio plays. Requests are batched wit
 up to 4000 characters of context and cached in a bounded text queue (96000 characters,
 256 requests). This does not retrieve book text that the reader has not submitted.
 The first uncached request can therefore still incur preparation latency.
+Beta 9 bounds waiting to 1500ms and then continues with the dictionary while
+background preparation continues. Already prepared queue entries are delivered immediately.
 
 The app's own playback also prefetches submitted sentences. Stop cancels its
 pending LLM preparation. Turning processing off cancels pending work and clears
@@ -48,6 +54,9 @@ none; original quoted text still requires exact delimiter positions.
 After validation, Russian number normalization reads whole integers (including
 grouped thousands and numbers before punctuation) and decimal fractions as words.
 LLMs retain digits verbatim; the app performs number spelling deterministically.
+Local Gemma uses LiteRT-LM JSON-constrained decoding. Tera punctuation silence is
+separate from LLM processing: by default at least 180ms for commas and 420ms for
+sentence ends, counting existing trailing silence instead of doubling it.
 
 ## Verification
 
@@ -59,10 +68,11 @@ policy unit tests. Synthetic cloud tests with actual API access confirmed:
 - Gemini 3.1 Flash Lite accepts `thinkingLevel: MINIMAL`; the short test returned
   in about 1.67 seconds with zero reported thought tokens.
 
-These are individual requests, not a throughput guarantee. Local loading,
-download resume, GPU performance and the Binder observation path require device
-verification. Beta 8 has not yet been installed on the test phone while its user
-is reading in Moon+ Reader.
+These are individual requests, not a throughput guarantee. Beta 8 is installed
+on the test phone; queued Moon+ Reader requests produced successful Tera audio in
+device logs. Local Gemma E2B is downloaded and hash verified. Its earlier preparation
+could exceed the reading wait deadline or produce invalid output. Beta 9 introduces
+bounded waiting and JSON constraints; those changes still require phone verification.
 
 Six synthetic paragraphs (2138 characters) took 4.75–9.70 seconds with DeepSeek
 Flash and no reported thinking trace. All six responses from the strict prompt

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -28,29 +29,44 @@ class LlmSettingsActivity : ComponentActivity() {
         setContent {
             SupertonicTheme {
                 var config by remember { mutableStateOf(LlmSettings.load(this)) }
+                val recommendations = remember { LlmModelRecommendations.load(this) }
                 var busy by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("") }
+                var ollamaStatus by remember { mutableStateOf("") }
+                var geminiStatus by remember { mutableStateOf("") }
+                var ollamaRevision by remember { mutableIntStateOf(0) }
+                var geminiRevision by remember { mutableIntStateOf(0) }
+                var refreshing by remember { mutableStateOf<Boolean?>(null) }
                 var ollamaModels by remember { mutableStateOf(loadModels(false)) }
                 var geminiModels by remember { mutableStateOf(loadModels(true)) }
-                var testText by remember { mutableStateOf("По-прежнему светло. Ты готов? Потом мы откроем окно — и станет теплее.") }
+                var testText by remember { mutableStateOf(intent.getStringExtra(android.content.Intent.EXTRA_TEXT)?.take(2000)
+                    ?: "По-прежнему светло. Ты готов? Потом мы откроем окно — и станет теплее.") }
                 val scope = rememberCoroutineScope()
                 val downloadStatus by LocalModelDownload.status.collectAsState()
                 val downloading by LocalModelDownload.downloading.collectAsState()
+                val pausePrefs = remember { getSharedPreferences("SupertonicPrefs", MODE_PRIVATE) }
+                var punctuationPauses by remember { mutableStateOf(pausePrefs.getBoolean("tera_punctuation_pauses", true)) }
+                var commaPause by remember { mutableIntStateOf(pausePrefs.getInt("tera_comma_pause_ms", 180)) }
+                var sentencePause by remember { mutableIntStateOf(pausePrefs.getInt("tera_sentence_pause_ms", 420)) }
                 fun save() {
                     try { LlmSettings.save(this, config); message = "Настройки сохранены" }
                     catch (_: Exception) { message = "Не удалось сохранить ключи в Android Keystore" }
                 }
                 fun refresh(gemini: Boolean) {
-                    busy = true; message = "Получение актуальных моделей…"
+                    fun status(value: String) { if (gemini) geminiStatus = value else ollamaStatus = value }
+                    busy = true; refreshing = gemini; status("Получение актуальных моделей…")
                     val snapshot = config
                     scope.launch {
                         try {
+                            LlmSettings.save(this@LlmSettingsActivity, snapshot)
+                            val provider = if (gemini) "gemini" else "ollama"
                             val models = withContext(Dispatchers.IO) { LlmProviders.models(snapshot, gemini) }
-                            if (gemini) geminiModels = models else ollamaModels = models
+                                .sortedWith(compareBy<String> { recommendations["$provider/$it"]?.priority ?: 100 }.thenBy { it })
+                            if (gemini) { geminiModels = models; geminiRevision++ } else { ollamaModels = models; ollamaRevision++ }
                             saveModels(gemini, models)
-                            message = if (models.isEmpty()) "API не вернул доступных моделей" else "Получено моделей: ${models.size}. Выберите модель ниже."
-                        } catch (e: Exception) { message = "Не удалось получить модели: ${e.message?.take(120)}" }
-                        finally { busy = false }
+                            status(if (models.isEmpty()) "API не вернул доступных моделей" else "Получено моделей: ${models.size}. Выберите модель ниже.")
+                        } catch (e: Exception) { status("Не удалось получить модели: ${e.message?.take(160)}") }
+                        finally { busy = false; refreshing = null }
                     }
                 }
                 Scaffold(topBar = { TopAppBar(title = { Text("Подготовка текста LLM") }, navigationIcon = {
@@ -72,19 +88,40 @@ class LlmSettingsActivity : ComponentActivity() {
                         Toggle("Расставлять ударения", config.stress) { config = config.copy(stress = it) }
                         Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it) }
                         Text("Текст, уже отправленный читалкой, подготавливается в фоне с контекстом до 4000 символов. Если читалка отправляет по одному фрагменту, первая подготовка каждого нового фрагмента может занять время.", style = MaterialTheme.typography.bodySmall)
+                        Text("Чтение ждёт подготовку не более 1,5 секунды. Если результат ещё не готов, используется словарь, а очередь подготавливается дальше в фоне.", style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider()
+                        Text("Паузы Tera при чтении", style = MaterialTheme.typography.titleLarge)
+                        Toggle("Слышимые паузы по пунктуации", punctuationPauses) {
+                            punctuationPauses = it; pausePrefs.edit().putBoolean("tera_punctuation_pauses", it).apply()
+                        }
+                        Choice("Запятая", "$commaPause мс", listOf("100 мс", "140 мс", "180 мс", "220 мс", "300 мс")) {
+                            commaPause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_comma_pause_ms", commaPause).apply()
+                        }
+                        Choice("Точка, вопрос и восклицание", "$sentencePause мс", listOf("250 мс", "350 мс", "420 мс", "550 мс", "700 мс")) {
+                            sentencePause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_sentence_pause_ms", sentencePause).apply()
+                        }
+                        Text("Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Ollama Cloud", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.ollamaEndpoint, { config = config.copy(ollamaEndpoint = it) }, label = { Text("Адрес API (HTTPS)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(config.ollamaKey, { config = config.copy(ollamaKey = it) }, label = { Text("Ключ Ollama") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
                         Button(onClick = { refresh(false) }, enabled = !busy) { Text("Считать актуальные модели Ollama") }
-                        Choice("Модель Ollama", config.ollamaModel.ifBlank { "Выберите модель" }, ollamaModels) { config = config.copy(ollamaModel = it) }
+                        if (refreshing == false) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (ollamaStatus.isNotEmpty()) Text(ollamaStatus)
+                        Choice("Модель Ollama", config.ollamaModel.ifBlank { "Выберите модель" }, ollamaModels, ollamaRevision,
+                            format = { name -> recommendations["ollama/$name"]?.let { "★ $name — ${it.label}" } ?: name },
+                            highlight = { recommendations.containsKey("ollama/$it") }) { config = config.copy(ollamaModel = it); save() }
                         Toggle("Размышление в Ollama (медленнее)", config.ollamaThinking) { config = config.copy(ollamaThinking = it) }
                         Text("По умолчанию выключено. Если модель разрешает только уровни размышления, при выключении выбирается минимальный доступный уровень.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Gemini", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.geminiKey, { config = config.copy(geminiKey = it) }, label = { Text("Ключ Gemini API") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
                         Button(onClick = { refresh(true) }, enabled = !busy) { Text("Считать актуальные модели Gemini") }
-                        Choice("Модель Gemini", config.geminiModel.ifBlank { "Выберите модель" }, geminiModels) { config = config.copy(geminiModel = it) }
+                        if (refreshing == true) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (geminiStatus.isNotEmpty()) Text(geminiStatus)
+                        Choice("Модель Gemini", config.geminiModel.ifBlank { "Выберите модель" }, geminiModels, geminiRevision,
+                            format = { name -> recommendations["gemini/$name"]?.let { "★ $name — ${it.label}" } ?: name },
+                            highlight = { recommendations.containsKey("gemini/$it") }) { config = config.copy(geminiModel = it); save() }
                         Toggle("Размышление в Gemini (медленнее)", config.geminiThinking) { config = config.copy(geminiThinking = it) }
                         if (ThinkingPolicy.gemini(config.geminiModel, false)?.minimumOnly == true) {
                             Text("У этой модели API не позволяет полностью отключить размышление. Выключенный тумблер устанавливает минимальный уровень.", style = MaterialTheme.typography.bodySmall)
@@ -123,7 +160,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             scope.launch {
                                 try {
                                     val result = withContext(Dispatchers.IO) { LlmPreparation.test(this@LlmSettingsActivity, snapshot, sample) }
-                                    message = "${result.provider}, ${result.elapsedMs} мс${if (result.fallback) " — резервная обработка; LLM не сработала" else ""}\n\n${result.text}"
+                                    message = "${result.provider}, ${result.elapsedMs} мс${if (result.fallback) " — резервная обработка; ${result.reason.orEmpty()}" else ""}\n\n${result.text}"
                                 } catch (_: Exception) { message = "Проверка не завершилась; проверьте модель, ключ и сеть" }
                                 finally { busy = false }
                             }
@@ -150,13 +187,17 @@ class LlmSettingsActivity : ComponentActivity() {
         Text(label, Modifier.weight(1f).padding(end = 12.dp)); Switch(checked, change)
     }
 }
-@Composable private fun Choice(label: String, selected: String, options: List<String>, change: (String) -> Unit) {
+@Composable private fun Choice(label: String, selected: String, options: List<String>, revision: Int = 0,
+                              format: (String) -> String = { it }, highlight: (String) -> Boolean = { false }, change: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(revision) { if (revision > 0 && options.isNotEmpty()) expanded = true }
     Column {
         Text(label, style = MaterialTheme.typography.labelLarge)
-        OutlinedButton(onClick = { expanded = true }, enabled = options.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text(selected) }
+        OutlinedButton(onClick = { expanded = true }, enabled = options.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text(format(selected)) }
         DropdownMenu(expanded, { expanded = false }, modifier = Modifier.heightIn(max = 360.dp)) {
-            options.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { expanded = false; change(option) }) }
+            options.forEach { option -> DropdownMenuItem(text = { Text(format(option)) },
+                modifier = if (highlight(option)) Modifier.background(MaterialTheme.colorScheme.primaryContainer) else Modifier,
+                onClick = { expanded = false; change(option) }) }
         }
     }
 }

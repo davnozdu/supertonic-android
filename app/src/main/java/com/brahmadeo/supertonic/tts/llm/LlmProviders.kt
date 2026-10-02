@@ -28,6 +28,7 @@ object LlmProviders {
 Копируй все слова и числа посимвольно. Не исправляй опечатки, грамматику, стиль или смысл. Не добавляй, не удаляй и не переставляй слова. Сохраняй регистр, имена, дефисы внутри слов и границы абзацев. Числа никогда не записывай словами.
 Не добавляй, не удаляй и не перемещай кавычки или скобки, даже в прямой речи.
 Расставляй словесные ударения символом U+0301 ПОСЛЕ ударной гласной. Разрешай омографы по контексту (светло́, пото́м, гото́в и т.д.). Не заменяй е на ё. Уже указанные ударения сохраняй.
+В каждом слове допускается не более одного ударения, только после гласной. Если ударение уже есть, копируй его точно; не добавляй второе и не переноси. Например: «По-прежнему светло́», «В комнате светло́».
 Восстанавливай отсутствующие необходимые запятые, точки, двоеточия, тире, вопросительные и восклицательные знаки. Сохраняй корректную авторскую пунктуацию; не добавляй лишние знаки ради драматичности.
 Строки идут подряд; учитывай соседние строки как контекст. Никаких других действий, пояснений, комментариев, пересказа или рассуждений в ответе."""
 
@@ -41,7 +42,9 @@ object LlmProviders {
             connection.readTimeout = if (body == null) 10000 else 12000
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Accept", "application/json")
-            if (key.isNotBlank()) connection.setRequestProperty(if (gemini) "x-goog-api-key" else "Authorization", if (gemini) key else "Bearer $key")
+            connection.setRequestProperty("User-Agent", "Supertonic-Android")
+            val credential = key.trim()
+            if (credential.isNotBlank()) connection.setRequestProperty(if (gemini) "x-goog-api-key" else "Authorization", if (gemini) credential else "Bearer $credential")
             if (body != null) {
                 connection.requestMethod = "POST"; connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
@@ -49,7 +52,11 @@ object LlmProviders {
             }
             val code = connection.responseCode
             // Never put provider response bodies (potential secrets/text) in errors or logs.
-            require(code in 200..299) { "API HTTP $code" }
+            require(code in 200..299) { when (code) {
+                401, 403 -> "API HTTP $code: сервер отказал в доступе; проверьте ключ и разрешения аккаунта"
+                429 -> "API HTTP 429: лимит запросов; повторите позже"
+                else -> "API HTTP $code"
+            } }
             val bytes = connection.inputStream.use { it.readNBytesCompat(512 * 1024) }
             return JSONObject(String(bytes, Charsets.UTF_8))
         } finally { if (activeHttp === connection) activeHttp = null; connection.disconnect() }
@@ -62,7 +69,10 @@ object LlmProviders {
     }
     fun models(c: LlmConfig, gemini: Boolean): List<String> {
         if (!gemini) {
-            val array = http(c.ollamaEndpoint.trimEnd('/') + "/api/tags", c.ollamaKey).optJSONArray("models") ?: JSONArray()
+            // Ollama Cloud publishes its catalogue without authentication. A key
+            // rejected for inference must not prevent viewing available models.
+            val catalogKey = if (URL(c.ollamaEndpoint).host.equals("ollama.com", true)) "" else c.ollamaKey
+            val array = http(c.ollamaEndpoint.trimEnd('/') + "/api/tags", catalogKey).getJSONArray("models")
             return (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("name")?.takeIf(String::isNotBlank) }.distinct().sorted()
         }
         require(c.geminiKey.isNotBlank()) { "Введите ключ Gemini" }
@@ -141,10 +151,11 @@ object LlmProviders {
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
         return local!!.createConversation(ConversationConfig(systemInstruction = Contents.of(INSTRUCTION),
-            samplerConfig = SamplerConfig(1, 0.95, 0.0), thinkingConfig = ThinkingConfig(c.localThinking, if (c.localThinking) 512 else 0), maxOutputToken = 6000)).use {
+            samplerConfig = SamplerConfig(1, 0.95, 0.0), thinkingConfig = ThinkingConfig(c.localThinking, if (c.localThinking) 512 else 0),
+            enableResponseFormat = true, maxOutputToken = 6000)).use {
             activeConversation = it
             val deadline = timer.schedule({ runCatching { it.cancelProcess() } }, 45, java.util.concurrent.TimeUnit.SECONDS)
-            try { parse(it.sendMessage(JSONObject().put("texts", JSONArray(texts)).toString()).toString(), texts.size) }
+            try { parse(it.sendMessage(JSONObject().put("texts", JSONArray(texts)).toString(), responseFormat = ResponseFormat.json(schema().toString())).toString(), texts.size) }
             finally { deadline.cancel(false); activeConversation = null; usedAt = SystemClock.elapsedRealtime() }
         }
     }

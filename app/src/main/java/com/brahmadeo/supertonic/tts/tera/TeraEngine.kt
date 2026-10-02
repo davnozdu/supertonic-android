@@ -23,6 +23,7 @@ import kotlin.math.roundToInt
 
 /** Android port of the distilled TeraTTSv2 ONNX pipeline. */
 class TeraEngine(private val root: File, context: Context) : AutoCloseable {
+    private val pausePrefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private val env = OrtEnvironment.getEnvironment()
     private val sessions = HashMap<String, OrtSession>()
     private val options = OrtSession.SessionOptions().apply {
@@ -123,6 +124,28 @@ class TeraEngine(private val root: File, context: Context) : AutoCloseable {
 
     @Synchronized
     fun synthesize(text: String, lang: String, stylePath: String, speed: Float, gain: Float,
+                   listener: SupertonicTTS.ProgressListener?, sessionId: Long): ByteArray {
+        if (!pausePrefs.getBoolean("tera_punctuation_pauses", true)) return synthesizePart(text, lang, stylePath, speed, gain, listener, sessionId)
+        val parts = TeraPunctuationPauses.split(text,
+            pausePrefs.getInt("tera_comma_pause_ms", 180).coerceIn(80, 400),
+            pausePrefs.getInt("tera_sentence_pause_ms", 420).coerceIn(200, 900))
+        val output = java.io.ByteArrayOutputStream()
+        for (part in parts) {
+            if (SupertonicTTS.isCancelled()) return ByteArray(0)
+            val pcm = synthesizePart(part.text, lang, stylePath, speed, gain, listener, sessionId)
+            if (pcm.isEmpty() || SupertonicTTS.isCancelled()) return ByteArray(0)
+            output.write(pcm)
+            val missing = TeraPunctuationPauses.missingSilenceSamples(pcm, part.pauseMs)
+            if (missing > 0) {
+                val silence = ByteArray(missing * 2)
+                output.write(silence)
+                listener?.onAudioChunk(sessionId, silence)
+            }
+        }
+        return output.toByteArray()
+    }
+
+    private fun synthesizePart(text: String, lang: String, stylePath: String, speed: Float, gain: Float,
                    listener: SupertonicTTS.ProgressListener?, sessionId: Long): ByteArray {
         require(lang == "ru") { "TeraTTSv2 preset supports Russian only" }
         val (styleDp, styleTtl) = voice(stylePath)

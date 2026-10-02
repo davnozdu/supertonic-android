@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Background preparation of text already submitted by any Android TTS client. */
 object LlmPreparation {
-    data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean)
+    data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null)
     private data class Entry(val id: Long, val caller: Any, val text: String, val input: String,
         val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false)
     private val lock = Any()
@@ -66,7 +66,7 @@ object LlmPreparation {
     }
     fun prefetch(ctx: Context, texts: List<String>): List<Long?> = texts.map { submit(ctx, appCaller, it) }
     fun cancelApp() = cancel(appCaller)
-    fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 30_000): String {
+    fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): String {
         if (!enabled(ctx)) return text
         initialize(ctx)
         val entry = synchronized(lock) {
@@ -79,14 +79,14 @@ object LlmPreparation {
             Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
             result.text
         } catch (_: Exception) {
-            Log.w("LlmPreparation", "Preparation deadline/cancellation; dictionary fallback chars=${text.length}")
+            Log.w("LlmPreparation", "Preparation not ready within ${timeoutMs}ms; dictionary fallback chars=${text.length}")
             text
         } finally { synchronized(lock) { entries.remove(entry.id) } }
     }
     fun test(ctx: Context, c: LlmConfig, text: String): Result {
         initialize(ctx)
         // Use the same single worker as normal reading and idle unload.
-        return executor.submit<Result> { process(ctx, c, listOf(text)).single() }.get(90, TimeUnit.SECONDS)
+        return executor.submit<Result> { process(ctx, c, listOf(text), ignoreCooldown = true).single() }.get(90, TimeUnit.SECONDS)
     }
     private fun startWorker() {
         if (!running.compareAndSet(false, true)) return
@@ -120,8 +120,9 @@ object LlmPreparation {
         val network = manager.activeNetwork ?: return@runCatching false
         manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }.getOrDefault(false)
-    private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch): List<Result> {
+    private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch, ignoreCooldown: Boolean = false): List<Result> {
         val started = SystemClock.elapsedRealtime()
+        var failure: String? = null
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()
             LlmMode.LOCAL -> listOf("local")
@@ -135,7 +136,7 @@ object LlmPreparation {
             if (provider == "ollama" && c.ollamaModel.isBlank()) continue
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
             if (provider == "local" && !LocalModelDownload.ready(ctx)) continue
-            if (SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) continue
+            if (!ignoreCooldown && SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) continue
             try {
                 val output = if (provider == "local") LlmProviders.local(ctx, c, texts) else LlmProviders.cloud(c, texts, provider == "gemini")
                 val validated = texts.zip(output).map { (a, b) -> PreparedTextValidator.validate(a, b, c.punctuation, c.stress)
@@ -143,14 +144,18 @@ object LlmPreparation {
                 val elapsed = SystemClock.elapsedRealtime() - started
                 Log.i("LlmPreparation", "Prepared fragments=${texts.size}, chars=${texts.sumOf { it.length }}, provider=$provider, ms=$elapsed")
                 return validated.map { Result(it, provider, elapsed, false) }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                val detail = e.message.orEmpty()
+                failure = if (listOf("LLM ", "API HTTP", "Сначала ", "Выберите ", "Подготовка ").any { detail.startsWith(it) }) detail.take(180)
+                    else e.javaClass.simpleName + (Regex("Status Code: \\d+").find(detail)?.value?.let { ": $it" } ?: "")
                 cooldown[provider] = SystemClock.elapsedRealtime() + 60_000
-                Log.w("LlmPreparation", "Provider $provider failed; trying fallback")
+                Log.w("LlmPreparation", "Provider $provider failed: $failure; trying fallback")
             } catch (_: LinkageError) {
+                failure = "Локальная среда выполнения не поддерживается"
                 cooldown[provider] = SystemClock.elapsedRealtime() + 60_000
                 Log.w("LlmPreparation", "Local runtime unsupported; dictionary fallback")
             }
         }
-        return texts.map { Result(it, "словарь", SystemClock.elapsedRealtime() - started, true) }
+        return texts.map { Result(it, "словарь", SystemClock.elapsedRealtime() - started, true, failure ?: "Нет готового провайдера: проверьте выбранную модель, ключ и скачивание Gemma") }
     }
 }
