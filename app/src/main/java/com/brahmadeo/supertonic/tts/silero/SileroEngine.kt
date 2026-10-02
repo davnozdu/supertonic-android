@@ -74,8 +74,12 @@ class SileroEngine(context: Context) : AutoCloseable {
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             val samples = head!!.forward(IValue.from(Tensor.fromBlob(hidden.dataAsFloatArray, hidden.shape())),
                 IValue.from(48000L), IValue.from(0.0), IValue.from(true)).toTensor().dataAsFloatArray
+            // Keep the requested boost without flattening speech peaks at PCM limits.
+            var peak = 0f
+            samples.forEach { require(it.isFinite()) { "Silero produced non-finite audio" }; peak = maxOf(peak, kotlin.math.abs(it)) }
+            val safeGain = if (peak > 0f) minOf(gain.coerceAtLeast(0f), .98f / peak) else 1f
             val pcm = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            samples.forEach { pcm.putShort((it * gain * 32767).toInt().coerceIn(-32768, 32767).toShort()) }
+            samples.forEach { pcm.putShort((it * safeGain * 32767).toInt().coerceIn(-32768, 32767).toShort()) }
             val bytes = pcm.array()
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             // Stream bounded PCM pieces into the existing reader/playback buffer.
