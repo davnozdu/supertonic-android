@@ -54,6 +54,7 @@ class LlmSettingsActivity : ComponentActivity() {
                 var offlineBusy by remember { mutableStateOf(false) }
                 var offlineStatus by remember { mutableStateOf("") }
                 var offlineStress by remember { mutableStateOf(pausePrefs.getBoolean("local_russian_stress",true)) }
+                var pcmCacheMb by remember { mutableIntStateOf(pausePrefs.getInt("reader_pcm_cache_mb",256)) }
                 var readerAhead by remember { mutableStateOf(pausePrefs.getBoolean("reader_early_prepare",true)) }
                 var punctuationPauses by remember { mutableStateOf(pausePrefs.getBoolean("tera_punctuation_pauses", true)) }
                 var commaPause by remember { mutableIntStateOf(pausePrefs.getInt("tera_comma_pause_ms", 180)) }
@@ -114,6 +115,9 @@ class LlmSettingsActivity : ComponentActivity() {
                             if (offlineStatus.isNotBlank()) Text(offlineStatus)
                             Toggle("Готовить текст читалки заранее", readerAhead) {
                                 readerAhead = it; pausePrefs.edit().putBoolean("reader_early_prepare",it).apply()
+                            }
+                            Choice("Кэш готового аудио в RAM", "$pcmCacheMb МБ", listOf("64 МБ","128 МБ","256 МБ","512 МБ","1024 МБ")) {
+                                pcmCacheMb=it.substringBefore(' ').toInt();pausePrefs.edit().putInt("reader_pcm_cache_mb",pcmCacheMb).apply()
                             }
                             Text("Подготавливаются только фрагменты, уже поставленные читалкой в очередь. Пауза считается минимальной: тишина модели засчитывается.", style = MaterialTheme.typography.bodySmall)
 

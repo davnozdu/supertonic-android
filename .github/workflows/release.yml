@@ -162,6 +162,14 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 18 changes
+            - Install the additional Silero CIS pack with 29 Russian voices; all Russian voice packs and offline resources are mirrored in this repository.
+            - Offline Russian book normalization works without LLM: numbers with recognized case/gender, dates, time, years, units, currency, fractions, percentages, degrees, Roman numerals, abbreviations, footnotes and line-break hyphenation.
+            - Shared local Silero Stress accentor, contextual homograph BERT and prebuilt SACC ё dictionary. Explicit user/LLM stress is preserved; idle unload after two minutes.
+            - Queue-ahead PCM synthesis for already submitted reader text, with adjustable RAM cache (64–1024 MB, default 256 MB).
+            - Minimum sentence pauses account for native model silence; Silero native punctuation durations.
+            - SIM/PIN/GIF/MIDI/WIFI read as words; Wi-Fi and hi-fi have spoken forms.
+
             ### Beta 17 changes
             - Optional Silero v5.5 Russian model with five voices, using ready-made Android TorchScript Lite / ExecuTorch files. No model conversion.
             - Shared LLM preparation, stress, ё, numbers, text cache and playback buffer apply to Silero too.

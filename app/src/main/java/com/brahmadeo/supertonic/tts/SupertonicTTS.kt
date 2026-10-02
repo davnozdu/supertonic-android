@@ -30,7 +30,8 @@ object SupertonicTTS {
         if(bytes==null || bytes.isEmpty() || bytes.size>16*1024*1024 || isCancelled()) return
         audioCache.remove(key)?.let { audioCacheBytes-=it.size }
         audioCache[key]=bytes;audioCacheBytes+=bytes.size
-        while(audioCacheBytes>128L*1024*1024 || audioCache.size>256) {
+        val limit = (appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt("reader_pcm_cache_mb",256) ?: 256).coerceIn(64,1024)*1024L*1024L
+        while(audioCacheBytes>limit || audioCache.size>256) {
             val first=audioCache.entries.first();audioCacheBytes-=first.value.size;audioCache.remove(first.key)
         }
     }
@@ -385,6 +386,7 @@ object SupertonicTTS {
 
     @Synchronized
     fun release() {
+        com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
         com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
         sileroEngine?.close()
         sileroEngine = null

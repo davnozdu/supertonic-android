@@ -64,6 +64,8 @@ object AssetManager {
     }
 
     fun setModelType(context: Context, type: String) {
+        com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
+        com.brahmadeo.supertonic.tts.SupertonicTTS.setCancelled(true)
         context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
             .edit().putString("selected_model", type).apply()
     }

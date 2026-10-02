@@ -36,12 +36,13 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                     } else { LlmPreparation.cancel(caller); ReaderAudioAhead.cancel() }
                 }
             } catch (_: Exception) {
+                queuedText=null
                 Log.w("LlmPreparation", "Queue observation unavailable; using ordinary synthesis")
             } finally { data.setDataPosition(position) }
         }
         try {
             val result = delegate.transact(code, data, reply, flags)
-            if (id != null && reply != null) {
+            if ((id != null || queuedText != null) && reply != null) {
                 val replyPosition = reply.dataPosition()
                 try { reply.setDataPosition(0); reply.readException(); if (reply.readInt() != TextToSpeech.SUCCESS) { LlmPreparation.rejected(id); queuedText=null } }
                 finally { reply.setDataPosition(replyPosition) }

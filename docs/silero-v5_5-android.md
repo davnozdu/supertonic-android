@@ -67,3 +67,17 @@ Russian numbers still use our validated LLM pipeline. A mixed source is split
 without dropping punctuation/characters. Automatic Czech recognition uses script
 and word hints, not a complete language detector; ambiguous Latin defaults to
 English, with a manual Czech override.
+
+## Beta 18: voice packs and offline preparation
+
+Resources are mirrored in [russian-resources-v1](https://github.com/davnozdu/supertonic-android/releases/tag/russian-resources-v1): original ru (5 voices), CIS Russian (29 voices), offline accentor/homograph model, safe ё SACC dictionary, verified ARM64 runtime, licences and SHA-256 manifest. Downloads validate hashes and extract only known entries with exact byte limits. Existing Tera, ru and CIS files are kept separately. Installed resources need no network and survive app updates.
+
+Select **Silero CIS · 29 русских голосов** in the model list, install its pack and select a voice. CIS has a different alphabet and speaker IDs, and takes 11 mel inputs, not v5.5's 13. It does not support the sentence-type/focus controls. LLM preparation, offline normalization, accents, ё and foreign TTS still apply.
+
+The offline book normalizer adds case-aware cardinal numbers for recognized governing prepositions, whole integers and gender, dates, clock time, formatted Russian phone numbers, ordinal years, fractions, decimals, units/currency/percent/degrees, contextual Roman numbers, common abbreviations, named letter acronyms, footnotes and line-break hyphenation. SIM/PIN/GIF/MIDI/WIFI, Wi-Fi and hi-fi are expanded before foreign language detection. It is not a complete Russian grammatical parser; ambiguous grammar and unusual formats remain conservative. Source words and explicit stress are retained.
+
+Local stress uses existing Android Silero Stress models from ruvoice 0.18.0 and its published dictionaries/vocabulary. No TTS conversion. The author grammar/phrase rule code is not copied. Word predictions are batched; homographs receive bounded context and BERT markers. The safe ё table is compiled once on the computer into SACC and mmap'ed on the phone. LLM/user stress and written ё win. Neural inference is bounded by input chunk size and unloaded after two minutes idle; sentence results have an LRU cache. As with LLM, stress prediction is probabilistic, not guaranteed perfect.
+
+Android Binder queue observation already exposed early text to LLM. It now also submits QUEUE_ADD chunks to a bounded audio-ahead worker. Original Android transactions and playback acknowledgements are unchanged; cancelled/rejected requests are not played. Completed PCM has a shared LRU cache, adjustable 64–1024 MB (default 256 MB), 256 entries, individual PCM maximum 16 MB. Cache keys include model, exact prepared text, voice, speed, synthesis settings and foreign engine. A book cannot be prefetched before its reader has queued the text.
+
+Both Russian engines account for existing trailing silence when adding a minimum sentence pause. Silero uses native per-character durations for comma/colon/dash pauses and keeps full native sentence intonation where supported.

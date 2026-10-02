@@ -45,7 +45,7 @@ object LocalRussianAssets {
                         }
                     }
                 } }
-                check(digest.digest().joinToString("") { "%02x".format(it) } == sha(context)) { "Silero checksum mismatch" }
+                check(digest.digest().joinToString("") { "%02x".format(it) } == SHA) { "Silero checksum mismatch" }
             } finally { connection.disconnect() }
             progress("Проверка и распаковка $title", .9f)
             ZipInputStream(archive.inputStream()).use { zip ->
