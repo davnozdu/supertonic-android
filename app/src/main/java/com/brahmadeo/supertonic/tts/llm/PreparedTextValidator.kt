@@ -8,7 +8,9 @@ object PreparedTextValidator {
     private fun plain(s: String) = s.replace("+", "").replace("\u0301", "")
     private fun symbols(s: String) = s.filter { !it.isLetterOrDigit() && !it.isWhitespace() && it !in "+\u0301,.;:!?…—–-\"'«»“”„()[]" }
     fun validate(original: String, response: String, allowPunctuation: Boolean = true, allowStress: Boolean = true,
-                 numberRanges: List<IntRange> = emptyList(), allowYo: Boolean = true): String? {
+                 numberRanges: List<IntRange> = emptyList(), allowYo: Boolean = true,
+                 onReject: (String) -> Unit = {}): String? {
+        fun reject(reason: String): String? { onReject(reason); return null }
         // Some providers insert dialogue quotes despite the instruction. If the
         // source has none, discard those formatting additions before validation.
         // Existing source quotes/brackets must still retain their exact anchors.
@@ -17,7 +19,7 @@ object PreparedTextValidator {
         if (proposed.length > original.length * 2 + 100 || proposed.isBlank()) return null
         val a = words.findAll(original).toList()
         val b = words.findAll(proposed).toList()
-        if (a.size != b.size || a.isEmpty()) return null
+        if (a.size != b.size || a.isEmpty()) return reject("word_count")
         // Detached combining accents are not captured as words. Never let them
         // reach the tokenizer; retain mathematical '+' operators in word gaps.
         var nextWord = 0
@@ -25,7 +27,7 @@ object PreparedTextValidator {
             while (nextWord < b.size && b[nextWord].range.last < index) nextWord++
             if (proposed[index] == '\u0301' && (nextWord == b.size || index !in b[nextWord].range)) return null
         }
-        if (numbers.findAll(original).map { it.value }.toList() != numbers.findAll(proposed).map { it.value }.toList()) return null
+        if (numbers.findAll(original).map { it.value }.toList() != numbers.findAll(proposed).map { it.value }.toList()) return reject("number_changed")
         if (symbols(original) != symbols(proposed)) return null
         if (original.count { it == '\n' } != proposed.count { it == '\n' }) return null
         if (original.filter { it in "\"'«»“”„()[]" } != proposed.filter { it in "\"'«»“”„()[]" }) return null
@@ -51,10 +53,11 @@ object PreparedTextValidator {
             val sourcePlain = plain(source)
             val targetPlain = plain(target)
             fun foldYo(s: String) = s.lowercase().replace('ё', 'е')
-            for (j in sourcePlain.indices) if (sourcePlain[j] in "ёЁ" && targetPlain.getOrNull(j)?.lowercaseChar() != 'ё') return null
+            for (j in sourcePlain.indices) if (sourcePlain[j] in "ёЁ" && targetPlain.getOrNull(j)?.lowercaseChar() != 'ё') return reject("lost_yo")
             val changedGender = foldYo(sourcePlain) != foldYo(targetPlain)
             if (changedGender && !(numberRanges.any { a[i].range.first in it && a[i].range.last in it } &&
-                        numericGender(foldYo(sourcePlain)) == numericGender(foldYo(targetPlain)))) return null
+                        numericGender(foldYo(sourcePlain)) == numericGender(foldYo(targetPlain)) &&
+                        numberRanges.any { a[i].range.last == it.last })) return reject("rewritten_word")
             if (b[i].value.contains('+') && !source.contains('+')) return null
             val explicit = source.contains('+') || source.contains('\u0301')
             if (!explicit && source.none { it in "ёЁ" } && source.count { it in vowels } > 1) {
@@ -78,7 +81,7 @@ object PreparedTextValidator {
         }
         // A punctuation-only answer is not successful stress preparation.
         // Already marked text and single-syllable words need no new marks.
-        if (allowStress && needsStress && !suppliedStress) return null
+        if (allowStress && needsStress && !suppliedStress) return reject("missing_stress")
         if (!allowPunctuation) {
             val out = StringBuilder(original)
             for (i in a.indices.reversed()) out.replace(a[i].range.first, a[i].range.last + 1, replacements[i].second)

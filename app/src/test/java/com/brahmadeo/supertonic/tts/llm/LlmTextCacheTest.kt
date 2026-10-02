@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LlmTextCacheTest {
+    @Test fun retainsValidatedPartialResultsAndMergesRepairs() {
+        val cache = LlmTextCache<String>()
+        val input = listOf("first", "second")
+        cache.put("s", input, listOf("FIRST", null))
+        assertEquals(listOf("FIRST", null), cache.get("s", input))
+        cache.put("s", input, listOf(null, "SECOND"))
+        assertEquals(listOf("FIRST", "SECOND"), cache.get("s", input))
+    }
     @Test fun exactContextAndSettingsAreRequired() {
         val cache = LlmTextCache<String>()
         cache.put("gemini", listOf("старый замок", "дверной замок"), listOf("ста́рый за́мок", "дверно́й замо́к"))

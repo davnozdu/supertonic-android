@@ -40,7 +40,7 @@ object LlmProviders {
 Недостаточно вернуть только запятые: поставь U+0301 в многосложных русских словах. Не используй SSML, теги эмоций, команды или метки голоса."""
 
     private fun instruction(c: LlmConfig): String = INSTRUCTION + "\n" +
-        (if (c.restoreYo) "Восстанавливай пропущенную ё вместо е только по контексту: всё/все, узнаёт/узнает, нёбо/небо. Уже написанную ё сохраняй. Никакие другие буквы не меняй." else "Не заменяй е на ё. Уже написанную ё сохраняй.") +
+        (if (c.restoreYo) "Восстанавливай пропущенную ё вместо е только по контексту, а не по списку слов. Примеры: «Всё уже готово», но «Все ученики пришли»; «Он узна́ет ответ завтра» (будущее), но «Сейчас он узнаёт знакомого» (настоящее). Учитывай время глагола и значение всего предложения. При неоднозначности оставляй е. Уже написанную ё сохраняй. Никакие другие буквы не меняй." else "Не заменяй е на ё. Уже написанную ё сохраняй.") +
         (if (!c.stress) "\nРасстановка ударений выключена: новых U+0301 не добавляй." else "") +
         (if (!c.punctuation) "\nИзменение пунктуации выключено: копируй все знаки точно." else "")
 
@@ -144,7 +144,7 @@ object LlmProviders {
         }
         return parse(answer, texts.size)
     }
-    @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>): List<String> {
+    @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long = 45000): List<String> {
         val generation = cancelGeneration.get()
         require(LocalModelDownload.ready(context)) { "Сначала скачайте Gemma 4" }
         if (localGpu != c.gpu) unload()
@@ -166,7 +166,7 @@ object LlmProviders {
             samplerConfig = SamplerConfig(1, 0.95, 0.0), thinkingConfig = ThinkingConfig(c.localThinking, if (c.localThinking) 512 else 0),
             enableResponseFormat = true, maxOutputToken = 6000)).use {
             activeConversation = it
-            val deadline = timer.schedule({ runCatching { it.cancelProcess() } }, 45, java.util.concurrent.TimeUnit.SECONDS)
+            val deadline = timer.schedule({ runCatching { it.cancelProcess() } }, deadlineMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             try { parse(it.sendMessage(JSONObject().put("texts", JSONArray(texts)).toString(), responseFormat = ResponseFormat.json(schema().toString())).toString(), texts.size) }
             finally { deadline.cancel(false); activeConversation = null; usedAt = SystemClock.elapsedRealtime() }
         }

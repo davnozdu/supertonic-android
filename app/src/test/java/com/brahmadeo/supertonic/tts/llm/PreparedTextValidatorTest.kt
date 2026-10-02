@@ -55,6 +55,7 @@ class PreparedTextValidatorTest {
         assertNull(validateNumber(input, "одна́ ты́сяча одно́ незнако́мое."))
         assertNull(validateNumber(input, "одна́ ты́сяча двести одно́ незнако́мое."))
         assertNull(validateNumber(input, "одна́ ты́сяча сто одно́ другое."))
+        assertNull(validateNumber(input, "одно́ ты́сяча сто одно́ незнако́мое."))
         assertNull(PreparedTextValidator.validate("один незнакомец", "одно́ незнако́мец."))
     }
     private fun validateNumber(input: com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer.LlmNumbers, output: String) =

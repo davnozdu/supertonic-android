@@ -99,16 +99,18 @@ object LlmPreparation {
             try {
                 while (true) {
                     val batchEpoch = epoch
+                    val ctx = context ?: return@execute
+                    val config = LlmSettings.load(ctx)
+                    val batchLimit = if (config.mode == LlmMode.LOCAL) 1000 else 4000
                     val batch = synchronized(lock) {
                         val first = entries.values.firstOrNull { !it.processing && !it.future.isDone } ?: return@execute
                         var count = 0
                         entries.values.filter { it.caller == first.caller && !it.processing && !it.future.isDone }
-                            .takeWhile { count += it.text.length; count <= 4000 || count == it.text.length }
+                            .takeWhile { count += it.text.length; count <= batchLimit || count == it.text.length }
                             .onEach { it.processing = true }
                     }
-                    val ctx = context ?: return@execute
                     activeBatch = batch
-                    val results = process(ctx, LlmSettings.load(ctx), batch.map { it.input }, batchEpoch,
+                    val results = process(ctx, config, batch.map { it.input }, batchEpoch,
                         cancelled = { batch.all { it.future.isDone } },
                         onPrepared = { index, result -> if (batchEpoch == epoch) batch[index].future.complete(result) })
                     activeBatch = emptyList()
@@ -131,24 +133,26 @@ object LlmPreparation {
                         ignoreCooldown: Boolean = false, cancelled: () -> Boolean = { false },
                         onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
         val started = SystemClock.elapsedRealtime()
+        val results = arrayOfNulls<Result>(texts.size)
         preparedCache.get(c, texts)?.let { cached ->
             if (expectedEpoch == epoch && !cancelled()) {
-                val results = cached.map { Result(it, "кэш", 0, false) }
-                results.forEachIndexed(onPrepared)
-                Log.i("LlmPreparation", "Cache hit fragments=${texts.size}, chars=${texts.sumOf { it.length }}")
-                return results
+                cached.forEachIndexed { index, value -> if (value != null) {
+                    val result = Result(value, "кэш", 0, false)
+                    results[index] = result; onPrepared(index, result)
+                } }
+                Log.i("LlmPreparation", "Cache hit fragments=${cached.count { it != null }}/${texts.size}, chars=${texts.sumOf { it.length }}")
+                if (results.all { it != null }) return results.map { it!! }
             }
         }
         var failure: String? = null
         val numericInputs = texts.map { russianNumbers.prepareForLlm(it) }
         val providerTexts = numericInputs.map { it.text }
-        val results = arrayOfNulls<Result>(texts.size)
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()
             LlmMode.LOCAL -> listOf("local")
-            LlmMode.OLLAMA -> listOf("ollama", "local")
-            LlmMode.GEMINI -> listOf("gemini", "local")
-            LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
+            LlmMode.OLLAMA -> listOf("ollama", "ollama", "local")
+            LlmMode.GEMINI -> listOf("gemini", "gemini", "local")
+            LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "gemini", "ollama", "ollama") else listOf("ollama", "ollama", "gemini", "gemini")) + "local"
         }
         for (provider in providers) {
             if (expectedEpoch != epoch || cancelled()) break
@@ -157,35 +161,41 @@ object LlmPreparation {
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
             if (provider == "local" && !LocalModelDownload.ready(ctx)) continue
             if (!ignoreCooldown && SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) continue
-            if (providerTexts.sumOf { it.length } > if (provider == "local") 4000 else 8000) {
+            val requestIndices = LlmRetryContext.indices(providerTexts, results.indices.filter { results[it] == null }, if (provider == "local") 1600 else 8000)
+            val requestTexts = requestIndices.map { providerTexts[it] }
+            if (requestTexts.sumOf { it.length } > if (provider == "local") 1600 else 8000) {
                 failure = "Текст после раскрытия чисел превышает лимит LLM; используется словарь"
                 continue // A large block must not put the provider into cooldown.
             }
             try {
-                val output = if (provider == "local") LlmProviders.local(ctx, c, providerTexts) else LlmProviders.cloud(c, providerTexts, provider == "gemini")
+                val output = if (provider == "local") LlmProviders.local(ctx, c, requestTexts, if (ignoreCooldown) 45000 else 12000) else LlmProviders.cloud(c, requestTexts, provider == "gemini")
                 if (expectedEpoch != epoch || cancelled()) break
                 val elapsed = SystemClock.elapsedRealtime() - started
                 var accepted = 0
-                providerTexts.zip(output).forEachIndexed { index, (source, proposed) ->
+                requestTexts.zip(output).forEachIndexed { requestIndex, (source, proposed) ->
+                    val index = requestIndices[requestIndex]
                     if (results[index] == null) {
-                        PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress, numericInputs[index].ranges, c.restoreYo)?.let { validated ->
+                        var rejection = "structure"
+                        val validated = PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress,
+                            numericInputs[index].ranges, c.restoreYo) { rejection = it }
+                        if (validated != null) {
                             val result = Result(validated, provider, elapsed, false)
                             results[index] = result; accepted++
                             // A bad neighbour must not hold up already valid text
                             // while another provider prepares the remaining fragments.
                             onPrepared(index, result)
-                        }
+                        } else Log.w("LlmPreparation", "Rejected fragment=$index, chars=${source.length}, provider=$provider, reason=$rejection")
                     }
                 }
-                Log.i("LlmPreparation", "Prepared fragments=$accepted/${texts.size}, chars=${texts.sumOf { it.length }}, provider=$provider, ms=$elapsed")
+                Log.i("LlmPreparation", "Prepared fragments=$accepted/${texts.size}, requested=${requestIndices.size}, remaining=${results.count { it == null }}, chars=${texts.sumOf { it.length }}, provider=$provider, ms=$elapsed")
+                if (expectedEpoch == epoch) preparedCache.put(c, texts, results.map { it?.text })
                 if (results.all { it != null }) {
                     val complete = results.map { it!! }
                     // Cache only validated successes, retaining the whole context.
-                    if (expectedEpoch == epoch) preparedCache.put(c, texts, complete.map { it.text })
                     return complete
                 }
                 failure = "LLM изменила слова или вернула неправильные ударения в части фрагментов"
-                if (accepted == 0) cooldown[provider] = SystemClock.elapsedRealtime() + 60_000
+                if (accepted == 0 && results.all { it == null }) cooldown[provider] = SystemClock.elapsedRealtime() + 60_000
             } catch (e: Exception) {
                 if (expectedEpoch != epoch || cancelled()) break
                 val detail = e.message.orEmpty()
