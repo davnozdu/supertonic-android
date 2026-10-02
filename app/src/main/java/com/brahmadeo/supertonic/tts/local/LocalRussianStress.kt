@@ -85,7 +85,8 @@ object LocalRussianStress {
             val candidates = words.findAll(text).filter { m ->
                 val word=m.value; val lower=word.lowercase()
                 '+' !in word && '\u0301' !in word && 'ё' !in lower && lower.count { it in vowels } > 1 &&
-                    !exceptions.has(lower) && !homodict.has(lower) && yoDictionary?.lookup(word.toByteArray(Charsets.UTF_8)) == null
+                    !exceptions.has(lower) && !homodict.has(lower) &&
+                    com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(word,"ru") == word && yoDictionary?.lookup(word.toByteArray(Charsets.UTF_8)) == null
             }.toList()
             val predicted = mutableMapOf<Int,Pair<FloatArray,FloatArray>>()
             if(candidates.isNotEmpty()) {
@@ -104,6 +105,8 @@ object LocalRussianStress {
                 if (original == "Семена" && text.take(m.range.first).trimEnd().lastOrNull()?.let { it !in ".!?…" } == true)
                     return@replace "Семёна"
                 yoDictionary?.lookup(original.toByteArray(Charsets.UTF_8))?.let { return@replace it }
+                if (lower == "письма" && Regex("текст\\s+$",RegexOption.IGNORE_CASE).containsMatchIn(text.take(m.range.first)))
+                    return@replace restoreCase(original,"письм+а")
                 val variants = homodict.optJSONArray(lower)
                 if (variants != null && variants.length() == 2) {
                     val left = text.substring(maxOf(0,m.range.first-150),m.range.first).replace("+", "").replace("\u0301", "")
@@ -130,6 +133,8 @@ object LocalRussianStress {
                     return@replace if (stress in value.indices) value.substring(0,stress)+"+"+value.substring(stress) else value
                 }
                 if (positions.size == 1) return@replace original
+                val dictionary = com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(original,"ru")
+                if(dictionary != original) return@replace dictionary
                 val prediction = predicted[m.range.first] ?: return@replace original
                 val st = prediction.first
                 val yp = prediction.second

@@ -27,10 +27,17 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
                 val oldModel = AssetManager.getModelType(this@SpeechDiagnosticsActivity)
                 val oldVoice = prefs.getString("selected_voice", "F3.json")
+                val llmPrefs=getSharedPreferences("llm_settings",MODE_PRIVATE)
+                val oldLlmMode=llmPrefs.getString("mode","OFF")
+                val offline=intent.getBooleanExtra("offline",false)
                 val oldLang = prefs.getString("selected_lang", "en")
                 val model = intent.getStringExtra("model") ?: AssetManager.SILERO_MODEL
                 var tts: TextToSpeech? = null
                 try {
+                    if(offline) {
+                        llmPrefs.edit().putString("mode","OFF").commit()
+                        com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
+                    }
                     require(model in setOf(AssetManager.SILERO_MODEL, AssetManager.SILERO_CIS_MODEL, AssetManager.TERA_MODEL))
                     AssetManager.setModelType(this@SpeechDiagnosticsActivity, model)
                     prefs.edit().putString("selected_lang", "ru")
@@ -40,6 +47,15 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         AssetManager.download(this@SpeechDiagnosticsActivity) { _, progress ->
                             Log.i("SpeechCheck", "Download progress=${(progress*100).toInt()}")
                         }
+                    }
+                    if(offline) {
+                        val context=this@SpeechDiagnosticsActivity
+                        val accented=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(context,"секретарем зеленый ребенок кораблем береза веселый костер ковер. Текст письма. Лене. Позвали Семена.")
+                        Log.i("SpeechCheck","OFFLINE TEXT: $accented")
+                        check(listOf("секретарём","зелёный","ребёнок","кораблём","берёза","весёлый","костёр","ковёр").all { it in accented.replace("+","") })
+                        check("письм+а" in accented && "Л+ене" in accented && "Семёна" in accented)
+                        check(com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(context,"све+тло, берёза.")=="све+тло, берёза.")
+                        Log.i("SpeechCheck","OFFLINE stress/yo and explicit-stress checks passed; LLM disabled")
                     }
                     val ready = CompletableFuture<Int>()
                     withContext(Dispatchers.Main) {
@@ -86,6 +102,10 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 } catch (t: Throwable) { Log.e("SpeechCheck", "Integration check failed", t) }
                 finally {
                     tts?.stop(); tts?.shutdown()
+                    if(offline) {
+                        llmPrefs.edit().putString("mode",oldLlmMode).commit()
+                        com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
+                    }
                     AssetManager.setModelType(this@SpeechDiagnosticsActivity, oldModel)
                     prefs.edit().putString("selected_voice", oldVoice).putString("selected_lang", oldLang).apply()
                     SupertonicTTS.release()
