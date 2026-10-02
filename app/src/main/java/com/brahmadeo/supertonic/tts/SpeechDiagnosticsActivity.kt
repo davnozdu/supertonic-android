@@ -98,6 +98,21 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             Log.i("SpeechCheck", "PASS model=$model case=$index rate=$rate channels=$channels bytes=${output.length()} ms=${android.os.SystemClock.elapsedRealtime()-started}")
                         } finally { output.delete() }
                     }
+                    if(intent.getBooleanExtra("queue",false)) {
+                        val queued=listOf("Первая контрольная фраза для проверки непрерывного чтения.","Вторая контрольная фраза должна быть заранее подготовлена.","Третья контрольная фраза завершает проверку очереди.")
+                        val finished=java.util.concurrent.CountDownLatch(queued.size)
+                        val failures=java.util.concurrent.atomic.AtomicInteger()
+                        tts!!.setLanguage(Locale("ru"))
+                        tts!!.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                            override fun onStart(id: String?) { Log.i("SpeechCheck","Silent queued start=$id") }
+                            override fun onDone(id: String?) { finished.countDown() }
+                            override fun onError(id: String?) { failures.incrementAndGet();finished.countDown() }
+                        })
+                        val quiet=Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,0f) }
+                        queued.forEachIndexed { i,text -> check(tts!!.speak(text,TextToSpeech.QUEUE_ADD,quiet,"queue-check-$i")==TextToSpeech.SUCCESS) }
+                        check(finished.await(90,TimeUnit.SECONDS) && failures.get()==0)
+                        Log.i("SpeechCheck","SILENT QUEUE PASSED model=$model")
+                    }
                     Log.i("SpeechCheck", "ALL CASES PASSED model=$model")
                 } catch (t: Throwable) { Log.e("SpeechCheck", "Integration check failed", t) }
                 finally {

@@ -17,6 +17,14 @@ class RussianBookNormalizerTest {
         assertEquals("четвёртый век",RussianBookNormalizer.normalize("IV век"))
         assertEquals("31.02.2024",RussianBookNormalizer.normalize("31.02.2024",expandNumbers=false))
     }
+    @Test fun unitCases() {
+        assertEquals("до одного километра",RussianBookNormalizer.normalize("до 1 км"))
+        assertEquals("без двух рублей",RussianBookNormalizer.normalize("без 2 ₽"))
+        assertEquals("с пятью килограммами",RussianBookNormalizer.normalize("с 5 кг"))
+        assertEquals("к двадцати метрам",RussianBookNormalizer.normalize("к 20 м"))
+        assertEquals("сто долларов",RussianBookNormalizer.normalize("$100"))
+        assertEquals("третьего мая",RussianBookNormalizer.normalize("3 мая"))
+    }
     @Test fun unitsFractionsAndPhones() {
         assertEquals("два километра пять килограммов один процент",RussianBookNormalizer.normalize("2 км 5 кг 1%"))
         assertEquals("одна третья",RussianBookNormalizer.normalize("1/3"))

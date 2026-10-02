@@ -67,12 +67,31 @@ object RussianBookNormalizer {
         kotlin.math.abs(n)%10 in 2..4 -> few
         else -> many
     }
-    private fun inferredCase(before: String): Case {
+    private fun unitForm(n: Long, unit: List<String>, case: Case): String {
+        if(case==Case.NOM || case==Case.ACC) return plural(n,unit[0],unit[1],unit[2])
+        val first=unit[0].substringBefore(' ');val tail=unit[0].substringAfter(' ',"").let { if(it.isEmpty()) "" else " $it" }
+        if(first=="евро") return first
+        val single=kotlin.math.abs(n)%10==1L && kotlin.math.abs(n)%100!=11L
+        val soft=first.endsWith("ль")
+        val stem=if(soft) first.dropLast(1) else first
+        val form=when(case) {
+            Case.GEN -> if(single) stem+if(soft) "я" else "а" else unit[2].substringBefore(' ')
+            Case.DAT -> stem+if(single) { if(soft) "ю" else "у" } else if(soft) "ям" else "ам"
+            Case.INS -> stem+if(single) { if(soft) "ём" else "ом" } else if(soft) "ями" else "ами"
+            Case.PRE -> stem+if(single) "е" else if(soft) "ях" else "ах"
+            else -> first
+        }
+        return form+tail
+    }
+    private fun inferredCase(before: String, after: String = ""): Case {
         val last = rx("[а-яё]+").findAll(before.lowercase()).lastOrNull()?.value
+        val next=rx("[а-яё]+").find(after.lowercase())?.value.orEmpty()
+        if(last in setOf("в","на") && (next.endsWith("ах") || next.endsWith("ях"))) return Case.PRE
+        if(last in setOf("с","со") && next in setOf("лет","часов","минут","секунд","дней")) return Case.GEN
         return when(last) {
-            "без","до","из","от","около","после","для","более","менее","нет" -> Case.GEN
+            "без","до","из","от","около","после","для","более","менее","нет","лишился","достиг","достигли","требует","хватает" -> Case.GEN
             "к","по" -> Case.DAT
-            "между","перед","над" -> Case.INS
+            "между","перед","над","с","со" -> Case.INS
             "о","об","при" -> Case.PRE
             else -> Case.NOM
         }
@@ -134,7 +153,8 @@ object RussianBookNormalizer {
         val units=mapOf("км" to listOf("километр","километра","километров"),"м" to listOf("метр","метра","метров"),"см" to listOf("сантиметр","сантиметра","сантиметров"),"мм" to listOf("миллиметр","миллиметра","миллиметров"),"кг" to listOf("килограмм","килограмма","килограммов"),"г" to listOf("грамм","грамма","граммов"),"л" to listOf("литр","литра","литров"),"руб." to listOf("рубль","рубля","рублей"),"₽" to listOf("рубль","рубля","рублей"),"$" to listOf("доллар","доллара","долларов"),"€" to listOf("евро","евро","евро"),"%" to listOf("процент","процента","процентов"),"°C" to listOf("градус Цельсия","градуса Цельсия","градусов Цельсия"),"°С" to listOf("градус Цельсия","градуса Цельсия","градусов Цельсия"),"°" to listOf("градус","градуса","градусов"))
         t=rx("(?<![\\p{L}\\d])(-?\\d+(?:[,.]\\d+)?)\\s*(${units.keys.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }})(?![\\p{L}])").replace(t) { m ->
             val raw=m.groupValues[1]; val unit=units.getValue(m.groupValues[2]); val n=raw.toLongOrNull()
-            (if(n!=null) cardinal(n,inferredCase(t.take(m.range.first))) else numbers.normalize(raw))+" "+if(n!=null) plural(n,unit[0],unit[1],unit[2]) else unit[1]
+            val case=inferredCase(t.take(m.range.first))
+            (if(n!=null) cardinal(n,case) else numbers.normalize(raw))+" "+if(n!=null) unitForm(n,unit,case) else unit[1]
         }
         val letterNames=mapOf('А' to "а",'Б' to "бэ",'В' to "вэ",'Г' to "гэ",'Д' to "дэ",'Е' to "е",'Ё' to "ё",'Ж' to "жэ",'З' to "зэ",'И' to "и",'Й' to "и краткое",'К' to "ка",'Л' to "эль",'М' to "эм",'Н' to "эн",'О' to "о",'П' to "пэ",'Р' to "эр",'С' to "эс",'Т' to "тэ",'У' to "у",'Ф' to "эф",'Х' to "ха",'Ц' to "цэ",'Ч' to "че",'Ш' to "ша",'Щ' to "ща",'Ъ' to "твёрдый знак",'Ы' to "ы",'Ь' to "мягкий знак",'Э' to "э",'Ю' to "ю",'Я' to "я")
         val wordAcronyms=mapOf("ВУЗ" to "вуз","НАТО" to "нато","СМИ" to "сми","ООН" to "оон")
@@ -145,10 +165,17 @@ object RussianBookNormalizer {
         t=rx("(?<![\\p{L}\\d])(\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+)(?![\\p{L}\\d])").replace(t) { it.value.filterNot(Char::isWhitespace) }
         // Case-aware ordinary numbers, after compound formats have been resolved.
         t=rx("(?<![\\p{L}\\d.,])(-?\\d{1,12})(?![\\p{L}\\d]|[.,]\\d)").replace(t) { m ->
-            val case=inferredCase(t.take(m.range.first))
+            val case=inferredCase(t.take(m.range.first),t.substring(m.range.last+1))
             if(case==Case.NOM) {
                 val expanded=numbers.prepareForLlm(m.value+t.substring(m.range.last+1))
-                expanded.ranges.firstOrNull()?.let { r -> expanded.text.substring(r) } ?: cardinal(m.value.toLong())
+                val number=expanded.ranges.firstOrNull()?.let { r -> expanded.text.substring(r) } ?: cardinal(m.value.toLong())
+                val noun=rx("[а-яё]+").find(t.substring(m.range.last+1).lowercase())?.value.orEmpty()
+                when {
+                    noun !in setOf("мужчина","юноша","папа","дядя","дедушка") && (noun.endsWith('а') || noun.endsWith('я') || noun in setOf("ночь","дверь","жизнь","смерть","любовь","мышь","площадь","тетрадь","вещь","память","новость","кость")) && number.endsWith("один") -> number.removeSuffix("один")+"одна"
+                    noun !in setOf("мужчина","юноша","папа","дядя","дедушка") && (noun.endsWith('а') || noun.endsWith('я') || noun in setOf("ночь","дверь","жизнь","смерть","любовь","мышь","площадь","тетрадь","вещь","память","новость","кость")) && number.endsWith("два") -> number.removeSuffix("два")+"две"
+                    noun != "кофе" && (noun.endsWith('о') || noun.endsWith("ие")) && number.endsWith("один") -> number.removeSuffix("один")+"одно"
+                    else -> number
+                }
             } else cardinal(m.value.toLong(),case)
         }
         return numbers.normalize(t).replace(rx("[ \\t]+")," ").trim()

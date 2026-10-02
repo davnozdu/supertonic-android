@@ -26,6 +26,7 @@ object ReaderAudioAhead {
             ?: prefs.getString("selected_voice","ru_f1.json")!!
         val rate=(params?.getInt("rate",100) ?: 100)/100f
         val steps=prefs.getInt("diffusion_steps",5)
+        android.util.Log.i("ReaderAhead","Queued early text chars=${text.length} model=$model")
         worker.execute {
             try {
                 if(generation!=epoch.get() || !AssetManager.isReady(context) || model!=AssetManager.getModelType(context)) return@execute
@@ -34,7 +35,8 @@ object ReaderAudioAhead {
                 for(sentence in normalizer.splitIntoSentences(prepared,"ru",preservePunctuation=true)) {
                     if(generation!=epoch.get() || SupertonicTTS.isCancelled() || model!=AssetManager.getModelType(context)) break
                     val normalized=normalizer.normalize(sentence,"ru")
-                    SupertonicTTS.generateAudio(normalized,"ru",AssetManager.voiceFile(context,voice).path,rate.coerceIn(.5f,2.5f),0f,steps,2.5f)
+                    val pcm=SupertonicTTS.generateAudio(normalized,"ru",AssetManager.voiceFile(context,voice).path,rate.coerceIn(.5f,2.5f),0f,steps,2.5f)
+                    if(pcm!=null) android.util.Log.i("ReaderAhead","Prepared ahead PCM chars=${normalized.length} bytes=${pcm.size}")
                 }
             } catch(t: Throwable) { android.util.Log.w("ReaderAhead","Ahead preparation failed; normal synthesis remains available",t) }
         }

@@ -68,7 +68,7 @@ without dropping punctuation/characters. Automatic Czech recognition uses script
 and word hints, not a complete language detector; ambiguous Latin defaults to
 English, with a manual Czech override.
 
-## Beta 18: voice packs and offline preparation
+## Beta 19: voice packs and offline preparation
 
 Resources are mirrored in [russian-resources-v1](https://github.com/davnozdu/supertonic-android/releases/tag/russian-resources-v1): original ru (5 voices), CIS Russian (29 voices), offline accentor/homograph model, safe ё SACC dictionary, verified ARM64 runtime, licences and SHA-256 manifest. Downloads validate hashes and extract only known entries with exact byte limits. Existing Tera, ru and CIS files are kept separately. Installed resources need no network and survive app updates.
 
