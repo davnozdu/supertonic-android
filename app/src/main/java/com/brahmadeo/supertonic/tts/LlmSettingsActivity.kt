@@ -85,8 +85,8 @@ class LlmSettingsActivity : ComponentActivity() {
                                 config = config.copy(mode = LlmMode.entries.first { it.title == title }); save()
                             }
                         }
-                        Toggle("Расставлять ударения", config.stress) { config = config.copy(stress = it) }
-                        Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it) }
+                        Toggle("Расставлять ударения", config.stress) { config = config.copy(stress = it); save() }
+                        Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it); save() }
                         Text("Текст, уже отправленный читалкой, подготавливается в фоне с контекстом до 4000 символов. Если читалка отправляет по одному фрагменту, первая подготовка каждого нового фрагмента может занять время.", style = MaterialTheme.typography.bodySmall)
                         Text("Чтение ждёт подготовку не более 1,5 секунды. Если результат ещё не готов, используется словарь, а очередь подготавливается дальше в фоне.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
@@ -111,7 +111,7 @@ class LlmSettingsActivity : ComponentActivity() {
                         Choice("Модель Ollama", config.ollamaModel.ifBlank { "Выберите модель" }, ollamaModels, ollamaRevision,
                             format = { name -> recommendations["ollama/$name"]?.let { "★ $name — ${it.label}" } ?: name },
                             highlight = { recommendations.containsKey("ollama/$it") }) { config = config.copy(ollamaModel = it); save() }
-                        Toggle("Размышление в Ollama (медленнее)", config.ollamaThinking) { config = config.copy(ollamaThinking = it) }
+                        Toggle("Размышление в Ollama (медленнее)", config.ollamaThinking) { config = config.copy(ollamaThinking = it); save() }
                         Text("По умолчанию выключено. Если модель разрешает только уровни размышления, при выключении выбирается минимальный доступный уровень.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Gemini", style = MaterialTheme.typography.titleLarge)
@@ -122,14 +122,14 @@ class LlmSettingsActivity : ComponentActivity() {
                         Choice("Модель Gemini", config.geminiModel.ifBlank { "Выберите модель" }, geminiModels, geminiRevision,
                             format = { name -> recommendations["gemini/$name"]?.let { "★ $name — ${it.label}" } ?: name },
                             highlight = { recommendations.containsKey("gemini/$it") }) { config = config.copy(geminiModel = it); save() }
-                        Toggle("Размышление в Gemini (медленнее)", config.geminiThinking) { config = config.copy(geminiThinking = it) }
+                        Toggle("Размышление в Gemini (медленнее)", config.geminiThinking) { config = config.copy(geminiThinking = it); save() }
                         if (ThinkingPolicy.gemini(config.geminiModel, false)?.minimumOnly == true) {
                             Text("У этой модели API не позволяет полностью отключить размышление. Выключенный тумблер устанавливает минимальный уровень.", style = MaterialTheme.typography.bodySmall)
                         } else if (config.geminiModel.isNotBlank() && ThinkingPolicy.gemini(config.geminiModel, false) == null) {
                             Text("Для этой модели API не предоставляет известной настройки размышления; тумблер к ней не применяется.", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("API может вернуть также модели звука и изображений. Для подготовки текста выберите текстовую LLM.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it) }
+                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it); save() }
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Локальная Gemma 4 E2B", style = MaterialTheme.typography.titleLarge)
@@ -142,10 +142,10 @@ class LlmSettingsActivity : ComponentActivity() {
                             Button(enabled = LocalModelDownload.supported(), onClick = { LocalModelDownload.start(this@LlmSettingsActivity) }) { Text("Поставить / скачать локальную модель") }
                             if (!LocalModelDownload.supported()) Text("Для локальной Gemma 4 требуется 64-битный Android")
                         }
-                        Toggle("GPU для Gemma 4 (при ошибке — CPU)", config.gpu) { config = config.copy(gpu = it) }
-                        Toggle("Размышление в локальной Gemma 4 (медленнее)", config.localThinking) { config = config.copy(localThinking = it) }
+                        Toggle("GPU для Gemma 4 (при ошибке — CPU)", config.gpu) { config = config.copy(gpu = it); save() }
+                        Toggle("Размышление в локальной Gemma 4 (медленнее)", config.localThinking) { config = config.copy(localThinking = it); save() }
                         Choice("Выгрузка из RAM после простоя", "${config.idleSeconds} секунд", listOf("30 секунд", "60 секунд", "120 секунд", "300 секунд", "600 секунд")) {
-                            config = config.copy(idleSeconds = it.substringBefore(' ').toInt())
+                            config = config.copy(idleSeconds = it.substringBefore(' ').toInt()); save()
                         }
                         OutlinedButton(onClick = {
                             scope.launch { withContext(Dispatchers.IO) { LlmProviders.unload() }; message = "Локальная модель выгружена из RAM" }

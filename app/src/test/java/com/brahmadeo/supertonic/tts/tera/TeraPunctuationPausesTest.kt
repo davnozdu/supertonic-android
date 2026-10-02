@@ -22,4 +22,12 @@ class TeraPunctuationPausesTest {
         pcm[0] = 127; pcm[1] = 127
         assertTrue(TeraPunctuationPauses.missingSilenceSamples(pcm, 420) > 9702)
     }
+    @Test fun keepsAbbreviationsInitialsAndCompoundWordsTogether() {
+        assertEquals(listOf("А. С. Пушкин жил на ул. Ленина,", "д. 10."),
+            TeraPunctuationPauses.split("А. С. Пушкин жил на ул. Ленина, д. 10.").map { it.text })
+        assertEquals(listOf("Это,", "т. е. уточнение."),
+            TeraPunctuationPauses.split("Это, т. е. уточнение.").map { it.text })
+        assertEquals(listOf("По-прежнему светло -", "но холодно."),
+            TeraPunctuationPauses.split("По-прежнему светло - но холодно.").map { it.text })
+    }
 }

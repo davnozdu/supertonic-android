@@ -17,6 +17,13 @@ object PreparedTextValidator {
         val a = words.findAll(original).toList()
         val b = words.findAll(proposed).toList()
         if (a.size != b.size || a.isEmpty()) return null
+        // Detached combining accents are not captured as words. Never let them
+        // reach the tokenizer; retain mathematical '+' operators in word gaps.
+        var nextWord = 0
+        for (index in proposed.indices) {
+            while (nextWord < b.size && b[nextWord].range.last < index) nextWord++
+            if (proposed[index] == '\u0301' && (nextWord == b.size || index !in b[nextWord].range)) return null
+        }
         if (numbers.findAll(original).map { it.value }.toList() != numbers.findAll(proposed).map { it.value }.toList()) return null
         if (symbols(original) != symbols(proposed)) return null
         if (original.count { it == '\n' } != proposed.count { it == '\n' }) return null
@@ -26,10 +33,11 @@ object PreparedTextValidator {
             val sourceGap = original.substring(a[i].range.last + 1, a[i + 1].range.first)
             val targetGap = proposed.substring(b[i].range.last + 1, b[i + 1].range.first)
             if ((sourceGap == "-") != (targetGap == "-")) return null
+            if (sourceGap.count { it == '+' } != targetGap.count { it == '+' }) return null
             if (sourceGap.count { it == '\n' } != targetGap.count { it == '\n' }) return null
             if (sourceGap.filter { it in "\"'«»“”„()[]" } != targetGap.filter { it in "\"'«»“”„()[]" }) return null
         }
-        fun anchors(s: String) = s.filter { it == '\n' || it in "\"'«»“”„()[]" }
+        fun anchors(s: String) = s.filter { it == '\n' || it in "+\"'«»“”„()[]" }
         if (anchors(original.substring(0, a.first().range.first)) != anchors(proposed.substring(0, b.first().range.first))) return null
         if (anchors(original.substring(a.last().range.last + 1)) != anchors(proposed.substring(b.last().range.last + 1))) return null
         val replacements = mutableListOf<Pair<IntRange, String>>()
@@ -37,7 +45,7 @@ object PreparedTextValidator {
             val source = a[i].value
             val target = b[i].value.replace("+", "") // '+' is reserved for explicit input; LLM must return acute marks.
             if (plain(source).lowercase() != plain(target).lowercase()) return null
-            if (b[i].value.contains('+')) return null
+            if (b[i].value.contains('+') && !source.contains('+')) return null
             val explicit = source.contains('+') || source.contains('\u0301')
             if (!explicit && target.count { it == '\u0301' } > 1) return null
             val mark = target.indexOf('\u0301')

@@ -1,4 +1,4 @@
-# LLM preparation (Beta 9)
+# LLM preparation (Beta 11)
 
 LLM processing is optional and disabled by default. It prepares Russian punctuation
 and contextual stress before the normal dictionary and TTS pipeline. Cloud keys
@@ -36,6 +36,9 @@ up to 4000 characters of context and cached in a bounded text queue (96000 chara
 The first uncached request can therefore still incur preparation latency.
 Beta 9 bounds waiting to 1500ms and then continues with the dictionary while
 background preparation continues. Already prepared queue entries are delivered immediately.
+Valid fragments in a mixed batch are completed immediately while remaining fragments
+try another provider with the same context. Stop/flush cancellation is checked before
+calling a fallback, including active fragments removed after a wait timeout.
 
 The app's own playback also prefetches submitted sentences. Stop cancels its
 pending LLM preparation. Turning processing off cancels pending work and clears
@@ -68,11 +71,13 @@ policy unit tests. Synthetic cloud tests with actual API access confirmed:
 - Gemini 3.1 Flash Lite accepts `thinkingLevel: MINIMAL`; the short test returned
   in about 1.67 seconds with zero reported thought tokens.
 
-These are individual requests, not a throughput guarantee. Beta 8 is installed
-on the test phone; queued Moon+ Reader requests produced successful Tera audio in
-device logs. Local Gemma E2B is downloaded and hash verified. Its earlier preparation
-could exceed the reading wait deadline or produce invalid output. Beta 9 introduces
-bounded waiting and JSON constraints; those changes still require phone verification.
+These are individual requests, not a throughput guarantee. Beta 10 installed in place
+on the test phone. A real Gemini 3.1 Flash Lite test in the app completed in 1473ms
+with punctuation, contextual stress and unchanged numbers. Local Gemma E2B is downloaded
+and hash verified. A release-only JNI abort was traced to renamed configuration getters
+and corrected with keep rules; release CI now checks the resulting R8 mapping.
+Successful local text preparation, extended Moon reading and Beta 11 cancellation
+changes still require device verification after the user returns.
 
 Six synthetic paragraphs (2138 characters) took 4.75–9.70 seconds with DeepSeek
 Flash and no reported thinking trace. All six responses from the strict prompt

@@ -127,7 +127,7 @@ object LlmProviders {
                     .put(JSONObject().put("role", "user").put("content", prompt)))
             // Ollama Cloud does not support the format/schema parameter.
             // JSON is requested in the instruction and validated after receipt.
-            if (URL(c.ollamaEndpoint).host != "ollama.com") body.put("format", schema())
+            if (!URL(c.ollamaEndpoint).host.equals("ollama.com", true)) body.put("format", schema())
             http(c.ollamaEndpoint.trimEnd('/') + "/api/chat", c.ollamaKey, body).getJSONObject("message").getString("content")
         }
         return parse(answer, texts.size)
@@ -167,7 +167,7 @@ object LlmProviders {
         return (0 until count).map { array.getString(it) }
     }
     @Synchronized fun unloadIfIdle(context: Context) {
-        if (local != null && SystemClock.elapsedRealtime() - usedAt > LlmSettings.load(context).idleSeconds * 1000L) unload()
+        if (local != null && SystemClock.elapsedRealtime() - usedAt > LlmSettings.idleSeconds(context) * 1000L) unload()
     }
     @Synchronized fun unload() {
         local?.let { runCatching { it.close() } }

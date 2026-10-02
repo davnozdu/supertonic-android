@@ -38,7 +38,9 @@ class LocalModelDownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (job?.isActive == true) return START_NOT_STICKY
         val notifications = getSystemService(NotificationManager::class.java)
-        notifications.createNotificationChannel(NotificationChannel("llm_download", "Скачивание локальной LLM", NotificationManager.IMPORTANCE_LOW))
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            notifications.createNotificationChannel(NotificationChannel("llm_download", "Скачивание локальной LLM", NotificationManager.IMPORTANCE_LOW))
+        }
         startForeground(4204, notification("Подключение…"))
         LocalModelDownload.downloading.value = true
         job = scope.launch {
@@ -86,6 +88,7 @@ class LocalModelDownloadService : Service() {
                 } }
                 val hash = digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
                 if (hash != LocalModelDownload.SHA256) { partial.delete(); error("SHA-256 не совпала; скачайте заново") }
+                ensureActive()
                 check(partial.renameTo(target)) { "Не удалось сохранить модель" }
                 File(target.parentFile, "verified-${LocalModelDownload.SHA256}").writeText(hash)
                 LocalModelDownload.status.value = "Gemma 4 скачана и проверена"

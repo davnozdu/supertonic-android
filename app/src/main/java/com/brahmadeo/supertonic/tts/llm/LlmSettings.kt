@@ -35,6 +35,14 @@ data class LlmConfig(
 object LlmSettings {
     private const val PREFS = "llm_settings"
     private const val SECRET = "supertonic_llm_keys"
+    // Queue observation must not decrypt API keys on a reader's Binder thread.
+    fun enabled(context: Context): Boolean {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return p.getString("mode", "OFF") != "OFF" &&
+            (p.getBoolean("stress", true) || p.getBoolean("punctuation", true))
+    }
+    fun idleSeconds(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getInt("idle_seconds", 120).coerceIn(30, 600)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(SECRET, null) as? SecretKey)?.let { return it }

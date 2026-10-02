@@ -5,6 +5,19 @@ import kotlin.math.abs
 /** Audible punctuation boundaries, independent of whether LLM preparation is enabled. */
 object TeraPunctuationPauses {
     data class Part(val text: String, val pauseMs: Int)
+    private val abbreviations = setOf("г", "гг", "ул", "д", "кв", "стр", "им", "рис", "см", "напр", "др", "руб", "коп", "тыс", "млн", "млрд", "т", "е", "н", "п")
+    private fun abbreviationDot(text: String, index: Int): Boolean {
+        var next = index + 1
+        while (next < text.length && text[next].isWhitespace()) next++
+        if (next == text.length) return false // Retain the breath at a paragraph end.
+        var start = index
+        while (start > 0 && text[start - 1].isLetter()) start--
+        val token = text.substring(start, index)
+        val lower = token.lowercase()
+        if (lower in abbreviations && text[next].isUpperCase() && lower !in setOf("г", "гг", "ул", "им", "рис", "см")) return false
+        return lower in abbreviations ||
+            (token.length == 1 && token[0].isUpperCase() && text[next].isUpperCase())
+    }
 
     fun split(text: String, commaMs: Int = 180, sentenceMs: Int = 420): List<Part> {
         val result = mutableListOf<Part>()
@@ -17,10 +30,11 @@ object TeraPunctuationPauses {
                 numeric -> 0
                 c == ',' -> commaMs
                 c in ";:" -> commaMs + 80
-                c in "—–" && text.substring(start, i).any { it.isLetterOrDigit() } -> commaMs + 40
+                (c in "—–" || (c == '-' && i > 0 && i + 1 < text.length && text[i - 1].isWhitespace() && text[i + 1].isWhitespace())) &&
+                    text.substring(start, i).any { it.isLetterOrDigit() } -> commaMs + 40
                 c in ".!?…" -> {
                     // Keep dots inside abbreviations and dates intact.
-                    if (c == '.' && i + 1 < text.length && text[i + 1].isLetterOrDigit()) 0 else sentenceMs
+                    if (c == '.' && ((i + 1 < text.length && text[i + 1].isLetterOrDigit()) || abbreviationDot(text, i))) 0 else sentenceMs
                 }
                 else -> 0
             }

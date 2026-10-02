@@ -16,12 +16,19 @@ class PreparedTextValidatorTest {
         assertNull(PreparedTextValidator.validate("светло", "све́тло́"))
         assertNull(PreparedTextValidator.validate("светло", "свет́ло"))
         assertNull(PreparedTextValidator.validate("светло", "светл+о"))
+        assertNull(PreparedTextValidator.validate("светло", "светло \u0301"))
+        assertNull(PreparedTextValidator.validate("светло", "\u0301светло"))
     }
     @Test fun preservesExplicitStressAndCase() {
         assertEquals("СВЕТЛ+О.", PreparedTextValidator.validate("СВЕТЛ+О", "све́тло."))
         assertEquals("Светло́.", PreparedTextValidator.validate("Светло́", "све́тло."))
         assertEquals("Светло́.", PreparedTextValidator.validate("Светло́", "све́тло́."))
         assertEquals("+окно.", PreparedTextValidator.validate("+окно", "окно́."))
+        assertEquals("светл+о.", PreparedTextValidator.validate("светл+о", "светл+о."))
+    }
+    @Test fun preservesArithmeticOperators() {
+        assertNull(PreparedTextValidator.validate("1001 + 1101 равно", "1001 1101 ра́вно."))
+        assertEquals("1001 + 1101 ра́вно.", PreparedTextValidator.validate("1001 + 1101 равно", "1001 + 1101 ра́вно."))
     }
     @Test fun preservesQuotesAndParagraphs() {
         assertNull(PreparedTextValidator.validate("«окно»", "окно́"))

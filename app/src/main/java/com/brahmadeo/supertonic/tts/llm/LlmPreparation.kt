@@ -31,23 +31,22 @@ object LlmPreparation {
         context = ctx.applicationContext
         timer.scheduleWithFixedDelay({ context?.let { executor.execute { LlmProviders.unloadIfIdle(it) } } }, 15, 15, TimeUnit.SECONDS)
     }
-    fun enabled(ctx: Context) = LlmSettings.load(ctx).let { it.mode != LlmMode.OFF && (it.stress || it.punctuation) }
+    fun enabled(ctx: Context) = LlmSettings.enabled(ctx)
     fun settingsChanged() {
         synchronized(lock) { epoch++; entries.values.forEach { it.future.cancel(false) }; entries.clear() }
         LlmProviders.cancelActive()
         executor.execute { cooldown.clear(); LlmProviders.unload() }
     }
     fun submit(ctx: Context, caller: Any, text: String, flush: Boolean = false): Long? {
+        if (flush) cancel(caller)
         initialize(ctx)
-        if (!enabled(ctx) || text.isBlank() || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
+        if (text.length > 6000 || !enabled(ctx) || text.isBlank() || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
         val id = synchronized(lock) {
-            if (flush) cancelLocked(caller)
             // Bound copied text, even if a reader submits an entire book.
             while (entries.isNotEmpty() && (entries.size >= 256 || entries.values.sumOf { it.text.length } + text.length > 96_000)) {
                 val victim = entries.values.firstOrNull { !it.claimed && !it.processing } ?: return null
                 entries.remove(victim.id); victim.future.cancel(false)
             }
-            if (text.length > 6000) return null
             val entry = Entry(++nextId, caller, text, com.brahmadeo.supertonic.tts.utils.LexiconManager.apply(text))
             entries[entry.id] = entry
             entry.id
@@ -59,10 +58,13 @@ object LlmPreparation {
     private fun cancelLocked(caller: Any) {
         val keys = entries.values.filter { it.caller == caller }.map { it.id }
         keys.forEach { entries.remove(it)?.future?.cancel(false) }
+        // prepare() may already have removed a timed-out claimed entry.
+        activeBatch.filter { it.caller == caller }.forEach { it.future.cancel(false) }
     }
     fun cancel(caller: Any) {
         synchronized(lock) { cancelLocked(caller) }
-        if (activeBatch.isNotEmpty() && activeBatch.all { it.future.isCancelled }) LlmProviders.cancelActive()
+        val batch = activeBatch
+        if (batch.any { it.caller == caller } && batch.all { it.future.isDone }) LlmProviders.cancelActive()
     }
     fun prefetch(ctx: Context, texts: List<String>): List<Long?> = texts.map { submit(ctx, appCaller, it) }
     fun cancelApp() = cancel(appCaller)
@@ -103,7 +105,9 @@ object LlmPreparation {
                     }
                     val ctx = context ?: return@execute
                     activeBatch = batch
-                    val results = process(ctx, LlmSettings.load(ctx), batch.map { it.input }, batchEpoch)
+                    val results = process(ctx, LlmSettings.load(ctx), batch.map { it.input }, batchEpoch,
+                        cancelled = { batch.all { it.future.isDone } },
+                        onPrepared = { index, result -> if (batchEpoch == epoch) batch[index].future.complete(result) })
                     activeBatch = emptyList()
                     if (batchEpoch == epoch) batch.zip(results).forEach { (entry, result) -> entry.future.complete(result) }
                     else batch.forEach { it.future.cancel(false) }
@@ -120,9 +124,12 @@ object LlmPreparation {
         val network = manager.activeNetwork ?: return@runCatching false
         manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }.getOrDefault(false)
-    private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch, ignoreCooldown: Boolean = false): List<Result> {
+    private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
+                        ignoreCooldown: Boolean = false, cancelled: () -> Boolean = { false },
+                        onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
         val started = SystemClock.elapsedRealtime()
         var failure: String? = null
+        val results = arrayOfNulls<Result>(texts.size)
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()
             LlmMode.LOCAL -> listOf("local")
@@ -131,7 +138,7 @@ object LlmPreparation {
             LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
         }
         for (provider in providers) {
-            if (expectedEpoch != epoch) break
+            if (expectedEpoch != epoch || cancelled()) break
             if (provider != "local" && !connected(ctx)) continue
             if (provider == "ollama" && c.ollamaModel.isBlank()) continue
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
@@ -139,12 +146,26 @@ object LlmPreparation {
             if (!ignoreCooldown && SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) continue
             try {
                 val output = if (provider == "local") LlmProviders.local(ctx, c, texts) else LlmProviders.cloud(c, texts, provider == "gemini")
-                val validated = texts.zip(output).map { (a, b) -> PreparedTextValidator.validate(a, b, c.punctuation, c.stress)
-                    ?: throw IllegalArgumentException("LLM изменила слова или вернула неправильные ударения") }
+                if (expectedEpoch != epoch || cancelled()) break
                 val elapsed = SystemClock.elapsedRealtime() - started
-                Log.i("LlmPreparation", "Prepared fragments=${texts.size}, chars=${texts.sumOf { it.length }}, provider=$provider, ms=$elapsed")
-                return validated.map { Result(it, provider, elapsed, false) }
+                var accepted = 0
+                texts.zip(output).forEachIndexed { index, (source, proposed) ->
+                    if (results[index] == null) {
+                        PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress)?.let { validated ->
+                            val result = Result(validated, provider, elapsed, false)
+                            results[index] = result; accepted++
+                            // A bad neighbour must not hold up already valid text
+                            // while another provider prepares the remaining fragments.
+                            onPrepared(index, result)
+                        }
+                    }
+                }
+                Log.i("LlmPreparation", "Prepared fragments=$accepted/${texts.size}, chars=${texts.sumOf { it.length }}, provider=$provider, ms=$elapsed")
+                if (results.all { it != null }) return results.map { it!! }
+                failure = "LLM изменила слова или вернула неправильные ударения в части фрагментов"
+                if (accepted == 0) cooldown[provider] = SystemClock.elapsedRealtime() + 60_000
             } catch (e: Exception) {
+                if (expectedEpoch != epoch || cancelled()) break
                 val detail = e.message.orEmpty()
                 failure = if (listOf("LLM ", "API HTTP", "Сначала ", "Выберите ", "Подготовка ").any { detail.startsWith(it) }) detail.take(180)
                     else e.javaClass.simpleName + (Regex("Status Code: \\d+").find(detail)?.value?.let { ": $it" } ?: "")
@@ -156,6 +177,7 @@ object LlmPreparation {
                 Log.w("LlmPreparation", "Local runtime unsupported; dictionary fallback")
             }
         }
-        return texts.map { Result(it, "словарь", SystemClock.elapsedRealtime() - started, true, failure ?: "Нет готового провайдера: проверьте выбранную модель, ключ и скачивание Gemma") }
+        return texts.mapIndexed { index, text -> results[index] ?: Result(text, "словарь", SystemClock.elapsedRealtime() - started, true,
+            failure ?: "Нет готового провайдера: проверьте выбранную модель, ключ и скачивание Gemma") }
     }
 }
