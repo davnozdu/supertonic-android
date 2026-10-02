@@ -160,7 +160,15 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(env.RELEASE_TAG, '-beta') }}
           body: |
-            **Supertonic TTS for Android** — TeraTTSv2 for Russian and Supertonic 3 for other languages.
+            **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
+
+            ### Beta 16 changes
+            - Optional Silero v5.5 Russian model with five voices, using ready-made Android TorchScript Lite / ExecuTorch files. No model conversion.
+            - Shared LLM preparation, stress, ё, numbers, text cache and playback buffer apply to Silero too.
+            - Separate question/exclamation intonation switch; idle model unload after two minutes.
+            - Optional foreign passages through another installed Android TTS engine, including English and Czech. Audio joins the existing buffer, with bounded waiting, caching and recursion protection.
+            - Preserve foreign numbers for their own engine; retain Russian contextual number preparation.
+            - Silero requires ARM64. Model licence: CC BY-NC-SA 4.0 (noncommercial use).
 
             ### Beta 11 changes
             - LLM toggles and idle-time selections save immediately.

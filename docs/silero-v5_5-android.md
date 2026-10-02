@@ -42,3 +42,25 @@ Runtime projects/licences:
 
 Runtime co-existence with ONNX Runtime / LiteRT-LM must be checked in the signed
 APK on a real ARM64 device. Author benchmarks are not this app's measurements.
+
+## Foreign-language passages
+
+Tera and Silero share the optional Android TTS proxy for Latin passages. Settings
+offer the system engine or an explicitly selected installed engine, and automatic,
+English or Czech language selection. The current app and upstream Supertonic are
+excluded. An internal request marker rejects accidental delegation back into this
+service if Android cannot connect to the selected external engine.
+
+Foreign audio is synthesized, resampled to our current mono PCM16 rate and sent
+through the same bounded playback channel. The external engine does not speak
+independently. Installed offline voices are preferred; the external engine's own
+network policy applies. Connection wait is at most three seconds; synthesis eight
+seconds. Stop is observed every 50 ms while waiting. Failures have a one-minute
+cooldown and use approximate transliteration so reading can continue.
+
+The external audio LRU is limited to 32 MB / 128 entries. The engine disconnects
+after two minutes idle. Numbers in foreign spans stay intact for that engine;
+Russian numbers still use our validated LLM pipeline. A mixed source is split
+without dropping punctuation/characters. Automatic Czech recognition uses script
+and word hints, not a complete language detector; ambiguous Latin defaults to
+English, with a manual Czech override.

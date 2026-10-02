@@ -45,6 +45,10 @@ class LlmSettingsActivity : ComponentActivity() {
                 val downloadStatus by LocalModelDownload.status.collectAsState()
                 val downloading by LocalModelDownload.downloading.collectAsState()
                 val pausePrefs = remember { getSharedPreferences("SupertonicPrefs", MODE_PRIVATE) }
+                val foreignEngines = remember { com.brahmadeo.supertonic.tts.foreign.ForeignTts.engines(this) }
+                var foreignEnabled by remember { mutableStateOf(pausePrefs.getBoolean("foreign_tts", true)) }
+                var foreignEngine by remember { mutableStateOf(pausePrefs.getString("foreign_engine", "") ?: "") }
+                var foreignLanguage by remember { mutableStateOf(pausePrefs.getString("foreign_language", "auto") ?: "auto") }
                 var sileroIntonation by remember { mutableStateOf(pausePrefs.getBoolean("silero_intonation", true)) }
                 var punctuationPauses by remember { mutableStateOf(pausePrefs.getBoolean("tera_punctuation_pauses", true)) }
                 var commaPause by remember { mutableIntStateOf(pausePrefs.getInt("tera_comma_pause_ms", 180)) }
@@ -85,6 +89,29 @@ class LlmSettingsActivity : ComponentActivity() {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->
                                 config = config.copy(mode = LlmMode.entries.first { it.title == title }); save()
                             }
+                        }
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
+                            Toggle("Иностранные фрагменты через другой Android TTS", foreignEnabled) {
+                                foreignEnabled = it; pausePrefs.edit().putBoolean("foreign_tts", it).apply()
+                                com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
+                            }
+                            val engineLabels = listOf("Системный движок Android") + foreignEngines.map { "${it.title} (${it.id})" }
+                            val engineIndex = foreignEngines.indexOfFirst { it.id == foreignEngine } + 1
+                            Choice("Движок для иностранных фрагментов", engineLabels.getOrElse(engineIndex) { engineLabels[0] }, engineLabels) { value ->
+                                val index = engineLabels.indexOf(value)
+                                foreignEngine = if (index <= 0) "" else foreignEngines[index - 1].id
+                                pausePrefs.edit().putString("foreign_engine", foreignEngine).apply()
+                                com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
+                            }
+                            val languageLabels = listOf("Автоматически", "Английский", "Чешский")
+                            val languageIds = listOf("auto", "en", "cs")
+                            Choice("Язык латинских фрагментов", languageLabels[languageIds.indexOf(foreignLanguage).coerceAtLeast(0)], languageLabels) {
+                                foreignLanguage = languageIds[languageLabels.indexOf(it)]
+                                pausePrefs.edit().putString("foreign_language", foreignLanguage).apply()
+                                com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
+                            }
+                            Text("Русский остаётся в выбранной модели. Для иностранного текста предпочитается установленный офлайн-голос другого движка; его настройки сети действуют отдельно. Неоднозначная латиница в авторежиме считается английской. При сбое — приблизительная транслитерация без остановки книги.", style = MaterialTheme.typography.bodySmall)
+                            if (foreignEngines.isEmpty()) Text("Других движков TTS на телефоне не найдено.")
                         }
                         if (com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity)) {
                             Toggle("Silero: вопросительная и восклицательная интонация", sileroIntonation) {

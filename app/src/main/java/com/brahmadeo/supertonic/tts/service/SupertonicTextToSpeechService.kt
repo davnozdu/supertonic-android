@@ -144,7 +144,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         val language = lang?.lowercase(Locale.ROOT) ?: return TextToSpeech.LANG_NOT_SUPPORTED
-        val supported = if (AssetManager.isRussianModel(this)) language.startsWith("ru") || language.startsWith("rus")
+        val supported = if (AssetManager.isRussianModel(this)) language.startsWith("ru") || language.startsWith("rus") ||
+            (normalizeLanguage(language) in setOf("en", "cs") && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))
             else LANG_PREFIX_MAP.keys.any { language.startsWith(it) }
         if (!supported) return TextToSpeech.LANG_NOT_SUPPORTED
 
@@ -180,7 +181,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
         val selected = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         val voiceName = if (selected.endsWith(".json")) selected.substringBeforeLast(".") else selected
-        val prefix = if (AssetManager.isRussianModel(this)) "ru" else normalizeLanguage(lang)
+        val requested = normalizeLanguage(lang)
+        val prefix = if (AssetManager.isRussianModel(this) && !(requested in setOf("en", "cs") && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))) "ru" else requested
         return "$prefix-supertonic-$voiceName"
     }
 
@@ -192,7 +194,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (!AssetManager.isReady(this)) return voicesList
 
         ANDROID_LOCALE_TRIPLES.forEach { (twoLetter, _, _) ->
-            if (AssetManager.isRussianModel(this) && twoLetter != "ru") return@forEach
+            if (AssetManager.isRussianModel(this) && twoLetter != "ru" &&
+                !(twoLetter in setOf("en", "cs") && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))) return@forEach
             val locale = Locale.forLanguageTag(twoLetter)
             voiceNames.forEach { name ->
                 voicesList.add(
@@ -247,6 +250,10 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onSynthesizeText(request: SynthesisRequest?, callback: SynthesisCallback?) {
         if (request == null || callback == null) return
+        // A failed external-engine connection must never delegate back into us.
+        if (request.params.getBoolean("supertonic_foreign_proxy", false)) {
+            callback.error(); callback.done(); return
+        }
         SupertonicTTS.setCancelled(false)
         runBlocking {
             withTimeoutOrNull(5000) {
@@ -263,7 +270,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
         val requestedVoice = request.voiceName
         val requestedLang = detectLanguage(rawText, normalizeLanguage(request.language))
-        if (AssetManager.isRussianModel(this) && requestedLang != "ru") {
+        if (AssetManager.isRussianModel(this) && requestedLang != "ru" &&
+            !com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this)) {
             callback.error()
             return
         }

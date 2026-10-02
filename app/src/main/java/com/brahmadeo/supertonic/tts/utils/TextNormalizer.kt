@@ -312,6 +312,12 @@ class TextNormalizer {
 
     fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false): String {
         val lowerLang = lang.lowercase()
+        if (lowerLang.startsWith("ru")) {
+            val parts = com.brahmadeo.supertonic.tts.foreign.ForeignText.split(text)
+            if (parts.any { it.foreign }) return parts.joinToString("") { part ->
+                if (part.foreign) part.text else normalize(part.text, lang, isAdvancedEnabled)
+            }
+        }
 
         // Pre-pass for user-controlled punctuation tweaks. Done before Lexicon
         // so any rules the user writes still match against the original text,

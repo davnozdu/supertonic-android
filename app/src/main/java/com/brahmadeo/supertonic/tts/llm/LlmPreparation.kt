@@ -145,7 +145,7 @@ object LlmPreparation {
             }
         }
         var failure: String? = null
-        val numericInputs = texts.map { russianNumbers.prepareForLlm(it) }
+        val numericInputs = texts.map { com.brahmadeo.supertonic.tts.foreign.ForeignText.prepareNumbers(it, russianNumbers) }
         val providerTexts = numericInputs.map { it.text }
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()

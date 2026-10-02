@@ -19,11 +19,14 @@ class CheckDataActivity : Activity() {
         val ready = AssetManager.isReady(this)
         val availableVoices = ArrayList<String>()
         val unavailableVoices = ArrayList<String>()
+        val locales = if (AssetManager.isRussianModel(this)) listOf("rus-RUS") +
+            (if (com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this)) listOf("eng-USA", "ces-CZE") else emptyList())
+            else SUPPORTED_TTS_LOCALES
 
         if (ready) {
-            SUPPORTED_TTS_LOCALES.forEach { availableVoices.add(it) }
+            locales.forEach { availableVoices.add(it) }
         } else {
-            SUPPORTED_TTS_LOCALES.forEach { unavailableVoices.add(it) }
+            locales.forEach { unavailableVoices.add(it) }
         }
 
         val result = if (availableVoices.isNotEmpty()) {

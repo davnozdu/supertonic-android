@@ -208,6 +208,42 @@ object SupertonicTTS {
         val sid = ++sessionIdCounter
         currentSession.set(SessionContext(sid, listener))
         try {
+            val context = appContext
+            if (context != null && AssetManager.isRussianModel(context) &&
+                com.brahmadeo.supertonic.tts.foreign.ForeignTts.enabled(context)) {
+                val parts = com.brahmadeo.supertonic.tts.foreign.ForeignText.split(text)
+                if (parts.any { it.foreign }) {
+                    val output = java.io.ByteArrayOutputStream()
+                    for (part in parts) {
+                        if (isCancelled()) return null
+                        if (part.text.isBlank()) continue
+                        val foreign = if (part.foreign) com.brahmadeo.supertonic.tts.foreign.ForeignTts.synthesize(context,
+                            part.text, com.brahmadeo.supertonic.tts.foreign.ForeignTts.language(context, part.text, lang),
+                            speed, getAudioSampleRate(), gain) else null
+                        if (isCancelled()) return null
+                        if (foreign != null) {
+                            var position = 0
+                            while (position < foreign.size && !isCancelled()) {
+                                val end = minOf(position + 48000, foreign.size)
+                                listener?.onAudioChunk(sid, foreign.copyOfRange(position, end)); position = end
+                            }
+                            output.write(foreign)
+                        } else {
+                            val russian = if (part.foreign) com.brahmadeo.supertonic.tts.foreign.ForeignText.transliterate(part.text) else part.text
+                            val pcm = if (AssetManager.isSilero(context)) {
+                                val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(context).also { sileroEngine = it }
+                                engine.synthesize(russian, stylePath, speed, gain, listener, sid)
+                            } else {
+                                val engine = maybeTeraEngine() ?: return null
+                                engine.synthesize(russian, "ru", stylePath, speed, gain, listener, sid)
+                            }
+                            if (pcm.isEmpty()) return null
+                            output.write(pcm)
+                        }
+                    }
+                    return output.toByteArray().takeIf { it.isNotEmpty() && !isCancelled() }
+                }
+            }
             if (appContext?.let { AssetManager.isSilero(it) } == true) {
                 val ctx = appContext!!
                 val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(ctx).also { sileroEngine = it }
@@ -320,6 +356,7 @@ object SupertonicTTS {
 
     @Synchronized
     fun release() {
+        com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
         sileroEngine?.close()
         sileroEngine = null
         prewarmed = false
