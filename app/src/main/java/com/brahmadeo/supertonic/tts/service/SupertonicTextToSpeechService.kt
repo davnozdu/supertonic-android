@@ -123,7 +123,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         initJob = serviceScope.launch(Dispatchers.IO) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            if (!AssetManager.isTera(this@SupertonicTextToSpeechService) &&
+            if (!AssetManager.isRussianModel(this@SupertonicTextToSpeechService) &&
                 AssetManager.getModelType(this@SupertonicTextToSpeechService) != "android_optimized_int8") {
                 SupertonicTTS.initialize(modelPath, libPath,
                     xnnThreads = SupertonicTTS.recommendedXnnThreads(this@SupertonicTextToSpeechService))
@@ -144,7 +144,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         val language = lang?.lowercase(Locale.ROOT) ?: return TextToSpeech.LANG_NOT_SUPPORTED
-        val supported = if (AssetManager.isTera(this)) language.startsWith("ru") || language.startsWith("rus")
+        val supported = if (AssetManager.isRussianModel(this)) language.startsWith("ru") || language.startsWith("rus")
             else LANG_PREFIX_MAP.keys.any { language.startsWith(it) }
         if (!supported) return TextToSpeech.LANG_NOT_SUPPORTED
 
@@ -171,7 +171,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (voiceName == null) return TextToSpeech.ERROR
         if (!voiceName.contains("-supertonic-")) return TextToSpeech.ERROR
         val styleName = voiceName.substringAfter("-supertonic-")
-        if (AssetManager.isTera(this) && styleName !in AssetManager.TERA_VOICES) return TextToSpeech.ERROR
+        if (AssetManager.isRussianModel(this) && styleName !in (if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices else AssetManager.TERA_VOICES)) return TextToSpeech.ERROR
         val file = AssetManager.voiceFile(this, "$styleName.json")
         return if (file.exists()) TextToSpeech.SUCCESS else TextToSpeech.ERROR
     }
@@ -180,18 +180,19 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
         val selected = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         val voiceName = if (selected.endsWith(".json")) selected.substringBeforeLast(".") else selected
-        val prefix = if (AssetManager.isTera(this)) "ru" else normalizeLanguage(lang)
+        val prefix = if (AssetManager.isRussianModel(this)) "ru" else normalizeLanguage(lang)
         return "$prefix-supertonic-$voiceName"
     }
 
     override fun onGetVoices(): List<Voice> {
         val voicesList = mutableListOf<Voice>()
-        val voiceNames = if (AssetManager.isTera(this)) AssetManager.TERA_VOICES
+        val voiceNames = if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices
+            else if (AssetManager.isTera(this)) AssetManager.TERA_VOICES
             else listOf("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
         if (!AssetManager.isReady(this)) return voicesList
 
         ANDROID_LOCALE_TRIPLES.forEach { (twoLetter, _, _) ->
-            if (AssetManager.isTera(this) && twoLetter != "ru") return@forEach
+            if (AssetManager.isRussianModel(this) && twoLetter != "ru") return@forEach
             val locale = Locale.forLanguageTag(twoLetter)
             voiceNames.forEach { name ->
                 voicesList.add(
@@ -262,7 +263,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
         val requestedVoice = request.voiceName
         val requestedLang = detectLanguage(rawText, normalizeLanguage(request.language))
-        if (AssetManager.isTera(this) && requestedLang != "ru") {
+        if (AssetManager.isRussianModel(this) && requestedLang != "ru") {
             callback.error()
             return
         }
@@ -280,12 +281,12 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         var stylePath = AssetManager.voiceFile(this, voiceFile).absolutePath
 
         // Ensure stylePath is within the intended directory
-        if (!AssetManager.isTera(this) && !File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
+        if (!AssetManager.isRussianModel(this) && !File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
             stylePath = AssetManager.voiceFile(this, "F3.json").absolutePath
         }
 
         val isMixing = prefs.getBoolean("is_mixing_enabled", false)
-        if (isMixing && !AssetManager.isTera(this)) {
+        if (isMixing && !AssetManager.isRussianModel(this)) {
             val voice2 = prefs.getString("selected_voice_2", "M2.json") ?: "M2.json"
             val stylePath2 = File(voiceStyleDir, voice2).absolutePath
             val alpha = prefs.getFloat("mix_alpha", 0.5f)
@@ -296,7 +297,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
         val steps = prefs.getInt("diffusion_steps", 5)
 
-        if (!AssetManager.isTera(this) && AssetManager.getModelType(this) != "android_optimized_int8" && SupertonicTTS.getSoC() == -1) {
+        if (!AssetManager.isRussianModel(this) && AssetManager.getModelType(this) != "android_optimized_int8" && SupertonicTTS.getSoC() == -1) {
             val modelPath = File(filesDir, "${AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
             SupertonicTTS.initialize(modelPath, libPath,
@@ -333,7 +334,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             val producer = launch(Dispatchers.IO) {
                 try {
                     val sentences = textNormalizer.splitIntoSentences(
-                        rawText, requestedLang, preservePunctuation = AssetManager.isTera(this@SupertonicTextToSpeechService)
+                        rawText, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
                     )
                     for (sentence in sentences) {
                         if (SupertonicTTS.isCancelled()) { success = false; break }

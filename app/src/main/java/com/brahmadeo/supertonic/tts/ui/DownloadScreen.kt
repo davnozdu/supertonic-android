@@ -15,10 +15,11 @@ fun DownloadScreen(
     status: String,
     progress: Float,
     isTeraModel: Boolean = false,
+    isSileroModel: Boolean = false,
     error: String? = null,
     onRetry: () -> Unit = {}
 ) {
-    val message = stringResource(if (isTeraModel) AppR.string.download_intro_tera else AppR.string.download_intro)
+    val message = stringResource(when { isSileroModel -> AppR.string.download_intro_silero; isTeraModel -> AppR.string.download_intro_tera; else -> AppR.string.download_intro })
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -35,6 +36,7 @@ fun DownloadScreen(
                 text = stringResource(
                     when {
                         error != null -> AppR.string.download_failed
+                        isSileroModel -> AppR.string.download_silero_in_progress
                         isTeraModel -> AppR.string.download_tera_in_progress
                         else -> AppR.string.download_in_progress
                     }

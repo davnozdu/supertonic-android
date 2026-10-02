@@ -33,6 +33,7 @@ object AssetManager {
 
     const val DEFAULT_MODEL = "android_optimized_int8"
     const val TERA_MODEL = "teratts_v2"
+    const val SILERO_MODEL = "silero_v5_5_ru"
     private const val TERA_REVISION = "f05ea799094571a3553904a555df3834fb0b963b"
     private const val TERA_BASE_URL = "https://huggingface.co/TeraSpace/TeraTTSv2/resolve/$TERA_REVISION"
     private const val TERA_DICTIONARY_URL =
@@ -40,9 +41,16 @@ object AssetManager {
     val TERA_VOICES = listOf("ru_f1", "ru_f2", "ru_m1", "ru_m5")
 
     fun isTera(context: Context): Boolean = getModelType(context) == TERA_MODEL
+    fun isSilero(context: Context): Boolean = getModelType(context) == SILERO_MODEL
+    fun isRussianModel(context: Context): Boolean = isTera(context) || isSilero(context)
 
     fun voiceFile(context: Context, selected: String): File {
         val base = File(context.filesDir, MODEL_VERSION)
+        if (isSilero(context)) {
+            val name = File(selected).name.removeSuffix(".json")
+                .takeIf { it in com.brahmadeo.supertonic.tts.silero.SileroDownload.voices } ?: "kseniya"
+            return File(com.brahmadeo.supertonic.tts.silero.SileroDownload.root(context), "$name.json")
+        }
         if (!isTera(context)) return File(base, "voice_styles/${File(selected).name}")
         val voice = File(selected).name.removeSuffix(".json")
             .takeIf { it in TERA_VOICES } ?: "ru_f1"
@@ -134,6 +142,8 @@ object AssetManager {
         }
 
     fun isReady(context: Context): Boolean {
+        if (isSilero(context)) return com.brahmadeo.supertonic.tts.silero.SileroDownload.supported() &&
+            com.brahmadeo.supertonic.tts.silero.SileroDownload.ready(context)
         val baseDir = File(context.filesDir, MODEL_VERSION)
         if (!baseDir.exists()) return false
         
@@ -150,6 +160,10 @@ object AssetManager {
     }
 
     suspend fun download(context: Context, onProgress: (String, Float) -> Unit) {
+        if (isSilero(context)) {
+            com.brahmadeo.supertonic.tts.silero.SileroDownload.download(context, onProgress)
+            return
+        }
         val modelType = getModelType(context)
         val files = getFilesForModel(modelType)
 
@@ -221,6 +235,10 @@ object AssetManager {
     }
 
     fun delete(context: Context) {
+        if (isSilero(context)) {
+            com.brahmadeo.supertonic.tts.silero.SileroDownload.root(context).deleteRecursively()
+            return
+        }
         val baseDir = File(context.filesDir, MODEL_VERSION)
         if (baseDir.exists()) {
             baseDir.deleteRecursively()

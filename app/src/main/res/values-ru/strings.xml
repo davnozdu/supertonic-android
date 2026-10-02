@@ -247,4 +247,9 @@
     <string name="err_busy">Уже идёт другая загрузка или импорт словаря. Дождитесь окончания и попробуйте ещё раз.</string>
     <string name="err_unknown_fmt">Неизвестная ошибка (код %1$d).</string>
     <string name="assets_not_ready">Ресурсы не готовы. Сначала скачайте их на главном экране.</string>
+    <string name="model_silero_title">Silero v5.5 — русский</string>
+    <string name="model_silero_desc">5 голосов • вопросы и восклицания • 83 МБ • ARM64. Модель CC BY-NC-SA 4.0, для некоммерческого использования.</string>
+    <string name="model_delete_silero_message">Удалить скачанную Silero v5.5? Модели Tera и Supertonic сохранятся.</string>
+    <string name="download_intro_silero">Скачиваются готовые Android-файлы Silero v5.5: модель синтеза и вокодер, около 83 МБ. Конвертация не требуется.</string>
+    <string name="download_silero_in_progress">Загрузка Silero v5.5</string>
 </resources>

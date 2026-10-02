@@ -35,6 +35,10 @@
 -keep class ai.onnxruntime.** { *; }
 -dontwarn ai.onnxruntime.**
 
+# PyTorch and ExecuTorch use original Java class/field names from JNI.
+-keep class org.pytorch.** { *; }
+-keep class com.facebook.jni.** { *; }
+
 # Our hybrid Kotlin engine — referenced indirectly through SupertonicTTS
 # dispatch; protect it from being merged/renamed by R8.
 -keep class com.brahmadeo.supertonic.tts.tflite.** { *; }

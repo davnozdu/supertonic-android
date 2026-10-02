@@ -247,4 +247,9 @@
     <string name="voice_f3">Jessica - Professional, Clear</string>
     <string name="voice_f4">Olivia - Crisp, Confident</string>
     <string name="voice_f5">Emily - Kind, Gentle</string>
+    <string name="model_silero_title">Silero v5.5 — Russian</string>
+    <string name="model_silero_desc">5 voices • questions and exclamations • 83 MB • ARM64. Model: CC BY-NC-SA 4.0, noncommercial use.</string>
+    <string name="model_delete_silero_message">Delete downloaded Silero v5.5? Tera and Supertonic files will be kept.</string>
+    <string name="download_intro_silero">Downloading ready-made Silero v5.5 Android files: synthesis model and vocoder, about 83 MB. No conversion is needed.</string>
+    <string name="download_silero_in_progress">Downloading Silero v5.5</string>
 </resources>

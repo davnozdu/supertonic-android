@@ -103,8 +103,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 46
-        versionName "4.1.0-beta15"
+        versionCode 47
+        versionName "4.1.0-beta16"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
@@ -166,6 +166,7 @@ android {
             pickFirst '**/libLiteRt.so'
             pickFirst '**/libLiteRtClGlAccelerator.so'
             pickFirst '**/libc++_shared.so'
+            pickFirst '**/libfbjni.so'
         }
     }
 }
@@ -208,6 +209,8 @@ dependencies {
     // Pipeline integration arrives in a later iteration.
     implementation 'com.google.ai.edge.litert:litert:2.1.5'
     implementation 'com.google.ai.edge.litertlm:litertlm-android:0.17.1'
+    implementation 'org.pytorch:pytorch_android_lite:2.1.0'
+    implementation files('libs/executorch-1.5.0-arm64.aar')
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
 }

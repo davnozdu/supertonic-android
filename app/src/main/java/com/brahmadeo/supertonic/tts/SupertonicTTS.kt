@@ -18,6 +18,7 @@ object SupertonicTTS {
     @Volatile
     private var hybridEngine: HybridEngine? = null
     @Volatile private var teraEngine: TeraEngine? = null
+    private var sileroEngine: com.brahmadeo.supertonic.tts.silero.SileroEngine? = null
 
     /**
      * Hand the app context to SupertonicTTS once at startup so generateAudio
@@ -207,6 +208,11 @@ object SupertonicTTS {
         val sid = ++sessionIdCounter
         currentSession.set(SessionContext(sid, listener))
         try {
+            if (appContext?.let { AssetManager.isSilero(it) } == true) {
+                val ctx = appContext!!
+                val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(ctx).also { sileroEngine = it }
+                return engine.synthesize(text, stylePath, speed, gain, listener, sid).takeIf { it.isNotEmpty() }
+            }
             if (appContext?.let { AssetManager.isTera(it) } == true) {
                 val engine = maybeTeraEngine() ?: return null
                 return try {
@@ -251,6 +257,7 @@ object SupertonicTTS {
 
     @Synchronized
     fun getAudioSampleRate(): Int {
+        if (appContext?.let { AssetManager.isSilero(it) } == true) return 48000
         if (appContext?.let { AssetManager.isTera(it) } == true) return 44100
         if (nativePtr == 0L) return 44100
         return getSampleRate(nativePtr)
@@ -279,7 +286,7 @@ object SupertonicTTS {
         // For the hybrid INT4 preset the Rust nativePtr is intentionally 0 —
         // gate on either path being ready so XNNPACK kernel compilation runs
         // once at startup instead of on the user's first sentence.
-        if (nativePtr == 0L && maybeHybridEngine() == null && maybeTeraEngine() == null) {
+        if (appContext?.let { AssetManager.isSilero(it) } != true && nativePtr == 0L && maybeHybridEngine() == null && maybeTeraEngine() == null) {
             Log.w("SupertonicTTS", "prewarm skipped: engine not ready")
             return
         }
@@ -295,7 +302,7 @@ object SupertonicTTS {
             val t0 = System.currentTimeMillis()
             generateAudio(
                 text = ".",
-                lang = if (appContext?.let { AssetManager.isTera(it) } == true) "ru" else "en",
+                lang = if (appContext?.let { AssetManager.isRussianModel(it) } == true) "ru" else "en",
                 stylePath = stylePath,
                 speed = 1.0f,
                 bufferDuration = 0.0f,
@@ -313,6 +320,9 @@ object SupertonicTTS {
 
     @Synchronized
     fun release() {
+        sileroEngine?.close()
+        sileroEngine = null
+        prewarmed = false
         teraEngine?.let {
             try { it.close() } catch (t: Throwable) { Log.w("SupertonicTTS", "TeraEngine close failed", t) }
             teraEngine = null

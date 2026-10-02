@@ -45,6 +45,7 @@ class LlmSettingsActivity : ComponentActivity() {
                 val downloadStatus by LocalModelDownload.status.collectAsState()
                 val downloading by LocalModelDownload.downloading.collectAsState()
                 val pausePrefs = remember { getSharedPreferences("SupertonicPrefs", MODE_PRIVATE) }
+                var sileroIntonation by remember { mutableStateOf(pausePrefs.getBoolean("silero_intonation", true)) }
                 var punctuationPauses by remember { mutableStateOf(pausePrefs.getBoolean("tera_punctuation_pauses", true)) }
                 var commaPause by remember { mutableIntStateOf(pausePrefs.getInt("tera_comma_pause_ms", 180)) }
                 var sentencePause by remember { mutableIntStateOf(pausePrefs.getInt("tera_sentence_pause_ms", 420)) }
@@ -84,6 +85,12 @@ class LlmSettingsActivity : ComponentActivity() {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->
                                 config = config.copy(mode = LlmMode.entries.first { it.title == title }); save()
                             }
+                        }
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity)) {
+                            Toggle("Silero: вопросительная и восклицательная интонация", sileroIntonation) {
+                                sileroIntonation = it; pausePrefs.edit().putBoolean("silero_intonation", it).apply()
+                            }
+                            Text("Тип предложения передаётся прямо в звуковую модель. При выключении используется повествовательная интонация.", style = MaterialTheme.typography.bodySmall)
                         }
                         Toggle("Расставлять ударения", config.stress) { config = config.copy(stress = it); save() }
                         Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it); save() }

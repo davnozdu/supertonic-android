@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
     private fun prepareTextForTts(text: String?, lang: String): String {
         if (text.isNullOrEmpty()) return ""
         val trimmed = text.trim()
-        if (AssetManager.isTera(this)) return trimmed
+        if (AssetManager.isRussianModel(this)) return trimmed
         
         // Append " ." to prevent diffusion model from cutting off abruptly at the end
         // RESTRICTED for Korean
@@ -292,18 +292,31 @@ class MainActivity : ComponentActivity() {
                                         Text(getString(R.string.model_tera_desc), style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
+                                if (com.brahmadeo.supertonic.tts.silero.SileroDownload.supported()) {
+                                    androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        androidx.compose.material3.RadioButton(
+                                            selected = viewModel.selectedModel.value == AssetManager.SILERO_MODEL,
+                                            onClick = { viewModel.selectedModel.value = AssetManager.SILERO_MODEL }
+                                        )
+                                        Column {
+                                            Text(getString(R.string.model_silero_title), style = MaterialTheme.typography.titleMedium)
+                                            Text(getString(R.string.model_silero_desc), style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                }
                             }
                         },
                         confirmButton = {
                             TextButton(onClick = {
                                 AssetManager.setModelType(this@MainActivity, viewModel.selectedModel.value)
-                                if (AssetManager.isTera(this@MainActivity)) {
+                                if (AssetManager.isRussianModel(this@MainActivity)) {
                                     viewModel.currentLang.value = "ru"
-                                    viewModel.selectedVoiceFile.value = "ru_f1.json"
+                                    viewModel.selectedVoiceFile.value = if (AssetManager.isSilero(this@MainActivity)) "kseniya.json" else "ru_f1.json"
                                     saveStringPref("selected_lang", "ru")
-                                    saveStringPref("selected_voice", "ru_f1.json")
+                                    saveStringPref("selected_voice", viewModel.selectedVoiceFile.value)
                                     viewModel.isMixingEnabled.value = false
-                                } else if (viewModel.selectedVoiceFile.value.startsWith("ru_")) {
+                                } else if (viewModel.selectedVoiceFile.value.startsWith("ru_") || viewModel.selectedVoiceFile.value.removeSuffix(".json") in com.brahmadeo.supertonic.tts.silero.SileroDownload.voices) {
                                     viewModel.selectedVoiceFile.value = "F3.json"
                                     saveStringPref("selected_voice", "F3.json")
                                 }
@@ -317,6 +330,7 @@ class MainActivity : ComponentActivity() {
                         status = viewModel.downloadStatus.value,
                         progress = viewModel.downloadProgress.floatValue,
                         isTeraModel = AssetManager.isTera(this@MainActivity),
+                        isSileroModel = AssetManager.isSilero(this@MainActivity),
                         error = viewModel.downloadError.value,
                         onRetry = { startDownload() }
                     )
@@ -345,7 +359,7 @@ class MainActivity : ComponentActivity() {
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { viewModel.showModelDeleteDialog.value = false },
                             title = { Text(getString(R.string.model_delete_title)) },
-                            text = { Text(getString(if (AssetManager.isTera(this@MainActivity)) R.string.model_delete_tera_message else R.string.model_delete_message)) },
+                            text = { Text(getString(when { AssetManager.isSilero(this@MainActivity) -> R.string.model_delete_silero_message; AssetManager.isTera(this@MainActivity) -> R.string.model_delete_tera_message; else -> R.string.model_delete_message })) },
                             confirmButton = {
                                 TextButton(
                                     onClick = {
@@ -397,7 +411,7 @@ class MainActivity : ComponentActivity() {
                         getLocalizedResource(this@MainActivity, viewModel.currentLang.value, R.string.default_input_text)
                     }
                     val localizedLanguages = remember(viewModel.currentLang.value, viewModel.selectedModel.value) {
-                        val available = if (AssetManager.isTera(this@MainActivity))
+                        val available = if (AssetManager.isRussianModel(this@MainActivity))
                             languages.filterValues { it == "ru" } else languages
                         available.mapKeys { getLocalizedResource(this@MainActivity, viewModel.currentLang.value, it.key) }
                     }
@@ -427,7 +441,7 @@ class MainActivity : ComponentActivity() {
 
                         voices = viewModel.voiceFiles,
                         selectedVoiceFile = viewModel.selectedVoiceFile.value,
-                        isTeraModel = AssetManager.isTera(this@MainActivity),
+                        isTeraModel = AssetManager.isRussianModel(this@MainActivity),
                         onVoiceChange = {
                             if (viewModel.selectedVoiceFile.value != it) {
                                 viewModel.selectedVoiceFile.value = it
@@ -437,7 +451,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
 
-                        isMixingEnabled = viewModel.isMixingEnabled.value && !AssetManager.isTera(this@MainActivity),
+                        isMixingEnabled = viewModel.isMixingEnabled.value && !AssetManager.isRussianModel(this@MainActivity),
                         onMixingEnabledChange = { 
                             viewModel.isMixingEnabled.value = it
                             getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
@@ -672,7 +686,7 @@ class MainActivity : ComponentActivity() {
         // text_encoder.onnx for the Rust native engine to load — the .tflite
         // versions live in the same folder. Skip native init for that preset;
         // HybridEngine builds itself lazily on the first generateAudio call.
-        if (AssetManager.getModelType(this) == "android_optimized_int8" || AssetManager.isTera(this)) {
+        if (AssetManager.getModelType(this) == "android_optimized_int8" || AssetManager.isRussianModel(this)) {
             viewModel.isInitializing.value = false
             setupVoicesMap(viewModel.currentLang.value)
             return
@@ -705,6 +719,10 @@ class MainActivity : ComponentActivity() {
 
     private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
+        if (AssetManager.isSilero(this)) {
+            com.brahmadeo.supertonic.tts.silero.SileroDownload.voices.forEach { viewModel.voiceFiles[it] = "$it.json" }
+            return
+        }
         if (AssetManager.isTera(this)) {
             AssetManager.TERA_VOICES.forEach { viewModel.voiceFiles[it] = "$it.json" }
             return
@@ -753,7 +771,7 @@ class MainActivity : ComponentActivity() {
              return
         }
 
-        if (viewModel.isMixingEnabled.value && !AssetManager.isTera(this)) {
+        if (viewModel.isMixingEnabled.value && !AssetManager.isRussianModel(this)) {
             val stylePath2 = AssetManager.voiceFile(this, viewModel.selectedVoiceFile2.value).absolutePath
             if (File(stylePath2).exists()) {
                 stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
@@ -787,7 +805,7 @@ class MainActivity : ComponentActivity() {
         if (viewModel.isInitializing.value) return
 
         var stylePath = AssetManager.voiceFile(this, viewModel.selectedVoiceFile.value).absolutePath
-        if (viewModel.isMixingEnabled.value && !AssetManager.isTera(this)) {
+        if (viewModel.isMixingEnabled.value && !AssetManager.isRussianModel(this)) {
             val stylePath2 = AssetManager.voiceFile(this, viewModel.selectedVoiceFile2.value).absolutePath
             stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
         }
@@ -816,7 +834,7 @@ class MainActivity : ComponentActivity() {
         if (viewModel.isInitializing.value) return
 
         var stylePath = AssetManager.voiceFile(this, viewModel.selectedVoiceFile.value).absolutePath
-        if (viewModel.isMixingEnabled.value && !AssetManager.isTera(this)) {
+        if (viewModel.isMixingEnabled.value && !AssetManager.isRussianModel(this)) {
             val stylePath2 = AssetManager.voiceFile(this, viewModel.selectedVoiceFile2.value).absolutePath
             stylePath = "$stylePath;$stylePath2;${viewModel.mixAlpha.floatValue}"
         }

@@ -70,6 +70,9 @@ jobs:
           linker = "x86_64-linux-android34-clang"
           EOF
 
+      - name: Prepare pinned Silero runtime
+        run: python3 tools/prepare_silero_runtime.py
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 

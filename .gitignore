@@ -32,3 +32,5 @@ GEMINI.md
 app/release/
 
 out.wav
+.silero-runtime-cache/
+app/libs/*.aar

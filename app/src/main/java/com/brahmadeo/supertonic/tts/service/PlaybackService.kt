@@ -215,7 +215,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
         val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-        if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this) &&
+        if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this) &&
             com.brahmadeo.supertonic.tts.utils.AssetManager.getModelType(this) != "android_optimized_int8") {
             SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
         }
@@ -240,7 +240,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             SupertonicTTS.release()
             val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
             val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
-            if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this) &&
+            if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this) &&
                 com.brahmadeo.supertonic.tts.utils.AssetManager.getModelType(this) != "android_optimized_int8") {
                 SupertonicTTS.initialize(modelPath, libPath, xnnThreads = SupertonicTTS.recommendedXnnThreads(this))
             }
@@ -403,7 +403,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 try {
                     itemLoop@ while (true) {
                         val sentences = textNormalizer.splitIntoSentences(
-                            curText, curLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@PlaybackService)
+                            curText, curLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@PlaybackService)
                         )
                         val totalSentences = sentences.size
                         lastTotal = totalSentences
