@@ -49,4 +49,14 @@ class PreparedTextValidatorTest {
         assertEquals("Ты тут?", PreparedTextValidator.validate("Ты тут", "Ты тут?"))
         assertEquals("Светло́!", PreparedTextValidator.validate("Светло́", "Светло́!"))
     }
+    @Test fun permitsOnlyNumericGenderWithValuePreserved() {
+        val input = com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer().prepareForLlm("1101 незнакомое")
+        assertEquals("одна́ ты́сяча сто одно́ незнако́мое.", validateNumber(input, "одна́ ты́сяча сто одно́ незнако́мое."))
+        assertNull(validateNumber(input, "одна́ ты́сяча одно́ незнако́мое."))
+        assertNull(validateNumber(input, "одна́ ты́сяча двести одно́ незнако́мое."))
+        assertNull(validateNumber(input, "одна́ ты́сяча сто одно́ другое."))
+        assertNull(PreparedTextValidator.validate("один незнакомец", "одно́ незнако́мец."))
+    }
+    private fun validateNumber(input: com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer.LlmNumbers, output: String) =
+        PreparedTextValidator.validate(input.text, output, numberRanges = input.ranges)
 }

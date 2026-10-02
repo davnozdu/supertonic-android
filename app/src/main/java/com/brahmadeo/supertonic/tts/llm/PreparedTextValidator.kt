@@ -7,7 +7,8 @@ object PreparedTextValidator {
     private val vowels = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
     private fun plain(s: String) = s.replace("+", "").replace("\u0301", "")
     private fun symbols(s: String) = s.filter { !it.isLetterOrDigit() && !it.isWhitespace() && it !in "+\u0301,.;:!?…—–-\"'«»“”„()[]" }
-    fun validate(original: String, response: String, allowPunctuation: Boolean = true, allowStress: Boolean = true): String? {
+    fun validate(original: String, response: String, allowPunctuation: Boolean = true, allowStress: Boolean = true,
+                 numberRanges: List<IntRange> = emptyList()): String? {
         // Some providers insert dialogue quotes despite the instruction. If the
         // source has none, discard those formatting additions before validation.
         // Existing source quotes/brackets must still retain their exact anchors.
@@ -46,7 +47,12 @@ object PreparedTextValidator {
         for (i in a.indices) {
             val source = a[i].value
             val target = b[i].value.replace("+", "") // '+' is reserved for explicit input; LLM must return acute marks.
-            if (plain(source).lowercase() != plain(target).lowercase()) return null
+            fun numericGender(word: String) = when (word) { "один", "одна", "одно" -> "один"; "два", "две" -> "два"; else -> word }
+            val sourcePlain = plain(source)
+            val targetPlain = plain(target)
+            val changedGender = sourcePlain.lowercase() != targetPlain.lowercase()
+            if (changedGender && !(numberRanges.any { a[i].range.first in it && a[i].range.last in it } &&
+                        numericGender(sourcePlain.lowercase()) == numericGender(targetPlain.lowercase()))) return null
             if (b[i].value.contains('+') && !source.contains('+')) return null
             val explicit = source.contains('+') || source.contains('\u0301')
             if (!explicit && source.count { it in vowels } > 1) {
@@ -56,9 +62,9 @@ object PreparedTextValidator {
             if (!explicit && target.count { it == '\u0301' } > 1) return null
             val mark = target.indexOf('\u0301')
             if (!explicit && mark >= 0 && (mark == 0 || target[mark - 1] !in vowels)) return null
-            val sourcePlain = plain(source)
-            val replacement = if (!allowStress || source.contains('+') || source.contains('\u0301')) source else {
-                if (mark < 0) sourcePlain else sourcePlain.substring(0, mark) + '\u0301' + sourcePlain.substring(mark)
+            val base = if (changedGender) targetPlain.lowercase().let { if (source.first().isUpperCase()) it.replaceFirstChar(Char::uppercaseChar) else it } else sourcePlain
+            val replacement = if (source.contains('+') || source.contains('\u0301')) source else {
+                if (!allowStress || mark < 0) base else base.substring(0, mark) + '\u0301' + base.substring(mark)
             }
             replacements += b[i].range to replacement
         }

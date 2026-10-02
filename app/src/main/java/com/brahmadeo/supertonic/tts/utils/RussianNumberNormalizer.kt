@@ -16,7 +16,7 @@ package com.brahmadeo.supertonic.tts.utils
  *   genuinely ambiguous without morphological context.
  *
  * Not in scope (intentionally — would need a morphological analyzer):
- * - Gender agreement of "один/одна/одно" with the following noun.
+ * - General morphology beyond a small set of common counted nouns.
  * - Case agreement (always emits nominative).
  * - Phone numbers, IBANs, ranges with hyphens beyond simple "10-15".
  *
@@ -35,6 +35,49 @@ class RussianNumberNormalizer {
     private val decimalRegex = Regex("(?<![\\p{L}\\d.,])(-?\\d{1,12})[,.](\\d{1,9})(?![\\p{L}\\d]|[.,]\\d)")
     private val integerRegex = Regex("(?<![\\p{L}\\d])(?<!\\d[.,])(-?\\d{1,12})(?![\\p{L}\\d]|[.,]\\d|-\\p{L})")
     private val whitespaceRegex = Regex("\\s+")
+    private val nextNoun = Regex("^\\s+([+\\p{L}\\p{M}]+)")
+    private val feminineNouns = setOf("запись", "записи", "страница", "страницы", "книга", "книги",
+        "минута", "минуты", "секунда", "секунды", "строка", "строки", "глава", "главы",
+        "женщина", "женщины", "девушка", "девушки", "копейка", "копейки")
+    private val neuterNouns = setOf("имя", "имени", "окно", "окна", "слово", "слова", "письмо", "письма",
+        "сообщение", "сообщения", "предложение", "предложения", "место", "места")
+
+    data class LlmNumbers(val text: String, val ranges: List<IntRange>)
+
+    private fun countedInteger(value: Long, following: String): String {
+        val noun = nextNoun.find(following)?.groupValues?.get(1)?.replace("+", "")?.replace("\u0301", "")?.lowercase()
+        val words = spellInteger(value)
+        return when {
+            noun in feminineNouns && words.endsWith("один") -> words.removeSuffix("один") + "одна"
+            noun in feminineNouns && words.endsWith("два") -> words.removeSuffix("два") + "две"
+            noun in neuterNouns && words.endsWith("один") -> words.removeSuffix("один") + "одно"
+            else -> words
+        }
+    }
+
+    /** Expand plain counted integers before LLM, retaining exact numeric spans.
+     * Compound formats (dates, times, decimals, degrees, ranges, ordinals)
+     * remain digits and go through their established downstream handlers.
+     */
+    fun prepareForLlm(text: String): LlmNumbers {
+        val grouped = groupedIntegerRegex.replace(text) { m -> m.value.filterNot { it == ' ' || it == '\u00A0' || it == '\u202F' } }
+        val out = StringBuilder()
+        val spans = mutableListOf<IntRange>()
+        var start = 0
+        for (match in integerRegex.findAll(grouped)) {
+            val before = grouped.getOrNull(match.range.first - 1)
+            val after = grouped.substring(match.range.last + 1)
+            if (before in listOf(':', '/', '-', '–', '—') || after.trimStart().firstOrNull() in listOf('%', '°', ':', '/', '-', '–', '—')) continue
+            val value = match.value.toLongOrNull() ?: continue
+            out.append(grouped, start, match.range.first)
+            val numberStart = out.length
+            out.append(countedInteger(value, after))
+            spans += numberStart until out.length
+            start = match.range.last + 1
+        }
+        out.append(grouped, start, grouped.length)
+        return LlmNumbers(out.toString(), spans)
+    }
 
     private val units = arrayOf(
         "ноль", "один", "два", "три", "четыре", "пять", "шесть",
@@ -224,7 +267,7 @@ class RussianNumberNormalizer {
         t = integerRegex.replace(t) { m ->
             val raw = m.groupValues[1]
             val n = raw.toLongOrNull() ?: return@replace raw
-            spellInteger(n)
+            countedInteger(n, t.substring(m.range.last + 1))
         }
 
         return whitespaceRegex.replace(t, " ").trim()

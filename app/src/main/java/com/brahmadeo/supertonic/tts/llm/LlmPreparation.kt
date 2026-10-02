@@ -27,6 +27,7 @@ object LlmPreparation {
     private val cooldown = mutableMapOf<String, Long>() // Only the worker accesses this.
     private val appCaller = Any()
     private val preparedCache = LlmTextCache<LlmConfig>()
+    private val russianNumbers = com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer()
     @Synchronized fun initialize(ctx: Context) {
         if (context != null) return
         context = ctx.applicationContext
@@ -139,6 +140,8 @@ object LlmPreparation {
             }
         }
         var failure: String? = null
+        val numericInputs = texts.map { russianNumbers.prepareForLlm(it) }
+        val providerTexts = numericInputs.map { it.text }
         val results = arrayOfNulls<Result>(texts.size)
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()
@@ -154,14 +157,18 @@ object LlmPreparation {
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
             if (provider == "local" && !LocalModelDownload.ready(ctx)) continue
             if (!ignoreCooldown && SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) continue
+            if (providerTexts.sumOf { it.length } > if (provider == "local") 4000 else 8000) {
+                failure = "Текст после раскрытия чисел превышает лимит LLM; используется словарь"
+                continue // A large block must not put the provider into cooldown.
+            }
             try {
-                val output = if (provider == "local") LlmProviders.local(ctx, c, texts) else LlmProviders.cloud(c, texts, provider == "gemini")
+                val output = if (provider == "local") LlmProviders.local(ctx, c, providerTexts) else LlmProviders.cloud(c, providerTexts, provider == "gemini")
                 if (expectedEpoch != epoch || cancelled()) break
                 val elapsed = SystemClock.elapsedRealtime() - started
                 var accepted = 0
-                texts.zip(output).forEachIndexed { index, (source, proposed) ->
+                providerTexts.zip(output).forEachIndexed { index, (source, proposed) ->
                     if (results[index] == null) {
-                        PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress)?.let { validated ->
+                        PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress, numericInputs[index].ranges)?.let { validated ->
                             val result = Result(validated, provider, elapsed, false)
                             results[index] = result; accepted++
                             // A bad neighbour must not hold up already valid text
