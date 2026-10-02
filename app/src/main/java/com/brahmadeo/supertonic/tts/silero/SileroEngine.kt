@@ -49,6 +49,20 @@ class SileroEngine(context: Context) : AutoCloseable {
     }
     @Synchronized fun synthesize(text: String, voice: String, speed: Float, gain: Float,
         listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
+        val sentenceMs=if(prefs.getBoolean("tera_punctuation_pauses",true)) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
+        val parts=com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.split(text,0,sentenceMs,sentenceOnly=true)
+            .map { it.text }.ifEmpty { listOf(text) }.flatMap { SileroText.bounded(SileroText.prepare(it)) }
+        val output=java.io.ByteArrayOutputStream()
+        for(part in parts) {
+            if(SupertonicTTS.isCancelled()) return ByteArray(0)
+            val bytes=synthesizePart(part,voice,speed,gain,listener,sid)
+            if(bytes.isEmpty()) return ByteArray(0)
+            output.write(bytes)
+        }
+        return output.toByteArray()
+    }
+    private fun synthesizePart(text: String, voice: String, speed: Float, gain: Float,
+        listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
         lastUsed = android.os.SystemClock.elapsedRealtime()
         try {
             val prepared = if (nativeTypes) SileroText.prepare(text) else SileroText.prepare(text).replace('–', '—')

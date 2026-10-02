@@ -11,6 +11,17 @@ class SileroTextTest {
         assertEquals(2L, ids.first()); assertEquals(1L, ids.last())
         assertTrue(ids.all { it in 0..46 })
     }
+    @Test fun veryLongSentencesStayBounded() {
+        val text=("светл+о ".repeat(400)).trim()
+        val parts=SileroText.bounded(text)
+        assertTrue(parts.size>1)
+        assertTrue(parts.all { it.length<=1000 && !it.endsWith('+') })
+        assertEquals(text,parts.joinToString(" "))
+        assertEquals(2500,SileroText.bounded("а".repeat(2500)).sumOf { it.length })
+        val sentenceParts=com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.split("А. С. Пушкин спросил: ты готов? Да, конечно!",0,420,sentenceOnly=true)
+        assertEquals(2,sentenceParts.size)
+        assertTrue(sentenceParts.first().text.startsWith("А. С. Пушкин"))
+    }
     @Test fun questionsAndExclamations() {
         assertEquals(2L, SileroText.type("ты гот+ов?"))
         assertEquals(1L, SileroText.type("где ты?"))

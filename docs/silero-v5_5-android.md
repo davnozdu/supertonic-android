@@ -68,7 +68,7 @@ without dropping punctuation/characters. Automatic Czech recognition uses script
 and word hints, not a complete language detector; ambiguous Latin defaults to
 English, with a manual Czech override.
 
-## Beta 20: voice packs and offline preparation
+## Beta 21: voice packs and offline preparation
 
 Resources are mirrored in [russian-resources-v1](https://github.com/davnozdu/supertonic-android/releases/tag/russian-resources-v1): original ru (5 voices), CIS Russian (29 voices), offline accentor/homograph model, safe ё SACC dictionary, verified ARM64 runtime, licences and SHA-256 manifest. Downloads validate hashes and extract only known entries with exact byte limits. Existing Tera, ru and CIS files are kept separately. Installed resources need no network and survive app updates.
 
@@ -83,3 +83,5 @@ Android Binder queue observation already exposed early text to LLM. It now also 
 Both Russian engines account for existing trailing silence when adding a minimum sentence pause. Silero uses native per-character durations for comma/colon/dash pauses and keeps full native sentence intonation where supported.
 
 Native Silero duration rate divides durations, so speech-rate values are passed directly. Comma duration overrides are applied by the model after that scaling.
+
+Silero sentence boundaries are planned before lowercasing, preserving initials/abbreviations. Each sentence receives the configured minimum tail pause, even inside a combined reader chunk. Oversize sentences split at word boundaries (1000 prepared characters) with a bounded fallback for long tokens.

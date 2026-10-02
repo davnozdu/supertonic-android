@@ -19,7 +19,7 @@ object TeraPunctuationPauses {
             (token.length == 1 && token[0].isUpperCase() && text[next].isUpperCase())
     }
 
-    fun split(text: String, commaMs: Int = 180, sentenceMs: Int = 420): List<Part> {
+    fun split(text: String, commaMs: Int = 180, sentenceMs: Int = 420, sentenceOnly: Boolean = false): List<Part> {
         val result = mutableListOf<Part>()
         var start = 0
         var i = 0
@@ -27,6 +27,7 @@ object TeraPunctuationPauses {
             val c = text[i]
             val numeric = i > 0 && i + 1 < text.length && text[i - 1].isDigit() && text[i + 1].isDigit()
             val pause = when {
+                sentenceOnly && c !in ".!?…" -> 0
                 numeric -> 0
                 c == ',' -> commaMs
                 c in ";:" -> commaMs + 80

@@ -17,6 +17,18 @@ internal object SileroText {
             .filter { it in symbols && it !in "_~|" }
             .replace(Regex(" +"), " ").trim()
     }
+    fun bounded(prepared: String, limit: Int = 1000): List<String> {
+        require(limit in 32..1200)
+        val result=mutableListOf<String>();var remaining=prepared.trim()
+        while(remaining.length>limit) {
+            var end=remaining.lastIndexOf(' ',limit)
+            if(end<limit/2) end=limit
+            if(end>0 && remaining[end-1]=='+') end--
+            result+=remaining.substring(0,end).trim();remaining=remaining.substring(end).trimStart()
+        }
+        if(remaining.isNotEmpty()) result+=remaining
+        return result
+    }
     fun sequence(prepared: String): LongArray = longArrayOf(2) +
         prepared.map { symbols.indexOf(it).toLong() }.toLongArray() + longArrayOf(1)
     fun typeIds(prepared: String, expressive: Boolean): LongArray {
