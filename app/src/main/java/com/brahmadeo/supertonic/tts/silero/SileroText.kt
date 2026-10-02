@@ -9,7 +9,10 @@ internal object SileroText {
     private val wh = setOf("где", "зачем", "как", "какая", "какие", "какой", "когда", "кто", "кого", "кому", "куда", "откуда", "почему", "сколько", "что", "чего", "чем", "чей")
     private val fillers = setOf("ну", "а", "и", "вот", "так", "скажи", "скажите", "пожалуйста")
     fun prepare(input: String): String {
-        val stress = acute.replace(input.lowercase(Locale.ROOT)) { "+${it.groupValues[1]}" }
+        val manual = acute.replace(input.lowercase(Locale.ROOT)) { "+${it.groupValues[1]}" }
+        val stress = Regex("[а-яё+]+").replace(manual) { word ->
+            if('ё' in word.value && '+' !in word.value) word.value.replace("ё","+ё") else word.value
+        }
         return stress.replace('—', '–').replace('\n', ' ').replace('\t', ' ')
             .filter { it in symbols && it !in "_~|" }
             .replace(Regex(" +"), " ").trim()

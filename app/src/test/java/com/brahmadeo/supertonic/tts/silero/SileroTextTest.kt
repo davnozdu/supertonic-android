@@ -6,7 +6,7 @@ import org.junit.Test
 class SileroTextTest {
     @Test fun explicitStressAndYo() {
         val text = SileroText.prepare("Светло́. Всё — хорошо́!")
-        assertEquals("светл+о. всё – хорош+о!", text)
+        assertEquals("светл+о. вс+ё – хорош+о!", text)
         val ids = SileroText.sequence(text)
         assertEquals(2L, ids.first()); assertEquals(1L, ids.last())
         assertTrue(ids.all { it in 0..46 })

@@ -99,6 +99,8 @@ object LocalRussianStress {
                 val original = m.value
                 if ('+' in original || '\u0301' in original || 'ё' in original || 'Ё' in original) return@replace original
                 val lower = original.lowercase()
+                if(lower=="светло" && text.getOrNull(m.range.last+1)!='-' && text.getOrNull(m.range.last+1)!='–')
+                    return@replace restoreCase(original,"светл+о")
                 // Capitalized personal names remain names, never guessed as a different ё-name.
                 val properNames=mapOf("Лене" to "Л+ене","Дарье" to "Д+арье","Пети" to "П+ети","Алле" to "+Алле","Инге" to "+Инге")
                 properNames[original]?.let { return@replace it }
