@@ -68,7 +68,7 @@ without dropping punctuation/characters. Automatic Czech recognition uses script
 and word hints, not a complete language detector; ambiguous Latin defaults to
 English, with a manual Czech override.
 
-## Beta 19: voice packs and offline preparation
+## Beta 20: voice packs and offline preparation
 
 Resources are mirrored in [russian-resources-v1](https://github.com/davnozdu/supertonic-android/releases/tag/russian-resources-v1): original ru (5 voices), CIS Russian (29 voices), offline accentor/homograph model, safe ё SACC dictionary, verified ARM64 runtime, licences and SHA-256 manifest. Downloads validate hashes and extract only known entries with exact byte limits. Existing Tera, ru and CIS files are kept separately. Installed resources need no network and survive app updates.
 
@@ -81,3 +81,5 @@ Local stress uses existing Android Silero Stress models from ruvoice 0.18.0 and 
 Android Binder queue observation already exposed early text to LLM. It now also submits QUEUE_ADD chunks to a bounded audio-ahead worker. Original Android transactions and playback acknowledgements are unchanged; cancelled/rejected requests are not played. Completed PCM has a shared LRU cache, adjustable 64–1024 MB (default 256 MB), 256 entries, individual PCM maximum 16 MB. Cache keys include model, exact prepared text, voice, speed, synthesis settings and foreign engine. A book cannot be prefetched before its reader has queued the text.
 
 Both Russian engines account for existing trailing silence when adding a minimum sentence pause. Silero uses native per-character durations for comma/colon/dash pauses and keeps full native sentence intonation where supported.
+
+Native Silero duration rate divides durations, so speech-rate values are passed directly. Comma duration overrides are applied by the model after that scaling.

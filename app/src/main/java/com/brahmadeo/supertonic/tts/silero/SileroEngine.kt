@@ -64,7 +64,7 @@ class SileroEngine(context: Context) : AutoCloseable {
                 longArrayOf(symbolIds.getLong(metadata.getString("eos")))
             val n = seq.size.toLong()
             val shape = longArrayOf(1, n)
-            val rates = FloatArray(seq.size) { 1f / speed.coerceIn(.5f, 2.5f) }
+            val rates = FloatArray(seq.size) { speed.coerceIn(.5f, 2.5f) }
             val pitches = FloatArray(seq.size) { 1f }
             val types = SileroText.typeIds(prepared, prefs.getBoolean("silero_intonation", true))
             val t = android.os.SystemClock.elapsedRealtime()
