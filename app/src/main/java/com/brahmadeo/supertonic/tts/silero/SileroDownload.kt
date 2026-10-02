@@ -35,7 +35,7 @@ object SileroDownload {
             sizes(context).all { (name, size) -> File(dir, name).length() == size } &&
             voices(context).all { File(dir, "$it.json").isFile }
     }
-    suspend fun download(context: Context, progress: (String, Float) -> Unit) = withContext(Dispatchers.IO) {
+    suspend fun download(context: Context, progress: (String, Float) -> Unit) = com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) { withContext(Dispatchers.IO) {
         check(supported()) { "Silero v5.5 requires the ARM64 APK and an ARM64 phone" }
         if (ready(context)) { progress("${title(context)} готова", 1f); return@withContext }
         val sizes = sizes(context)
@@ -44,28 +44,11 @@ object SileroDownload {
         val dir = root(context)
         val stage = File(context.filesDir, dir.name + ".part")
         stage.deleteRecursively(); check(stage.mkdirs())
-        val archive = File(stage, "download.zip")
+        val archive = File(context.filesDir, dir.name + ".download.zip")
         try {
-            val connection = URL("$BASE/ruvoice-pack-${if (cis(context)) "cis_ru" else "ru"}.zip").openConnection() as HttpURLConnection
-            connection.connectTimeout = 15000; connection.readTimeout = 30000
-            try {
-                check(connection.responseCode == 200) { "Silero download: HTTP ${connection.responseCode}" }
-                val total = connection.contentLengthLong.takeIf { it > 0 } ?: 86495507L
-                val digest = MessageDigest.getInstance("SHA-256")
-                connection.inputStream.use { input -> archive.outputStream().use { output ->
-                    val buffer = ByteArray(65536); var received = 0L; var last = 0L
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val count = input.read(buffer); if (count < 0) break
-                        output.write(buffer, 0, count); digest.update(buffer, 0, count); received += count
-                        if (received - last >= 262144) {
-                            progress("$title: ${received / 1048576} / ${total / 1048576} МБ", (received.toFloat() / total * .85f).coerceAtMost(.85f))
-                            last = received
-                        }
-                    }
-                } }
-                check(digest.digest().joinToString("") { "%02x".format(it) } == sha(context)) { "Silero checksum mismatch" }
-            } finally { connection.disconnect() }
+            com.brahmadeo.supertonic.tts.utils.ResumableModelFile.fetch("$BASE/ruvoice-pack-${if (cis(context)) "cis_ru" else "ru"}.zip",archive,if (cis(context)) 85285099L else 86495507L,SHA) { received,total ->
+                progress("$title: ${received / 1048576} / ${total / 1048576} МБ",(received.toFloat()/total*.85f).coerceAtMost(.85f))
+            }
             progress("Проверка и распаковка $title", .9f)
             ZipInputStream(archive.inputStream()).use { zip ->
                 val seen = mutableSetOf<String>()
@@ -99,4 +82,4 @@ object SileroDownload {
             progress("${title(context)} готова", 1f)
         } finally { stage.deleteRecursively() }
     }
-}
+} }

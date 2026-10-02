@@ -19,34 +19,17 @@ object LocalRussianAssets {
     fun ready(context: Context): Boolean = root(context).let { dir ->
         File(dir, "verified.sha256").takeIf { it.isFile }?.readText() == SHA && sizes.all { (n,s) -> File(dir,n).length() == s }
     }
-    suspend fun download(context: Context, progress: (String, Float) -> Unit) = withContext(Dispatchers.IO) {
+    suspend fun download(context: Context, progress: (String, Float) -> Unit) = com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) { withContext(Dispatchers.IO) {
         if (ready(context)) { progress("Локальные ударения и ё готовы", 1f); return@withContext }
         val title = "Локальные ударения и ё"
         val dir = root(context)
         val stage = File(context.filesDir, dir.name + ".part")
         stage.deleteRecursively(); check(stage.mkdirs())
-        val archive = File(stage, "download.zip")
+        val archive = File(context.filesDir, dir.name + ".download.zip")
         try {
-            val connection = URL("https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1/russian-local-v1.zip").openConnection() as HttpURLConnection
-            connection.connectTimeout = 15000; connection.readTimeout = 30000
-            try {
-                check(connection.responseCode == 200) { "Загрузка локального акцентора: HTTP ${connection.responseCode}" }
-                val total = connection.contentLengthLong.takeIf { it > 0 } ?: 38577847L
-                val digest = MessageDigest.getInstance("SHA-256")
-                connection.inputStream.use { input -> archive.outputStream().use { output ->
-                    val buffer = ByteArray(65536); var received = 0L; var last = 0L
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val count = input.read(buffer); if (count < 0) break
-                        output.write(buffer, 0, count); digest.update(buffer, 0, count); received += count
-                        if (received - last >= 262144) {
-                            progress("$title: ${received / 1048576} / ${total / 1048576} МБ", (received.toFloat() / total * .85f).coerceAtMost(.85f))
-                            last = received
-                        }
-                    }
-                } }
-                check(digest.digest().joinToString("") { "%02x".format(it) } == SHA) { "Silero checksum mismatch" }
-            } finally { connection.disconnect() }
+            com.brahmadeo.supertonic.tts.utils.ResumableModelFile.fetch("https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1/russian-local-v1.zip",archive,38577847L,SHA) { received,total ->
+                progress("$title: ${received / 1048576} / ${total / 1048576} МБ",(received.toFloat()/total*.85f).coerceAtMost(.85f))
+            }
             progress("Проверка и распаковка $title", .9f)
             ZipInputStream(archive.inputStream()).use { zip ->
                 val seen = mutableSetOf<String>()
@@ -76,4 +59,4 @@ object LocalRussianAssets {
             progress("Локальные ударения и ё готовы", 1f)
         } finally { stage.deleteRecursively() }
     }
-}
+} }

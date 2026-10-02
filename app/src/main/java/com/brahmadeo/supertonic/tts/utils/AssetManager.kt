@@ -163,7 +163,10 @@ object AssetManager {
                 BinaryAccentDictionary.looksLikeSacc(TeraStressDictionary.databaseFile(File(baseDir, "tera"))))
     }
 
-    suspend fun download(context: Context, onProgress: (String, Float) -> Unit) {
+    suspend fun download(context: Context, onProgress: (String, Float) -> Unit) = ModelDownloadForeground.run(context) {
+        downloadInForeground(context,onProgress)
+    }
+    private suspend fun downloadInForeground(context: Context, onProgress: (String, Float) -> Unit) {
         if (isSilero(context)) {
             com.brahmadeo.supertonic.tts.silero.SileroDownload.download(context) { status, value -> onProgress(status, value * .7f) }
             com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(context) { status, value -> onProgress(status, .7f + value * .3f) }

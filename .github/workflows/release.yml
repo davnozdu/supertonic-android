@@ -162,7 +162,8 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
-            ### Beta 21 changes
+            ### Beta 22 changes
+            - Model/voice downloads run in a data-sync foreground service, resume partial files and retry network interruptions with full size/SHA validation.
             - Install the additional Silero CIS pack with 29 Russian voices; all Russian voice packs and offline resources are mirrored in this repository.
             - Offline Russian book normalization works without LLM: numbers with recognized case/gender, dates, time, years, units, currency, fractions, percentages, degrees, Roman numerals, abbreviations, footnotes and line-break hyphenation.
             - Shared local Silero Stress accentor, contextual homograph BERT and prebuilt SACC ё dictionary. Explicit user/LLM stress is preserved; idle unload after two minutes.
