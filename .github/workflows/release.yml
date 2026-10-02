@@ -147,6 +147,9 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2 for Russian and Supertonic 3 for other languages.
 
+            ### Beta 10 changes
+            - Fix a native local-Gemma crash in signed builds: preserve the LiteRT-LM configuration methods called through JNI. A crash previously disconnected Moon+ Reader from the TTS engine.
+
             ### Beta 9 changes
             - Cloud model refresh shows progress/results beside its button and opens the current list. Ollama Cloud's public catalogue loads without an API key; configured private endpoints still use their key.
             - Tested recommendations are highlighted in the dynamically fetched list. Gemini 3.1 Flash Lite and DeepSeek v4.1 Flash are fast choices; Mistral Large 3 is a slower alternative.

@@ -26,6 +26,11 @@
 -dontwarn org.tensorflow.lite.**
 -dontwarn com.google.ai.edge.litert.**
 
+# LiteRT-LM JNI calls Kotlin configuration getters by their original names.
+# This is a separate package from litert: renaming SamplerConfig/ThinkingConfig
+# causes a native JNI abort (mid == null), which also terminates system TTS.
+-keep class com.google.ai.edge.litertlm.** { *; }
+
 # ONNX Runtime Java API wraps native sessions / EPs.
 -keep class ai.onnxruntime.** { *; }
 -dontwarn ai.onnxruntime.**
