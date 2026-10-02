@@ -162,7 +162,7 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
-            ### Beta 16 changes
+            ### Beta 17 changes
             - Optional Silero v5.5 Russian model with five voices, using ready-made Android TorchScript Lite / ExecuTorch files. No model conversion.
             - Shared LLM preparation, stress, ё, numbers, text cache and playback buffer apply to Silero too.
             - Separate question/exclamation intonation switch; idle model unload after two minutes.
