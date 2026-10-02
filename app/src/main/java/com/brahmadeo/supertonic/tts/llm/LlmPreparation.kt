@@ -26,6 +26,7 @@ object LlmPreparation {
     @Volatile private var activeBatch: List<Entry> = emptyList()
     private val cooldown = mutableMapOf<String, Long>() // Only the worker accesses this.
     private val appCaller = Any()
+    private val preparedCache = LlmTextCache<LlmConfig>()
     @Synchronized fun initialize(ctx: Context) {
         if (context != null) return
         context = ctx.applicationContext
@@ -34,6 +35,7 @@ object LlmPreparation {
     fun enabled(ctx: Context) = LlmSettings.enabled(ctx)
     fun settingsChanged() {
         synchronized(lock) { epoch++; entries.values.forEach { it.future.cancel(false) }; entries.clear() }
+        preparedCache.clear()
         LlmProviders.cancelActive()
         executor.execute { cooldown.clear(); LlmProviders.unload() }
     }
@@ -128,6 +130,14 @@ object LlmPreparation {
                         ignoreCooldown: Boolean = false, cancelled: () -> Boolean = { false },
                         onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
         val started = SystemClock.elapsedRealtime()
+        preparedCache.get(c, texts)?.let { cached ->
+            if (expectedEpoch == epoch && !cancelled()) {
+                val results = cached.map { Result(it, "кэш", 0, false) }
+                results.forEachIndexed(onPrepared)
+                Log.i("LlmPreparation", "Cache hit fragments=${texts.size}, chars=${texts.sumOf { it.length }}")
+                return results
+            }
+        }
         var failure: String? = null
         val results = arrayOfNulls<Result>(texts.size)
         val providers = when (c.mode) {
@@ -161,7 +171,12 @@ object LlmPreparation {
                     }
                 }
                 Log.i("LlmPreparation", "Prepared fragments=$accepted/${texts.size}, chars=${texts.sumOf { it.length }}, provider=$provider, ms=$elapsed")
-                if (results.all { it != null }) return results.map { it!! }
+                if (results.all { it != null }) {
+                    val complete = results.map { it!! }
+                    // Cache only validated successes, retaining the whole context.
+                    if (expectedEpoch == epoch) preparedCache.put(c, texts, complete.map { it.text })
+                    return complete
+                }
                 failure = "LLM изменила слова или вернула неправильные ударения в части фрагментов"
                 if (accepted == 0) cooldown[provider] = SystemClock.elapsedRealtime() + 60_000
             } catch (e: Exception) {

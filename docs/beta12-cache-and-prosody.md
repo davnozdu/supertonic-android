@@ -1,0 +1,10 @@
+# Beta 12: bounded preparation, reuse and stress ownership
+
+- App playback queues a moving window of 4,000–48,000 characters (default 16,000), at most 128 fragments. It no longer submits an entire book and evicts its beginning. Android TTS clients can only supply text they have actually queued; no fake completion callbacks are sent to obtain future pages.
+- Requests retain the existing approximately 4,000-character batch limit. A single submitted fragment may be up to 6,000 characters; larger fragments bypass LLM preparation. The pending queue remains capped at 96,000 characters/256 fragments.
+- Exact-context RAM LRU caches only validated successes, including original context and output, capped at 8 million UTF-16 characters and 256 batches. This is at most approximately 16 MB of text plus object overhead. Settings form part of the key and changes clear the cache. Fallbacks are not cached. No book text is logged or written to storage by this cache.
+- Generic accent dictionary now explicitly preserves both U+0301 and legacy `+` stress before Tera's dictionary stage. A regression test uses deliberately wrong dictionary stresses to check precedence across both stages.
+- If stress is requested and an answer adds zero stresses to unstressed multisyllabic Russian words, validation rejects it. This does not prove all stresses are correct; it prevents reporting punctuation-only responses as completed stress preparation. Local Gemma receives a small operation example; real-device validation remains necessary.
+- TeraTTSv2's documented controls and runtime support language tags, stress, voices, duration and diffusion selection. They do not document an emotion-tag syntax or parse emotion commands. No emotion switch or invented markup is supplied. Question/exclamation punctuation remains in the encoder input and explicit terminal pause handling; audible intonation depends on the trained voice.
+
+Primary sources: https://huggingface.co/TeraSpace/TeraTTSv2 and its `teratts.py` runtime.

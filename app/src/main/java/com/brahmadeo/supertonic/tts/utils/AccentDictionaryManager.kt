@@ -172,7 +172,7 @@ object AccentDictionaryManager {
     // Including \p{M} makes the matcher consume the existing diacritic, so
     // its lowercased form misses the (unstressed-key) dictionary and the
     // word is preserved as the user marked it.
-    private val wordPattern: Pattern = Pattern.compile("[\\p{L}\\p{M}]+")
+    private val wordPattern: Pattern = Pattern.compile("[+\\p{L}\\p{M}]+")
     private const val META_PREFS = "AccentDictMeta"
     private const val META_KEY_SOURCE = "source"
     private const val META_KEY_ENTRIES = "entries"
@@ -312,6 +312,10 @@ object AccentDictionaryManager {
         val sb = StringBuffer()
         while (matcher.find()) {
             val original = matcher.group() ?: continue
+            // Both LLM combining accents and legacy '+' user accents win.
+            // Consuming '+' with the entire word also prevents stressing only
+            // a substring of a manually marked word.
+            if ('+' in original || '\u0301' in original) continue
             val lower = original.lowercase()
             // Look up in whichever backend is live. The .sacc reader takes
             // UTF-8 bytes; the JSON HashMap is keyed by the lowercased String.

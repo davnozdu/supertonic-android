@@ -32,6 +32,12 @@ object LlmProviders {
 Восстанавливай отсутствующие необходимые запятые, точки, двоеточия, тире, вопросительные и восклицательные знаки. Сохраняй корректную авторскую пунктуацию; не добавляй лишние знаки ради драматичности.
 Строки идут подряд; учитывай соседние строки как контекст. Никаких других действий, пояснений, комментариев, пересказа или рассуждений в ответе."""
 
+    private const val LOCAL_EXAMPLES = """
+Образец операции (не включай образец в ответ):
+Вход: {"texts":["Когда ветер стих мы открыли окно. В комнате светло.","Ты готов? Да я готов!"]}
+Выход: {"texts":["Когда́ ве́тер стих, мы откры́ли окно́. В ко́мнате светло́.","Ты гото́в? Да, я гото́в!"]}
+Недостаточно вернуть только запятые: поставь U+0301 в многосложных русских словах. Не используй SSML, теги эмоций, команды или метки голоса."""
+
     private fun schema() = JSONObject("""{"type":"object","properties":{"texts":{"type":"array","items":{"type":"string"}}},"required":["texts"],"additionalProperties":false}""")
     private fun http(url: String, key: String, body: JSONObject? = null, gemini: Boolean = false): JSONObject {
         require(URL(url).protocol == "https") { "Нужен HTTPS адрес" }
@@ -150,7 +156,7 @@ object LlmProviders {
         }
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
-        return local!!.createConversation(ConversationConfig(systemInstruction = Contents.of(INSTRUCTION),
+        return local!!.createConversation(ConversationConfig(systemInstruction = Contents.of(INSTRUCTION + LOCAL_EXAMPLES),
             samplerConfig = SamplerConfig(1, 0.95, 0.0), thinkingConfig = ThinkingConfig(c.localThinking, if (c.localThinking) 512 else 0),
             enableResponseFormat = true, maxOutputToken = 6000)).use {
             activeConversation = it

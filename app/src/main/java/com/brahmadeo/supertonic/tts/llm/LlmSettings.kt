@@ -29,7 +29,8 @@ data class LlmConfig(
     val gpu: Boolean = true,
     val idleSeconds: Int = 120,
     val punctuation: Boolean = true,
-    val stress: Boolean = true
+    val stress: Boolean = true,
+    val aheadChars: Int = 16000
 )
 
 object LlmSettings {
@@ -43,6 +44,8 @@ object LlmSettings {
     }
     fun idleSeconds(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         .getInt("idle_seconds", 120).coerceIn(30, 600)
+    fun aheadChars(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getInt("ahead_chars", 16000).coerceIn(4000, 48000)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(SECRET, null) as? SecretKey)?.let { return it }
@@ -79,7 +82,8 @@ object LlmSettings {
             geminiThinking = p.getBoolean("gemini_thinking", false),
             localThinking = p.getBoolean("local_thinking", false),
             idleSeconds = p.getInt("idle_seconds", 120).coerceIn(30, 600),
-            punctuation = p.getBoolean("punctuation", true), stress = p.getBoolean("stress", true)
+            punctuation = p.getBoolean("punctuation", true), stress = p.getBoolean("stress", true),
+            aheadChars = aheadChars(context)
         )
     }
     fun save(context: Context, c: LlmConfig) {
@@ -94,7 +98,8 @@ object LlmSettings {
             .putBoolean("gemini_thinking", c.geminiThinking)
             .putBoolean("local_thinking", c.localThinking)
             .putInt("idle_seconds", c.idleSeconds.coerceIn(30, 600))
-            .putBoolean("punctuation", c.punctuation).putBoolean("stress", c.stress).apply()
+            .putBoolean("punctuation", c.punctuation).putBoolean("stress", c.stress)
+            .putInt("ahead_chars", c.aheadChars.coerceIn(4000, 48000)).apply()
         LlmPreparation.settingsChanged()
     }
     fun previousMode(context: Context) = runCatching {

@@ -41,12 +41,18 @@ object PreparedTextValidator {
         if (anchors(original.substring(0, a.first().range.first)) != anchors(proposed.substring(0, b.first().range.first))) return null
         if (anchors(original.substring(a.last().range.last + 1)) != anchors(proposed.substring(b.last().range.last + 1))) return null
         val replacements = mutableListOf<Pair<IntRange, String>>()
+        var needsStress = false
+        var suppliedStress = false
         for (i in a.indices) {
             val source = a[i].value
             val target = b[i].value.replace("+", "") // '+' is reserved for explicit input; LLM must return acute marks.
             if (plain(source).lowercase() != plain(target).lowercase()) return null
             if (b[i].value.contains('+') && !source.contains('+')) return null
             val explicit = source.contains('+') || source.contains('\u0301')
+            if (!explicit && source.count { it in vowels } > 1) {
+                needsStress = true
+                if (target.contains('\u0301')) suppliedStress = true
+            }
             if (!explicit && target.count { it == '\u0301' } > 1) return null
             val mark = target.indexOf('\u0301')
             if (!explicit && mark >= 0 && (mark == 0 || target[mark - 1] !in vowels)) return null
@@ -56,6 +62,9 @@ object PreparedTextValidator {
             }
             replacements += b[i].range to replacement
         }
+        // A punctuation-only answer is not successful stress preparation.
+        // Already marked text and single-syllable words need no new marks.
+        if (allowStress && needsStress && !suppliedStress) return null
         if (!allowPunctuation) {
             val out = StringBuilder(original)
             for (i in a.indices.reversed()) out.replace(a[i].range.first, a[i].range.last + 1, replacements[i].second)

@@ -89,6 +89,12 @@ class LlmSettingsActivity : ComponentActivity() {
                         Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it); save() }
                         Text("Текст, уже отправленный читалкой, подготавливается в фоне с контекстом до 4000 символов. Если читалка отправляет по одному фрагменту, первая подготовка каждого нового фрагмента может занять время.", style = MaterialTheme.typography.bodySmall)
                         Text("Чтение ждёт подготовку не более 1,5 секунды. Если результат ещё не готов, используется словарь, а очередь подготавливается дальше в фоне.", style = MaterialTheme.typography.bodySmall)
+                        Choice("Подготовка текста вперёд в приложении", "${config.aheadChars} символов",
+                            listOf("4000 символов", "8000 символов", "16000 символов", "32000 символов", "48000 символов")) {
+                            config = config.copy(aheadChars = it.substringBefore(' ').toInt()); save()
+                        }
+                        Text("Подготовленный текст хранится в кэше RAM: до 8 млн символов вместе с исходным контекстом (около 16 МБ текста). Повторное чтение того же блока не требует LLM. Кэш очищается при изменении настроек и закрытии процесса.")
+                        Text("Движущийся буфер заранее обрабатывает следующие части загруженного текста и пополняется во время чтения. Для сторонней читалки доступны только уже переданные ею фрагменты.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Паузы Tera при чтении", style = MaterialTheme.typography.titleLarge)
                         Toggle("Слышимые паузы по пунктуации", punctuationPauses) {

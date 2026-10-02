@@ -43,4 +43,10 @@ class PreparedTextValidatorTest {
         assertEquals("светло́ ты гото́в", PreparedTextValidator.validate("светло ты готов", "светло́, ты гото́в?", allowPunctuation = false))
         assertEquals("светло, ты готов?", PreparedTextValidator.validate("светло ты готов", "светло́, ты гото́в?", allowStress = false))
     }
+    @Test fun rejectsMissingStressWithoutBreakingPunctuationOnlyMode() {
+        assertNull(PreparedTextValidator.validate("В комнате светло", "В комнате светло."))
+        assertEquals("В комнате светло.", PreparedTextValidator.validate("В комнате светло", "В комнате светло.", allowStress = false))
+        assertEquals("Ты тут?", PreparedTextValidator.validate("Ты тут", "Ты тут?"))
+        assertEquals("Светло́!", PreparedTextValidator.validate("Светло́", "Светло́!"))
+    }
 }

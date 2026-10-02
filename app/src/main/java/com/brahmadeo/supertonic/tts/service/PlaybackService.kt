@@ -406,9 +406,10 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             curText, curLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@PlaybackService)
                         )
                         val totalSentences = sentences.size
-                        val llmIds = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prefetch(this@PlaybackService, sentences)
                         lastTotal = totalSentences
                         val validStartIndex = if (curStart in 0 until totalSentences) curStart else 0
+                        val llmIds = mutableMapOf<Int, Long?>()
+                        var prefetchedUntil = validStartIndex
 
                         // Re-arm the wakelock per item: it's acquired with a
                         // 10-minute timeout, which a long queue can outlive.
@@ -416,6 +417,15 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
                         for (index in validStartIndex until totalSentences) {
                             if (SupertonicTTS.isCancelled() || !isActive) break@itemLoop
+
+                            val end = com.brahmadeo.supertonic.tts.llm.LlmLookahead.end(sentences, index,
+                                com.brahmadeo.supertonic.tts.llm.LlmSettings.aheadChars(this@PlaybackService))
+                            if (end > prefetchedUntil) {
+                                val ids = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prefetch(this@PlaybackService,
+                                    sentences.subList(prefetchedUntil, end))
+                                ids.forEachIndexed { offset, id -> llmIds[prefetchedUntil + offset] = id }
+                                prefetchedUntil = end
+                            }
 
                             // Honour pause without consuming CPU. Producer can pause
                             // even though consumer is still draining the buffer —
@@ -430,7 +440,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                                 notifyListenerProgress(index, totalSentences)
                             }
 
-                            val preparedSentence = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this@PlaybackService, sentences[index], llmIds[index])
+                            val preparedSentence = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this@PlaybackService, sentences[index], llmIds.remove(index))
                             if (SupertonicTTS.isCancelled() || !isActive) break@itemLoop
                             val normalizedText = textNormalizer.normalize(preparedSentence, curLang, isAdvancedEnabled)
 
