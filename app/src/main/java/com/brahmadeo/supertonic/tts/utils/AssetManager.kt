@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.brahmadeo.supertonic.tts.R
 import com.brahmadeo.supertonic.tts.tera.TeraStressDictionary
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
+import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -155,7 +158,7 @@ object AssetManager {
         val lastModelType = prefs.getString("last_downloaded_model", null)
         val currentModelType = getModelType(context)
         
-        if (lastModelType != currentModelType) return false
+        if (currentModelType != TERA_MODEL && prefs.getString("last_downloaded_native_model", lastModelType) != currentModelType) return false
         
         val files = getFilesForModel(currentModelType)
         return files.all { File(baseDir, it.localPath).exists() } &&
@@ -182,9 +185,16 @@ object AssetManager {
             // If we are changing models, clear the directory first to avoid mixing
             val prefs = context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
             val lastModelType = prefs.getString("last_downloaded_model", null)
-            if (lastModelType != null && lastModelType != modelType) {
-                baseDir.deleteRecursively()
-                baseDir.mkdirs()
+            val nativeModel = prefs.getString("last_downloaded_native_model", lastModelType)
+            if (modelType != TERA_MODEL && nativeModel != modelType) {
+                // Native presets share filenames; Tera owns a separate directory.
+                File(baseDir, "onnx").deleteRecursively()
+                File(baseDir, "voice_styles").deleteRecursively()
+            }
+            val catalog = JSONArray(context.assets.open("model-downloads.json").bufferedReader().use { it.readText() })
+            val checksums = (0 until catalog.length()).associate { index ->
+                val entry = catalog.getJSONObject(index)
+                entry.getString("name") to (entry.getLong("size") to entry.getString("digest").removePrefix("sha256:"))
             }
 
             // Up to 4 files in flight simultaneously — big files like
@@ -205,18 +215,36 @@ object AssetManager {
                                 val partFile = File(targetFile.absolutePath + ".part")
                                 try {
                                     Log.d(TAG, "Downloading $url -> ${targetFile.absolutePath}")
-                                    partFile.delete()
-                                    URL(url).openStream().use { input ->
-                                        FileOutputStream(partFile).use { output ->
-                                            input.copyTo(output)
+                                    val verified = if(asset.baseUrl == ASSETS_BASE_URL) checksums[asset.remoteName] else null
+                                    if(verified != null) {
+                                        ResumableModelFile.fetch(url,partFile,verified.first,verified.second) { _,_ -> }
+                                    } else {
+                                        partFile.delete()
+                                        val connection = URL(url).openConnection().apply {
+                                            connectTimeout = 15000
+                                            readTimeout = 30000
                                         }
+                                        try {
+                                            connection.getInputStream().use { input -> FileOutputStream(partFile).use { output ->
+                                                val buffer=ByteArray(65536)
+                                                while(true) {
+                                                    coroutineContext.ensureActive()
+                                                    val count=input.read(buffer); if(count<0) break
+                                                    output.write(buffer,0,count)
+                                                }
+                                            } }
+                                            val size=connection.contentLengthLong
+                                            check(size < 0 || partFile.length() == size) { "Неполная загрузка ${asset.remoteName}" }
+                                        } finally { (connection as? java.net.HttpURLConnection)?.disconnect() }
                                     }
+                                    coroutineContext.ensureActive()
                                     check(partFile.length() > 0 && partFile.renameTo(targetFile)) {
                                         "Could not finish download of ${asset.remoteName}"
                                     }
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Failed to download ${asset.remoteName}", e)
-                                    partFile.delete()
+                                    // Keep verified partial transfers for the next resumable attempt.
+                                    if(asset.baseUrl != ASSETS_BASE_URL) partFile.delete()
                                     throw e
                                 }
                             }
@@ -238,7 +266,9 @@ object AssetManager {
             }
             
             if (modelType == TERA_MODEL) com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(context, onProgress)
-            prefs.edit().putString("last_downloaded_model", modelType).apply()
+            prefs.edit().putString("last_downloaded_model", modelType).apply {
+                if(modelType != TERA_MODEL) putString("last_downloaded_native_model",modelType)
+            }.apply()
             onProgress(context.getString(R.string.download_ready_status), 1.0f)
         }
     }
@@ -253,7 +283,7 @@ object AssetManager {
             baseDir.deleteRecursively()
         }
         context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
-            .edit().remove("last_downloaded_model").apply()
+            .edit().remove("last_downloaded_model").remove("last_downloaded_native_model").apply()
     }
 
     fun cleanupOldVersions(context: Context) {

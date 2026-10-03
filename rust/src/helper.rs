@@ -874,10 +874,10 @@ pub fn load_and_mix_voice_styles(path1: &str, path2: &str, alpha: f32) -> Result
 }
 
 /// Build a session, optionally registering the XNNPACK EP.
-fn build_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_threads: usize) -> Result<Session> {
+fn build_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_threads: usize, optimization: GraphOptimizationLevel) -> Result<Session> {
     #[allow(unused_mut)]
     let mut builder = Session::builder()?
-        .with_optimization_level(GraphOptimizationLevel::Level3)?
+        .with_optimization_level(optimization)?
         // OPTIMIZATION: Disable spinning to save battery and reduce heat on Android.
         // This ensures that when one thread pool is idle (e.g., ORT pool while XNNPACK is working),
         // it doesn't consume any CPU cycles.
@@ -911,7 +911,7 @@ fn build_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_t
 /// anyway. This also future-proofs any model XNNPACK can't handle.
 fn create_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_threads: usize) -> Result<Session> {
     if use_xnnpack {
-        match build_session(model_path, true, ort_threads, _xnn_threads) {
+        match build_session(model_path, true, ort_threads, _xnn_threads, GraphOptimizationLevel::Level3) {
             Ok(s) => return Ok(s),
             Err(e) => {
                 log::warn!(
@@ -921,7 +921,15 @@ fn create_session(model_path: &str, use_xnnpack: bool, ort_threads: usize, _xnn_
             }
         }
     }
-    build_session(model_path, false, ort_threads, _xnn_threads)
+    match build_session(model_path, false, ort_threads, _xnn_threads, GraphOptimizationLevel::Level3) {
+        Ok(session) => Ok(session),
+        Err(error) => {
+            // Extended fusion can produce fp16 Gelu kernels absent from mobile ORT.
+            // Basic optimization retains the original graph and CPU cast fallbacks.
+            log::warn!("CPU optimized session failed ({:?}); retrying with basic graph optimization", error);
+            build_session(model_path, false, ort_threads, _xnn_threads, GraphOptimizationLevel::Level1)
+        }
+    }
 }
 
 /// Load TTS components
