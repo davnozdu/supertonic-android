@@ -20,8 +20,14 @@ import java.util.concurrent.TimeUnit
 
 /** Non-exported, root/ADB-only integration check. Synthetic text, no playback. */
 class SpeechDiagnosticsActivity : ComponentActivity() {
+    companion object { private val running = java.util.concurrent.atomic.AtomicBoolean() }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        if (!running.compareAndSet(false,true)) {
+            Log.w("SpeechCheck","Diagnostic already running; duplicate ignored")
+            finish()
+            return
+        }
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
@@ -108,13 +114,22 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             .copy(mode=com.brahmadeo.supertonic.tts.llm.LlmMode.LOCAL,gpu=backend=="gpu",localThinking=false)
                         val samples=listOf("По-прежнему светло. Она страдала. Ты готов? Это не раз было.",
                             "Когда ветер стих мы открыли окно. Всё хорошо!",
-                            "В списке 1001 имя и 1101 запись.")
+                            "В списке 1001 имя и 1101 запись.",
+                            "Зеленый ребенок сидит под елкой. Все ученики пришли, и теперь все готово.")
+                        var passed=true
                         for((index,sample) in samples.withIndex()) {
                             val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,config,sample,traceSynthetic=true)
                             Log.i("SpeechCheck","GEMMA PROBE backend=$backend case=$index provider=${result.provider} fallback=${result.fallback} ms=${result.elapsedMs} reason=${result.reason}; result=${result.text}")
-                            check(!result.fallback) { "Gemma did not supply a validated result" }
-                            if(index==0) check(listOf("светло́","страда́ла","гото́в").all { it in result.text }) { "Gemma control stress is incorrect" }
+                            val plain=result.text.replace("\u0301", "")
+                            val correct=!result.fallback && when(index) {
+                                0 -> listOf("светло́","страда́ла","гото́в").all { it in result.text }
+                                3 -> listOf("Зелёный","ребёнок","ёлкой","Все ученики","всё готово").all { it in plain }
+                                else -> true
+                            }
+                            passed=passed && correct
+                            Log.i("SpeechCheck","GEMMA QUALITY case=$index correct=$correct")
                         }
+                        check(passed) { "Gemma did not pass all text/stress/yo checks" }
                         Log.i("SpeechCheck","GEMMA PROBE PASSED backend=$backend")
                         return@withContext
                     }
@@ -216,6 +231,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     prefs.edit().putString("selected_voice", oldVoice).putString("selected_lang", oldLang).apply()
                     SupertonicTTS.release()
                     Log.i("SpeechCheck", "Original model and voice restored")
+                    running.set(false)
                 }
             }
             finish()

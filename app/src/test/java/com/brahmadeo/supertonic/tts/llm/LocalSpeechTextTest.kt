@@ -29,6 +29,14 @@ class LocalSpeechTextTest {
         assertEquals(376,LocalSpeechText.outputTokens(60))
         assertEquals(2048,LocalSpeechText.outputTokens(Int.MAX_VALUE))
     }
+    @Test fun acuteOutputNeedsNoNativeMarkerAdaptation() {
+        val original="Зеленый ребенок стоит под елкой. Все ученики пришли."
+        val answer="Зелёный ребёнок стои́т под ёлкой. Все ученики́ пришли́."
+        assertEquals(answer,LocalSpeechText.response(answer))
+        assertEquals(answer,PreparedTextValidator.validate(original,answer))
+        assertTrue(LocalSpeechText.prompt(original,"Слева.","Справа.").endsWith("ТЕКСТ:\n$original"))
+        assertTrue("Не используй +" in LocalSpeechText.instruction(true,true,true))
+    }
     @Test fun disabledOperationsAreExplicit() {
         val instruction=LocalSpeechText.instruction(false,false,false)
         assertTrue("Не добавляй ударений" in instruction)

@@ -172,9 +172,9 @@ object LlmProviders {
         fun generate(engine: Engine, index: Int): String {
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             val text=texts[index]
-            val prompt=JSONObject().put("text",text)
-                .put("left_context",texts.getOrNull(index-1)?.takeLast(256).orEmpty())
-                .put("right_context",texts.getOrNull(index+1)?.take(256).orEmpty()).toString()
+            val prompt=LocalSpeechText.prompt(text,
+                texts.getOrNull(index-1)?.takeLast(256).orEmpty(),
+                texts.getOrNull(index+1)?.take(256).orEmpty())
             val timedOut=java.util.concurrent.atomic.AtomicBoolean()
             return engine.createConversation(ConversationConfig(systemInstruction=Contents.of(system),
                 samplerConfig=SamplerConfig(1,0.95,0.0),

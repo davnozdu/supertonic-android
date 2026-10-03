@@ -162,6 +162,15 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 33 changes
+            - Use ordinary acute stress marks and plain text input for local Gemma; retain strict validation of words, numbers and stress positions.
+            - Extend device checks to contextual е/ё and prevent overlapping diagnostics from interrupting synthesis.
+            - Local model quality is being verified on a real phone; rejected or late answers safely use autonomous processing.
+
+            ### Beta 32 changes
+            - Replace constrained local decoding with short text conversations, bounded output and adjacent context.
+            - Deliver validated fragments as soon as they are ready; retry GPU inference errors on CPU and keep idle unloading.
+
             ### Beta 29 changes
             - Deliver cached PCM without acquiring the model inference monitor; background synthesis no longer blocks already prepared audio.
             - Keep PCM memory accounting under a separate short lock, allocate independent delivery session IDs and log actual cache occupancy.
