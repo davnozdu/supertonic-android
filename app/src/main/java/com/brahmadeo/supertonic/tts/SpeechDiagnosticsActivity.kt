@@ -125,6 +125,37 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             Log.i("SpeechCheck", "PASS model=$model case=$index rate=$rate channels=$channels bytes=${output.length()} ms=${android.os.SystemClock.elapsedRealtime()-started}")
                         } finally { output.delete() }
                     }
+                    if(intent.getBooleanExtra("contention",false)) {
+                        val probe=com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize("Проверка выдачи готового аудио во время фонового синтеза.","ru")
+                        val style=AssetManager.voiceFile(this@SpeechDiagnosticsActivity,prefs.getString("selected_voice","ru_f1.json")!!).path
+                        val steps=prefs.getInt("diffusion_steps",5)
+                        SupertonicTTS.setCancelled(false)
+                        val expected=SupertonicTTS.generateAudio(probe,"ru",style,1.1f,0f,steps,2.5f)
+                        check(expected!=null && expected.isNotEmpty())
+                        val locked=java.util.concurrent.CountDownLatch(1)
+                        val release=java.util.concurrent.CountDownLatch(1)
+                        val holder=Thread {
+                            synchronized(SupertonicTTS) {
+                                locked.countDown()
+                                release.await(3,TimeUnit.SECONDS)
+                            }
+                        }
+                        holder.start()
+                        try {
+                            check(locked.await(3,TimeUnit.SECONDS))
+                            var delivered=0
+                            val listener=object : SupertonicTTS.ProgressListener {
+                                override fun onProgress(sessionId: Long,current: Int,total: Int) {}
+                                override fun onAudioChunk(sessionId: Long,data: ByteArray) { delivered+=data.size }
+                            }
+                            val started=android.os.SystemClock.elapsedRealtime()
+                            val cached=SupertonicTTS.generateAudio(probe,"ru",style,1.1f,0f,steps,2.5f,listener)
+                            val elapsed=android.os.SystemClock.elapsedRealtime()-started
+                            check(cached===expected && delivered==expected.size)
+                            check(elapsed<500 && holder.isAlive) { "Cached audio waited for model lock: ${elapsed}ms" }
+                            Log.i("SpeechCheck","CACHE WHILE MODEL BUSY PASSED model=$model ms=$elapsed bytes=$delivered")
+                        } finally { release.countDown(); holder.join(3000) }
+                    }
                     if(intent.getBooleanExtra("queue",false)) {
                         val queued=listOf("Первая контрольная фраза для проверки непрерывного чтения.","Вторая контрольная фраза должна быть заранее подготовлена.","Третья контрольная фраза завершает проверку очереди.")
                         val finished=java.util.concurrent.CountDownLatch(queued.size)

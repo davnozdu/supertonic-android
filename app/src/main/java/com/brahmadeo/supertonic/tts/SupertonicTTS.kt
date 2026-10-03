@@ -19,22 +19,17 @@ object SupertonicTTS {
     private var hybridEngine: HybridEngine? = null
     @Volatile private var teraEngine: TeraEngine? = null
     private var sileroEngine: com.brahmadeo.supertonic.tts.silero.SileroEngine? = null
-    private val audioCache = LinkedHashMap<String,ByteArray>(32,.75f,true)
-    private var audioCacheBytes=0L
+    private val audioCache = com.brahmadeo.supertonic.tts.utils.SpeechAudioCache()
     private fun audioKey(context: Context, text: String, lang: String, style: String, speed: Float, steps: Int, gain: Float): String {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         val settings=listOf("tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
         return listOf(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),text,lang,style,speed,steps,gain,settings).joinToString("\u0000")
     }
-    @Synchronized fun clearAudioCache() { audioCache.clear(); audioCacheBytes=0L }
+    fun clearAudioCache() { audioCache.clear() }
     private fun cacheAudio(key: String, bytes: ByteArray?) {
-        if(bytes==null || bytes.isEmpty() || bytes.size>16*1024*1024 || isCancelled()) return
-        audioCache.remove(key)?.let { audioCacheBytes-=it.size }
-        audioCache[key]=bytes;audioCacheBytes+=bytes.size
+        if(bytes==null || isCancelled()) return
         val limit = (appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt("reader_pcm_cache_mb",256) ?: 256).coerceIn(64,1024)*1024L*1024L
-        while(audioCacheBytes>limit || audioCache.size>256) {
-            val first=audioCache.entries.first();audioCacheBytes-=first.value.size;audioCache.remove(first.key)
-        }
+        audioCache.put(key,bytes,limit)
     }
     private val foreignFallbackNormalizer by lazy { com.brahmadeo.supertonic.tts.utils.TextNormalizer() }
 
@@ -220,23 +215,39 @@ object SupertonicTTS {
         return isCancelled
     }
 
-    @Volatile
-    private var sessionIdCounter: Long = 0
+    private val sessionIdCounter = java.util.concurrent.atomic.AtomicLong()
 
-    @Synchronized
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
-        val sid = ++sessionIdCounter
-        currentSession.set(SessionContext(sid, listener))
-        val cacheKey = appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain) }
-        if(cacheKey != null) audioCache[cacheKey]?.let { cached ->
-            android.util.Log.i("ReaderAhead","PCM cache hit chars=${text.length} bytes=${cached.size}")
-            var offset=0
-            while(offset<cached.size && !isCancelled()) {
-                val end=minOf(offset+48000,cached.size);listener?.onAudioChunk(sid,cached.copyOfRange(offset,end));offset=end
-            }
-            return if(isCancelled()) null else cached
+        val cacheKey=appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain) }
+        if(cacheKey!=null) audioCache.get(cacheKey)?.let { return deliverCached(text,it,listener) }
+        val waiting=android.os.SystemClock.elapsedRealtime()
+        return synchronized(this) {
+            val elapsed=android.os.SystemClock.elapsedRealtime()-waiting
+            if(elapsed>100) Log.i("ReaderAhead","Uncached model lock wait=${elapsed}ms chars=${text.length}")
+            generateAudioLocked(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration)
         }
+    }
+
+    private fun deliverCached(text: String, hit: com.brahmadeo.supertonic.tts.utils.SpeechAudioCache.Hit, listener: ProgressListener?): ByteArray? {
+        val cached=hit.pcm
+        val sid=sessionIdCounter.incrementAndGet()
+        Log.i("ReaderAhead","PCM cache hit chars=${text.length} bytes=${cached.size} entries=${hit.entries} retainedBytes=${hit.retainedBytes}")
+        var offset=0
+        while(offset<cached.size && !isCancelled()) {
+            val end=minOf(offset+48000,cached.size)
+            listener?.onAudioChunk(sid,cached.copyOfRange(offset,end)); offset=end
+        }
+        return if(isCancelled()) null else cached
+    }
+
+    /** Called only under the model monitor; cached delivery never enters it. */
+    private fun generateAudioLocked(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?): ByteArray? {
+        if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
+        val cacheKey = appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain) }
+        if(cacheKey!=null) audioCache.get(cacheKey)?.let { return deliverCached(text,it,listener) }
+        val sid = sessionIdCounter.incrementAndGet()
+        currentSession.set(SessionContext(sid, listener))
 
         try {
             val context = appContext

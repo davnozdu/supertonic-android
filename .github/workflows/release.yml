@@ -162,6 +162,11 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 29 changes
+            - Deliver cached PCM without acquiring the model inference monitor; background synthesis no longer blocks already prepared audio.
+            - Keep PCM memory accounting under a separate short lock, allocate independent delivery session IDs and log actual cache occupancy.
+            - Add device regression checks that stream cached audio while the model monitor is occupied; preserve Tera and Silero prosody settings.
+
             ### Beta 28 changes
             - Restore natural Silero pauses and continuous sentence prosody by default; fixed punctuation pauses are an independent opt-in setting.
             - Preserve word boundaries and expression controls; invalidate cached audio when the Silero pause setting changes.
