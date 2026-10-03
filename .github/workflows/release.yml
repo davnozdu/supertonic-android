@@ -162,6 +162,12 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 25 changes
+            - Preserve nonbreaking/thin book spaces and word boundaries before all synthesis engines; fix short sentences written without spaces after punctuation.
+            - Correct Silero punctuation pause durations using the natural ten-frame prefix in both model packs; zero leaves model pauses intact.
+            - Keep decimals, dates, links, initials and paragraph boundaries; preserve typographic hyphens and separators.
+            - LLM instructions preserve short phrases and avoid inserting artificial punctuation between grammatical words.
+
             ### Beta 24 changes
             - Clear text/audio caches manually from text preparation settings; automatically invalidate them when settings change without stopping playback.
             - The ё switch applies to local dictionaries and Tera too. Preserve written ё, prevent false ё in wall declensions, and use dictionary ё rather than speculative word-model predictions.

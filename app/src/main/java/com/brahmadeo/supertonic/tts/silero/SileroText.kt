@@ -9,12 +9,16 @@ internal object SileroText {
     private val wh = setOf("где", "зачем", "как", "какая", "какие", "какой", "когда", "кто", "кого", "кому", "куда", "откуда", "почему", "сколько", "что", "чего", "чем", "чей")
     private val fillers = setOf("ну", "а", "и", "вот", "так", "скажи", "скажите", "пожалуйста")
     fun prepare(input: String): String {
-        val manual = acute.replace(input.lowercase(Locale.ROOT)) { "+${it.groupValues[1]}" }
+        val manual = acute.replace(com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(input).lowercase(Locale.ROOT)) { "+${it.groupValues[1]}" }
         val stress = Regex("[а-яё+]+").replace(manual) { word ->
             if('ё' in word.value && '+' !in word.value) word.value.replace("ё","+ё") else word.value
         }
         return stress.replace('—', '–').replace('\n', ' ').replace('\t', ' ')
-            .filter { it in symbols && it !in "_~|" }
+            .map { c -> when {
+                c in symbols && c !in "_~|" -> c
+                c.isLetter() || Character.getType(c)==Character.NON_SPACING_MARK.toInt() -> null
+                else -> ' '
+            } }.filterNotNull().joinToString("")
             .replace(Regex(" +"), " ").trim()
     }
     fun bounded(prepared: String, limit: Int = 1000): List<String> {

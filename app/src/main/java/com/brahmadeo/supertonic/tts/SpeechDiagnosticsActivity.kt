@@ -39,10 +39,10 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         llmPrefs.edit().putString("mode","OFF").commit()
                         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
                     }
-                    require(model in setOf(AssetManager.SILERO_MODEL, AssetManager.SILERO_CIS_MODEL, AssetManager.TERA_MODEL))
+                    require(model in setOf(AssetManager.SILERO_MODEL, AssetManager.SILERO_CIS_MODEL, AssetManager.TERA_MODEL,"standard","android_optimized_int8","android_optimized_fp16","android_optimized_fp32"))
                     AssetManager.setModelType(this@SpeechDiagnosticsActivity, model)
                     prefs.edit().putString("selected_lang", "ru")
-                        .putString("selected_voice", if (model == AssetManager.SILERO_CIS_MODEL) "ru_alexandr.json" else if (model == AssetManager.SILERO_MODEL) "kseniya.json" else "ru_f1.json").apply()
+                        .putString("selected_voice", when(model) { AssetManager.SILERO_CIS_MODEL -> "ru_alexandr.json"; AssetManager.SILERO_MODEL -> "kseniya.json"; AssetManager.TERA_MODEL -> "ru_f1.json"; else -> "F3.json" }).apply()
                     SupertonicTTS.release()
                     if (!AssetManager.isReady(this@SpeechDiagnosticsActivity)) {
                         AssetManager.download(this@SpeechDiagnosticsActivity) { _, progress ->
@@ -79,12 +79,17 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     check(tts!!.setLanguage(Locale("ru")) >= TextToSpeech.LANG_AVAILABLE)
                     tts!!.setSpeechRate(1.1f)
                     val cases = listOf(
-                        "По-прежнему светло. Когда ветер стих мы открыли окно. В списке 1001 имя и 1101 запись. Ты готов? Да я готов!",
-                        "По-прежнему светло. Когда ветер стих мы открыли окно. В списке 1001 имя и 1101 запись. Ты готов? Да я готов!",
+                        "Это не\u00a0раз\u202fбыло. Да.Нет!Как? По-прежнему светло. В списке 1001 имя и 1101 запись. Да, я готов!",
+                        "Это не\u00a0раз\u202fбыло. Да.Нет!Как? По-прежнему светло. В списке 1001 имя и 1101 запись. Да, я готов!",
                         "Он сказал: Hello world! Потом добавил: Dobrý den, jak se máte? Всё хорошо.",
                         "Hello world! There are 1001 names.",
                         "Dobrý den, jak se máte? Máme 1101 záznamů."
                     )
+                    SupertonicTTS.setApplicationContext(this@SpeechDiagnosticsActivity)
+                    val words=com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize("Не\u00a0раз\u202fбыло.","ru")
+                        .replace("+","").replace("\u0301","")
+                    check(words=="Не раз было.")
+                    Log.i("SpeechCheck","WORD BOUNDARIES PASSED model=$model: $words")
                     for ((index, text) in cases.withIndex()) {
                         if (index == 1) {
                             delay(6000)
@@ -115,7 +120,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             check(String(header, 0, 4, Charsets.US_ASCII) == "RIFF")
                             val wave = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
                             val rate = wave.getInt(24); val channels = wave.getShort(22).toInt()
-                            check(rate == if (model != AssetManager.TERA_MODEL) 48000 else 44100)
+                            check(rate == if (model in setOf(AssetManager.SILERO_MODEL,AssetManager.SILERO_CIS_MODEL)) 48000 else 44100)
                             check(channels == 1 && output.length() > 44)
                             Log.i("SpeechCheck", "PASS model=$model case=$index rate=$rate channels=$channels bytes=${output.length()} ms=${android.os.SystemClock.elapsedRealtime()-started}")
                         } finally { output.delete() }

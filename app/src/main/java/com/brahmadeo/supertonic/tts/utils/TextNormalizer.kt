@@ -325,7 +325,7 @@ class TextNormalizer {
         // so any rules the user writes still match against the original text,
         // and *before* number/accent passes so stressed Russian numbers don't
         // get double-`?` artefacts on the second cycle.
-        var inputText = applyPunctuationTweaks(text)
+        var inputText = applyPunctuationTweaks(BookTextSpacing.normalize(text))
 
         // Pipeline for everything except Korean (whose tokenisation does not
         // play nicely with whole-word patches):
@@ -414,7 +414,7 @@ class TextNormalizer {
         // between sessions without restarting.
         val chunkLimit = PlaybackPrefs.chunkMode.limit
 
-        var protectedText = text
+        var protectedText = BookTextSpacing.normalize(text)
 
         // Abbreviation protection — patterns pre-compiled as class fields.
         abbreviationPatterns.forEachIndexed { index, pattern ->

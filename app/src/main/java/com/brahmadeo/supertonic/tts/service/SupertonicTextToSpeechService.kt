@@ -266,6 +266,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (SupertonicTTS.isCancelled()) { callback.error(); callback.done(); return }
         val requestStarted = android.os.SystemClock.elapsedRealtime()
         Log.i("SupertonicTTS", "TTS request started: chars=${rawText.length}, model=${AssetManager.getModelType(this)}")
+        val unusualSpaces=com.brahmadeo.supertonic.tts.utils.BookTextSpacing.unusualSpaceCount(rawText)
+        if(unusualSpaces>0) Log.i("SupertonicTTS","Book typography separators=$unusualSpaces; word boundaries preserved")
         val effectiveSpeed = (request.speechRate / 100.0f).coerceIn(0.5f, 2.5f)
         callback.start(SupertonicTTS.getAudioSampleRate(), android.media.AudioFormat.ENCODING_PCM_16BIT, 1)
 

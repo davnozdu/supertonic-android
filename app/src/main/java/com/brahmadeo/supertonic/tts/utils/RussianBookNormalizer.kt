@@ -104,7 +104,7 @@ object RussianBookNormalizer {
         return t
     }
     fun normalize(text: String, expandNumbers: Boolean = true): String {
-        var t=abbreviations(text)
+        var t=abbreviations(BookTextSpacing.normalize(text))
         t=rx("(?<=[а-яёА-ЯЁ])-\\s*\\r?\\n\\s*(?=[а-яёА-ЯЁ])").replace(t,"")
         t=rx("\\[\\d{1,5}]").replace(t,"")
         for ((key,value) in mapOf("т. е." to "то есть","т.е." to "то есть","т. д." to "так далее","т.д." to "так далее","т. п." to "тому подобное","т.п." to "тому подобное","т.к." to "так как","г-н" to "господин","г-жа" to "госпожа"))

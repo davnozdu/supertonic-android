@@ -50,7 +50,8 @@ class SileroEngine(context: Context) : AutoCloseable {
     @Synchronized fun synthesize(text: String, voice: String, speed: Float, gain: Float,
         listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
         val sentenceMs=if(prefs.getBoolean("tera_punctuation_pauses",true)) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
-        val parts=com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.split(text,0,sentenceMs,sentenceOnly=true)
+        val spaced=com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(text)
+        val parts=com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.split(spaced,0,sentenceMs,sentenceOnly=true)
             .map { it.text }.ifEmpty { listOf(text) }.flatMap { SileroText.bounded(SileroText.prepare(it)) }
         val output=java.io.ByteArrayOutputStream()
         for(part in parts) {
@@ -85,7 +86,7 @@ class SileroEngine(context: Context) : AutoCloseable {
             val pauses = prefs.getBoolean("tera_punctuation_pauses",true)
             val commaMs = prefs.getInt("tera_comma_pause_ms",180).coerceIn(0,400)
             val durations = prepared.mapIndexedNotNull { index, c ->
-                if (pauses && c in ",;:–—") (index+1).toLong() to IValue.from(((commaMs + if(c==',') 0 else 80) / 12.5).toLong()) else null
+                if (pauses) SileroPauseFrames.forPunctuation(c,commaMs)?.let { (index+1).toLong() to IValue.from(it) } else null
             }.toMap()
             val args = arrayListOf(
                 IValue.from(Tensor.fromBlob(seq, shape)),
@@ -98,7 +99,14 @@ class SileroEngine(context: Context) : AutoCloseable {
                 args += IValue.from(Tensor.fromBlob(types, shape))
                 args += IValue.optionalNull()
             }
-            val out = mel!!.forward(*args.toTypedArray()).toTuple()[0].toTensor()
+            val melResult = mel!!.forward(*args.toTypedArray()).toTuple()
+            val out = melResult[0].toTensor()
+            if(durations.isNotEmpty()) {
+                val actual=melResult[1].toTensor().dataAsFloatArray
+                Log.i("SileroTTS","Punctuation frames: " + durations.keys.joinToString { index ->
+                    "$index=${actual.getOrNull(index.toInt())}"
+                })
+            }
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             val hidden = backbone!!.forward(EValue.from(org.pytorch.executorch.Tensor.fromBlob(out.dataAsFloatArray, out.shape())))[0].toTensor()
             if (SupertonicTTS.isCancelled()) return ByteArray(0)

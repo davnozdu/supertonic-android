@@ -10,7 +10,7 @@ internal object TeraTextPreparation {
     private val punctuationNeedsSpace = Regex("[,.!?;:](?=[\\p{L}\\p{N}])")
 
     fun punctuation(text: String): String {
-        var prepared = text.replace("…", "...")
+        var prepared = com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(text).replace("…", "...")
             .replace('“', '"').replace('”', '"')
             .replace('‘', '\'').replace('’', '\'')
             .replace('‑', '-').replace('\u00a0', ' ')

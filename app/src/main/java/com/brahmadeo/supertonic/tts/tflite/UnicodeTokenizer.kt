@@ -42,7 +42,7 @@ class UnicodeTokenizer(indexerFile: File) {
      * and the number of real (non-padding) tokens.
      */
     fun tokenize(text: String, lang: String, fixedLen: Int): TokenizeResult {
-        var t = Normalizer.normalize(text, Normalizer.Form.NFKD)
+        var t = Normalizer.normalize(com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(text), Normalizer.Form.NFKD)
         for ((from, to) in universalReplacements) t = t.replace(from, to)
         t = whitespace.replace(t, " ").trim()
         val processed = "<$lang>$t</$lang>"

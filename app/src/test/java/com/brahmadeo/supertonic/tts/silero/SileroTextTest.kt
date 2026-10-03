@@ -4,6 +4,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SileroTextTest {
+    @Test fun bookSpacesDoNotJoinShortWords() {
+        assertEquals("не раз было.",SileroText.prepare("Не\u00a0раз\u202fбыло."))
+        assertEquals("не раз было.",SileroText.prepare("Не\u2009раз\u2002было."))
+    }
+    @Test fun shortSentencesKeepSeparateBoundaries() {
+        assertEquals("да. нет! как?",SileroText.prepare("Да.Нет!Как?"))
+        val parts=com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.split(com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize("Да.Нет!Как?"),0,420,sentenceOnly=true)
+        assertEquals(listOf("Да.","Нет!","Как?"),parts.map { it.text })
+    }
+    @Test fun separatorsAndHyphensDoNotDisappear() {
+        assertEquals("не раз было",SileroText.prepare("не/раз(было)"))
+        assertEquals("по-прежнему",SileroText.prepare("по\u2011прежнему"))
+    }
+    @Test fun punctuationFramesIncludeNaturalPrefix() {
+        assertEquals(24L,SileroPauseFrames.forPunctuation(',',180))
+        assertEquals(31L,SileroPauseFrames.forPunctuation('–',180))
+        assertNull(SileroPauseFrames.forPunctuation(',',0))
+        assertNull(SileroPauseFrames.forPunctuation(' ',180))
+    }
     @Test fun explicitStressAndYo() {
         val text = SileroText.prepare("Светло́. Всё — хорошо́!")
         assertEquals("светл+о. вс+ё – хорош+о!", text)
