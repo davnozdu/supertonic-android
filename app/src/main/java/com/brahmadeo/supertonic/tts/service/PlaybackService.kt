@@ -102,7 +102,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         }
     }
 
-    private lateinit var mediaSession: MediaSessionCompat
+    private var mediaSession: MediaSessionCompat? = null
     private var audioTrack: AudioTrack? = null
     private var lastTrackRate: Int = -1
     @Volatile private var isPlaying = false
@@ -204,17 +204,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             setReferenceCounted(false)
         }
         
-        mediaSession = MediaSessionCompat(attributionContext, "SupertonicMediaSession").apply {
-            setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() { this@PlaybackService.play() }
-                override fun onPause() { this@PlaybackService.pause() }
-                override fun onStop() { this@PlaybackService.stopServicePlayback() }
-            })
-            // Moon owns the headset while system TTS is reading its book.
-            // Activate this session only for our own in-app playback.
-            isActive = false
-        }
-
         val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
         val libPath = applicationInfo.nativeLibraryDir + "/libonnxruntime.so"
         if (!com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this) &&
@@ -877,15 +866,28 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     private fun updatePlaybackState(state: Int) {
-        mediaSession.isActive = state == PlaybackStateCompat.STATE_BUFFERING ||
-            state == PlaybackStateCompat.STATE_PLAYING || state == PlaybackStateCompat.STATE_PAUSED
+        if (state == PlaybackStateCompat.STATE_STOPPED || state == PlaybackStateCompat.STATE_NONE) {
+            // Android can select an INACTIVE session belonging to the last
+            // audio UID (the TTS engine). Release it so Moon receives buttons.
+            mediaSession?.release()
+            mediaSession = null
+            return
+        }
+        val session = mediaSession ?: MediaSessionCompat(attributionContext,"SupertonicMediaSession").apply {
+            setCallback(object : MediaSessionCompat.Callback() {
+                override fun onPlay() { this@PlaybackService.play() }
+                override fun onPause() { this@PlaybackService.pause() }
+                override fun onStop() { this@PlaybackService.stopServicePlayback() }
+            })
+        }.also { mediaSession=it }
+        session.isActive = true
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or
                 PlaybackStateCompat.ACTION_PLAY_PAUSE or PlaybackStateCompat.ACTION_STOP)
             .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
                 if (state == PlaybackStateCompat.STATE_PLAYING) 1.0f else 0.0f)
             .build()
-        mediaSession.setPlaybackState(playbackState)
+        session.setPlaybackState(playbackState)
     }
 
     private fun startForegroundService(status: String, showControls: Boolean) {
@@ -911,7 +913,10 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setStyle(androidx.media.app.NotificationCompat.MediaStyle().setMediaSession(mediaSession.sessionToken).setShowActionsInCompactView(0))
+            .setStyle(androidx.media.app.NotificationCompat.MediaStyle().apply {
+                mediaSession?.let { setMediaSession(it.sessionToken) }
+                setShowActionsInCompactView(0)
+            })
 
         if (showControls) {
             if (isPlaying) {
@@ -943,7 +948,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     override fun onDestroy() {
         super.onDestroy()
-        mediaSession.release()
+        mediaSession?.release()
         try {
             audioTrack?.release()
         } catch (_: Exception) {}

@@ -23,7 +23,7 @@ import kotlin.math.roundToInt
 
 /** Android port of the distilled TeraTTSv2 ONNX pipeline. */
 class TeraEngine(private val root: File, context: Context,
-                 private val sampler: String = "sampler_distilled_cfg3_8step") : AutoCloseable {
+                 val sampler: String = TeraQuality.FAST) : AutoCloseable {
     private val llmPrefs = context.applicationContext.getSharedPreferences("llm_settings", Context.MODE_PRIVATE)
     private val pausePrefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private val env = OrtEnvironment.getEnvironment()
@@ -53,6 +53,7 @@ class TeraEngine(private val root: File, context: Context,
         } catch (t: Throwable) {
             sessions.values.forEach { it.close() }
             options.close()
+            accents.close()
             throw t
         }
     }

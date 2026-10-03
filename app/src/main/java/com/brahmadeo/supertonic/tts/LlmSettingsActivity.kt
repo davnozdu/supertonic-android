@@ -45,6 +45,10 @@ class LlmSettingsActivity : ComponentActivity() {
                 val downloadStatus by LocalModelDownload.status.collectAsState()
                 val downloading by LocalModelDownload.downloading.collectAsState()
                 val pausePrefs = remember { getSharedPreferences("SupertonicPrefs", MODE_PRIVATE) }
+                var teacherReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.tera.TeraQuality.ready(this)) }
+                var teacherEnabled by remember { mutableStateOf(pausePrefs.getBoolean("tera_teacher",false) && teacherReady) }
+                var teacherBusy by remember { mutableStateOf(false) }
+                var teacherStatus by remember { mutableStateOf("") }
                 val foreignEngines = remember { com.brahmadeo.supertonic.tts.foreign.ForeignTts.engines(this) }
                 var foreignEnabled by remember { mutableStateOf(pausePrefs.getBoolean("foreign_tts", true)) }
                 var foreignEngine by remember { mutableStateOf(pausePrefs.getString("foreign_engine", "") ?: "") }
@@ -97,6 +101,32 @@ class LlmSettingsActivity : ComponentActivity() {
                             message = "Кэш текста и аудио очищен. Уже переданный Android звук может доиграть; следующие фрагменты будут подготовлены заново."
                         }) { Text("Очистить кэш текста и аудио") }
                         Text("Целые числа сначала точно переводятся в слова. LLM расставляет ударения и пунктуацию и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется.", style = MaterialTheme.typography.bodySmall)
+                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
+                            Text("Звук Tera",style=MaterialTheme.typography.titleMedium)
+                            Text("PCM 44,1 кГц, 16 бит. Быстрый distilled — по умолчанию. Teacher — альтернативный полный синтез, примерно в 2–3 раза медленнее; результат сравните на слух.",style=MaterialTheme.typography.bodySmall)
+                            Button(enabled=!teacherBusy && !teacherReady,onClick={
+                                teacherBusy=true
+                                scope.launch {
+                                    try {
+                                        withContext(Dispatchers.IO) {
+                                            com.brahmadeo.supertonic.tts.tera.TeraQuality.download(this@LlmSettingsActivity) {
+                                                teacherStatus="Tera teacher: $it %"
+                                            }
+                                        }
+                                        teacherReady=true
+                                        teacherStatus="Tera teacher установлена"
+                                        com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                                    } catch(t: Exception) { teacherStatus="Ошибка: ${t.message}" }
+                                    finally { teacherBusy=false }
+                                }
+                            }) { Text(if(teacherReady) "Tera teacher установлена" else "Скачать Tera teacher · 257 МБ") }
+                            if(teacherStatus.isNotBlank()) Text(teacherStatus)
+                            if(teacherReady) Toggle("Tera teacher · экспериментальный режим",teacherEnabled) {
+                                teacherEnabled=it
+                                pausePrefs.edit().putBoolean("tera_teacher",it).apply()
+                            }
+                            Text("Оба варианта используют выбранный голос и подготовку LLM. Загружается только один вариант синтеза; при переключении кэш аудио очищается.",style=MaterialTheme.typography.bodySmall)
+                        }
                         if (config.mode != LlmMode.OFF) {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->
                                 config = config.copy(mode = LlmMode.entries.first { it.title == title }); save()
