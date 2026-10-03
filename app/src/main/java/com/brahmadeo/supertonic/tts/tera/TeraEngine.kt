@@ -22,7 +22,8 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** Android port of the distilled TeraTTSv2 ONNX pipeline. */
-class TeraEngine(private val root: File, context: Context) : AutoCloseable {
+class TeraEngine(private val root: File, context: Context,
+                 private val sampler: String = "sampler_distilled_cfg3_8step") : AutoCloseable {
     private val llmPrefs = context.applicationContext.getSharedPreferences("llm_settings", Context.MODE_PRIVATE)
     private val pausePrefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private val env = OrtEnvironment.getEnvironment()
@@ -43,9 +44,16 @@ class TeraEngine(private val root: File, context: Context) : AutoCloseable {
         .bufferedReader(Charsets.UTF_8).use { it.readLines().toSet() }
 
     init {
+        require(sampler in setOf("sampler_distilled_cfg3_8step", "sampler_teacher_8step"))
         require(indexer.size == 65536)
-        for (name in listOf("text_encoder", "duration_predictor", "sampler_distilled_cfg3_8step", "vocoder")) {
-            sessions[name] = env.createSession(File(root, "models/$name.onnx").absolutePath, options)
+        try {
+            for (name in listOf("text_encoder", "duration_predictor", sampler, "vocoder")) {
+                sessions[name] = env.createSession(File(root, "models/$name.onnx").absolutePath, options)
+            }
+        } catch (t: Throwable) {
+            sessions.values.forEach { it.close() }
+            options.close()
+            throw t
         }
     }
 
@@ -177,7 +185,7 @@ class TeraEngine(private val root: File, context: Context) : AutoCloseable {
         val noise = FloatArray(144 * frames)
         val random = Random(1234)
         for (i in noise.indices) noise[i] = random.nextGaussian().toFloat()
-        val (latent, _) = run("sampler_distilled_cfg3_8step", mapOf(
+        val (latent, _) = run(sampler, mapOf(
             "initial_latent" to floatTensor(noise, 1, 144, frames.toLong()),
             "text_emb" to floatTensor(embedding, *embeddingShape),
             "style_ttl" to floatTensor(styleTtl, 1, 50, 256),

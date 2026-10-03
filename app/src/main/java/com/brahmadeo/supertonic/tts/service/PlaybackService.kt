@@ -208,9 +208,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() { this@PlaybackService.play() }
                 override fun onPause() { this@PlaybackService.pause() }
-                override fun onStop() { this@PlaybackService.stopPlayback() }
+                override fun onStop() { this@PlaybackService.stopServicePlayback() }
             })
-            isActive = true
+            // Moon owns the headset while system TTS is reading its book.
+            // Activate this session only for our own in-app playback.
+            isActive = false
         }
 
         val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
@@ -235,7 +237,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP_PLAYBACK") {
-            stopPlayback()
+            stopServicePlayback()
+        } else if (intent?.action == "PLAY_PLAYBACK") {
+            play()
+        } else if (intent?.action == "PAUSE_PLAYBACK") {
+            pause()
         } else if (intent?.action == "RESET_ENGINE") {
             SupertonicTTS.release()
             val modelPath = File(filesDir, "${com.brahmadeo.supertonic.tts.utils.AssetManager.MODEL_VERSION}/onnx").absolutePath
@@ -702,6 +708,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     fun play() {
         resumeOnFocusGain = false
+        // The reusable AudioTrack survives stops; its presence does not mean
+        // there is still a paused job to resume.
+        if (!isSynthesizing) return
         if (!isPlaying) {
             if (requestAudioFocus()) {
                 isPlaying = true
@@ -868,9 +877,13 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     private fun updatePlaybackState(state: Int) {
+        mediaSession.isActive = state == PlaybackStateCompat.STATE_BUFFERING ||
+            state == PlaybackStateCompat.STATE_PLAYING || state == PlaybackStateCompat.STATE_PAUSED
         val playbackState = PlaybackStateCompat.Builder()
-            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_STOP)
-            .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
+            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or PlaybackStateCompat.ACTION_STOP)
+            .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                if (state == PlaybackStateCompat.STATE_PLAYING) 1.0f else 0.0f)
             .build()
         mediaSession.setPlaybackState(playbackState)
     }
@@ -903,17 +916,22 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         if (showControls) {
             if (isPlaying) {
                 builder.addAction(android.R.drawable.ic_media_pause, getString(R.string.notif_paused),
-                    androidx.media.session.MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_PAUSE))
+                    playbackCommand("PAUSE_PLAYBACK", 1))
             } else {
                 builder.addAction(android.R.drawable.ic_media_play, getString(R.string.yes), // No play string in resources, reusing yes for now or just generic
-                    androidx.media.session.MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_PLAY))
+                    playbackCommand("PLAY_PLAYBACK", 2))
             }
         } else {
              builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.cancel),
-                androidx.media.session.MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_STOP))
+                playbackCommand("STOP_PLAYBACK", 3))
         }
         return builder.build()
     }
+
+    private fun playbackCommand(action: String, requestCode: Int): PendingIntent =
+        PendingIntent.getService(this, requestCode,
+            Intent(this, PlaybackService::class.java).setAction(action),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

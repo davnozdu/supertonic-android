@@ -53,6 +53,34 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     prefs.edit().putString("selected_lang", "ru")
                         .putString("selected_voice", when(model) { AssetManager.SILERO_CIS_MODEL -> "ru_alexandr.json"; AssetManager.SILERO_MODEL -> "kseniya.json"; AssetManager.TERA_MODEL -> "ru_f1.json"; else -> "F3.json" }).apply()
                     SupertonicTTS.release()
+                    if (intent.getBooleanExtra("teacherProbe", false)) {
+                        check(model == AssetManager.TERA_MODEL)
+                        val root=File(filesDir,"${AssetManager.MODEL_VERSION}/tera")
+                        val style=AssetManager.voiceFile(this@SpeechDiagnosticsActivity,"ru_f1.json").path
+                        val sample="Это не раз было. По-прежнему светло. Ты готов? Да, всё хорошо!"
+                        SupertonicTTS.setCancelled(false)
+                        if (intent.getBooleanExtra("withGemma", false)) {
+                            val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,
+                                com.brahmadeo.supertonic.tts.llm.LlmSettings.load(this@SpeechDiagnosticsActivity)
+                                    .copy(mode=com.brahmadeo.supertonic.tts.llm.LlmMode.LOCAL),sample,traceSynthetic=true)
+                            Log.i("SpeechCheck","BENCH Gemma provider=${result.provider} fallback=${result.fallback} ms=${result.elapsedMs}")
+                        }
+                        for (sampler in listOf("sampler_distilled_cfg3_8step","sampler_teacher_8step")) {
+                            val loadStart=android.os.SystemClock.elapsedRealtime()
+                            com.brahmadeo.supertonic.tts.tera.TeraEngine(root,this@SpeechDiagnosticsActivity,sampler).use { engine ->
+                                Log.i("SpeechCheck","BENCH sampler=$sampler loadMs=${android.os.SystemClock.elapsedRealtime()-loadStart}")
+                                repeat(2) { pass ->
+                                    val started=android.os.SystemClock.elapsedRealtime()
+                                    val pcm=engine.synthesize(sample,"ru",style,1.1f,2.5f,null,0)
+                                    val elapsed=android.os.SystemClock.elapsedRealtime()-started
+                                    check(pcm.isNotEmpty())
+                                    val memory=android.os.Debug.MemoryInfo().also { android.os.Debug.getMemoryInfo(it) }
+                                    Log.i("SpeechCheck","BENCH sampler=$sampler pass=$pass ms=$elapsed audioMs=${pcm.size*1000L/88200} pssKb=${memory.totalPss}")
+                                }
+                            }
+                        }
+                        return@withContext
+                    }
                     if (!AssetManager.isReady(this@SpeechDiagnosticsActivity)) {
                         AssetManager.download(this@SpeechDiagnosticsActivity) { _, progress ->
                             Log.i("SpeechCheck", "Download progress=${(progress*100).toInt()}")
@@ -187,7 +215,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             check(rate == if (model in setOf(AssetManager.SILERO_MODEL,AssetManager.SILERO_CIS_MODEL)) 48000 else 44100)
                             check(channels == 1 && output.length() > 44)
                             Log.i("SpeechCheck", "PASS model=$model case=$index rate=$rate channels=$channels bytes=${output.length()} ms=${android.os.SystemClock.elapsedRealtime()-started}")
-                        } finally { output.delete() }
+                        } finally { if (!intent.getBooleanExtra("retainAudio",false)) output.delete() }
                     }
                     if(intent.getBooleanExtra("contention",false)) {
                         val probe=com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize("Проверка выдачи готового аудио во время фонового синтеза.","ru")

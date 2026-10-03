@@ -86,6 +86,7 @@ object LlmPreparation {
         return try {
             val result = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
             Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
+            Log.i("LlmPreparation", "Text trace source=${SpeechTextTrace.fingerprint(text)} prepared=${SpeechTextTrace.fingerprint(result.text)} provider=${result.provider} fallback=${result.fallback}")
             synchronized(lock) { entries.remove(entry.id) }
             result
         } catch (_: Exception) {
