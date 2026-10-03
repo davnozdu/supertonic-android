@@ -31,10 +31,13 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val oldLlmMode=llmPrefs.getString("mode","OFF")
                 val oldRestoreYo=llmPrefs.getBoolean("restore_yo",true)
                 val offline=intent.getBooleanExtra("offline",false)
+                val oldLocalStress=prefs.getBoolean("local_russian_stress",true)
+                val verifyStress=intent.getBooleanExtra("stress",false)
                 val oldLang = prefs.getString("selected_lang", "en")
                 val model = intent.getStringExtra("model") ?: AssetManager.SILERO_MODEL
                 var tts: TextToSpeech? = null
                 try {
+                    if(verifyStress) prefs.edit().putBoolean("local_russian_stress",true).commit()
                     if(offline) {
                         llmPrefs.edit().putString("mode","OFF").commit()
                         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
@@ -86,6 +89,19 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         "Dobrý den, jak se máte? Máme 1101 záznamů."
                     )
                     SupertonicTTS.setApplicationContext(this@SpeechDiagnosticsActivity)
+                    val llmOnly="Она страда́ла. Теперь светло́, елка и все. Ты гото́в?"
+                    check(com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize(llmOnly,"ru",skipStress=true)==llmOnly)
+                    Log.i("SpeechCheck","LLM PRIORITY NORMALIZER PASSED: no dictionary stress or yo additions")
+                    if(intent.getBooleanExtra("llm",false)) {
+                        val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,
+                            com.brahmadeo.supertonic.tts.llm.LlmSettings.load(this@SpeechDiagnosticsActivity),
+                            "По-прежнему светло. Она страдала. Ты готов? Это не раз было.")
+                        Log.i("SpeechCheck","LLM PROVIDER TEST provider=${result.provider} fallback=${result.fallback} ms=${result.elapsedMs} reason=${result.reason}")
+                        if(!result.fallback) {
+                            check(com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize(result.text,"ru",skipStress=true)==result.text)
+                            Log.i("SpeechCheck","LLM SYNTHETIC RESULT: ${result.text}")
+                        }
+                    }
                     val words=com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize("Не\u00a0раз\u202fбыло.","ru")
                         .replace("+","").replace("\u0301","")
                     check(words=="Не раз было.")
@@ -175,6 +191,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 } catch (t: Throwable) { Log.e("SpeechCheck", "Integration check failed", t) }
                 finally {
                     tts?.stop(); tts?.shutdown()
+                    if(verifyStress) prefs.edit().putBoolean("local_russian_stress",oldLocalStress).commit()
                     if(offline) {
                         llmPrefs.edit().putString("mode",oldLlmMode).putBoolean("restore_yo",oldRestoreYo).commit()
                         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()

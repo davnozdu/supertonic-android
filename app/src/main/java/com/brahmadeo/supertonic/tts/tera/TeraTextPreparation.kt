@@ -31,9 +31,11 @@ internal object TeraTextPreparation {
         }.replace(Regex("[ \\t]+"), " ").trim()
     }
 
+    fun explicitStress(text: String): String = acute.replace(text) { "+${it.groupValues[1]}" }
+
     fun stress(text: String, lookup: (String) -> String?, yoWords: Map<String, String>,
                ambiguousStress: Set<String>, ambiguousYo: Set<String>): String {
-        val manual = acute.replace(text) { "+${it.groupValues[1]}" }
+        val manual = explicitStress(text)
         return wordPattern.replace(manual) { match ->
             val original = match.value
             if ('+' in original) return@replace original

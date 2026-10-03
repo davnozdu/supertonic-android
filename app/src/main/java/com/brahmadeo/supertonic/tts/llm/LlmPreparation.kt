@@ -71,25 +71,26 @@ object LlmPreparation {
     }
     fun prefetch(ctx: Context, texts: List<String>): List<Long?> = texts.map { submit(ctx, appCaller, it) }
     fun cancelApp() = cancel(appCaller)
-    fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): String {
-        if (!enabled(ctx)) return text
+    fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): String = prepareResult(ctx,text,id,timeoutMs).text
+    fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): Result {
+        if (!enabled(ctx)) return Result(text,"автономно",0,true)
         initialize(ctx)
         val entry = synchronized(lock) {
             (if (id != null) entries[id] else entries.values.firstOrNull { it.text == text && !it.claimed }
                 ?: entries.values.firstOrNull { it.text == text })?.also { it.claimed = true }
         } ?: submit(ctx, appCaller, text)?.let { token -> synchronized(lock) { entries[token]?.also { it.claimed = true } } }
-        if (entry == null) return text
+        if (entry == null) return Result(text,"словарь",0,true,"Текст не принят в очередь LLM")
         startWorker()
         return try {
             val result = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
             Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
             synchronized(lock) { entries.remove(entry.id) }
-            result.text
+            result
         } catch (_: Exception) {
             Log.w("LlmPreparation", "Preparation not ready within ${timeoutMs}ms; dictionary fallback chars=${text.length}")
             // Keep the future even if it completed just after get() timed out:
             // the background waiter can still consume the validated result.
-            text
+            Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
     fun test(ctx: Context, c: LlmConfig, text: String): Result {

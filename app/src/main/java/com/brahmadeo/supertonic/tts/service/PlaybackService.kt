@@ -440,16 +440,18 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                                 notifyListenerProgress(index, totalSentences)
                             }
 
-                            val preparedSentence = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this@PlaybackService, sentences[index], llmIds.remove(index))
+                            val preparation = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this@PlaybackService, sentences[index], llmIds.remove(index))
+                            val preparedSentence = preparation.text
+                            val llmProcessed = !preparation.fallback
                             if (SupertonicTTS.isCancelled() || !isActive) break@itemLoop
-                            val normalizedText = textNormalizer.normalize(preparedSentence, curLang, isAdvancedEnabled)
+                            val normalizedText = textNormalizer.normalize(preparedSentence, curLang, isAdvancedEnabled, skipStress=llmProcessed)
 
                             // Streaming: each finished chunk inside generateAudio is
                             // pushed via streamingListener.onAudioChunk into the
                             // channel, where the consumer above picks it up.
                             val result = SupertonicTTS.generateAudio(
                                 normalizedText, curLang, curStyle, curSpeed, 0.0f, curSteps,
-                                VOLUME_BOOST_FACTOR, streamingListener
+                                VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=llmProcessed
                             )
 
                             if (result != null && result.isNotEmpty()) {

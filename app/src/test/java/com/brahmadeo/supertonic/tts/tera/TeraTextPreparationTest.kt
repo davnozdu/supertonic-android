@@ -4,6 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TeraTextPreparationTest {
+    @Test fun llmOnlyPathConvertsMarkersWithoutAddingStressOrYo() {
+        assertEquals("Потом светл+о, елка и все. Гот+ов?",TeraTextPreparation.explicitStress("Потом светло́, елка и все. Гот+ов?"))
+        assertEquals("Берёза стоит.",TeraTextPreparation.explicitStress("Берёза стоит."))
+    }
     @Test fun preservesCommaAndSentenceBoundaries() {
         assertEquals("Да, конечно. Потом уйдём! Правда?", TeraTextPreparation.punctuation("Да,конечно.Потом уйдём!Правда?"))
     }

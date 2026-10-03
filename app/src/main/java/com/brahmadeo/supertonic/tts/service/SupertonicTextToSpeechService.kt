@@ -263,7 +263,10 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
         val incomingText = request.charSequenceText?.toString() ?: return
         val aheadText = com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
-        val rawText = aheadText ?: com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this, incomingText)
+        val preparation = if (aheadText == null) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
+        val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
+        val rawText = aheadText?.text ?: preparation!!.text
+        Log.i("LlmPreparation", "Speech path=${if(llmProcessed) "LLM; internal stress bypassed" else "offline fallback"} chars=${rawText.length}")
         if(aheadText!=null) Log.i("ReaderAhead","Using prepared text without repeated LLM wait chars=${incomingText.length}")
         if (SupertonicTTS.isCancelled()) { callback.error(); callback.done(); return }
         val requestStarted = android.os.SystemClock.elapsedRealtime()
@@ -352,10 +355,10 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                     for (sentence in sentences) {
                         if (SupertonicTTS.isCancelled()) { success = false; break }
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
-                        val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled)
+                        val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=llmProcessed)
                         val result = SupertonicTTS.generateAudio(
                             normalizedText, requestedLang, stylePath, effectiveSpeed, 0.0f,
-                            steps, VOLUME_BOOST_FACTOR, streamingListener
+                            steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=llmProcessed
                         )
                         if (result == null || SupertonicTTS.isCancelled()) { success = false; break }
                     }

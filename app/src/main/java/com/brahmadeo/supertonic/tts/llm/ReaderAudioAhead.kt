@@ -17,7 +17,7 @@ object ReaderAudioAhead {
         { Thread(it,"ReaderAudioAhead").apply { isDaemon = true } },ThreadPoolExecutor.DiscardPolicy())
     private val preparedTexts=PreparedSpeechHandoff()
     fun cancel() { epoch.incrementAndGet(); preparedTexts.clear(); worker.queue.clear() }
-    fun takePrepared(text: String): String? = preparedTexts.take(text)
+    internal fun takePrepared(text: String): PreparedSpeechText? = preparedTexts.takePrepared(text)
     fun submit(ctx: Context, text: String, params: Bundle?) {
         val prefs=ctx.getSharedPreferences("SupertonicPrefs",0)
         if (!prefs.getBoolean("reader_early_prepare",true) || !AssetManager.isRussianModel(ctx) || text.length > 6000 || text.length < 12) return
@@ -36,15 +36,17 @@ object ReaderAudioAhead {
                 if(generation!=epoch.get() || !AssetManager.isReady(context) || model!=AssetManager.getModelType(context)) return@execute
                 // Background work has the duration of earlier playback available;
                 // the foreground's short startup deadline is inappropriate here.
-                val prepared=LlmPreparation.prepare(context,text,timeoutMs=30000)
+                val result=LlmPreparation.prepareResult(context,text,timeoutMs=30000)
+                val prepared=result.text
+                val llmProcessed=!result.fallback
                 if(generation!=epoch.get() || model!=AssetManager.getModelType(context)) return@execute
-                preparedTexts.put(textGeneration,text,prepared)
+                preparedTexts.put(textGeneration,text,prepared,llmProcessed)
                 val normalizer=TextNormalizer()
                 for(sentence in normalizer.splitIntoSentences(prepared,"ru",preservePunctuation=true)) {
                     if(generation!=epoch.get() || SupertonicTTS.isCancelled() || model!=AssetManager.getModelType(context)) break
-                    val normalized=normalizer.normalize(sentence,"ru")
+                    val normalized=normalizer.normalize(sentence,"ru",skipStress=llmProcessed)
                     if(generation!=epoch.get()) break
-                    val pcm=SupertonicTTS.generateAudio(normalized,"ru",AssetManager.voiceFile(context,voice).path,rate.coerceIn(.5f,2.5f),0f,steps,2.5f,preparationGeneration=cacheGeneration)
+                    val pcm=SupertonicTTS.generateAudio(normalized,"ru",AssetManager.voiceFile(context,voice).path,rate.coerceIn(.5f,2.5f),0f,steps,2.5f,preparationGeneration=cacheGeneration,skipDictionary=llmProcessed)
                     if(pcm!=null) android.util.Log.i("ReaderAhead","Prepared ahead PCM chars=${normalized.length} bytes=${pcm.size}")
                 }
             } catch(t: Throwable) { android.util.Log.w("ReaderAhead","Ahead preparation failed; normal synthesis remains available",t) }

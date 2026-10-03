@@ -126,15 +126,15 @@ class TeraEngine(private val root: File, context: Context) : AutoCloseable {
 
     @Synchronized
     fun synthesize(text: String, lang: String, stylePath: String, speed: Float, gain: Float,
-                   listener: SupertonicTTS.ProgressListener?, sessionId: Long): ByteArray {
-        if (!pausePrefs.getBoolean("tera_punctuation_pauses", true)) return synthesizePart(text, lang, stylePath, speed, gain, listener, sessionId)
+                   listener: SupertonicTTS.ProgressListener?, sessionId: Long, skipDictionary: Boolean = false): ByteArray {
+        if (!pausePrefs.getBoolean("tera_punctuation_pauses", true)) return synthesizePart(text, lang, stylePath, speed, gain, listener, sessionId, skipDictionary)
         val parts = TeraPunctuationPauses.split(com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(text),
             pausePrefs.getInt("tera_comma_pause_ms", 180).coerceIn(80, 400),
             pausePrefs.getInt("tera_sentence_pause_ms", 420).coerceIn(0, 900))
         val output = java.io.ByteArrayOutputStream()
         for (part in parts) {
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
-            val pcm = synthesizePart(part.text, lang, stylePath, speed, gain, listener, sessionId)
+            val pcm = synthesizePart(part.text, lang, stylePath, speed, gain, listener, sessionId, skipDictionary)
             if (pcm.isEmpty() || SupertonicTTS.isCancelled()) return ByteArray(0)
             output.write(pcm)
             val missing = TeraPunctuationPauses.missingSilenceSamples(pcm, part.pauseMs)
@@ -148,10 +148,12 @@ class TeraEngine(private val root: File, context: Context) : AutoCloseable {
     }
 
     private fun synthesizePart(text: String, lang: String, stylePath: String, speed: Float, gain: Float,
-                   listener: SupertonicTTS.ProgressListener?, sessionId: Long): ByteArray {
+                   listener: SupertonicTTS.ProgressListener?, sessionId: Long, skipDictionary: Boolean = false): ByteArray {
         require(lang == "ru") { "TeraTTSv2 preset supports Russian only" }
         val (styleDp, styleTtl) = voice(stylePath)
-        val prepared = Normalizer.normalize("<ru>${accentText(TeraTextPreparation.punctuation(text))}</ru>", Normalizer.Form.NFKD)
+        val punctuated = TeraTextPreparation.punctuation(text)
+        val stressed = if (skipDictionary) TeraTextPreparation.explicitStress(punctuated) else accentText(punctuated)
+        val prepared = Normalizer.normalize("<ru>${stressed}</ru>", Normalizer.Form.NFKD)
         val ids = tokenize(prepared)
         val durationIds = tokenize(prepared.replace("+", ""))
         val textLen = ids.size.toLong()

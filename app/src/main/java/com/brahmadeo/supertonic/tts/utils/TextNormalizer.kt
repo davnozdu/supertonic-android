@@ -311,13 +311,13 @@ class TextNormalizer {
         }
     }
 
-    fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false): String {
+    fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false, skipStress: Boolean = false): String {
         val lowerLang = lang.lowercase()
         if (lowerLang.startsWith("ru")) {
             val preprocessed = RussianBookNormalizer.normalize(text, expandNumbers = false)
             val parts = com.brahmadeo.supertonic.tts.foreign.ForeignText.split(preprocessed)
             if (parts.any { it.foreign }) return parts.joinToString("") { part ->
-                if (part.foreign) part.text else normalize(part.text, lang, isAdvancedEnabled)
+                if (part.foreign) part.text else normalize(part.text, lang, isAdvancedEnabled, skipStress)
             }
         }
 
@@ -325,7 +325,8 @@ class TextNormalizer {
         // so any rules the user writes still match against the original text,
         // and *before* number/accent passes so stressed Russian numbers don't
         // get double-`?` artefacts on the second cycle.
-        var inputText = applyPunctuationTweaks(BookTextSpacing.normalize(text))
+        val spaced = BookTextSpacing.normalize(text)
+        var inputText = if (skipStress) spaced else applyPunctuationTweaks(spaced)
 
         // Pipeline for everything except Korean (whose tokenisation does not
         // play nicely with whole-word patches):
@@ -335,13 +336,15 @@ class TextNormalizer {
         //      words that the number normaliser just emitted ("две тысячи
         //      двадцать четыре" -> "две ты́сячи два́дцать четы́ре").
         var processedText = if (lowerLang != "ko") {
-            var t = LexiconManager.apply(inputText)
+            var t = if (skipStress) inputText else LexiconManager.apply(inputText)
             if (lowerLang.startsWith("ru")) {
                 t = RussianBookNormalizer.normalize(t)
                 val original = t
-                context?.let { t = com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(it, t) }
-                t = AccentDictionaryManager.apply(t, lowerLang)
-                t = RussianYoPolicy.apply(original, t, context?.getSharedPreferences("llm_settings",0)?.getBoolean("restore_yo",true) ?: true)
+                if (!skipStress) {
+                    context?.let { t = com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(it, t) }
+                    t = AccentDictionaryManager.apply(t, lowerLang)
+                    t = RussianYoPolicy.apply(original, t, context?.getSharedPreferences("llm_settings",0)?.getBoolean("restore_yo",true) ?: true)
+                }
                 t
             } else {
                 AccentDictionaryManager.apply(t, lowerLang)
