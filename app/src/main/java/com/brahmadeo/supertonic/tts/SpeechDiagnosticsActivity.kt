@@ -95,12 +95,28 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     if(intent.getBooleanExtra("llm",false)) {
                         val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,
                             com.brahmadeo.supertonic.tts.llm.LlmSettings.load(this@SpeechDiagnosticsActivity),
-                            "По-прежнему светло. Она страдала. Ты готов? Это не раз было.")
+                            "По-прежнему светло. Она страдала. Ты готов? Это не раз было.",traceSynthetic=true)
                         Log.i("SpeechCheck","LLM PROVIDER TEST provider=${result.provider} fallback=${result.fallback} ms=${result.elapsedMs} reason=${result.reason}")
                         if(!result.fallback) {
                             check(com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize(result.text,"ru",skipStress=true)==result.text)
                             Log.i("SpeechCheck","LLM SYNTHETIC RESULT: ${result.text}")
                         }
+                    }
+                    if(intent.getBooleanExtra("gemmaProbe",false)) {
+                        val backend=intent.getStringExtra("backend") ?: "gpu"
+                        val config=com.brahmadeo.supertonic.tts.llm.LlmSettings.load(this@SpeechDiagnosticsActivity)
+                            .copy(mode=com.brahmadeo.supertonic.tts.llm.LlmMode.LOCAL,gpu=backend=="gpu",localThinking=false)
+                        val samples=listOf("По-прежнему светло. Она страдала. Ты готов? Это не раз было.",
+                            "Когда ветер стих мы открыли окно. Всё хорошо!",
+                            "В списке 1001 имя и 1101 запись.")
+                        for((index,sample) in samples.withIndex()) {
+                            val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,config,sample,traceSynthetic=true)
+                            Log.i("SpeechCheck","GEMMA PROBE backend=$backend case=$index provider=${result.provider} fallback=${result.fallback} ms=${result.elapsedMs} reason=${result.reason}; result=${result.text}")
+                            check(!result.fallback) { "Gemma did not supply a validated result" }
+                            if(index==0) check(listOf("светло́","страда́ла","гото́в").all { it in result.text }) { "Gemma control stress is incorrect" }
+                        }
+                        Log.i("SpeechCheck","GEMMA PROBE PASSED backend=$backend")
+                        return@withContext
                     }
                     val words=com.brahmadeo.supertonic.tts.utils.TextNormalizer().normalize("Не\u00a0раз\u202fбыло.","ru")
                         .replace("+","").replace("\u0301","")

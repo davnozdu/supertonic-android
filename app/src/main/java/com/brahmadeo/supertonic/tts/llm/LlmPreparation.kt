@@ -93,10 +93,10 @@ object LlmPreparation {
             Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
-    fun test(ctx: Context, c: LlmConfig, text: String): Result {
+    fun test(ctx: Context, c: LlmConfig, text: String, traceSynthetic: Boolean = false): Result {
         initialize(ctx)
         // Use the same single worker as normal reading and idle unload.
-        return executor.submit<Result> { process(ctx, c, listOf(text), ignoreCooldown = true).single() }.get(90, TimeUnit.SECONDS)
+        return executor.submit<Result> { process(ctx, c, listOf(text), ignoreCooldown = true, traceSynthetic = traceSynthetic).single() }.get(90, TimeUnit.SECONDS)
     }
     private fun startWorker() {
         if (!running.compareAndSet(false, true)) return
@@ -135,7 +135,7 @@ object LlmPreparation {
         manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }.getOrDefault(false)
     private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
-                        ignoreCooldown: Boolean = false, cancelled: () -> Boolean = { false },
+                        ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, cancelled: () -> Boolean = { false },
                         onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
         val started = SystemClock.elapsedRealtime()
         val results = arrayOfNulls<Result>(texts.size)
@@ -173,25 +173,30 @@ object LlmPreparation {
                 continue // A large block must not put the provider into cooldown.
             }
             try {
-                val output = if (provider == "local") LlmProviders.local(ctx, c, requestTexts, if (ignoreCooldown) 45000 else 12000) else LlmProviders.cloud(c, requestTexts, provider == "gemini")
-                if (expectedEpoch != epoch || cancelled()) break
-                val elapsed = SystemClock.elapsedRealtime() - started
                 var accepted = 0
-                requestTexts.zip(output).forEachIndexed { requestIndex, (source, proposed) ->
+                fun accept(requestIndex: Int, proposed: String) {
+                    if (expectedEpoch != epoch || cancelled()) return
                     val index = requestIndices[requestIndex]
-                    if (results[index] == null) {
-                        var rejection = "structure"
-                        val validated = PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress,
-                            numericInputs[index].ranges, c.restoreYo) { rejection = it }
-                        if (validated != null) {
-                            val result = Result(validated, provider, elapsed, false)
-                            results[index] = result; accepted++
-                            // A bad neighbour must not hold up already valid text
-                            // while another provider prepares the remaining fragments.
-                            onPrepared(index, result)
-                        } else Log.w("LlmPreparation", "Rejected fragment=$index, chars=${source.length}, provider=$provider, reason=$rejection")
-                    }
+                    if (results[index] != null) return
+                    val source = requestTexts[requestIndex]
+                    var rejection = "structure"
+                    val validated = PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress,
+                        numericInputs[index].ranges, c.restoreYo) { rejection = it }
+                    if (traceSynthetic) Log.i("SpeechCheck","SYNTHETIC PROPOSAL provider=$provider: $proposed")
+                    if (validated != null) {
+                        val result = Result(validated, provider, SystemClock.elapsedRealtime()-started, false)
+                        results[index] = result; accepted++
+                        onPrepared(index, result)
+                        if (provider == "local") preparedCache.put(c,texts,results.map { it?.text })
+                    } else Log.w("LlmPreparation", "Rejected fragment=$index, chars=${source.length}, provider=$provider, reason=$rejection")
                 }
+                if (provider == "local") {
+                    LlmProviders.local(ctx,c,requestTexts,deadlineMs=45000,onOutput=::accept)
+                } else {
+                    LlmProviders.cloud(c,requestTexts,provider=="gemini").forEachIndexed { index,text -> accept(index,text) }
+                }
+                if (expectedEpoch != epoch || cancelled()) break
+                val elapsed = SystemClock.elapsedRealtime()-started
                 Log.i("LlmPreparation", "Prepared fragments=$accepted/${texts.size}, requested=${requestIndices.size}, remaining=${results.count { it == null }}, chars=${texts.sumOf { it.length }}, provider=$provider, ms=$elapsed")
                 if (expectedEpoch == epoch) preparedCache.put(c, texts, results.map { it?.text })
                 if (results.all { it != null }) {

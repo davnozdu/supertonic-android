@@ -16,7 +16,7 @@ object PreparedTextValidator {
         // Existing source quotes/brackets must still retain their exact anchors.
         val delimiters = "\"'«»“”„()[]"
         val proposed = if (original.none { it in delimiters }) response.filterNot { it in delimiters } else response
-        if (proposed.length > original.length * 2 + 100 || proposed.isBlank()) return null
+        if (proposed.length > original.length * 2 + 100 || proposed.isBlank()) return reject("response_length")
         val a = words.findAll(original).toList()
         val b = words.findAll(proposed).toList()
         if (a.size != b.size || a.isEmpty()) return reject("word_count")
@@ -25,18 +25,18 @@ object PreparedTextValidator {
         var nextWord = 0
         for (index in proposed.indices) {
             while (nextWord < b.size && b[nextWord].range.last < index) nextWord++
-            if (proposed[index] == '\u0301' && (nextWord == b.size || index !in b[nextWord].range)) return null
+            if (proposed[index] == '\u0301' && (nextWord == b.size || index !in b[nextWord].range)) return reject("detached_accent")
         }
         if (numbers.findAll(original).map { it.value }.toList() != numbers.findAll(proposed).map { it.value }.toList()) return reject("number_changed")
-        if (symbols(original) != symbols(proposed)) return null
-        if (original.count { it == '\n' } != proposed.count { it == '\n' }) return null
+        if (symbols(original) != symbols(proposed)) return reject("unsupported_symbols")
+        if (original.count { it == '\n' } != proposed.count { it == '\n' }) return reject("paragraph_count")
         if (original.filter { it in "\"'«»“”„()[]" } != proposed.filter { it in "\"'«»“”„()[]" }) return null
         // A hyphen inside a word is spelling, not freely editable punctuation.
         for (i in 0 until a.lastIndex) {
             val sourceGap = original.substring(a[i].range.last + 1, a[i + 1].range.first)
             val targetGap = proposed.substring(b[i].range.last + 1, b[i + 1].range.first)
-            if ((sourceGap == "-") != (targetGap == "-")) return null
-            if (sourceGap.count { it == '+' } != targetGap.count { it == '+' }) return null
+            if ((sourceGap == "-") != (targetGap == "-")) return reject("word_hyphen")
+            if (sourceGap.count { it == '+' } != targetGap.count { it == '+' }) return reject("plus_operator")
             if (sourceGap.count { it == '\n' } != targetGap.count { it == '\n' }) return null
             if (sourceGap.filter { it in "\"'«»“”„()[]" } != targetGap.filter { it in "\"'«»“”„()[]" }) return null
         }
@@ -58,15 +58,15 @@ object PreparedTextValidator {
             if (changedGender && !(numberRanges.any { a[i].range.first in it && a[i].range.last in it } &&
                         numericGender(foldYo(sourcePlain)) == numericGender(foldYo(targetPlain)) &&
                         numberRanges.any { a[i].range.last == it.last })) return reject("rewritten_word")
-            if (b[i].value.contains('+') && !source.contains('+')) return null
+            if (b[i].value.contains('+') && !source.contains('+')) return reject("unexpected_plus")
             val explicit = source.contains('+') || source.contains('\u0301')
             if (!explicit && source.none { it in "ёЁ" } && source.count { it in vowels } > 1) {
                 needsStress = true
                 if (target.contains('\u0301') || (allowYo && target.any { it in "ёЁ" })) suppliedStress = true
             }
-            if (!explicit && target.count { it == '\u0301' } > 1) return null
+            if (!explicit && target.count { it == '\u0301' } > 1) return reject("multiple_accents")
             val mark = target.indexOf('\u0301')
-            if (!explicit && mark >= 0 && (mark == 0 || target[mark - 1] !in vowels)) return null
+            if (!explicit && mark >= 0 && (mark == 0 || target[mark - 1] !in vowels)) return reject("accent_not_on_vowel")
             val base = if (changedGender) targetPlain.lowercase().let { if (source.first().isUpperCase()) it.replaceFirstChar(Char::uppercaseChar) else it } else {
                 sourcePlain.mapIndexed { j, ch ->
                     if (allowYo && ch in "еЕ" && targetPlain.getOrNull(j)?.lowercaseChar() == 'ё') {

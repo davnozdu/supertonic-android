@@ -12,6 +12,7 @@ import java.net.URL
 object LlmProviders {
     private var local: Engine? = null
     private var localGpu: Boolean? = null
+    private var localGpuFailed = false
     private var usedAt = 0L
     @Volatile private var activeConversation: Conversation? = null
     @Volatile private var activeHttp: HttpURLConnection? = null
@@ -146,31 +147,62 @@ object LlmProviders {
         }
         return parse(answer, texts.size)
     }
-    @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long = 45000): List<String> {
+    @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long = 45000,
+        onOutput: (Int,String) -> Unit = { _,_ -> }): List<String> {
         val generation = cancelGeneration.get()
         require(LocalModelDownload.ready(context)) { "Сначала скачайте Gemma 4" }
-        if (localGpu != c.gpu) unload()
-        if (local == null) {
+        val wantGpu=c.gpu && !localGpuFailed
+        if (local != null && localGpu != wantGpu) { closeLocal() }
             fun load(gpu: Boolean): Engine {
                 Engine.setNativeMinLogSeverity(LogSeverity.ERROR)
                 val engine = Engine(EngineConfig(LocalModelDownload.modelFile(context).absolutePath,
-                    backend = if (gpu) Backend.GPU() else Backend.CPU(threadCount = 2),
+                    backend = if (gpu) Backend.GPU() else Backend.CPU(), audioBackend = Backend.CPU(),
                     maxNumTokens = 8192, cacheDir = java.io.File(context.cacheDir, "gemma4").apply { mkdirs() }.path))
                 try { engine.initialize(); return engine } catch (t: Throwable) { runCatching { engine.close() }; throw t }
             }
-            local = if (c.gpu) try { load(true) } catch (_: Exception) { Log.w("LlmPreparation", "GPU unavailable; loading CPU"); load(false) } else load(false)
-            localGpu = c.gpu
-            Log.i("LlmPreparation", "Local Gemma loaded")
+        if (local == null) {
+            local = if (wantGpu) try { load(true).also { localGpu=true } } catch (_: Exception) {
+                localGpuFailed=true; Log.w("LlmPreparation", "GPU unavailable; loading CPU"); load(false).also { localGpu=false }
+            } else load(false).also { localGpu=false }
+            Log.i("LlmPreparation", "Local Gemma loaded backend=${if(localGpu==true) "GPU" else "CPU"}")
         }
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
-        return local!!.createConversation(ConversationConfig(systemInstruction = Contents.of(instruction(c) + if (c.stress) LOCAL_EXAMPLES else ""),
-            samplerConfig = SamplerConfig(1, 0.95, 0.0), thinkingConfig = ThinkingConfig(c.localThinking, if (c.localThinking) 512 else 0),
-            enableResponseFormat = true, maxOutputToken = 6000)).use {
-            activeConversation = it
-            val deadline = timer.schedule({ runCatching { it.cancelProcess() } }, deadlineMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-            try { parse(it.sendMessage(JSONObject().put("texts", JSONArray(texts)).toString(), responseFormat = ResponseFormat.json(schema().toString())).toString(), texts.size) }
-            finally { deadline.cancel(false); activeConversation = null; usedAt = SystemClock.elapsedRealtime() }
+        val system=LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo)
+        fun generate(engine: Engine, index: Int): String {
+            check(generation==cancelGeneration.get()) { "Подготовка отменена" }
+            val text=texts[index]
+            val prompt=JSONObject().put("text",text)
+                .put("left_context",texts.getOrNull(index-1)?.takeLast(256).orEmpty())
+                .put("right_context",texts.getOrNull(index+1)?.take(256).orEmpty()).toString()
+            val timedOut=java.util.concurrent.atomic.AtomicBoolean()
+            return engine.createConversation(ConversationConfig(systemInstruction=Contents.of(system),
+                samplerConfig=SamplerConfig(1,0.95,0.0),
+                thinkingConfig=ThinkingConfig(c.localThinking,if(c.localThinking) 512 else 0),
+                maxOutputToken=LocalSpeechText.outputTokens(text.length))).use { conversation ->
+                activeConversation=conversation
+                val started=SystemClock.elapsedRealtime()
+                val deadline=timer.schedule({ timedOut.set(true); runCatching { conversation.cancelProcess() } },deadlineMs,java.util.concurrent.TimeUnit.MILLISECONDS)
+                try {
+                    val raw=conversation.sendMessage(prompt).toString()
+                    check(!timedOut.get()) { "LLM локальная: превышен лимит ${deadlineMs}мс" }
+                    check(generation==cancelGeneration.get()) { "Подготовка отменена" }
+                    Log.i("LlmPreparation","Local Gemma fragment=$index chars=${text.length} outputChars=${raw.length} backend=${if(localGpu==true) "GPU" else "CPU"} ms=${SystemClock.elapsedRealtime()-started}")
+                    LocalSpeechText.response(raw)
+                } catch(e: Exception) {
+                    if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${deadlineMs}мс")
+                    throw e
+                } finally { deadline.cancel(false); activeConversation=null; usedAt=SystemClock.elapsedRealtime() }
+            }
+        }
+        return texts.indices.map { index ->
+            val output=try { generate(local!!,index) } catch(e: Exception) {
+                if(localGpu!=true || generation!=cancelGeneration.get() || e.message.orEmpty().startsWith("LLM локальная:")) throw e
+                Log.w("LlmPreparation","Gemma GPU inference failed (${e.javaClass.simpleName}); retrying CPU")
+                closeLocal(); localGpuFailed=true; local=load(false);localGpu=false
+                generate(local!!,index)
+            }
+            onOutput(index,output); output
         }
     }
     private fun parse(answer: String, count: Int): List<String> {
@@ -184,6 +216,9 @@ object LlmProviders {
         if (local != null && SystemClock.elapsedRealtime() - usedAt > LlmSettings.idleSeconds(context) * 1000L) unload()
     }
     @Synchronized fun unload() {
+        closeLocal();localGpuFailed=false
+    }
+    private fun closeLocal() {
         local?.let { runCatching { it.close() } }
         local = null; localGpu = null
         Log.i("LlmPreparation", "Local Gemma unloaded")
