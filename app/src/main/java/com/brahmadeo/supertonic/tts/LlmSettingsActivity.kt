@@ -108,6 +108,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             Toggle("Локальные ударения и ё по контексту", offlineStress) {
                                 offlineStress = it; pausePrefs.edit().putBoolean("local_russian_stress",it).apply()
                             }
+                            if (!offlineStress) Text("Локальный акцентор выключен. Если LLM недоступна или не успела ответить, Silero может читать слова без правильных ударений. Для стабильного чтения рекомендуется включить локальные ударения; ударения LLM сохраняют приоритет.", style = MaterialTheme.typography.bodySmall)
                             Button(enabled = !offlineBusy && !offlineReady, onClick = {
                                 offlineBusy = true
                                 scope.launch {

@@ -65,7 +65,11 @@ class SileroEngine(context: Context) : AutoCloseable {
         listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
         lastUsed = android.os.SystemClock.elapsedRealtime()
         try {
-            val prepared = if (nativeTypes) SileroText.prepare(text) else SileroText.prepare(text).replace('–', '—')
+            val source = SileroText.prepare(text)
+            // These end-symbol quirks were measured on v5.5 RU; other voice packs
+            // keep their original input until independently verified.
+            val input = if (nativeTypes) SileroText.modelInput(source) else SileroText.ModelInput(source, false)
+            val prepared = if (nativeTypes) input.text else input.text.replace('–', '—')
             if (prepared.isEmpty() || SupertonicTTS.isCancelled()) return ByteArray(0)
             require(prepared.length <= 1200) { "Silero sentence is too long" }
             val voiceFile = File(voice)
@@ -86,7 +90,10 @@ class SileroEngine(context: Context) : AutoCloseable {
             val commaMs = prefs.getInt("tera_comma_pause_ms",180).coerceIn(0,400)
             val durations = prepared.mapIndexedNotNull { index, c ->
                 if (pauses) SileroPauseFrames.forPunctuation(c,commaMs)?.let { (index+1).toLong() to IValue.from(it) } else null
-            }.toMap()
+            }.toMap().toMutableMap()
+            // A synthetic terminal dot protects the last vowel without adding
+            // a new sentence pause (the model's natural prefix is ten frames).
+            if (input.addedEndDot) durations[prepared.length.toLong()] = IValue.from(1L)
             val args = arrayListOf(
                 IValue.from(Tensor.fromBlob(seq, shape)),
                 IValue.from(Tensor.fromBlob(longArrayOf(speaker.toLong()), longArrayOf(1))),
@@ -118,7 +125,7 @@ class SileroEngine(context: Context) : AutoCloseable {
             val pcm = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
             samples.forEach { pcm.putShort((it * safeGain * 32767).toInt().coerceIn(-32768, 32767).toShort()) }
             val base = pcm.array()
-            val endPause = if (pauses && prepared.trimEnd().lastOrNull() in listOf('.', '!', '?', '…')) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
+            val endPause = if (pauses && source.trimEnd().lastOrNull() in listOf('.', '!', '?', '…')) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
             val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(base,endPause,48000)
             val bytes = if (missing > 0) base + ByteArray(missing*2) else base
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
@@ -128,7 +135,7 @@ class SileroEngine(context: Context) : AutoCloseable {
                 val end = minOf(pos + 48000, bytes.size)
                 listener?.onAudioChunk(sid, bytes.copyOfRange(pos, end)); pos = end
             }
-            Log.i("SileroTTS", "Synthesized chars=${prepared.length} types=${types.toSet()} ms=${android.os.SystemClock.elapsedRealtime()-t} audioMs=${samples.size*1000L/48000}")
+            Log.i("SileroTTS", "Synthesized chars=${prepared.length} accents=${prepared.count { it == '+' }} endCorrection=${prepared != source} types=${types.toSet()} ms=${android.os.SystemClock.elapsedRealtime()-t} audioMs=${samples.size*1000L/48000}")
             return if (SupertonicTTS.isCancelled()) ByteArray(0) else bytes
         } finally { lastUsed = android.os.SystemClock.elapsedRealtime() }
     }

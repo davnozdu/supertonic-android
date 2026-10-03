@@ -4,6 +4,33 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SileroTextTest {
+    @Test fun finalStressIsNotPulledToTheLastVowel() {
+        assertEquals(SileroText.ModelInput("страд+ала.",true),SileroText.modelInput("страд+ала"))
+        assertEquals(SileroText.ModelInput("страд+ала.",false),SileroText.modelInput("страд+ала."))
+        for (text in listOf("светл+о", "светл+о.", "хорош+о.", "гот+ов.")) {
+            assertEquals(text.removeSuffix("."),SileroText.modelInput(text).text)
+            assertFalse(SileroText.modelInput(text).addedEndDot)
+        }
+        assertEquals("светл+о!",SileroText.modelInput("светл+о!").text)
+        assertEquals("гот+ов?",SileroText.modelInput("гот+ов?").text)
+        assertEquals("светл+о...",SileroText.modelInput("светл+о...").text)
+    }
+    @Test fun shortIsolatedFinalVowelsSurviveSileroAcceleration() {
+        for ((source,spoken) in listOf("да." to "даа.","кто?" to "ктоо?","вс+ё." to "вс+ёё.","– да!" to "– даа!","пишут см+и." to "пишут см+ии."))
+            assertEquals(spoken,SileroText.modelInput(source).text)
+        // A correction to a standalone response must not stretch little words
+        // inside a paragraph or add micro-pauses between them.
+        assertEquals("это не раз б+ыло. да. нет! как?",SileroText.modelInput("это не раз б+ыло. да. нет! как?").text)
+        assertEquals("да, я гот+ов",SileroText.modelInput("да, я гот+ов.").text)
+    }
+    @Test fun llmStressSurvivesAllNativeInputSteps() {
+        val text=SileroText.prepare("Она страда́ла. Теперь светло́. Всё хорошо́!")
+        assertEquals("она страд+ала. теперь светл+о. вс+ё хорош+о!",SileroText.modelInput(text).text)
+        assertEquals(4,SileroText.modelInput(text).text.count { it=='+' })
+        val input=SileroText.modelInput(SileroText.prepare("Она страда́ла"))
+        assertTrue(input.addedEndDot)
+        assertEquals(SileroText.sequence(input.text).size,SileroText.typeIds(input.text,true).size)
+    }
     @Test fun naturalProsodyKeepsShortSentencesInOneInference() {
         assertEquals(listOf("это не раз было. да. нет! как?"), SileroText.phrases("Это не\u00a0раз\u202fбыло. Да.Нет!Как?"))
         assertEquals(listOf("да.","нет!","как?"), SileroText.phrases("Да. Нет! Как?",420))

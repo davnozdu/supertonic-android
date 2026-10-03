@@ -34,7 +34,9 @@ object ReaderAudioAhead {
         worker.execute {
             try {
                 if(generation!=epoch.get() || !AssetManager.isReady(context) || model!=AssetManager.getModelType(context)) return@execute
-                val prepared=LlmPreparation.prepare(context,text)
+                // Background work has the duration of earlier playback available;
+                // the foreground's short startup deadline is inappropriate here.
+                val prepared=LlmPreparation.prepare(context,text,timeoutMs=30000)
                 if(generation!=epoch.get() || model!=AssetManager.getModelType(context)) return@execute
                 preparedTexts.put(textGeneration,text,prepared)
                 val normalizer=TextNormalizer()

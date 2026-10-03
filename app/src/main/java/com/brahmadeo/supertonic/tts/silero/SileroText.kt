@@ -41,6 +41,25 @@ internal object SileroText {
     }
     fun sequence(prepared: String): LongArray = longArrayOf(2) +
         prepared.map { symbols.indexOf(it).toLong() }.toLongArray() + longArrayOf(1)
+    data class ModelInput(val text: String, val addedEndDot: Boolean)
+    private val oxytoneEnd = Regex("[аеёиоуыэюя]\\S*\\+[аеёиоуыэюя][^\\sаеёиоуыэюя]*$", RegexOption.IGNORE_CASE)
+    private val shortEnd = Regex("^([^\\p{L}]*[бвгджзйклмнпрстфхцчшщ]{1,2}\\+?)([аеёиоуыэюя])(?=[.!?…][^\\p{L}]*$)", RegexOption.IGNORE_CASE)
+    private val smiEnd = Regex("(?<![\\p{L}+])(см\\+)(и)(?=[.!?…][^\\p{L}]*$)", RegexOption.IGNORE_CASE)
+    /** Silero v5.5 end-symbol corrections, adapted from RuVoice Stress.modelEnd/stretchShort.
+     * Only model input changes: source text, cache keys and reader highlighting stay intact.
+     * Do not introduce inter-word pauses or change question/exclamation punctuation. */
+    fun modelInput(prepared: String): ModelInput {
+        val text = prepared.trimEnd()
+        if (text.isEmpty()) return ModelInput(text, false)
+        val oxy = oxytoneEnd.containsMatchIn(text.removeSuffix("."))
+        val added = text.last().isLetter() && !oxy
+        val ended = when {
+            added -> "$text."
+            oxy && text.endsWith('.') && !text.endsWith("..") -> text.dropLast(1)
+            else -> text
+        }
+        return ModelInput(smiEnd.replace(shortEnd.replace(ended, "$1$2$2"), "$1$2$2"), added)
+    }
     fun typeIds(prepared: String, expressive: Boolean): LongArray {
         val ids = LongArray(prepared.length + 2)
         if (!expressive) return ids

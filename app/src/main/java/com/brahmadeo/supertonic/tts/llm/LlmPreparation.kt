@@ -47,7 +47,7 @@ object LlmPreparation {
         val id = synchronized(lock) {
             // Bound copied text, even if a reader submits an entire book.
             while (entries.isNotEmpty() && (entries.size >= 256 || entries.values.sumOf { it.text.length } + text.length > 96_000)) {
-                val victim = entries.values.firstOrNull { !it.claimed && !it.processing } ?: return null
+                val victim = entries.values.firstOrNull { it.future.isDone || (!it.claimed && !it.processing) } ?: return null
                 entries.remove(victim.id); victim.future.cancel(false)
             }
             val entry = Entry(++nextId, caller, text, com.brahmadeo.supertonic.tts.utils.LexiconManager.apply(text))
@@ -75,18 +75,22 @@ object LlmPreparation {
         if (!enabled(ctx)) return text
         initialize(ctx)
         val entry = synchronized(lock) {
-            (if (id != null) entries[id] else entries.values.firstOrNull { it.text == text && !it.claimed })?.also { it.claimed = true }
+            (if (id != null) entries[id] else entries.values.firstOrNull { it.text == text && !it.claimed }
+                ?: entries.values.firstOrNull { it.text == text })?.also { it.claimed = true }
         } ?: submit(ctx, appCaller, text)?.let { token -> synchronized(lock) { entries[token]?.also { it.claimed = true } } }
         if (entry == null) return text
         startWorker()
         return try {
             val result = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
             Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
+            synchronized(lock) { entries.remove(entry.id) }
             result.text
         } catch (_: Exception) {
             Log.w("LlmPreparation", "Preparation not ready within ${timeoutMs}ms; dictionary fallback chars=${text.length}")
+            // Keep the future even if it completed just after get() timed out:
+            // the background waiter can still consume the validated result.
             text
-        } finally { synchronized(lock) { entries.remove(entry.id) } }
+        }
     }
     fun test(ctx: Context, c: LlmConfig, text: String): Result {
         initialize(ctx)
