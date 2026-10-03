@@ -35,7 +35,17 @@ class LocalSpeechTextTest {
         assertEquals(answer,LocalSpeechText.response(answer))
         assertEquals(answer,PreparedTextValidator.validate(original,answer))
         assertTrue(LocalSpeechText.prompt(original,"Слева.","Справа.").endsWith("ТЕКСТ:\n$original"))
-        assertTrue("Не используй +" in LocalSpeechText.instruction(true,true,true))
+        assertTrue("U+0301" in LocalSpeechText.instruction(true,true,true,"acute"))
+    }
+    @Test fun capitalsAreOnlyMarkersWhenAddedToSameSourceWord() {
+        val source="Она страдала. Ты готов? По-прежнему светло."
+        val response=LocalSpeechText.response("Она страдАла. Ты готОв? По-прЕжнему светлО.",source,"caps")
+        assertEquals("Она страда́ла. Ты гото́в? По-пре́жнему светло́.",response)
+        assertEquals(response,PreparedTextValidator.validate(source,response))
+        assertEquals("ООН и Анна.",LocalSpeechText.response("ООН и Анна.","ООН и Анна.","caps"))
+        assertNull(PreparedTextValidator.validate("светло",LocalSpeechText.response("слеблО","светло","caps")))
+        assertNull(PreparedTextValidator.validate("страдала",LocalSpeechText.response("стрАдАла","страдала","caps")))
+        assertEquals("светл+о",PreparedTextValidator.validate("светл+о",LocalSpeechText.response("свЕтло","светл+о","caps")))
     }
     @Test fun disabledOperationsAreExplicit() {
         val instruction=LocalSpeechText.instruction(false,false,false)

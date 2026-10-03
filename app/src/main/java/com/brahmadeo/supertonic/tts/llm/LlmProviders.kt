@@ -148,7 +148,7 @@ object LlmProviders {
         return parse(answer, texts.size)
     }
     @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long = 45000,
-        onOutput: (Int,String) -> Unit = { _,_ -> }): List<String> {
+        onOutput: (Int,String) -> Unit = { _,_ -> }, protocol: String = "caps", diagnosticInstruction: String? = null): List<String> {
         val generation = cancelGeneration.get()
         require(LocalModelDownload.ready(context)) { "Сначала скачайте Gemma 4" }
         val wantGpu=c.gpu && !localGpuFailed
@@ -168,7 +168,7 @@ object LlmProviders {
         }
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
-        val system=LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo)
+        val system=diagnosticInstruction ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
         fun generate(engine: Engine, index: Int): String {
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             val text=texts[index]
@@ -188,7 +188,7 @@ object LlmProviders {
                     check(!timedOut.get()) { "LLM локальная: превышен лимит ${deadlineMs}мс" }
                     check(generation==cancelGeneration.get()) { "Подготовка отменена" }
                     Log.i("LlmPreparation","Local Gemma fragment=$index chars=${text.length} outputChars=${raw.length} backend=${if(localGpu==true) "GPU" else "CPU"} ms=${SystemClock.elapsedRealtime()-started}")
-                    LocalSpeechText.response(raw)
+                    LocalSpeechText.response(raw,text,protocol)
                 } catch(e: Exception) {
                     if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${deadlineMs}мс")
                     throw e

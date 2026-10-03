@@ -8,7 +8,7 @@ object PreparedTextValidator {
     private fun plain(s: String) = s.replace("+", "").replace("\u0301", "")
     private fun symbols(s: String) = s.filter { !it.isLetterOrDigit() && !it.isWhitespace() && it !in "+\u0301,.;:!?…—–-\"'«»“”„()[]" }
     fun validate(original: String, response: String, allowPunctuation: Boolean = true, allowStress: Boolean = true,
-                 numberRanges: List<IntRange> = emptyList(), allowYo: Boolean = true,
+                 numberRanges: List<IntRange> = emptyList(), allowYo: Boolean = true, requireStress: Boolean = allowStress,
                  onReject: (String) -> Unit = {}): String? {
         fun reject(reason: String): String? { onReject(reason); return null }
         // Some providers insert dialogue quotes despite the instruction. If the
@@ -81,7 +81,7 @@ object PreparedTextValidator {
         }
         // A punctuation-only answer is not successful stress preparation.
         // Already marked text and single-syllable words need no new marks.
-        if (allowStress && needsStress && !suppliedStress) return reject("missing_stress")
+        if (requireStress && needsStress && !suppliedStress) return reject("missing_stress")
         if (!allowPunctuation) {
             val out = StringBuilder(original)
             for (i in a.indices.reversed()) out.replace(a[i].range.first, a[i].range.last + 1, replacements[i].second)

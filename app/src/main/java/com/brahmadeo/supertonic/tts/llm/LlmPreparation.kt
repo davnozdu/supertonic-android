@@ -27,10 +27,12 @@ object LlmPreparation {
     private val cooldown = mutableMapOf<String, Long>() // Only the worker accesses this.
     private val appCaller = Any()
     private val preparedCache = LlmTextCache<LlmConfig>()
+    private var ambiguousLocalYo: Set<String> = setOf("все","узнает","берет")
     private val russianNumbers = com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer()
     @Synchronized fun initialize(ctx: Context) {
         if (context != null) return
         context = ctx.applicationContext
+        ambiguousLocalYo=runCatching { ctx.assets.open("tera_ambiguous_yo.txt").bufferedReader().use { it.readLines().toSet() } }.getOrDefault(ambiguousLocalYo)
         timer.scheduleWithFixedDelay({ context?.let { executor.execute { LlmProviders.unloadIfIdle(it) } } }, 15, 15, TimeUnit.SECONDS)
     }
     fun enabled(ctx: Context) = LlmSettings.enabled(ctx)
@@ -181,10 +183,18 @@ object LlmPreparation {
                     val source = requestTexts[requestIndex]
                     var rejection = "structure"
                     val validated = PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress,
-                        numericInputs[index].ranges, c.restoreYo) { rejection = it }
+                        numericInputs[index].ranges, c.restoreYo, requireStress=provider!="local" && c.stress) { rejection = it }
                     if (traceSynthetic) Log.i("SpeechCheck","SYNTHETIC PROPOSAL provider=$provider: $proposed")
                     if (validated != null) {
-                        val result = Result(validated, provider, SystemClock.elapsedRealtime()-started, false)
+                        val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
+                            val local=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,validated)
+                            val dictionary=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(local,"ru")
+                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(validated,dictionary,c.restoreYo)
+                            MissingSpeechMarks.merge(validated,safe,c.stress,c.restoreYo,ambiguousLocalYo)
+                        } else validated
+                        val supplemented=completed!=validated
+                        if(provider=="local") Log.i("LlmPreparation","Local supplement chars=${validated.length} llmEdited=${validated!=source} llmStress=${validated.count { it=='\u0301' }} llmYoAdded=${validated.count { it in "ёЁ" }-source.count { it in "ёЁ" }} changed=$supplemented; explicit LLM stress/yo retained")
+                        val result = Result(completed, if(supplemented) "local+offline" else provider, SystemClock.elapsedRealtime()-started, false)
                         results[index] = result; accepted++
                         onPrepared(index, result)
                         if (provider == "local") preparedCache.put(c,texts,results.map { it?.text })

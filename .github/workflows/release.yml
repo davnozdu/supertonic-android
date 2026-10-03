@@ -162,6 +162,12 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 34 changes
+            - Accept structurally valid partial local Gemma edits and fill unmarked Russian words with autonomous processing.
+            - Preserve explicit LLM stress and written ё; do not replace LLM punctuation, words or numbers during supplementation.
+            - Keep strict cloud validation and reject semantic corruption from every provider.
+            - Use a simpler local stress notation and include private device comparisons of prompt formats.
+
             ### Beta 33 changes
             - Use ordinary acute stress marks and plain text input for local Gemma; retain strict validation of words, numbers and stress positions.
             - Extend device checks to contextual е/ё and prevent overlapping diagnostics from interrupting synthesis.
