@@ -24,8 +24,9 @@ object SupertonicTTS {
     private fun audioKey(context: Context, text: String, lang: String, style: String, speed: Float, steps: Int, gain: Float): String {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         val settings=listOf("tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
-        return listOf(AssetManager.getModelType(context),text,lang,style,speed,steps,gain,settings).joinToString("\u0000")
+        return listOf(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),text,lang,style,speed,steps,gain,settings).joinToString("\u0000")
     }
+    @Synchronized fun clearAudioCache() { audioCache.clear(); audioCacheBytes=0L }
     private fun cacheAudio(key: String, bytes: ByteArray?) {
         if(bytes==null || bytes.isEmpty() || bytes.size>16*1024*1024 || isCancelled()) return
         audioCache.remove(key)?.let { audioCacheBytes-=it.size }
@@ -45,6 +46,7 @@ object SupertonicTTS {
      */
     fun setApplicationContext(context: Context) {
         appContext = context.applicationContext
+        com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.initialize(context)
         com.brahmadeo.supertonic.tts.utils.TextNormalizer.context = context.applicationContext
     }
 
@@ -222,7 +224,8 @@ object SupertonicTTS {
     private var sessionIdCounter: Long = 0
 
     @Synchronized
-    fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null): ByteArray? {
+    fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null): ByteArray? {
+        if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
         val sid = ++sessionIdCounter
         currentSession.set(SessionContext(sid, listener))
         val cacheKey = appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain) }

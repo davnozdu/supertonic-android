@@ -23,6 +23,7 @@ import kotlin.math.roundToInt
 
 /** Android port of the distilled TeraTTSv2 ONNX pipeline. */
 class TeraEngine(private val root: File, context: Context) : AutoCloseable {
+    private val llmPrefs = context.applicationContext.getSharedPreferences("llm_settings", Context.MODE_PRIVATE)
     private val pausePrefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private val env = OrtEnvironment.getEnvironment()
     private val sessions = HashMap<String, OrtSession>()
@@ -59,7 +60,8 @@ class TeraEngine(private val root: File, context: Context) : AutoCloseable {
     }
 
     private fun accentText(text: String): String {
-        return TeraTextPreparation.stress(text, accents::lookup, yoWords, ambiguousStress, ambiguousYo)
+        val prepared = TeraTextPreparation.stress(text, accents::lookup, yoWords, ambiguousStress, ambiguousYo)
+        return com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(text, prepared, llmPrefs.getBoolean("restore_yo",true))
     }
 
     private fun tokenize(text: String): LongArray {

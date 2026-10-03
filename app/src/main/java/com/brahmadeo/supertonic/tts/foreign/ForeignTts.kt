@@ -54,6 +54,7 @@ object ForeignTts {
     fun reset() { idle.execute { synchronized(this) {
         closeClient(); cache.clear(); cacheBytes = 0; cooldown.clear()
     } } }
+    @Synchronized fun clearAudioCache() { cache.clear(); cacheBytes=0 }
     private fun closeClient() { client?.shutdown(); client = null; clientEngine = null; init = null }
     private fun waitFor(future: CompletableFuture<*>, timeoutMs: Long) {
         val until = android.os.SystemClock.elapsedRealtime() + timeoutMs

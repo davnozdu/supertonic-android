@@ -162,6 +162,11 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 24 changes
+            - Clear text/audio caches manually from text preparation settings; automatically invalidate them when settings change without stopping playback.
+            - The ё switch applies to local dictionaries and Tera too. Preserve written ё, prevent false ё in wall declensions, and use dictionary ё rather than speculative word-model predictions.
+            - Discard stale background audio preparation after cache invalidation.
+
             ### Beta 23 changes
             - Visible Models and voice packs button on the main screen and in the menu; choose Silero CIS to access 29 Russian voices without deleting the current pack.
             - Model picker can be cancelled; installed voice packs are reused when switching.

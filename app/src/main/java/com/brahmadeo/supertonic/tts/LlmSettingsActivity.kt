@@ -90,6 +90,10 @@ class LlmSettingsActivity : ComponentActivity() {
                             save()
                         }
                         Text("Ударения и пунктуация готовятся до синтеза. При ошибке или превышении времени ожидания используется обычная обработка со словарём.")
+                        Button(onClick = {
+                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            message = "Кэш текста и аудио очищен. Уже переданный Android звук может доиграть; следующие фрагменты будут подготовлены заново."
+                        }) { Text("Очистить кэш текста и аудио") }
                         Text("Целые числа сначала точно переводятся в слова. LLM расставляет ударения и пунктуацию и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется.", style = MaterialTheme.typography.bodySmall)
                         if (config.mode != LlmMode.OFF) {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->
@@ -152,6 +156,7 @@ class LlmSettingsActivity : ComponentActivity() {
                         Toggle("Расставлять ударения", config.stress) { config = config.copy(stress = it); save() }
                         Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it); save() }
                         Toggle("Восстанавливать букву ё по контексту", config.restoreYo) { config = config.copy(restoreYo = it); save() }
+                        Text("Переключатель ё действует на LLM и локальные словари. Исходная ё в книге сохраняется. Изменение настроек автоматически сбрасывает кэш подготовки и готового аудио.", style = MaterialTheme.typography.bodySmall)
                         Text("Текст, уже отправленный читалкой, подготавливается в фоне с контекстом до 4000 символов. Если читалка отправляет по одному фрагменту, первая подготовка каждого нового фрагмента может занять время.", style = MaterialTheme.typography.bodySmall)
                         Text("Чтение ждёт подготовку не более 1,5 секунды. Если результат ещё не готов, используется словарь, а очередь подготавливается дальше в фоне.", style = MaterialTheme.typography.bodySmall)
                         Choice("Подготовка текста вперёд в приложении", "${config.aheadChars} символов",

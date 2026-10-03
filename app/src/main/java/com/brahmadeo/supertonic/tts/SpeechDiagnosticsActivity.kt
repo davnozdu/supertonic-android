@@ -29,6 +29,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val oldVoice = prefs.getString("selected_voice", "F3.json")
                 val llmPrefs=getSharedPreferences("llm_settings",MODE_PRIVATE)
                 val oldLlmMode=llmPrefs.getString("mode","OFF")
+                val oldRestoreYo=llmPrefs.getBoolean("restore_yo",true)
                 val offline=intent.getBooleanExtra("offline",false)
                 val oldLang = prefs.getString("selected_lang", "en")
                 val model = intent.getStringExtra("model") ?: AssetManager.SILERO_MODEL
@@ -56,6 +57,19 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         check("письм+а" in accented && "Л+ене" in accented && "Семёна" in accented)
                         check(com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(context,"све+тло, берёза.")=="све+тло, берёза.")
                         Log.i("SpeechCheck","OFFLINE stress/yo and explicit-stress checks passed; LLM disabled")
+                        if(intent.getBooleanExtra("cache",false)) {
+                            SupertonicTTS.setApplicationContext(context)
+                            val normalizer=com.brahmadeo.supertonic.tts.utils.TextNormalizer()
+                            val wall=normalizer.normalize("По стенам.","ru")
+                            check("стёнам" !in wall.replace("+","").replace("\u0301","").lowercase())
+                            llmPrefs.edit().putBoolean("restore_yo",false).commit()
+                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            val plain=normalizer.normalize("Зеленый ребенок, ковер и берёза.","ru").replace("+","").replace("\u0301","")
+                            check("Зеленый ребенок, ковер и берёза." == plain)
+                            llmPrefs.edit().putBoolean("restore_yo",oldRestoreYo).commit()
+                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            Log.i("SpeechCheck","YO SWITCH AND WALL REGRESSION PASSED: $wall; disabled=$plain")
+                        }
                     }
                     val ready = CompletableFuture<Int>()
                     withContext(Dispatchers.Main) {
@@ -72,7 +86,15 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         "Dobrý den, jak se máte? Máme 1101 záznamů."
                     )
                     for ((index, text) in cases.withIndex()) {
-                        if (index == 1) delay(6000)
+                        if (index == 1) {
+                            delay(6000)
+                            if(intent.getBooleanExtra("cache",false)) {
+                                val before=com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation
+                                com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                                check(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation>before)
+                                Log.i("SpeechCheck","Manual cache invalidation before repeated synthesis")
+                            }
+                        }
                         val language = when (index) { 3 -> "en"; 4 -> "cs"; else -> "ru" }
                         check(tts!!.setLanguage(Locale(language)) >= TextToSpeech.LANG_AVAILABLE)
                         val id = "speech-check-$index"; val done = CompletableFuture<Unit>()
@@ -118,7 +140,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 finally {
                     tts?.stop(); tts?.shutdown()
                     if(offline) {
-                        llmPrefs.edit().putString("mode",oldLlmMode).commit()
+                        llmPrefs.edit().putString("mode",oldLlmMode).putBoolean("restore_yo",oldRestoreYo).commit()
                         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
                     }
                     AssetManager.setModelType(this@SpeechDiagnosticsActivity, oldModel)

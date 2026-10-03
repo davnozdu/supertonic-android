@@ -24,6 +24,7 @@ object LocalRussianStress {
     private val cache = object : LinkedHashMap<String, String>(128, .75f, true) {
         override fun removeEldestEntry(e: MutableMap.MutableEntry<String,String>?) = size > 512
     }
+    @Synchronized fun clearCache() { cache.clear() }
     init {
         Executors.newSingleThreadScheduledExecutor { Thread(it, "LocalStressIdle").apply { isDaemon = true } }
             .scheduleWithFixedDelay({ synchronized(this) {
@@ -143,12 +144,8 @@ object LocalRussianStress {
                 val index = positions.indices.maxByOrNull { st[it] } ?: 0
                 val pos = positions[index]
                 var value = original
-                // Neural ё only on the stressed vowel; named entities stay conservative.
-                val yoIndex = yp.indices.maxByOrNull { yp[it] } ?: -1
-                val maxYo = yp.maxOrNull() ?: 0f
-                val confidence = if (yp.isEmpty()) 0.0 else 1.0 / yp.sumOf { kotlin.math.exp((it-maxYo).toDouble()) }
-                if (yoIndex == index && confidence > .5 && value[pos].lowercaseChar() == 'е' && original[0].isLowerCase())
-                    value = value.substring(0,pos)+"ё"+value.substring(pos+1)
+                // ё is restored only from verified dictionary forms; word-model guesses
+                // can invent ё in ordinary words such as "стенам".
                 value.substring(0,pos)+"+"+value.substring(pos)
             }
             cache[text] = result

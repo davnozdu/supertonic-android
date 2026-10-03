@@ -338,9 +338,14 @@ class TextNormalizer {
             var t = LexiconManager.apply(inputText)
             if (lowerLang.startsWith("ru")) {
                 t = RussianBookNormalizer.normalize(t)
+                val original = t
                 context?.let { t = com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(it, t) }
+                t = AccentDictionaryManager.apply(t, lowerLang)
+                t = RussianYoPolicy.apply(original, t, context?.getSharedPreferences("llm_settings",0)?.getBoolean("restore_yo",true) ?: true)
+                t
+            } else {
+                AccentDictionaryManager.apply(t, lowerLang)
             }
-            AccentDictionaryManager.apply(t, lowerLang)
         } else {
             inputText
         }

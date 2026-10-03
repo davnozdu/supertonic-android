@@ -504,7 +504,10 @@ class MainActivity : ComponentActivity() {
                         },
 
                         speed = viewModel.currentSpeed.floatValue,
-                        onSpeedChange = { viewModel.currentSpeed.floatValue = it },
+                        onSpeedChange = {
+                            viewModel.currentSpeed.floatValue = it
+                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                        },
                         steps = viewModel.currentSteps.intValue,
                         onStepsChange = {
                             viewModel.currentSteps.intValue = it

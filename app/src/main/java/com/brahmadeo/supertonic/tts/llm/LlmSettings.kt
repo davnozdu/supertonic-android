@@ -102,7 +102,7 @@ object LlmSettings {
             .putBoolean("punctuation", c.punctuation).putBoolean("stress", c.stress)
             .putBoolean("restore_yo", c.restoreYo)
             .putInt("ahead_chars", c.aheadChars.coerceIn(4000, 48000)).apply()
-        LlmPreparation.settingsChanged()
+        com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
     }
     fun previousMode(context: Context) = runCatching {
         LlmMode.valueOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("last_mode", "AUTO")!!)
