@@ -4,6 +4,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SileroTextTest {
+    @Test fun naturalProsodyKeepsShortSentencesInOneInference() {
+        assertEquals(listOf("это не раз было. да. нет! как?"), SileroText.phrases("Это не\u00a0раз\u202fбыло. Да.Нет!Как?"))
+        assertEquals(listOf("да.","нет!","как?"), SileroText.phrases("Да. Нет! Как?",420))
+        assertEquals(listOf("не раз было, и он бы не стал."),SileroText.phrases("Не раз было, и он бы не стал."))
+    }
     @Test fun bookSpacesDoNotJoinShortWords() {
         assertEquals("не раз было.",SileroText.prepare("Не\u00a0раз\u202fбыло."))
         assertEquals("не раз было.",SileroText.prepare("Не\u2009раз\u2002было."))

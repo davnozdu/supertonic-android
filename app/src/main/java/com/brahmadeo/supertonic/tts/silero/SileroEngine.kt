@@ -49,10 +49,9 @@ class SileroEngine(context: Context) : AutoCloseable {
     }
     @Synchronized fun synthesize(text: String, voice: String, speed: Float, gain: Float,
         listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
-        val sentenceMs=if(prefs.getBoolean("tera_punctuation_pauses",true)) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
-        val spaced=com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(text)
-        val parts=com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.split(spaced,0,sentenceMs,sentenceOnly=true)
-            .map { it.text }.ifEmpty { listOf(text) }.flatMap { SileroText.bounded(SileroText.prepare(it)) }
+        val fixedPauses=prefs.getBoolean("silero_fixed_pauses",false)
+        val sentenceMs=if(fixedPauses) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
+        val parts=SileroText.phrases(text,sentenceMs)
         val output=java.io.ByteArrayOutputStream()
         for(part in parts) {
             if(SupertonicTTS.isCancelled()) return ByteArray(0)
@@ -83,7 +82,7 @@ class SileroEngine(context: Context) : AutoCloseable {
             val pitches = FloatArray(seq.size) { 1f }
             val types = SileroText.typeIds(prepared, prefs.getBoolean("silero_intonation", true))
             val t = android.os.SystemClock.elapsedRealtime()
-            val pauses = prefs.getBoolean("tera_punctuation_pauses",true)
+            val pauses = prefs.getBoolean("silero_fixed_pauses",false)
             val commaMs = prefs.getInt("tera_comma_pause_ms",180).coerceIn(0,400)
             val durations = prepared.mapIndexedNotNull { index, c ->
                 if (pauses) SileroPauseFrames.forPunctuation(c,commaMs)?.let { (index+1).toLong() to IValue.from(it) } else null

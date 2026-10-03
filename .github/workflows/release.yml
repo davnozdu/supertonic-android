@@ -162,6 +162,11 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Beta 27 changes
+            - Restore natural Silero pauses and continuous sentence prosody by default; fixed punctuation pauses are an independent opt-in setting.
+            - Preserve word boundaries and expression controls; invalidate cached audio when the Silero pause setting changes.
+            - Tera synthesis and its pause settings remain unchanged.
+
             ### Beta 26 changes
             - Resume native model downloads with bounded timeouts, retries and SHA-256 validation; retain Tera when switching native presets.
             - Retry unsupported optimized ONNX graphs with basic optimization for mobile FP16 kernel compatibility.

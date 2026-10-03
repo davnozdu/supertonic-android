@@ -21,6 +21,12 @@ internal object SileroText {
             } }.filterNotNull().joinToString("")
             .replace(Regex(" +"), " ").trim()
     }
+    fun phrases(input: String, extraSentencePauseMs: Int = 0): List<String> {
+        val spaced=com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(input)
+        val sentences=if(extraSentencePauseMs>0) com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses
+            .split(spaced,0,extraSentencePauseMs,sentenceOnly=true).map { it.text } else listOf(spaced)
+        return sentences.flatMap { bounded(prepare(it)) }
+    }
     fun bounded(prepared: String, limit: Int = 1000): List<String> {
         require(limit in 32..1200)
         val result=mutableListOf<String>();var remaining=prepared.trim()

@@ -12,7 +12,7 @@ object SpeechPreparationCache {
     private val cleaner = Executors.newSingleThreadExecutor { Thread(it,"SpeechCacheClear").apply { isDaemon=true } }
     private val keys = setOf("selected_model","selected_voice","selected_voice_2","is_mixing_enabled","mix_alpha","is_advanced_normalization","selected_lang","speed","diffusion_steps",
         "local_russian_stress","reader_early_prepare","reader_pcm_cache_mb","tera_punctuation_pauses",
-        "tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","foreign_tts","foreign_engine","foreign_language")
+        "tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language")
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if(key == null || key in keys) clear()
     }

@@ -56,7 +56,9 @@ class LlmSettingsActivity : ComponentActivity() {
                 var offlineStress by remember { mutableStateOf(pausePrefs.getBoolean("local_russian_stress",true)) }
                 var pcmCacheMb by remember { mutableIntStateOf(pausePrefs.getInt("reader_pcm_cache_mb",256)) }
                 var readerAhead by remember { mutableStateOf(pausePrefs.getBoolean("reader_early_prepare",true)) }
-                var punctuationPauses by remember { mutableStateOf(pausePrefs.getBoolean("tera_punctuation_pauses", true)) }
+                val sileroPauses = remember { com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity) }
+                val pauseKey = if(sileroPauses) "silero_fixed_pauses" else "tera_punctuation_pauses"
+                var punctuationPauses by remember { mutableStateOf(pausePrefs.getBoolean(pauseKey, !sileroPauses)) }
                 var commaPause by remember { mutableIntStateOf(pausePrefs.getInt("tera_comma_pause_ms", 180)) }
                 var sentencePause by remember { mutableIntStateOf(pausePrefs.getInt("tera_sentence_pause_ms", 420)) }
                 fun save() {
@@ -167,8 +169,8 @@ class LlmSettingsActivity : ComponentActivity() {
                         Text("Движущийся буфер заранее обрабатывает следующие части загруженного текста и пополняется во время чтения. Для сторонней читалки доступны только уже переданные ею фрагменты.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Паузы русских моделей при чтении", style = MaterialTheme.typography.titleLarge)
-                        Toggle("Слышимые паузы по пунктуации", punctuationPauses) {
-                            punctuationPauses = it; pausePrefs.edit().putBoolean("tera_punctuation_pauses", it).apply()
+                        Toggle(if(sileroPauses) "Дополнительные фиксированные паузы Silero" else "Слышимые паузы по пунктуации", punctuationPauses) {
+                            punctuationPauses = it; pausePrefs.edit().putBoolean(pauseKey, it).apply()
                         }
                         Choice("Запятая", "$commaPause мс", listOf("100 мс", "140 мс", "180 мс", "220 мс", "300 мс")) {
                             commaPause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_comma_pause_ms", commaPause).apply()
@@ -176,7 +178,7 @@ class LlmSettingsActivity : ComponentActivity() {
                         Choice("Точка, вопрос и восклицание", "$sentencePause мс", listOf("0 мс", "250 мс", "350 мс", "420 мс", "550 мс", "700 мс")) {
                             sentencePause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_sentence_pause_ms", sentencePause).apply()
                         }
-                        Text("Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу.", style = MaterialTheme.typography.bodySmall)
+                        Text(if(sileroPauses) "По умолчанию используется естественный ритм Silero: модель сама задаёт паузы и сохраняет связную интонацию. Дополнительные паузы можно включить вручную." else "Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Ollama Cloud", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.ollamaEndpoint, { config = config.copy(ollamaEndpoint = it) }, label = { Text("Адрес API (HTTPS)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
