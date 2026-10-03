@@ -913,9 +913,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setStyle(androidx.media.app.NotificationCompat.MediaStyle().apply {
-                mediaSession?.let { setMediaSession(it.sessionToken) }
-                setShowActionsInCompactView(0)
+            .setStyle(androidx.media.app.NotificationCompat.MediaStyle().also { style ->
+                mediaSession?.let { style.setMediaSession(it.sessionToken) }
+                style.setShowActionsInCompactView(0)
             })
 
         if (showControls) {
