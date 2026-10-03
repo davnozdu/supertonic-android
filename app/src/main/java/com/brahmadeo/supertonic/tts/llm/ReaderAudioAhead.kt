@@ -15,13 +15,16 @@ object ReaderAudioAhead {
     private val epoch = AtomicLong()
     private val worker = ThreadPoolExecutor(1,1,30,TimeUnit.SECONDS,ArrayBlockingQueue(16),
         { Thread(it,"ReaderAudioAhead").apply { isDaemon = true } },ThreadPoolExecutor.DiscardPolicy())
-    fun cancel() { epoch.incrementAndGet(); worker.queue.clear() }
+    private val preparedTexts=PreparedSpeechHandoff()
+    fun cancel() { epoch.incrementAndGet(); preparedTexts.clear(); worker.queue.clear() }
+    fun takePrepared(text: String): String? = preparedTexts.take(text)
     fun submit(ctx: Context, text: String, params: Bundle?) {
         val prefs=ctx.getSharedPreferences("SupertonicPrefs",0)
         if (!prefs.getBoolean("reader_early_prepare",true) || !AssetManager.isRussianModel(ctx) || text.length > 6000 || text.length < 12) return
         val packageNames=ctx.packageManager.getPackagesForUid(android.os.Binder.getCallingUid()).orEmpty()
         if (packageNames.any { it.contains("talkback") || it.contains("jieshuo") || it.contains("accessibility") }) return
         val context=ctx.applicationContext;val generation=epoch.get();val model=AssetManager.getModelType(ctx)
+        val textGeneration=preparedTexts.token()
         val cacheGeneration=com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation
         val voice=params?.getString("voiceName")?.substringAfter("-supertonic-","")?.takeIf { it.isNotEmpty() }?.plus(".json")
             ?: prefs.getString("selected_voice","ru_f1.json")!!
@@ -32,6 +35,8 @@ object ReaderAudioAhead {
             try {
                 if(generation!=epoch.get() || !AssetManager.isReady(context) || model!=AssetManager.getModelType(context)) return@execute
                 val prepared=LlmPreparation.prepare(context,text)
+                if(generation!=epoch.get() || model!=AssetManager.getModelType(context)) return@execute
+                preparedTexts.put(textGeneration,text,prepared)
                 val normalizer=TextNormalizer()
                 for(sentence in normalizer.splitIntoSentences(prepared,"ru",preservePunctuation=true)) {
                     if(generation!=epoch.get() || SupertonicTTS.isCancelled() || model!=AssetManager.getModelType(context)) break

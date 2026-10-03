@@ -262,7 +262,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
         val incomingText = request.charSequenceText?.toString() ?: return
-        val rawText = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this, incomingText)
+        val aheadText = com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
+        val rawText = aheadText ?: com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepare(this, incomingText)
+        if(aheadText!=null) Log.i("ReaderAhead","Using prepared text without repeated LLM wait chars=${incomingText.length}")
         if (SupertonicTTS.isCancelled()) { callback.error(); callback.done(); return }
         val requestStarted = android.os.SystemClock.elapsedRealtime()
         Log.i("SupertonicTTS", "TTS request started: chars=${rawText.length}, model=${AssetManager.getModelType(this)}")
