@@ -37,6 +37,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val oldLlmMode=llmPrefs.getString("mode","OFF")
                 val oldMultiVoice=llmPrefs.getBoolean("multi_voice",false)
                 val multiVoiceProbe=intent.getBooleanExtra("multiVoiceProbe",false)
+                val voicePreviewProbe=intent.getBooleanExtra("voicePreviewProbe",false)
                 val oldRestoreYo=llmPrefs.getBoolean("restore_yo",true)
                 val offline=intent.getBooleanExtra("offline",false)
                 val oldLocalStress=prefs.getBoolean("local_russian_stress",true)
@@ -49,6 +50,10 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         val requested = intent.getStringExtra("roleProvider") ?: oldLlmMode
                         require(requested in listOf("LOCAL", "GEMINI", "OLLAMA", "AUTO"))
                         llmPrefs.edit().putBoolean("multi_voice",true).putString("mode",requested).commit()
+                        com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
+                    }
+                    if(voicePreviewProbe) {
+                        llmPrefs.edit().putBoolean("multi_voice",true).commit()
                         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
                     }
                     if(verifyStress) prefs.edit().putBoolean("local_russian_stress",true).commit()
@@ -123,6 +128,29 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     check(ready.get(10, TimeUnit.SECONDS) == TextToSpeech.SUCCESS)
                     check(tts!!.setLanguage(Locale("ru")) >= TextToSpeech.LANG_AVAILABLE)
                     tts!!.setSpeechRate(1.1f)
+                    if(voicePreviewProbe) {
+                        val voices=AssetManager.russianVoices(this@SpeechDiagnosticsActivity)
+                        check(voices.isNotEmpty())
+                        for(voice in voices) {
+                            check(tts!!.setVoice(com.brahmadeo.supertonic.tts.llm.VoicePreview.voice(voice))==TextToSpeech.SUCCESS)
+                            val done=CompletableFuture<Unit>()
+                            tts!!.setOnUtteranceProgressListener(object: UtteranceProgressListener() {
+                                override fun onStart(id: String?) {}
+                                override fun onDone(id: String?) { done.complete(Unit) }
+                                override fun onError(id: String?) { done.completeExceptionally(IllegalStateException("Voice preview failed")) }
+                            })
+                            val output=File(cacheDir,"voice-preview-probe.wav")
+                            try {
+                                check(tts!!.synthesizeToFile(com.brahmadeo.supertonic.tts.llm.VoicePreview.SAMPLE,
+                                    com.brahmadeo.supertonic.tts.llm.VoicePreview.params(this@SpeechDiagnosticsActivity),output,"preview-$voice")==TextToSpeech.SUCCESS)
+                                done.get(30,TimeUnit.SECONDS)
+                                check(output.length()>44)
+                                Log.i("SpeechCheck","VOICE PREVIEW PASSED model=$model voice=$voice wavBytes=${output.length()}")
+                            } finally { output.delete() }
+                        }
+                        Log.i("SpeechCheck","ALL VOICE PREVIEWS PASSED model=$model count=${voices.size}; multivoice enabled during check")
+                        return@withContext
+                    }
                     if(multiVoiceProbe) {
                         val sample="Павел подошёл к окну.\n— Как красиво! — сказала Ольга.\n— Да, сегодня прекрасный день, — ответил Павел."
                         val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,
@@ -343,7 +371,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 finally {
                     tts?.stop(); tts?.shutdown()
                     if(verifyStress) prefs.edit().putBoolean("local_russian_stress",oldLocalStress).commit()
-                    if(offline || multiVoiceProbe) {
+                    if(offline || multiVoiceProbe || voicePreviewProbe) {
                         llmPrefs.edit().putBoolean("multi_voice",oldMultiVoice).putString("mode",oldLlmMode).putBoolean("restore_yo",oldRestoreYo).commit()
                         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
                     }

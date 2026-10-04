@@ -99,15 +99,17 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                         val text = if (data.readInt() != 0) TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(data)?.toString() else null
                         val mode = data.readInt()
                         if (text != null) {
-                            id = LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
                             val params=if(data.readInt()!=0) android.os.Bundle.CREATOR.createFromParcel(data) else null
                             val utteranceId=data.readString()
-                            musicOwner=caller
-                            musicToken=com.brahmadeo.supertonic.tts.music.BackgroundMusic.enqueue(context,caller,utteranceId,mode!=TextToSpeech.QUEUE_ADD)
-                            if(mode == TextToSpeech.QUEUE_ADD) {
-                                queuedText=text
-                                queuedParams=params
-                            } else ReaderAudioAhead.cancel()
+                            if (!VoicePreview.requested(context, params, getCallingUid())) {
+                                id = LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
+                                musicOwner=caller
+                                musicToken=com.brahmadeo.supertonic.tts.music.BackgroundMusic.enqueue(context,caller,utteranceId,mode!=TextToSpeech.QUEUE_ADD)
+                                if(mode == TextToSpeech.QUEUE_ADD) {
+                                    queuedText=text
+                                    queuedParams=params
+                                } else ReaderAudioAhead.cancel()
+                            }
                         }
                     } else {
                         com.brahmadeo.supertonic.tts.music.BackgroundMusic.stop(caller)

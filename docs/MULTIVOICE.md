@@ -1,6 +1,8 @@
-# Experimental multi-voice reading — Beta 46.3
+# Experimental multi-voice reading — Beta 46.4
 
 The switch is off by default, in LLM text preparation settings. Narrator, male and female voices are selected manually and saved per synthesis engine. This is voice routing, not translation or summarization.
+
+Each selected role voice and every option in its dropdown has a Listen/Stop button. Preview uses the same short, explicitly accented sample and the chosen Android TTS voice, without modifying book settings. An app-UID-restricted engine parameter bypasses LLM, multi-voice routing, reader lookahead and music enqueue for that request only. One activity-owned client replaces its previous preview, ignores stale callbacks, and stops on leaving the settings screen. A private diagnostic renders every installed voice while multi-voice mode is enabled, verifying that a preview keeps its requested voice.
 
 ## Data path
 

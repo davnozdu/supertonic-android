@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.llm.*
@@ -21,14 +22,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class LlmSettingsActivity : ComponentActivity() {
+    private lateinit var voicePreview: VoicePreview
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         LlmPreparation.initialize(this)
+        voicePreview = VoicePreview(this)
         setContent {
             SupertonicTheme {
                 var config by remember { mutableStateOf(LlmSettings.load(this)) }
+                val previewState by voicePreview.state.collectAsState()
                 val recommendations = remember { LlmModelRecommendations.load(this) }
                 var busy by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("") }
@@ -98,6 +102,7 @@ class LlmSettingsActivity : ComponentActivity() {
                         if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
                             Text("Мультиголосовая озвучка · эксперимент", style = MaterialTheme.typography.titleMedium)
                             Toggle("Читать автора и диалоги разными голосами", config.multiVoice) {
+                                voicePreview.stop()
                                 config = config.copy(multiVoice = it); save()
                             }
                             Text("LLM определяет автора, мужские и женские реплики по соседнему тексту. Слова книги сохраняются. Неясные реплики и фрагменты без готовой разметки читает автор. Голоса сохраняются отдельно для каждой звуковой модели.", style = MaterialTheme.typography.bodySmall)
@@ -106,10 +111,13 @@ class LlmSettingsActivity : ComponentActivity() {
                                 val roleVoices = com.brahmadeo.supertonic.tts.utils.AssetManager.russianVoices(this@LlmSettingsActivity)
                                 VoiceRole.entries.forEach { role ->
                                     var selected by remember(role, roleVoices) { mutableStateOf(MultiVoiceSettings.selected(this@LlmSettingsActivity, role)) }
-                                    Choice(when(role) { VoiceRole.AUTHOR -> "Голос автора"; VoiceRole.MALE -> "Мужской голос"; VoiceRole.FEMALE -> "Женский голос" }, selected, roleVoices) {
-                                        selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it)
+                                    VoiceRoleChoice(when(role) { VoiceRole.AUTHOR -> "Голос автора"; VoiceRole.MALE -> "Мужской голос"; VoiceRole.FEMALE -> "Женский голос" }, selected, roleVoices,
+                                        previewState, voicePreview::toggle) {
+                                        voicePreview.stop(); selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it)
                                     }
                                 }
+                                if (previewState.message.isNotBlank()) Text(previewState.message, style = MaterialTheme.typography.bodySmall)
+                                Text("У каждого голоса есть кнопка «Прослушать», в том числе в списке выбора. Повторное нажатие останавливает пробу. Для сравнения используется одинаковая короткая фраза без LLM и фоновой музыки.", style = MaterialTheme.typography.bodySmall)
                                 Text("Подготовка идёт заранее в пределах очереди читалки. Чтение не ждёт разметку дольше обычного лимита. Облако рекомендуется; локальная Gemma может ошибаться в ролях.", style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -302,12 +310,41 @@ class LlmSettingsActivity : ComponentActivity() {
             }
         }
     }
+    override fun onStop() {
+        if (::voicePreview.isInitialized) voicePreview.stop()
+        super.onStop()
+    }
+    override fun onDestroy() {
+        if (::voicePreview.isInitialized) voicePreview.close()
+        super.onDestroy()
+    }
     private fun loadModels(gemini: Boolean): List<String> {
         val value = getSharedPreferences("llm_models", MODE_PRIVATE).getString(if (gemini) "gemini" else "ollama", "[]")!!
         return runCatching { val array = org.json.JSONArray(value); (0 until array.length()).map { array.getString(it) } }.getOrDefault(emptyList())
     }
     private fun saveModels(gemini: Boolean, models: List<String>) {
         getSharedPreferences("llm_models", MODE_PRIVATE).edit().putString(if (gemini) "gemini" else "ollama", org.json.JSONArray(models).toString()).apply()
+    }
+}
+
+@Composable private fun VoiceRoleChoice(label: String, selected: String, options: List<String>,
+    preview: VoicePreview.State, listen: (String) -> Unit, change: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    fun caption(voice: String) = if (preview.activeVoice == voice) "Остановить" else "Прослушать"
+    Column {
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { expanded = true }, enabled = options.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(selected) }
+            OutlinedButton(onClick = { listen(selected) }, enabled = selected in options) { Text(caption(selected)) }
+        }
+        DropdownMenu(expanded, { expanded = false }, modifier = Modifier.heightIn(max = 420.dp)) {
+            options.forEach { voice -> DropdownMenuItem(
+                text = { Text(voice) },
+                trailingIcon = { TextButton(onClick = { listen(voice) }) { Text(caption(voice)) } },
+                modifier = if (voice == selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer) else Modifier,
+                onClick = { expanded = false; change(voice) }) }
+        }
     }
 }
 

@@ -267,13 +267,15 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
         val incomingText = request.charSequenceText?.toString() ?: return
-        val aheadText = com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
-        val preparation = if (aheadText == null) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
+        val voicePreview = com.brahmadeo.supertonic.tts.llm.VoicePreview.requested(this, request.params, request.callerUid)
+        val aheadText = if (voicePreview) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
+        val preparation = if (aheadText == null && !voicePreview) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
-        val rawText = aheadText?.text ?: preparation!!.text
+        val preserveMarks = llmProcessed || voicePreview
+        val rawText = aheadText?.text ?: preparation?.text ?: incomingText
         val traceId=com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(incomingText)
         Log.i("LlmPreparation", "TTS trace source=$traceId prepared=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(rawText)} llm=$llmProcessed ahead=${aheadText!=null}")
-        Log.i("LlmPreparation", "Speech path=${if(llmProcessed) "LLM; internal stress bypassed" else "offline fallback"} chars=${rawText.length}")
+        Log.i("LlmPreparation", "Speech path=${if(voicePreview) "voice preview; LLM bypassed" else if(llmProcessed) "LLM; internal stress bypassed" else "offline fallback"} chars=${rawText.length}")
         if(aheadText!=null) Log.i("ReaderAhead","Using prepared text without repeated LLM wait chars=${incomingText.length}")
         if (SupertonicTTS.isCancelled()) { callback.error(); callback.done(); return }
         val requestStarted = android.os.SystemClock.elapsedRealtime()
@@ -302,6 +304,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
         val voiceStyleDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
         var stylePath = AssetManager.voiceFile(this, voiceFile).absolutePath
+        if (voicePreview) Log.i("VoicePreview", "Synthesis voice=${voiceFile.removeSuffix(".json")} model=${AssetManager.getModelType(this)}")
 
         // Ensure stylePath is within the intended directory
         if (!AssetManager.isRussianModel(this) && !File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
@@ -356,7 +359,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         runBlocking {
             val producer = launch(Dispatchers.IO) {
                 try {
-                    val parts = com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.parts(this@SupertonicTextToSpeechService,
+                    val parts = if (voicePreview) listOf(rawText to stylePath) else com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.parts(this@SupertonicTextToSpeechService,
                         rawText, aheadText?.voicePlan ?: preparation?.voicePlan.orEmpty(), stylePath)
                     val sentences = parts.flatMap { (part, style) -> textNormalizer.splitIntoSentences(
                         part, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
@@ -364,11 +367,11 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                     for ((sentence, sentenceStyle) in sentences) {
                         if (SupertonicTTS.isCancelled()) { success = false; break }
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
-                        val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=llmProcessed)
+                        val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=preserveMarks)
                         Log.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$llmProcessed model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
                         val result = SupertonicTTS.generateAudio(
                             normalizedText, requestedLang, sentenceStyle, effectiveSpeed, 0.0f,
-                            steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=llmProcessed
+                            steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=preserveMarks
                         )
                         if (result == null || SupertonicTTS.isCancelled()) { success = false; break }
                     }
