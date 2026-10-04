@@ -166,6 +166,13 @@ jobs:
           body: |
             **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
+            ### Background music and Shtorm
+            - Download four ready music tracks, import your own MP3, select or delete tracks.
+            - Loop background music at 10% volume by default; pause and resume with reading.
+            - Add experimental Shtorm PocketTTS RU v2 with a verified reusable ONNX download.
+            - Preserve common LLM, local text processing, audio caching and foreign-language fallback.
+            - Hide obsolete INT8, FP32 and FP16 presets from model selection.
+
             ### Beta 34 changes
             - Accept structurally valid partial local Gemma edits and fill unmarked Russian words with autonomous processing.
             - Preserve explicit LLM stress and written ё; do not replace LLM punctuation, words or numbers during supplementation.
