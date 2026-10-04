@@ -23,7 +23,7 @@ Grab the signed APK from the **[Releases](https://github.com/davnozdu/supertonic
 2. Tap the APK to install. If `adb install` returns `INSTALL_FAILED_VERIFICATION_FAILURE`, disable **Verify apps over USB** in Developer Options.
 3. First launch downloads ~400 MB of ONNX models from Hugging Face — needs Wi-Fi once.
 
-Releases are signed with an **ephemeral CI keystore** that rotates every build, so the upgrade flow is: `adb uninstall com.brahmadeo.supertonic.tts` → install the new APK. To make the identity stable, add `KEYSTORE_BASE64` / `KEY_ALIAS` / `KEYSTORE_PASSWORD` / `KEY_PASSWORD` as repository secrets and adjust `.github/workflows/release.yml` to import that keystore instead of generating one.
+Releases use the permanent keystore from repository secrets and install over the current fork without uninstalling. Application ID: `com.davnozdu.supertonic.tts.fork`.
 
 ## Use as the system TTS engine
 
@@ -34,6 +34,20 @@ After installation:
 3. Pick any of the 31 languages and test with *Listen to an example*.
 
 Every app that uses Android's TTS API (Voice Aloud, TalkBack, reader apps, navigation, Tasker etc.) will now use Supertonic.
+
+## Background music
+
+Menu → **Фоновая музыка**. **Скачать музыку** installs four Gemini-generated tracks from the project's `reading-music-v1` release (about 16 MB). Choose an installed track, or import your own MP3; the app copies it into private storage. Each track can be removed from the phone and the ready catalog can be downloaded again.
+
+Music loops during actual reading, follows pause/stop and resumes at the saved position. Volume is independent of speech, 0–100%, default 10%. Speculative LLM preparation and synthesis to a file do not start music. The music decoder releases after two idle minutes. It creates no competing media session or audio-focus request.
+
+## Shtorm PocketTTS RU v2 (experimental)
+
+The ARM64 picker includes [ArtShtorm/Shtorm_PocketTTS_RU](https://huggingface.co/ArtShtorm/Shtorm_PocketTTS_RU), fast v2. Its ONNX graphs are prepared once by GitHub Actions, numerically compared with the original PyTorch model, and stored in the `shtorm-pocket-v2` release. The phone downloads approximately 439 MB and checks pinned SHA-256 hashes. No conversion runs on the phone.
+
+The native runtime adapts [PocketTTS-Android-Engine](https://github.com/The-unknown-Shadowman/PocketTTS-Android-Engine) and PocketTTS.cpp. Output is 24 kHz mono PCM16. Shtorm receives the shared LLM/local text preparation and combines acute stress marks; phrases are bounded to approximately 180 characters as recommended by the author. Sonic adjusts speed without pitch shift. The model unloads after two idle minutes. Starter voice: Alba MacKenna, CC BY 4.0; model and runtime attribution are in `vendor/pockettts` and the downloadable license.
+
+Tera and Silero remain available. Obsolete INT8/FP32/FP16 presets are hidden from the model picker.
 
 ## Pronunciation control
 

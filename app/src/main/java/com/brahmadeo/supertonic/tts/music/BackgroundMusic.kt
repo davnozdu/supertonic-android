@@ -22,6 +22,7 @@ object BackgroundMusic {
     private var player: MediaPlayer? = null
     private var loadedSource = ""
     private var prepared = false
+    private var seeking = false
     private var savedPosition = 0
     private var failedTrack = ""
     private var previewVolume: Int? = null
@@ -81,7 +82,7 @@ object BackgroundMusic {
         handler.removeCallbacks(idleRelease)
         if (failedTrack == track) return
         if (player != null) {
-            if (prepared) runCatching { updateVolume(); player?.start() }.onFailure { fail(track) }
+            if (prepared && !seeking) runCatching { updateVolume(); player?.start() }.onFailure { fail(track) }
             return
         }
         loadedSource = source
@@ -93,11 +94,15 @@ object BackgroundMusic {
             current.setWakeMode(ctx,PowerManager.PARTIAL_WAKE_LOCK)
             current.isLooping = true
             current.setOnErrorListener { _, _, _ -> if (player === current) fail(track); true }
+            current.setOnSeekCompleteListener { if(player===current) { seeking=false;update() } }
             current.setOnPreparedListener {
                 if (player === current) {
                     runCatching {
                         prepared = true
-                        if (savedPosition > 0 && current.duration > 0) current.seekTo(savedPosition % current.duration)
+                        if (savedPosition > 0 && current.duration > 0) {
+                            seeking=true
+                            current.seekTo(savedPosition % current.duration)
+                        }
                         message.value = ""
                         update()
                         Log.i("BackgroundMusic","Prepared looping track; volume=${(volume()*100).toInt()}%")
@@ -121,5 +126,6 @@ object BackgroundMusic {
         player?.let { runCatching { it.release() } }
         player = null
         prepared = false
+        seeking = false
     }
 }
