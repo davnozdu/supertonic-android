@@ -2,6 +2,12 @@ package com.brahmadeo.supertonic.tts.pocket
 import org.junit.Assert.*
 import org.junit.Test
 class PocketTextTest {
+    @Test fun russianChunkHasAnEndCueWithoutReplacingQuestionOrExclamation() {
+        assertEquals("Конец фразы.", PocketText.modelPrompt("Конец фразы"))
+        assertEquals("Уже?", PocketText.modelPrompt("Уже?"))
+        assertEquals("Ещё!", PocketText.modelPrompt("Ещё!"))
+        assertEquals("Идёт а́.", PocketText.modelPrompt("Идёт а́"))
+    }
     @Test fun commonStressReachesModelAsAcuteWithoutLosingYoOrPunctuation() {
         assertEquals("Све́тло, ещё! Ты го́тов?",PocketText.prepare("Св+етло, ещё! Ты г+отов?"))
     }

@@ -57,6 +57,26 @@ object TeraPunctuationPauses {
         return result
     }
 
+    fun synthesisParts(parts: List<Part>): List<Part> {
+        fun short(part: Part) = part.text.count { it.lowercaseChar() in "аеёиоуыэюя" } <= 2 &&
+            part.text.count { it.isLetter() } <= 8
+        val result = mutableListOf<Part>()
+        var pending: Part? = null
+        for (part in parts) {
+            val combined = pending?.let { Part(it.text + " " + part.text, part.pauseMs) } ?: part
+            pending = null
+            if (short(combined)) pending = combined else result += combined
+        }
+        pending?.let { tail ->
+            if (result.isEmpty()) result += tail
+            else {
+                val previous = result.removeAt(result.lastIndex)
+                result += Part(previous.text + " " + tail.text, tail.pauseMs)
+            }
+        }
+        return result
+    }
+
     /** Add only the missing silence; retain natural model pauses already present. */
     fun missingSilenceSamples(pcm: ByteArray, pauseMs: Int, sampleRate: Int = 44100): Int {
         var silentSamples = 0

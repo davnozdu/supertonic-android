@@ -186,6 +186,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         super.onCreate()
         SupertonicTTS.setApplicationContext(this)
         createNotificationChannel()
+        CallInterruption.register(this, this) { pause() }
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
@@ -262,6 +263,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int = 0) {
         serviceScope.launch {
+            if (CallInterruption.active()) return@launch
             // Cancel any in-flight synthesis, but keep the AudioTrack alive so the
             // next sentence can stream straight in without a re-init delay.
             if (synthesisJob?.isActive == true) {
@@ -696,6 +698,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     override fun onAudioChunk(sessionId: Long, data: ByteArray) {}
 
     fun play() {
+        if (CallInterruption.active()) return
         resumeOnFocusGain = false
         // The reusable AudioTrack survives stops; its presence does not mean
         // there is still a paused job to resume.
@@ -836,6 +839,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     override fun onAudioFocusChange(focusChange: Int) {
+        if (CallInterruption.active()) { pause(); return }
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> stopServicePlayback()
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
@@ -952,6 +956,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     override fun onDestroy() {
         super.onDestroy()
+        CallInterruption.unregister(this)
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,false)
         mediaSession?.release()
         try {

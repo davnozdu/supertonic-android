@@ -5,6 +5,8 @@ internal object PocketText {
     fun prepare(input: String): String = Regex("\\+([аеёиоуыэюяАЕЁИОУЫЭЮЯ])").replace(
         com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(input)) { "${it.groupValues[1]}\u0301" }
         .replace(Regex("[\\t\\r\\n ]+")," ").trim()
+    fun modelPrompt(chunk: String): String =
+        if (chunk.lastOrNull()?.let { it.isLetterOrDigit() || it == '\u0301' } == true) "$chunk." else chunk
     fun chunks(input: String, limit: Int = 180): List<String> {
         require(limit>=32)
         val chunks=mutableListOf<String>()

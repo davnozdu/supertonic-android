@@ -24,7 +24,7 @@ class PocketEngine(context: Context) : AutoCloseable {
         used=android.os.SystemClock.elapsedRealtime()
         try {
             val engine=native ?: NativePocketTts(root.path,root.path,"fp32",.3f,1,
-                Runtime.getRuntime().availableProcessors().coerceIn(1,4),0,50).also { native=it }
+                Runtime.getRuntime().availableProcessors().coerceIn(1,4),180,50).also { native=it }
             val output=ByteArrayOutputStream()
             val start=android.os.SystemClock.elapsedRealtime()
             for(chunk in PocketText.chunks(text)) {
@@ -32,7 +32,7 @@ class PocketEngine(context: Context) : AutoCloseable {
                 val frames=ArrayList<FloatArray>()
                 var count=0
                 var peak=0f
-                val okay=engine.synthesize(chunk,java.io.File(root,"alba.wav").path,speed.coerceIn(.5f,2.5f),object: NativePocketTts.AudioSink {
+                val okay=engine.synthesize(PocketText.modelPrompt(chunk),java.io.File(root,"alba.wav").path,speed.coerceIn(.5f,2.5f),object: NativePocketTts.AudioSink {
                     override fun onAudio(samples: FloatArray): Boolean {
                         if(SupertonicTTS.isCancelled()) return false
                         check(samples.all { it.isFinite() }) { "PocketTTS produced invalid audio" }
@@ -46,12 +46,21 @@ class PocketEngine(context: Context) : AutoCloseable {
                 if(!okay || SupertonicTTS.isCancelled()) return ByteArray(0)
                 // Normalize a bounded phrase consistently; never hard-clip the common 2.5x gain.
                 val safeGain=if(peak>0f) minOf(gain.coerceAtLeast(0f),.98f/peak) else 1f
+                val phrase = ByteArrayOutputStream(count * 2)
                 for(samples in frames) {
                     if(SupertonicTTS.isCancelled()) return ByteArray(0)
                     val pcm=ByteBuffer.allocate(samples.size*2).order(ByteOrder.LITTLE_ENDIAN)
                     samples.forEach { pcm.putShort((it*safeGain*32767).toInt().coerceIn(-32768,32767).toShort()) }
                     val bytes=pcm.array()
+                    phrase.write(bytes)
                     output.write(bytes);listener?.onAudioChunk(sid,bytes)
+                }
+                if (chunk.trimEnd('"', '\'', '»', ')', ']').lastOrNull() in listOf('.', '!', '?', '…')) {
+                    val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(phrase.toByteArray(), 180, 24000)
+                    if (missing > 0) {
+                        val silence = ByteArray(missing * 2)
+                        output.write(silence); listener?.onAudioChunk(sid, silence)
+                    }
                 }
             }
             Log.i("PocketTTS","Synthesized chars=${text.length} accents=${PocketText.prepare(text).count { it=='\u0301' }} ms=${android.os.SystemClock.elapsedRealtime()-start} audioMs=${output.size()*1000L/48000}")

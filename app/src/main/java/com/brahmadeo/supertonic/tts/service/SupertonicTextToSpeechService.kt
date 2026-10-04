@@ -21,9 +21,10 @@ import java.io.File
 import java.util.Locale
 
 class SupertonicTextToSpeechService : TextToSpeechService() {
+    private val queueObservers = java.util.concurrent.CopyOnWriteArrayList<com.brahmadeo.supertonic.tts.llm.TtsQueueObserver>()
     override fun onBind(intent: android.content.Intent): android.os.IBinder? {
         val binder = super.onBind(intent) ?: return null
-        return com.brahmadeo.supertonic.tts.llm.TtsQueueObserver(this, binder)
+        return com.brahmadeo.supertonic.tts.llm.TtsQueueObserver(this, binder).also { queueObservers.add(it) }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -115,6 +116,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         super.onCreate()
         SupertonicTTS.setApplicationContext(this)
         Log.i("SupertonicTTS", "Service created")
+        CallInterruption.register(this, this) { queueObservers.forEach { it.stopForCall() } }
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
@@ -140,6 +142,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
     override fun onDestroy() {
         super.onDestroy()
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.stopTts()
+        CallInterruption.unregister(this)
+        queueObservers.forEach { it.close() }; queueObservers.clear()
         serviceScope.cancel()
     }
 
@@ -251,6 +255,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onSynthesizeText(request: SynthesisRequest?, callback: SynthesisCallback?) {
         if (request == null || callback == null) return
+        if (CallInterruption.active()) { callback.error(TextToSpeech.ERROR_SERVICE); return }
         // A failed external-engine connection must never delegate back into us.
         if (request.params.getBoolean("supertonic_foreign_proxy", false)) {
             callback.error(); callback.done(); return

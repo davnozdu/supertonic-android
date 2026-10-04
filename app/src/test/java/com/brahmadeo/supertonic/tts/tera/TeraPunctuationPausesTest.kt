@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TeraPunctuationPausesTest {
+    @Test fun shortInterjectionsKeepTheirContextInsteadOfSeparateVowelSynthesis() {
+        val parts = TeraPunctuationPauses.synthesisParts(TeraPunctuationPauses.split("Ну, пока он собирался, она ждала. А, понял."))
+        assertEquals(listOf("Ну, пока он собирался,", "она ждала.", "А, понял."), parts.map { it.text })
+        assertEquals(listOf(180, 420, 420), parts.map { it.pauseMs })
+        assertEquals(listOf("Она вернулась. Пока!"), TeraPunctuationPauses.synthesisParts(
+            TeraPunctuationPauses.split("Она вернулась. Пока!")).map { it.text })
+    }
     @Test fun distinguishesCommaAndSentence() {
         val parts = TeraPunctuationPauses.split("Светло, но прохладно. Ты готов?")
         assertEquals(listOf("Светло,", "но прохладно.", "Ты готов?"), parts.map { it.text })

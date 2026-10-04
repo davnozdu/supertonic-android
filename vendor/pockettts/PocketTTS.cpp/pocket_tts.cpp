@@ -351,7 +351,8 @@ static std::pair<std::string, int> prepare_text(const std::string& raw, int cfg_
     for (auto& c : text) { if (c == '\n' || c == '\r') c = ' '; }
     
     int nwords = count_words(text);
-    int eos_extra = cfg_eos_extra >= 0 ? cfg_eos_extra : ((nwords <= 4) ? 5 : 3);
+    // Keep two additional 80 ms decoder frames: protect the last spoken syllable.
+    int eos_extra = cfg_eos_extra >= 0 ? cfg_eos_extra : ((nwords <= 4) ? 7 : 5);
     
     // Capitalize first letter
     if (!text.empty() && std::islower((unsigned char)text[0]))
@@ -2115,6 +2116,7 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
         });
         
         bool first = true;
+        size_t trailing_silence = 0;
         
         while (true) {
             int want = first ? cfg_.first_chunk_frames : cfg_.max_chunk_frames;
@@ -2145,7 +2147,11 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
                 size_t n = 1;
                 for (auto d : shape) n *= d;
                 
-                if (!cb(outputs[0].GetTensorData<float>(), n)) {
+                const float* decoded = outputs[0].GetTensorData<float>();
+                size_t quiet = 0;
+                while (quiet < n && std::abs(decoded[n - quiet - 1]) <= 0.005f) ++quiet;
+                trailing_silence = quiet == n ? trailing_silence + quiet : quiet;
+                if (!cb(decoded, n)) {
                     std::lock_guard<std::mutex> lock(mtx);
                     aborted = true;
                     break;
@@ -2158,7 +2164,8 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
             gen_thread.join();
         }
         if (aborted) return;
-        if (chunks[si].sentence_end && !silence.empty() && !cb(silence.data(), silence.size())) return;
+        if (chunks[si].sentence_end && trailing_silence < pause_samples &&
+            !cb(silence.data(), pause_samples - trailing_silence)) return;
     }
 }
 

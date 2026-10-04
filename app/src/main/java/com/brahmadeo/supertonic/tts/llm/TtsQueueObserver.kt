@@ -34,7 +34,29 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
             finally { data.recycle();reply.recycle() }
         }
     }
+    fun stopForCall() {
+        ReaderAudioAhead.cancel()
+        val owners = synchronized(musicCallbacks) { musicCallbacks.keys.toList() }
+        for (owner in owners) {
+            LlmPreparation.cancel(owner)
+            com.brahmadeo.supertonic.tts.music.BackgroundMusic.stop(owner)
+            val data = Parcel.obtain(); val reply = Parcel.obtain()
+            try {
+                data.writeInterfaceToken("android.speech.tts.ITextToSpeechService")
+                data.writeStrongBinder(owner); data.setDataPosition(0)
+                delegate.transact(FIRST_CALL_TRANSACTION + 5, data, reply, 0)
+            } catch (_: Exception) { Log.w("CallInterruption", "TTS client stop failed") }
+            finally { data.recycle(); reply.recycle() }
+        }
+    }
+    fun close() { synchronized(musicCallbacks) {
+        musicCallbacks.values.forEach { it.detach() }; musicCallbacks.clear()
+    } }
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+        if (code == FIRST_CALL_TRANSACTION && com.brahmadeo.supertonic.tts.service.CallInterruption.active()) {
+            reply?.writeNoException(); reply?.writeInt(TextToSpeech.ERROR)
+            return true
+        }
         val position = data.dataPosition()
         if(Build.VERSION.SDK_INT in 24..36 && code==FIRST_CALL_TRANSACTION+11) {
             var rewritten: Parcel? = null

@@ -141,7 +141,7 @@ class TeraEngine(private val root: File, context: Context,
             pausePrefs.getInt("tera_comma_pause_ms", 180).coerceIn(80, 400),
             pausePrefs.getInt("tera_sentence_pause_ms", 420).coerceIn(0, 900))
         val output = java.io.ByteArrayOutputStream()
-        for (part in parts) {
+        for (part in TeraPunctuationPauses.synthesisParts(parts)) {
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             val pcm = synthesizePart(part.text, lang, stylePath, speed, gain, listener, sessionId, skipDictionary)
             if (pcm.isEmpty() || SupertonicTTS.isCancelled()) return ByteArray(0)
