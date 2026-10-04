@@ -20,7 +20,7 @@ class PocketEngine(context: Context) : AutoCloseable {
             if(native!=null && android.os.SystemClock.elapsedRealtime()-used>120000) unload()
         } },15,15,TimeUnit.SECONDS)
     }
-    @Synchronized fun synthesize(text: String, speed: Float, gain: Float, listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
+    @Synchronized fun synthesize(text: String, voiceFile: String, speed: Float, gain: Float, listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
         used=android.os.SystemClock.elapsedRealtime()
         try {
             val engine=native ?: NativePocketTts(root.path,root.path,"fp32",.3f,1,
@@ -32,7 +32,7 @@ class PocketEngine(context: Context) : AutoCloseable {
                 val frames=ArrayList<FloatArray>()
                 var count=0
                 var peak=0f
-                val okay=engine.synthesize(PocketText.modelPrompt(chunk),java.io.File(root,"alba.wav").path,speed.coerceIn(.5f,2.5f),object: NativePocketTts.AudioSink {
+                val okay=engine.synthesize(PocketText.modelPrompt(chunk),voiceFile,speed.coerceIn(.5f,2.5f),object: NativePocketTts.AudioSink {
                     override fun onAudio(samples: FloatArray): Boolean {
                         if(SupertonicTTS.isCancelled()) return false
                         check(samples.all { it.isFinite() }) { "PocketTTS produced invalid audio" }

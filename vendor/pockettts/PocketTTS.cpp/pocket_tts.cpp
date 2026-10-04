@@ -68,6 +68,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -351,8 +352,10 @@ static std::pair<std::string, int> prepare_text(const std::string& raw, int cfg_
     for (auto& c : text) { if (c == '\n' || c == '\r') c = ' '; }
     
     int nwords = count_words(text);
-    // Keep two additional 80 ms decoder frames: protect the last spoken syllable.
-    int eos_extra = cfg_eos_extra >= 0 ? cfg_eos_extra : ((nwords <= 4) ? 7 : 5);
+    // Match the Python runtime; extra generated speech after EOS can repeat words.
+    // -2 retains the former tail solely for private A/B diagnostics.
+    int eos_extra = cfg_eos_extra >= 0 ? cfg_eos_extra : ((nwords <= 4) ? 5 : 3);
+    if (cfg_eos_extra == -2) eos_extra += 2;
     
     // Capitalize first letter
     if (!text.empty() && std::islower((unsigned char)text[0]))
@@ -1620,6 +1623,7 @@ public:
     void stream(const std::string& text, const std::string& voice, StreamCallback cb, int max_frames = 500);
     void stream(const std::string& text, const Tensor& voice, StreamCallback cb, int max_frames = 500);
     const Config& config() const { return cfg_; }
+    void set_eos_extra(int value) { cfg_.eos_extra_frames = value; }
     
     double warmup() {
         auto start = std::chrono::high_resolution_clock::now();
@@ -2092,8 +2096,10 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
         std::deque<Tensor> queue;
         bool gen_done = false;
         bool aborted = false;
+        std::exception_ptr generation_error;
         
         std::thread gen_thread([&]() {
+            try {
             while (gen.has_next()) {
                 {
                     std::lock_guard<std::mutex> lock(mtx);
@@ -2108,6 +2114,10 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
                 }
                 cv.notify_one();
             }
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(mtx);
+                generation_error = std::current_exception();
+            }
             {
                 std::lock_guard<std::mutex> lock(mtx);
                 gen_done = true;
@@ -2118,15 +2128,18 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
         bool first = true;
         size_t trailing_silence = 0;
         
+        try {
         while (true) {
             int want = first ? cfg_.first_chunk_frames : cfg_.max_chunk_frames;
             
             std::vector<Tensor> batch;
+            bool finished = false;
             {
                 std::unique_lock<std::mutex> lock(mtx);
                 cv.wait(lock, [&]{ return (int)queue.size() >= want || gen_done || aborted; });
                 if (aborted) break;
                 
+                finished = gen_done;
                 int take = gen_done ? (int)queue.size() : std::min((int)queue.size(), want);
                 for (int i = 0; i < take; ++i) {
                     batch.push_back(std::move(queue.front()));
@@ -2134,7 +2147,7 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
                 }
             }
             
-            if (batch.empty() && gen_done) break;
+            if (batch.empty() && finished) break;
             
             if (!batch.empty()) {
                 auto lat = Tensor::concat(batch, 1);
@@ -2160,10 +2173,20 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
             }
         }
         
+        } catch (...) {
+            { std::lock_guard<std::mutex> lock(mtx); aborted = true; }
+            cv.notify_all();
+            if (gen_thread.joinable()) gen_thread.join();
+            throw;
+        }
         if (gen_thread.joinable()) {
             gen_thread.join();
         }
+        if (generation_error) std::rethrow_exception(generation_error);
         if (aborted) return;
+        std::cerr << "[pocket-tts] completed chunk=" << si << " frames=" << gen.frame_idx()
+                  << " eos=" << gen.eos_frame() << " extra=" << eos_extra
+                  << " limit=" << effective_max_frames << "\n";
         if (chunks[si].sentence_end && trailing_silence < pause_samples &&
             !cb(silence.data(), pause_samples - trailing_silence)) return;
     }
@@ -2674,6 +2697,10 @@ double ptt_warmup(void* handle) {
     }
 }
 
+void ptt_set_eos_extra(void* handle, int value) {
+    if (handle) static_cast<pocket_tts::PocketTTS*>(handle)->set_eos_extra(value);
+}
+
 void ptt_free_audio(float* samples) {
     free(samples);
 }
@@ -2691,6 +2718,7 @@ struct ptt_stream_ctx {
     std::deque<std::pair<float*, size_t>> chunks;
     bool done = false;
     bool aborted = false;
+    bool failed = false;
 };
 
 void* ptt_stream_start(void* handle, const char* text, const char* voice) {
@@ -2702,7 +2730,7 @@ void* ptt_stream_start(void* handle, const char* text, const char* voice) {
         try {
             tts->stream(t, v, [ctx](const float* samples, size_t n) -> bool {
                 float* copy = static_cast<float*>(malloc(n * sizeof(float)));
-                if (!copy) return false;
+                if (!copy) throw std::bad_alloc();
                 std::memcpy(copy, samples, n * sizeof(float));
                 {
                     std::lock_guard<std::mutex> lock(ctx->mtx);
@@ -2714,6 +2742,8 @@ void* ptt_stream_start(void* handle, const char* text, const char* voice) {
             });
         } catch (const std::exception& e) {
             std::cerr << "[pocket-tts] stream error: " << e.what() << "\n";
+            std::lock_guard<std::mutex> lock(ctx->mtx);
+            ctx->failed = true;
         }
         {
             std::lock_guard<std::mutex> lock(ctx->mtx);
@@ -2739,7 +2769,7 @@ int ptt_stream_read(void* stream_ctx, float** out_samples, int* out_len) {
         *out_len = static_cast<int>(len);
         return 1;
     }
-    return ctx->aborted ? -2 : 0;
+    return ctx->aborted ? -2 : (ctx->failed ? -1 : 0);
 }
 
 // Request cancellation without freeing the context. The owner must subsequently

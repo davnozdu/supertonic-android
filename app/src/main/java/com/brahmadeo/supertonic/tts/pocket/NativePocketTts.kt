@@ -12,7 +12,8 @@ internal class NativePocketTts(
     lsdSteps: Int,
     threads: Int,
     sentencePauseMs: Int,
-    maxTextTokens: Int
+    maxTextTokens: Int,
+    eosExtra: Int = -1
 ) : AutoCloseable {
     private var handle: Long = 0
     private val lifetime = java.util.concurrent.locks.ReentrantReadWriteLock()
@@ -27,7 +28,8 @@ internal class NativePocketTts(
             lsdSteps,
             threads,
             sentencePauseMs,
-            maxTextTokens
+            maxTextTokens,
+            eosExtra
         )
         check(handle != 0L) { "Не удалось загрузить Shtorm PocketTTS." }
     }
@@ -47,7 +49,8 @@ internal class NativePocketTts(
         lsdSteps: Int,
         threads: Int,
         sentencePauseMs: Int,
-        maxTextTokens: Int
+        maxTextTokens: Int,
+        eosExtra: Int
     ): Long
     private external fun nativeSynthesize(handle: Long, text: String, voiceFile: String, speed: Float, sink: AudioSink): Boolean
     private external fun nativeStop(handle: Long)

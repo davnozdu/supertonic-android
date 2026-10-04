@@ -115,7 +115,13 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     check(ready.get(10, TimeUnit.SECONDS) == TextToSpeech.SUCCESS)
                     check(tts!!.setLanguage(Locale("ru")) >= TextToSpeech.LANG_AVAILABLE)
                     tts!!.setSpeechRate(1.1f)
-                    val cases = listOf(
+                    val bookFile=File(cacheDir,"book-probe.txt")
+                    val bookProbe=intent.getBooleanExtra("bookProbe",false)
+                    val cases = if(bookProbe) {
+                        require(model==AssetManager.POCKET_MODEL)
+                        require(bookFile.length() in 1..20000)
+                        bookFile.readText().split("\n\n").filter { it.isNotBlank() }.also { require(it.size in 1..20) }
+                    } else listOf(
                         "Это не\u00a0раз\u202fбыло. Да.Нет!Как? По-прежнему светло. В списке 1001 имя и 1101 запись. Да, я готов!",
                         "Это не\u00a0раз\u202fбыло. Да.Нет!Как? По-прежнему светло. В списке 1001 имя и 1101 запись. Да, я готов!",
                         "Он сказал: Hello world! Потом добавил: Dobrý den, jak se máte? Всё хорошо.",
@@ -182,6 +188,41 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         .replace("+","").replace("\u0301","")
                     check(words=="Не раз было.")
                     Log.i("SpeechCheck","WORD BOUNDARIES PASSED model=$model: $words")
+                    if(bookProbe && intent.getBooleanExtra("tailProbe",false)) {
+                        val root=com.brahmadeo.supertonic.tts.pocket.PocketDownload.root(this@SpeechDiagnosticsActivity)
+                        val normalizer=com.brahmadeo.supertonic.tts.utils.TextNormalizer()
+                        val prepared=cases.map { text ->
+                            val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this@SpeechDiagnosticsActivity,text,timeoutMs=60000)
+                            normalizer.normalize(result.text,"ru",skipStress=!result.fallback).also {
+                                Log.i("SpeechCheck","BOOK INPUT llm=${!result.fallback}: $it")
+                            }
+                        }
+                        for(tail in listOf(-2,-1)) {
+                            com.brahmadeo.supertonic.tts.pocket.NativePocketTts(root.path,root.path,"fp32",.3f,1,4,180,50,tail).use { engine ->
+                                for((index,text) in prepared.withIndex()) {
+                                    val audio=java.io.ByteArrayOutputStream()
+                                    for(chunk in com.brahmadeo.supertonic.tts.pocket.PocketText.chunks(text)) {
+                                        check(engine.synthesize(com.brahmadeo.supertonic.tts.pocket.PocketText.modelPrompt(chunk),File(root,"alba.wav").path,1f,
+                                            object: com.brahmadeo.supertonic.tts.pocket.NativePocketTts.AudioSink {
+                                                override fun onAudio(samples: FloatArray): Boolean {
+                                                    val bytes=ByteBuffer.allocate(samples.size*2).order(ByteOrder.LITTLE_ENDIAN)
+                                                    samples.forEach { bytes.putShort((it*32767).toInt().coerceIn(-32768,32767).toShort()) }
+                                                    audio.write(bytes.array());return true
+                                                }
+                                            }))
+                                    }
+                                    val pcm=audio.toByteArray()
+                                    val header=ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+                                    header.put("RIFF".toByteArray()).putInt(pcm.size+36).put("WAVEfmt ".toByteArray()).putInt(16)
+                                        .putShort(1.toShort()).putShort(1.toShort()).putInt(24000).putInt(48000).putShort(2.toShort()).putShort(16.toShort())
+                                        .put("data".toByteArray()).putInt(pcm.size)
+                                    File(cacheDir,"tail-$tail-$index.wav").outputStream().use { it.write(header.array());it.write(pcm) }
+                                    Log.i("SpeechCheck","TAIL PROBE tail=$tail case=$index audioMs=${pcm.size*1000L/48000}")
+                                }
+                            }
+                        }
+                        return@withContext
+                    }
                     for ((index, text) in cases.withIndex()) {
                         if (index == 1) {
                             delay(6000)
@@ -192,7 +233,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                                 Log.i("SpeechCheck","Manual cache invalidation before repeated synthesis")
                             }
                         }
-                        val language = when (index) { 3 -> "en"; 4 -> "cs"; else -> "ru" }
+                        val language = if(bookProbe) "ru" else when (index) { 3 -> "en"; 4 -> "cs"; else -> "ru" }
                         check(tts!!.setLanguage(Locale(language)) >= TextToSpeech.LANG_AVAILABLE)
                         val id = "speech-check-$index"; val done = CompletableFuture<Unit>()
                         tts!!.setOnUtteranceProgressListener(object : UtteranceProgressListener() {

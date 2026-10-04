@@ -47,7 +47,7 @@ object AssetManager {
 
     fun isPocket(context: Context): Boolean = getModelType(context) == POCKET_MODEL
     fun russianVoices(context: Context): List<String> = when {
-        isPocket(context) -> listOf("alba")
+        isPocket(context) -> com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(context)
         isSilero(context) -> com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(context)
         else -> TERA_VOICES
     }
@@ -57,7 +57,7 @@ object AssetManager {
 
     fun voiceFile(context: Context, selected: String): File {
         val base = File(context.filesDir, MODEL_VERSION)
-        if (isPocket(context)) return File(com.brahmadeo.supertonic.tts.pocket.PocketDownload.root(context),"alba.wav")
+        if (isPocket(context)) return com.brahmadeo.supertonic.tts.pocket.PocketVoices.voiceFile(context,selected)
         if (isSilero(context)) {
             val name = File(selected).name.removeSuffix(".json")
                 .takeIf { it in com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(context) } ?: com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(context)

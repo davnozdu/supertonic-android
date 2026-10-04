@@ -330,6 +330,20 @@ class MainActivity : ComponentActivity() {
                         onRetry = { startDownload() }
                     )
                 } else {
+                    if(AssetManager.isPocket(this@MainActivity) && !com.brahmadeo.supertonic.tts.pocket.PocketVoices.ready(this@MainActivity)) {
+                        Button(onClick={
+                            viewModel.isDownloading.value=true
+                            lifecycleScope.launch {
+                                try {
+                                    com.brahmadeo.supertonic.tts.pocket.PocketVoices.download(this@MainActivity) { status,progress ->
+                                        viewModel.downloadStatus.value=status;viewModel.downloadProgress.floatValue=progress
+                                    }
+                                    setupVoicesMap(viewModel.currentLang.value)
+                                } catch(t: Exception) { Toast.makeText(this@MainActivity,"Не удалось скачать голоса: ${t.message}",Toast.LENGTH_LONG).show() }
+                                finally { viewModel.isDownloading.value=false }
+                            }
+                        }) { Text("Скачать 7 голосов Shtorm") }
+                    }
                     if (viewModel.showQueueDialog.value) {
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { viewModel.showQueueDialog.value = false },
@@ -723,7 +737,9 @@ class MainActivity : ComponentActivity() {
     private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
         if (AssetManager.isPocket(this)) {
-            viewModel.voiceFiles["Alba · Shtorm RU"]="alba.json"
+            com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(this).forEach {
+                viewModel.voiceFiles["${it.replaceFirstChar { c -> c.uppercase() }} · Shtorm RU"]="$it.json"
+            }
             return
         }
         if (AssetManager.isSilero(this)) {

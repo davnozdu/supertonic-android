@@ -282,7 +282,7 @@ object SupertonicTTS {
                                 com.brahmadeo.supertonic.tts.foreign.ForeignText.transliterate(part.text), "ru") else part.text
                             val pcm = if (AssetManager.isPocket(context)) {
                                 val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(context).also { pocketEngine=it }
-                                engine.synthesize(russian,speed,gain,listener,sid)
+                                engine.synthesize(russian,stylePath,speed,gain,listener,sid)
                             } else if (AssetManager.isSilero(context)) {
                                 val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(context).also { sileroEngine = it }
                                 engine.synthesize(russian, stylePath, speed, gain, listener, sid)
@@ -300,7 +300,7 @@ object SupertonicTTS {
             if (appContext?.let { AssetManager.isPocket(it) } == true) {
                 val ctx=appContext!!
                 val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(ctx).also { pocketEngine=it }
-                return engine.synthesize(text,speed,gain,listener,sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
+                return engine.synthesize(text,stylePath,speed,gain,listener,sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isSilero(it) } == true) {
                 val ctx = appContext!!

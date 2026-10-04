@@ -1,0 +1,41 @@
+{
+  "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+  "license": "CC-BY-4.0",
+  "files": [
+    {
+      "name": "alba",
+      "size": 479276,
+      "sha256": "596965758f5360172d3339a94969dbee12678d6401fada571c5e72fbf8f09d9c"
+    },
+    {
+      "name": "marius",
+      "size": 480044,
+      "sha256": "076968c3122520f3412eb7090e8c1c3f75fe57be1e24a2f96465583d84c71e16"
+    },
+    {
+      "name": "javert",
+      "size": 480044,
+      "sha256": "b889e080eec3efa824bddaf875b4f531d75464f88128d08941ae648d9d3ade70"
+    },
+    {
+      "name": "jean",
+      "size": 480044,
+      "sha256": "afd9e551f5f8038aef367a070f75fc72a8db409df59b47b0e84b4058a71fae37"
+    },
+    {
+      "name": "fantine",
+      "size": 506150,
+      "sha256": "2452115c748a01dc533de12c2f2536ec5635fefd8fb8e848e5410675f34beb40"
+    },
+    {
+      "name": "cosette",
+      "size": 480044,
+      "sha256": "9535851fc81f4dfda029c408e371d2b45f8cd981f64e0c1fa85a33a9b5e597b6"
+    },
+    {
+      "name": "eponine",
+      "size": 537260,
+      "sha256": "5e45cac2cd9ef183b2c4c6cfcc9c44baa858bd92ffe96577d77ca23bb8b0a714"
+    }
+  ]
+}
