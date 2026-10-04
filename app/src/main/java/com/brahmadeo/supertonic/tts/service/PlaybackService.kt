@@ -282,7 +282,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
             val rate = SupertonicTTS.getAudioSampleRate()
             ensureAudioTrack(rate)
-            try { audioTrack?.flush() } catch (_: Exception) {}
+            try { audioTrack?.pause(); audioTrack?.flush() } catch (_: Exception) {}
 
             isSynthesizing = true
             isPlaying = true

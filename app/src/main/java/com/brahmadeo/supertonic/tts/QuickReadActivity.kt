@@ -37,10 +37,12 @@ class QuickReadActivity : ComponentActivity() {
             Surface { Column(Modifier.heightIn(max = 600.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Быстрое чтение · MyTTS", style = MaterialTheme.typography.titleLarge)
                 OutlinedTextField(value = text.value, onValueChange = { text.value = it },
-                    label = { Text("Текст или ссылка на статью") }, modifier = Modifier.fillMaxWidth(), maxLines = 5)
+                    label = { Text("Текст или ссылка на статью") }, modifier = Modifier.fillMaxWidth(), maxLines = 5,
+                    isError = text.value.length > com.brahmadeo.supertonic.tts.article.ArticleExtractor.MAX_TEXT,
+                    supportingText = { if (text.value.length > com.brahmadeo.supertonic.tts.article.ArticleExtractor.MAX_TEXT) Text("Лимит 180 000 знаков. Передайте текст частями.") })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { paste() }) { Text("Вставить") }
-                    Button(enabled = text.value.isNotBlank(), onClick = {
+                    Button(enabled = text.value.isNotBlank() && text.value.length <= com.brahmadeo.supertonic.tts.article.ArticleExtractor.MAX_TEXT, onClick = {
                         startActivity(Intent(this@QuickReadActivity, MainActivity::class.java).setAction(Intent.ACTION_SEND)
                             .setType("text/plain").putExtra(Intent.EXTRA_TEXT, text.value)
                             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))

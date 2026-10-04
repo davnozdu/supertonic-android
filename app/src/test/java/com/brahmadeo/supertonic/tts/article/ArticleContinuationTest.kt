@@ -30,6 +30,11 @@ class ArticleContinuationTest {
         assertEquals("https://telegra.ph/a%2Fb", find("<link rel=next href='/a%2Fb'>"))
         assertEquals("https://telegra.ph/a", ArticleContinuation.canonicalUrl("https://telegra.ph/a#fragment"))
     }
+    @Test fun fullSeriesTitleRecognizesNextButNotOtherArticles() {
+        assertEquals("https://telegra.ph/story-2", find("<article><p><a href='/story-2'>Рассказ · Часть 2</a></p></article>"))
+        assertNull(find("<article><p><a href='/story-2'>Другой рассказ · Часть 2</a></p></article>"))
+        assertNull(find("<article><div class='related'><p><a href='/story-2'>Рассказ · Часть 2</a></p></div></article>"))
+    }
     @Test fun cancelledSessionCannotCompleteNewDownloads() {
         var cancelled = false
         val first = ArticleSession.begin { cancelled = true }

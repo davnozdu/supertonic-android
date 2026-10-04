@@ -55,6 +55,16 @@ class PlaybackActivity : ComponentActivity() {
 
         override fun onProgress(current: Int, total: Int) {
             runOnUiThread {
+                val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
+                val text = prefs.getString("last_text", "").orEmpty()
+                if (text.isNotBlank() && text != currentText) {
+                    currentText = text
+                    currentVoicePath = prefs.getString("last_voice_path", currentVoicePath).orEmpty()
+                    currentLang = prefs.getString("last_lang", currentLang).orEmpty()
+                    currentSpeed = prefs.getFloat("last_speed", currentSpeed)
+                    currentSteps = prefs.getInt("last_steps", currentSteps)
+                    setupList(currentText)
+                }
                 currentIndexState.intValue = current
                 updateIndexState(current)
                 if (total > 0 && current !in 0 until total) {

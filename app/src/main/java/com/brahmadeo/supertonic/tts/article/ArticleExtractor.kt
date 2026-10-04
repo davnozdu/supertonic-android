@@ -45,11 +45,12 @@ object ArticleExtractor {
         }
         val title = (doc.selectFirst("#firstHeading, article h1, h1")?.text()
             ?: doc.selectFirst("meta[property=og:title]")?.attr("content") ?: doc.title()).trim()
+        val structured = ArticleStructuredData.body(doc)
         val explicit = doc.selectFirst(".tl_article_content") ?: wiki
         val nextUrl = ArticleContinuation.find(doc, explicit, url, title)
         val root = if (explicit != null) explicit.clone() else {
-            val article = Readability4J(url, doc.outerHtml()).parse()
-            val content = article.content ?: error("Не удалось выделить статью. Попробуйте поделиться выделенным текстом.")
+            val article = runCatching { Readability4J(url, doc.outerHtml()).parse() }.getOrNull()
+            val content = article?.content ?: if (structured != null) "" else error("Не удалось выделить статью. Попробуйте поделиться выделенным текстом.")
             Jsoup.parseBodyFragment(content).body()
         }
         root.select("script, style, noscript, nav, footer, form, button, iframe, svg, canvas, " +
@@ -92,9 +93,11 @@ object ArticleExtractor {
         visit(root)
         val paragraphs = out.toString().replace('\u00a0', ' ').lineSequence()
             .map { it.replace(Regex("[\\t\\r ]+"), " ").trim() }.filter { it.isNotBlank() }.toList()
-        val body = paragraphs.joinToString("\n\n")
+        var body = paragraphs.joinToString("\n\n")
+        if (structured != null && structured.length > body.length) body = structured
         require(body.length >= 80) { "На странице недостаточно текста статьи. Можно вставить или передать текст напрямую." }
-        val text = if (title.isNotBlank() && paragraphs.firstOrNull() != title) "$title.\n\n$body" else body
+        val spokenTitle = if (title.lastOrNull() in setOf('.', '?', '!', '…')) title else "$title."
+        val text = if (title.isNotBlank() && body.lineSequence().firstOrNull()?.trim() != title) "$spokenTitle\n\n$body" else body
         require(text.length <= MAX_TEXT) { "Статья слишком большая (лимит 180 000 знаков). Передайте её частями." }
         return ReadingArticle(title, text, nextUrl, url)
     }

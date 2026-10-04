@@ -23,14 +23,19 @@ object ArticleContinuation {
         if (explicit.size > 1) return null
         val root = articleRoot ?: doc.selectFirst("article, main") ?: return null
         val currentPart = partNumber.find(title)?.groupValues?.get(1)?.toIntOrNull()
+        fun seriesTitle(value: String) = partNumber.replace(value, "").replace(Regex("[\\p{P}\\s]+"), " ").trim().lowercase()
         val paragraphs = root.select("p, li, div")
         val tail = paragraphs.takeLast(6)
         val candidates = root.select("a[href]").filter { a ->
             val label = a.text().replace(Regex("\\s+"), " ").trim().trimStart('→', '»', '›', ' ')
-            if (!nextLabel.matches(label)) return@filter false
-            // A table of contents at the beginning is not a next-page link.
-            if (tail.none { it === a.parent() || it.getAllElements().contains(a) }) return@filter false
             val number = partNumber.find(label)?.groupValues?.get(1)?.toIntOrNull()
+            val namedNext = currentPart != null && number == currentPart + 1 &&
+                seriesTitle(title).length >= 4 && seriesTitle(label) == seriesTitle(title)
+            if (!nextLabel.matches(label) && !namedNext) return@filter false
+            if (a.parents().any { ancestor -> ancestor.normalName() in setOf("nav", "footer") ||
+                ancestor.classNames().any { it in setOf("related", "recommended", "comments", "advertisement") } }) return@filter false
+            // A table of contents at the beginning is not a next-page link.
+            if (!namedNext && tail.none { it === a.parent() || it.getAllElements().contains(a) }) return@filter false
             if (number != null && number != (currentPart ?: 1) + 1) return@filter false
             true
         }.mapNotNull { allowed(it.attr("href")) }.distinct()
