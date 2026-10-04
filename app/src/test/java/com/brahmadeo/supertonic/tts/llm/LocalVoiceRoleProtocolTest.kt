@@ -4,6 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LocalVoiceRoleProtocolTest {
+    @Test fun indexedLabelsMustCoverAllFragmentsExactlyOnce() {
+        val pieces=listOf(listOf("Автор. ","— Да! ","— сказала Анна."))
+        val plan=LocalVoiceRoleProtocol.parse("0:А\n1:Ж\n2:А",pieces).single()
+        assertEquals(listOf(VoiceRole.AUTHOR,VoiceRole.FEMALE,VoiceRole.AUTHOR),plan.map { it.role })
+        for(answer in listOf("0:А\n2:Ж", "0:А\n0:Ж\n2:А", "0:А\n2:Ж\n1:А", "0:А\n1:Ж\n2:А\n3:М")) {
+            assertThrows(IllegalArgumentException::class.java) { LocalVoiceRoleProtocol.parse(answer,pieces) }
+        }
+    }
+    @Test fun unicodeBookSpacesAroundDialogueDashesAreRecognized() {
+        val text="Автор.\u00a0— Да!\u202f— сказала Анна."
+        assertEquals(3,LocalVoiceRoleProtocol.fragments(text).size)
+        assertEquals(text,LocalVoiceRoleProtocol.fragments(text).joinToString(""))
+    }
     @Test fun fixedFragmentsPreserveEveryLetterAndWhitespace() {
         val text="Павел подошёл к окну.\n— Как красиво! — сказала Ольга.\n— Да, — ответил Павел."
         val (_,pieces)=LocalVoiceRoleProtocol.prompt(listOf(text),"")

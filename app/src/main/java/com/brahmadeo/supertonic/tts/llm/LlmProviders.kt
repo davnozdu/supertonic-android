@@ -152,7 +152,8 @@ object LlmProviders {
         if (provider == "local") {
             val (prompt,pieces) = LocalVoiceRoleProtocol.prompt(texts,preceding)
             val answer = local(context,c,listOf(prompt),deadlineMs=12000,protocol="roles-local",
-                diagnosticInstruction=LocalVoiceRoleProtocol.INSTRUCTION).single()
+                diagnosticInstruction=LocalVoiceRoleProtocol.INSTRUCTION,
+                outputTokenLimit=(pieces.sumOf { it.size }*8+16).coerceIn(64,272)).single()
             return LocalVoiceRoleProtocol.parse(answer,pieces)
         }
         val prompt = VoiceRoleProtocol.prompt(texts, preceding)
@@ -160,7 +161,8 @@ object LlmProviders {
             VoiceRoleProtocol.schema(), provider == "gemini", 2400), texts)
     }
     @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long = 45000,
-        onOutput: (Int,String) -> Unit = { _,_ -> }, protocol: String = "caps", diagnosticInstruction: String? = null): List<String> {
+        onOutput: (Int,String) -> Unit = { _,_ -> }, protocol: String = "caps", diagnosticInstruction: String? = null,
+        outputTokenLimit: Int? = null): List<String> {
         val generation = cancelGeneration.get()
         require(LocalModelDownload.ready(context)) { "Сначала скачайте Gemma 4" }
         val wantGpu=c.gpu && !localGpuFailed
@@ -191,7 +193,7 @@ object LlmProviders {
             return engine.createConversation(ConversationConfig(systemInstruction=Contents.of(system),
                 samplerConfig=SamplerConfig(1,0.95,0.0),
                 thinkingConfig=ThinkingConfig(c.localThinking,if(c.localThinking) 512 else 0),
-                maxOutputToken=if (protocol == "roles-local") 64 else if (protocol.startsWith("roles")) 1600 else LocalSpeechText.outputTokens(text.length))).use { conversation ->
+                maxOutputToken=outputTokenLimit ?: if (protocol == "roles-local") 64 else if (protocol.startsWith("roles")) 1600 else LocalSpeechText.outputTokens(text.length))).use { conversation ->
                 activeConversation=conversation
                 val started=SystemClock.elapsedRealtime()
                 val deadline=timer.schedule({ timedOut.set(true); runCatching { conversation.cancelProcess() } },deadlineMs,java.util.concurrent.TimeUnit.MILLISECONDS)
