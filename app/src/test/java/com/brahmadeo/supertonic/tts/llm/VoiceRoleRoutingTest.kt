@@ -68,6 +68,23 @@ class VoiceRoleRoutingTest {
             }, resolved = { i, _, _ -> if (i == 0) delivered = true })
         assertTrue(delivered)
     }
+    @Test fun unsupportedLocalRuntimeCannotLeaveTheQueueWaitingForever() {
+        var failed = false
+        val result = VoiceRoleRouting.resolve(texts,listOf("local"),"",{ true },
+            request = { _, _, _ -> throw UnsatisfiedLinkError("Missing native runtime") },
+            failed = { _, _ -> failed = true })
+        assertTrue(failed)
+        assertTrue(result.plans.all { it == null })
+    }
+    @Test fun deadlineStopsAdditionalBatchesWithoutDiscardingCompletedParagraphs() {
+        var allowed = true
+        var calls = 0
+        val result = VoiceRoleRouting.resolve(listOf("Первый абзац.", "Второй ".repeat(700)),listOf("ollama"),"",{ allowed },
+            request = { _, input, _ -> calls++; allowed = false; input.map { listOf(VoiceRoleText(it,VoiceRole.AUTHOR)) } })
+        assertEquals(1,calls)
+        assertNotNull(result.plans.first())
+        assertNull(result.plans.last())
+    }
     @Test fun offlineNeverCallsCloudAndMissingLocalNeverBlocksReading() {
         var requested = false
         val result = VoiceRoleRouting.resolve(texts, listOf("ollama", "local"), "", { false }, { _, _, _ -> requested = true; error("unexpected") })

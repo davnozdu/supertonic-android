@@ -195,14 +195,20 @@ object LlmPreparation {
                     }
                     activeBatch = batch
                     val preceding = roleContext.get(batch.first().caller)
-                    val results = process(ctx, config, batch.map { it.input }, batchEpoch,
+                    val results = try { process(ctx, config, batch.map { it.input }, batchEpoch,
                         preceding = preceding,
                         onTextPrepared = { index, result -> if (batchEpoch == epoch) batch[index].textReady = result },
                         cancelled = { batch.all { it.cancelled } },
                         onPrepared = { index, result -> if (batchEpoch == epoch && !batch[index].cancelled) {
                             batch[index].textReady = result
                             batch[index].future.complete(result)
-                        } })
+                        } }) } catch (e: Exception) {
+                        Log.w("LlmPreparation", "Batch failed error=${e.javaClass.simpleName}; offline reading remains available")
+                        batch.map { Result(it.input, "словарь", 0, true, "Ошибка фоновой обработки") }
+                    } catch (e: LinkageError) {
+                        Log.w("LlmPreparation", "Unsupported runtime; offline reading remains available")
+                        batch.map { Result(it.input, "словарь", 0, true, "Среда выполнения недоступна") }
+                    }
                     synchronized(lock) { if (batchEpoch == epoch && batch.any { !it.cancelled }) {
                         // Record processed roles too, so a continued quote can keep its voice.
                         roleContext.append(batch.first().caller, results.map { result ->
@@ -215,7 +221,7 @@ object LlmPreparation {
                         batch.zip(results).forEach { (entry, result) ->
                             if (!entry.cancelled) { entry.textReady = result; entry.future.complete(result) }
                         }
-                        if (needsRoleRecovery(config, results)) scheduleRoleRecovery(ctx, config, batch, preceding, batchEpoch)
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx) && needsRoleRecovery(config, results)) scheduleRoleRecovery(ctx, config, batch, preceding, batchEpoch)
                     }
                     else batch.forEach { it.future.cancel(false) }
                     return@execute
@@ -289,7 +295,8 @@ object LlmPreparation {
                 } else roleRequest?.invoke(provider, parts, before) ?: LlmProviders.voiceRoles(ctx, c, parts, before, provider,
                     minOf(8000L, (if(provider=="local") deadline else cloudDeadline) - SystemClock.elapsedRealtime()).coerceAtLeast(1))
             }, failed = { provider, error ->
-                roleCooldown[provider] = SystemClock.elapsedRealtime() + 10_000
+                val pause = if (Regex("API HTTP (401|403|429)").containsMatchIn(error.message.orEmpty())) 60_000 else 10_000
+                roleCooldown[provider] = SystemClock.elapsedRealtime() + pause
                 Log.w("MultiVoice", "Role request failed provider=$provider error=${error.javaClass.simpleName}; trying next provider")
             }, resolved = { index, plan, provider ->
                 if (expectedEpoch == epoch && !cancelled()) resolved(index,

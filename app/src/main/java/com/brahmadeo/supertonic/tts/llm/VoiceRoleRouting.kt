@@ -59,19 +59,24 @@ internal object VoiceRoleRouting {
                     // A network failure should not trigger one failed call for every slice.
                     slices.drop(offset).forEach { invalid += it.paragraph }
                     break
+                } catch (e: LinkageError) {
+                    chunk.forEach { invalid += it.paragraph }
+                    slices.drop(offset).forEach { invalid += it.paragraph }
+                    failed(provider, IllegalStateException("Local runtime unavailable", e))
+                    break
                 }
-            collected.forEach { (i, segments) ->
-                if (i !in invalid && plans[i] == null) {
-                    val merged = mutableListOf<VoiceRoleText>()
-                    segments.forEach { part ->
-                        if (merged.lastOrNull()?.role == part.role) {
-                            val old = merged.removeAt(merged.lastIndex)
-                            merged += old.copy(text = old.text + part.text)
-                        } else merged += part
+                collected.forEach { (i, segments) ->
+                    if (i !in invalid && plans[i] == null) {
+                        val merged = mutableListOf<VoiceRoleText>()
+                        segments.forEach { part ->
+                            if (merged.lastOrNull()?.role == part.role) {
+                                val old = merged.removeAt(merged.lastIndex)
+                                merged += old.copy(text = old.text + part.text)
+                            } else merged += part
+                        }
+                        if (VoiceRolePlan.safe(texts[i], merged) == merged) { plans[i] = merged; used[i] = provider; resolved(i, merged, provider) }
                     }
-                    if (VoiceRolePlan.safe(texts[i], merged) == merged) { plans[i] = merged; used[i] = provider; resolved(i, merged, provider) }
                 }
-            }
             }
             if (plans.all { it != null }) break
         }

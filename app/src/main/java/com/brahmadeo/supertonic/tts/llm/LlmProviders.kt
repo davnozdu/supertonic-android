@@ -15,7 +15,7 @@ object LlmProviders {
     private var localGpuFailed = false
     private var usedAt = 0L
     @Volatile private var activeConversation: Conversation? = null
-    @Volatile private val activeHttp = java.util.concurrent.ConcurrentHashMap.newKeySet<HttpURLConnection>()
+    private val activeHttp = java.util.concurrent.ConcurrentHashMap.newKeySet<HttpURLConnection>()
     private val cancelGeneration = java.util.concurrent.atomic.AtomicLong()
     private val thinkingControls = java.util.concurrent.ConcurrentHashMap<String, List<Any>>()
     private val timer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "LLM-deadline").apply { isDaemon = true } }
