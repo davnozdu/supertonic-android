@@ -9,6 +9,6 @@ for HEADER in onnxruntime_c_api.h onnxruntime_cxx_api.h onnxruntime_cxx_inline.h
 done
 cd "$ROOT"
 ./gradlew extractOnnxLib
-cmake -S app/src/main/cpp/pocket -B build/pocket-native -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DANDROID_STL=c++_shared -DCMAKE_BUILD_TYPE=Release
+cmake -S app/src/main/cpp/pocket -B build/pocket-native -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release
 cmake --build build/pocket-native --target pockettts_jni --parallel 2
 cp build/pocket-native/libpockettts_jni.so app/src/main/jniLibs/arm64-v8a/

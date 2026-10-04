@@ -20,4 +20,4 @@ add_library(pockettts_jni SHARED "${ROOT}/vendor/pockettts/PocketTTS.cpp/pocket_
 target_compile_definitions(pockettts_jni PRIVATE PTT_SHARED_LIB)
 target_include_directories(pockettts_jni PRIVATE "${ROOT}/build/pocket-headers" "${ROOT}/vendor/pockettts/sonic" "${sentencepiece_SOURCE_DIR}/src" "${dr_libs_SOURCE_DIR}")
 target_link_libraries(pockettts_jni PRIVATE "${ROOT}/app/build/onnxruntime/jni/arm64-v8a/libonnxruntime.so" sentencepiece-static log android)
-target_link_options(pockettts_jni PRIVATE "-Wl,-z,max-page-size=16384")
+target_link_options(pockettts_jni PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL")
