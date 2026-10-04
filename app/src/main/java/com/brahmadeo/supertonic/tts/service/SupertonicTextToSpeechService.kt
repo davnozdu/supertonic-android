@@ -29,6 +29,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var initJob: Job? = null
+    @Volatile private var activeVoicePreview = false
 
     private val attributionContext: Context by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -218,7 +219,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
     }
 
     override fun onStop() {
-        com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
+        if (!activeVoicePreview) com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
         SupertonicTTS.setCancelled(true)
     }
 
@@ -260,6 +261,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (request.params.getBoolean("supertonic_foreign_proxy", false)) {
             callback.error(); callback.done(); return
         }
+        val voicePreview = com.brahmadeo.supertonic.tts.llm.VoicePreview.requested(this, request.params, request.callerUid)
+        activeVoicePreview = voicePreview
+        try {
         SupertonicTTS.setCancelled(false)
         runBlocking {
             withTimeoutOrNull(5000) {
@@ -267,7 +271,6 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
         val incomingText = request.charSequenceText?.toString() ?: return
-        val voicePreview = com.brahmadeo.supertonic.tts.llm.VoicePreview.requested(this, request.params, request.callerUid)
         val aheadText = if (voicePreview) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
         val preparation = if (aheadText == null && !voicePreview) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
@@ -405,5 +408,6 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
         Log.i("SupertonicTTS", "TTS request finished after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms, success=$success")
         if (success) callback.done() else callback.error()
+        } finally { activeVoicePreview = false }
     }
 }

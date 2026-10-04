@@ -103,8 +103,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 84
-        versionName "4.1.0-beta46.4"
+        versionCode 85
+        versionName "4.1.0-beta46.5"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"

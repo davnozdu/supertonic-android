@@ -14,13 +14,14 @@ import android.util.Log
  */
 class TtsQueueObserver(private val context: Context, private val delegate: IBinder) : Binder() {
     private val musicCallbacks = HashMap<IBinder, com.brahmadeo.supertonic.tts.music.MusicTtsCallback>()
+    private val readingOwners = java.util.concurrent.ConcurrentHashMap.newKeySet<IBinder>()
     /** The local callback proxy cannot die with the remote client; preserve framework cleanup explicitly. */
     private fun deadClient(owner: IBinder, dead: com.brahmadeo.supertonic.tts.music.MusicTtsCallback) {
         val removed=synchronized(musicCallbacks) {
             if(musicCallbacks[owner]===dead) { musicCallbacks.remove(owner);true } else false
         }
         if(!removed) return
-        ReaderAudioAhead.cancel()
+        if (readingOwners.remove(owner)) ReaderAudioAhead.cancel()
         LlmPreparation.cancel(owner)
         for(code in listOf(FIRST_CALL_TRANSACTION+5,FIRST_CALL_TRANSACTION+11)) {
             val data=Parcel.obtain();val reply=Parcel.obtain()
@@ -51,6 +52,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
     }
     fun close() { synchronized(musicCallbacks) {
         musicCallbacks.values.forEach { it.detach() }; musicCallbacks.clear()
+        readingOwners.clear()
     } }
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
         if (code == FIRST_CALL_TRANSACTION && com.brahmadeo.supertonic.tts.service.CallInterruption.active()) {
@@ -102,6 +104,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                             val params=if(data.readInt()!=0) android.os.Bundle.CREATOR.createFromParcel(data) else null
                             val utteranceId=data.readString()
                             if (!VoicePreview.requested(context, params, getCallingUid())) {
+                                readingOwners.add(caller)
                                 id = LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
                                 musicOwner=caller
                                 musicToken=com.brahmadeo.supertonic.tts.music.BackgroundMusic.enqueue(context,caller,utteranceId,mode!=TextToSpeech.QUEUE_ADD)
@@ -113,7 +116,8 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                         }
                     } else {
                         com.brahmadeo.supertonic.tts.music.BackgroundMusic.stop(caller)
-                        LlmPreparation.cancel(caller); ReaderAudioAhead.cancel()
+                        LlmPreparation.cancel(caller)
+                        if (caller in readingOwners) ReaderAudioAhead.cancel()
                     }
                 }
             } catch (_: Exception) {
