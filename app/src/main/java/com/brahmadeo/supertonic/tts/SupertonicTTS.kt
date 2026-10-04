@@ -28,9 +28,13 @@ object SupertonicTTS {
     }
     fun clearAudioCache() { audioCache.clear() }
     private fun cacheLimitBytes(): Long =
-        (appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt("reader_pcm_cache_mb",256) ?: 256).coerceIn(64,1024)*1024L*1024L
+        com.brahmadeo.supertonic.tts.utils.SpeechCacheBudget.limit(
+            appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt("reader_pcm_cache_mb",256) ?: 256, Runtime.getRuntime().maxMemory())
     fun releaseAheadCache(owner: String) { audioCache.releaseAhead(owner) }
-    fun aheadCacheHasRoom(): Boolean = audioCache.status().aheadBytes < cacheLimitBytes() - 16*1024L*1024L
+    fun aheadCacheHasRoom(): Boolean {
+        val limit = cacheLimitBytes()
+        return audioCache.status().aheadBytes < limit - minOf(16*1024L*1024L,limit/4)
+    }
     fun audioCacheStatus(): String {
         val status = audioCache.status()
         return "retainedBytes=${status.retainedBytes} aheadBytes=${status.aheadBytes} limitBytes=${cacheLimitBytes()} entries=${status.entries}"

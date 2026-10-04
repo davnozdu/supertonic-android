@@ -174,6 +174,8 @@ class LlmSettingsActivity : ComponentActivity() {
                             Choice("Кэш готового аудио в RAM", "$pcmCacheMb МБ", listOf("64 МБ","128 МБ","256 МБ","512 МБ","1024 МБ")) {
                                 pcmCacheMb=it.substringBefore(' ').toInt();pausePrefs.edit().putInt("reader_pcm_cache_mb",pcmCacheMb).apply()
                             }
+                            val effectiveCacheMb = com.brahmadeo.supertonic.tts.utils.SpeechCacheBudget.limit(pcmCacheMb,Runtime.getRuntime().maxMemory())/(1024*1024)
+                            if (effectiveCacheMb < pcmCacheMb) Text("На этом устройстве кэш ограничен до $effectiveCacheMb МБ, чтобы оставить память для синтеза и воспроизведения.", style = MaterialTheme.typography.bodySmall)
                             Text("Подготавливаются только фрагменты, уже поставленные читалкой в очередь. Пауза считается минимальной: тишина модели засчитывается.", style = MaterialTheme.typography.bodySmall)
 
                             Toggle("Иностранные фрагменты через другой Android TTS", foreignEnabled) {

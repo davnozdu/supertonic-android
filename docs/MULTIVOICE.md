@@ -1,4 +1,4 @@
-# Experimental multi-voice reading — Beta 46
+# Experimental multi-voice reading — Beta 46.1
 
 The switch is off by default, in LLM text preparation settings. Narrator, male and female voices are selected manually and saved per synthesis engine. This is voice routing, not translation or summarization.
 
@@ -25,7 +25,7 @@ The first-role metric is limited: it checks the speaker gender of the beginning,
 
 The old PCM cache had a separate 256-entry ceiling, independent of its MB limit: 256 short 80 KB fragments retain only ~20 MB. The safeguard is now 16384 entries, so the byte budget is the practical limit for speech. Tera/Silero's former 16-task lookahead now shares the bounded 256-task/192000-character window; no silent discard. Prepared text handoff matches this window.
 
-Upcoming unplayed PCM is protected; already delivered entries are evicted first. When future PCM approaches the chosen limit, only the background producer waits, reserving 16 MB for an in-flight fragment. Consumed/fallback requests release their own reservation. Logging reports retainedBytes, aheadBytes, limitBytes and entry count. The cache cannot invent text that the reader has not submitted; 256 MB is a maximum, not a promise that every reader supplies that much future text.
+Upcoming unplayed PCM is protected; already delivered entries are evicted first. When future PCM approaches the chosen limit, only the background producer waits, reserving 16 MB for an in-flight fragment. Consumed/fallback requests release their own reservation. PCM also respects the actual managed-heap limit, reserving 64–128 MB for synthesis/playback. This phone allows a 512 MB large heap: the selected 256 MB is fully usable, while impossible 512/1024 MB choices are capped at 384 MB and the settings explain the effective limit. Logging reports retainedBytes, aheadBytes, limitBytes and entry count. The cache cannot invent text that the reader has not submitted; 256 MB is a maximum, not a promise that every reader supplies that much future text.
 
 ## Verification
 
