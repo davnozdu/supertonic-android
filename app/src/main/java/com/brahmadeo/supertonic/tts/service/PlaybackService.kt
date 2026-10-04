@@ -508,7 +508,14 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
                         if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break
 
-                        val nextItem = QueueManager.next() ?: break
+                        var nextItem = QueueManager.next()
+                        val continuationDeadline = android.os.SystemClock.elapsedRealtime() + 35_000
+                        while (nextItem == null && com.brahmadeo.supertonic.tts.article.ArticleSession.pending &&
+                            isActive && !SupertonicTTS.isCancelled() && android.os.SystemClock.elapsedRealtime() < continuationDeadline) {
+                            delay(100)
+                            nextItem = QueueManager.next()
+                        }
+                        if (nextItem == null) break
                         SupertonicTTS.reset()
                         try { channel.send(AudioPacket(silenceBytes(300))) } catch (_: Exception) { break }
                         curText = nextItem.text
@@ -795,6 +802,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     fun stopServicePlayback() {
+        if (com.brahmadeo.supertonic.tts.article.ArticleSession.pending) {
+            com.brahmadeo.supertonic.tts.article.ArticleSession.cancel(); QueueManager.clear()
+        }
         isPlaying = false
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,false)
         com.brahmadeo.supertonic.tts.llm.LlmPreparation.cancelApp()

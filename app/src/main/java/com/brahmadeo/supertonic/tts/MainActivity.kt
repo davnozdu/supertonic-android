@@ -229,11 +229,19 @@ class MainActivity : ComponentActivity() {
                         lifecycle.withResumed {
                             viewModel.pendingArticle.value?.let { text ->
                                 viewModel.pendingArticle.value = null
+                                QueueManager.initialize(this@MainActivity)
+                                QueueManager.clear()
+                                viewModel.enqueueContinuations(viewModel.currentLang.value,
+                                    AssetManager.voiceFile(this@MainActivity, viewModel.selectedVoiceFile.value).absolutePath,
+                                    viewModel.currentSpeed.floatValue, viewModel.currentSteps.intValue)
                                 HistoryManager.saveItem(this@MainActivity, text, viewModel.selectedVoiceFile.value)
                                 playNow(text)
                             }
                         }
                     }
+                }
+                LaunchedEffect(viewModel.articleWarning.value) {
+                    viewModel.articleWarning.value?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show(); viewModel.articleWarning.value = null }
                 }
                 if (viewModel.showLinkDialog.value) {
                     androidx.compose.material3.AlertDialog(

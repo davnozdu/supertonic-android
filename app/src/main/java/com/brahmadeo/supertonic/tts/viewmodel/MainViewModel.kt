@@ -16,10 +16,14 @@ class MainViewModel : ViewModel() {
     var articleLoading = mutableStateOf(false)
     var articleError = mutableStateOf<String?>(null)
     var pendingArticle = mutableStateOf<String?>(null)
+    var articleWarning = mutableStateOf<String?>(null)
+    private var firstArticle: com.brahmadeo.supertonic.tts.article.ReadingArticle? = null
     private var articleJob: Job? = null
     private var articleGeneration = 0L
     fun cancelArticle() {
         articleGeneration++
+        com.brahmadeo.supertonic.tts.article.ArticleSession.cancel()
+        firstArticle = null
         articleJob?.cancel(); articleJob = null
         articleLoading.value = false; pendingArticle.value = null
     }
@@ -31,6 +35,7 @@ class MainViewModel : ViewModel() {
         articleJob = viewModelScope.launch {
             try {
                 val article = com.brahmadeo.supertonic.tts.article.ArticleLoader.load(link)
+                firstArticle = article
                 inputText.value = article.text
                 pendingArticle.value = article.text
                 showLinkDialog.value = false
@@ -40,6 +45,39 @@ class MainViewModel : ViewModel() {
                 articleError.value = e.message ?: "Не удалось загрузить статью. Проверьте соединение."
             } finally { if (generation == articleGeneration) articleLoading.value = false }
         }
+    }
+    fun enqueueContinuations(lang: String, style: String, speed: Float, steps: Int) {
+        val first = firstArticle ?: return
+        if (first.nextUrl == null) return
+        var job: Job? = null
+        val session = com.brahmadeo.supertonic.tts.article.ArticleSession.begin { job?.cancel() }
+        job = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            val seen = mutableSetOf(com.brahmadeo.supertonic.tts.article.ArticleContinuation.canonicalUrl(first.sourceUrl))
+            var article = first
+            var total = first.text.length
+            var pages = 1
+            try {
+                while (article.nextUrl != null && com.brahmadeo.supertonic.tts.article.ArticleSession.current(session)) {
+                    val next = article.nextUrl!!
+                    check(seen.add(next)) { "Ссылка на продолжение зациклена. Автопереход остановлен." }
+                    check(pages < 20) { "Достигнут лимит 20 частей. Следующие части можно открыть отдельно." }
+                    val loaded = com.brahmadeo.supertonic.tts.article.ArticleLoader.load(next)
+                    check(total + loaded.text.length <= com.brahmadeo.supertonic.tts.article.ArticleExtractor.MAX_TEXT) {
+                        "Достигнут лимит 180 000 знаков для цепочки статей. Продолжение можно открыть отдельно."
+                    }
+                    if (!com.brahmadeo.supertonic.tts.article.ArticleSession.current(session)) break
+                    val actualUrl = com.brahmadeo.supertonic.tts.article.ArticleContinuation.canonicalUrl(loaded.sourceUrl)
+                    check(seen.add(actualUrl) || actualUrl == next) { "Продолжение перенаправлено на уже прочитанную страницу." }
+                    com.brahmadeo.supertonic.tts.utils.QueueManager.add(com.brahmadeo.supertonic.tts.utils.QueueItem(
+                        text = loaded.text, lang = lang, stylePath = style, speed = speed, steps = steps))
+                    article = loaded; total += loaded.text.length; pages++
+                    android.util.Log.i("ArticleReader", "Continuation queued page=$pages totalChars=$total")
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { articleWarning.value = "Продолжение не загружено: ${e.message}" }
+            finally { com.brahmadeo.supertonic.tts.article.ArticleSession.complete(session) }
+        }
+        articleJob = job; job?.start()
     }
     // UI State
     var inputText = mutableStateOf("")

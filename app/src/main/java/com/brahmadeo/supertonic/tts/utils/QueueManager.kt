@@ -22,24 +22,25 @@ object QueueManager {
     private var appContext: Context? = null
     private const val FILE_NAME = "playback_queue.json"
 
-    fun initialize(context: Context) {
+    @Synchronized fun initialize(context: Context) {
+        if (appContext != null) return
         appContext = context.applicationContext
         loadQueue()
     }
 
-    fun add(item: QueueItem) {
+    @Synchronized fun add(item: QueueItem) {
         queue.addLast(item)
         saveQueue()
         notifyListeners()
     }
 
-    fun addNext(item: QueueItem) {
+    @Synchronized fun addNext(item: QueueItem) {
         queue.addFirst(item)
         saveQueue()
         notifyListeners()
     }
 
-    fun next(): QueueItem? {
+    @Synchronized fun next(): QueueItem? {
         val item = queue.removeFirstOrNull()
         if (item != null) {
             saveQueue()
@@ -48,32 +49,32 @@ object QueueManager {
         return item
     }
 
-    fun peek(): QueueItem? {
+    @Synchronized fun peek(): QueueItem? {
         return queue.firstOrNull()
     }
 
-    fun clear() {
+    @Synchronized fun clear() {
         queue.clear()
         saveQueue()
         notifyListeners()
     }
 
-    fun isEmpty(): Boolean = queue.isEmpty()
+    @Synchronized fun isEmpty(): Boolean = queue.isEmpty()
 
-    fun size(): Int = queue.size
+    @Synchronized fun size(): Int = queue.size
 
-    fun getList(): List<QueueItem> = queue.toList()
+    @Synchronized fun getList(): List<QueueItem> = queue.toList()
 
-    fun addListener(listener: (List<QueueItem>) -> Unit) {
+    @Synchronized fun addListener(listener: (List<QueueItem>) -> Unit) {
         listeners.add(listener)
         listener(getList())
     }
 
-    fun removeListener(listener: (List<QueueItem>) -> Unit) {
+    @Synchronized fun removeListener(listener: (List<QueueItem>) -> Unit) {
         listeners.remove(listener)
     }
 
-    fun replaceAll(newItems: List<QueueItem>) {
+    @Synchronized fun replaceAll(newItems: List<QueueItem>) {
         queue.clear()
         queue.addAll(newItems)
         saveQueue()

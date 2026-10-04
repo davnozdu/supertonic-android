@@ -6,7 +6,7 @@ import org.jsoup.nodes.Element
 import org.jsoup.nodes.TextNode
 import java.net.URI
 
-data class ReadingArticle(val title: String, val text: String)
+data class ReadingArticle(val title: String, val text: String, val nextUrl: String? = null, val sourceUrl: String = "")
 
 /** HTML is parsed locally. Scripts are never executed and HTML never goes to the LLM. */
 object ArticleExtractor {
@@ -46,6 +46,7 @@ object ArticleExtractor {
         val title = (doc.selectFirst("#firstHeading, article h1, h1")?.text()
             ?: doc.selectFirst("meta[property=og:title]")?.attr("content") ?: doc.title()).trim()
         val explicit = doc.selectFirst(".tl_article_content") ?: wiki
+        val nextUrl = ArticleContinuation.find(doc, explicit, url, title)
         val root = if (explicit != null) explicit.clone() else {
             val article = Readability4J(url, doc.outerHtml()).parse()
             val content = article.content ?: error("Не удалось выделить статью. Попробуйте поделиться выделенным текстом.")
@@ -65,6 +66,13 @@ object ArticleExtractor {
             }
         }
         root.select("h1").remove() // Title is prepended once below.
+        if (nextUrl != null) root.select("a[href]").filter {
+            runCatching { ArticleContinuation.canonicalUrl(it.absUrl("href")) == nextUrl }.getOrDefault(false)
+        }.forEach { anchor ->
+            val parent = anchor.parent()
+            anchor.remove()
+            if (parent?.normalName() in setOf("p", "li") && parent?.text().isNullOrBlank()) parent?.remove()
+        }
         val out = StringBuilder()
         val blocks = setOf("p", "div", "section", "article", "blockquote", "li", "h2", "h3", "h4", "pre", "tr")
         fun visit(node: org.jsoup.nodes.Node) {
@@ -88,6 +96,6 @@ object ArticleExtractor {
         require(body.length >= 80) { "На странице недостаточно текста статьи. Можно вставить или передать текст напрямую." }
         val text = if (title.isNotBlank() && paragraphs.firstOrNull() != title) "$title.\n\n$body" else body
         require(text.length <= MAX_TEXT) { "Статья слишком большая (лимит 180 000 знаков). Передайте её частями." }
-        return ReadingArticle(title, text)
+        return ReadingArticle(title, text, nextUrl, url)
     }
 }

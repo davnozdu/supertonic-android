@@ -45,6 +45,7 @@ object ReadingControls {
     private fun command(ctx: Context, stop: Boolean) { main.post {
         SleepTimer.block()
         paused = !stop
+        if (stop) { com.brahmadeo.supertonic.tts.article.ArticleSession.cancel(); com.brahmadeo.supertonic.tts.utils.QueueManager.clear() }
         // Stop the requesting reader before flushing its queued Android audio.
         if (externalReading) {
             val audio = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
