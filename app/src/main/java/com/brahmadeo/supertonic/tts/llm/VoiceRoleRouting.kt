@@ -10,7 +10,7 @@ internal object VoiceRoleRouting {
                 request: (String, List<String>, String) -> List<List<VoiceRoleText>?>,
                 failed: (String, Exception) -> Unit = { _, _ -> },
                 resolved: (Int, List<VoiceRoleText>, String) -> Unit = { _, _, _ -> },
-                existing: Result? = null): Result {
+                existing: Result? = null, cloudRecovery: Boolean = false): Result {
         val plans = MutableList<List<VoiceRoleText>?>(texts.size) { null }
         val used = MutableList<String?>(texts.size) { null }
         if (existing != null) {
@@ -22,6 +22,7 @@ internal object VoiceRoleRouting {
             }
         }
         for (provider in providers.distinct()) {
+            if (cloudRecovery && provider == "local") continue
             if (!available(provider)) continue
             val local = provider == "local"
             val maxChars = if (local) 1000 else 2000

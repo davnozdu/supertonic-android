@@ -18,6 +18,30 @@ object SupertonicTTS {
     @Volatile
     private var hybridEngine: HybridEngine? = null
     @Volatile private var teraEngine: TeraEngine? = null
+    @Volatile private var lastAudioUse = 0L
+    private val idleScheduler = java.util.concurrent.ScheduledThreadPoolExecutor(1) { task ->
+        Thread(task, "TeraIdle").apply { isDaemon = true }
+    }.apply { removeOnCancelPolicy = true }
+    private var teraIdleTask: java.util.concurrent.ScheduledFuture<*>? = null
+    private const val TERA_IDLE_MS = 120_000L
+    private fun touchAudio() { lastAudioUse = android.os.SystemClock.elapsedRealtime() }
+    @Synchronized private fun scheduleTeraIdle() {
+        teraIdleTask?.cancel(false)
+        teraIdleTask = if (teraEngine == null) null else idleScheduler.schedule({
+            synchronized(this) {
+                teraIdleTask = null
+                if (teraEngine != null) {
+                    val remaining = TERA_IDLE_MS - (android.os.SystemClock.elapsedRealtime() - lastAudioUse)
+                    if (remaining > 0) scheduleTeraIdle()
+                    else {
+                        teraEngine?.close(); teraEngine = null; prewarmed = false
+                        Log.i("SupertonicTTS", "Tera unloaded after idle; prepared PCM retained")
+                    }
+                }
+            }
+        }, TERA_IDLE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+    @Synchronized internal fun teraResident() = teraEngine != null
     private var sileroEngine: com.brahmadeo.supertonic.tts.silero.SileroEngine? = null
     private var pocketEngine: com.brahmadeo.supertonic.tts.pocket.PocketEngine? = null
     private val audioCache = com.brahmadeo.supertonic.tts.utils.SpeechAudioCache()
@@ -236,6 +260,7 @@ object SupertonicTTS {
 
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null, skipDictionary: Boolean = false, aheadOwner: String? = null): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
+        touchAudio()
         val cacheKey=appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) }
         if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val waiting=android.os.SystemClock.elapsedRealtime()
@@ -351,6 +376,8 @@ object SupertonicTTS {
             return null
         } finally {
             currentSession.set(null)
+            touchAudio()
+            scheduleTeraIdle()
         }
     }
 
@@ -426,6 +453,7 @@ object SupertonicTTS {
 
     @Synchronized
     fun release() {
+        teraIdleTask?.cancel(false); teraIdleTask = null
         com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
         com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
         pocketEngine?.close()

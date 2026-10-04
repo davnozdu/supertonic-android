@@ -23,13 +23,18 @@ import kotlin.math.roundToInt
 
 /** Android port of the distilled TeraTTSv2 ONNX pipeline. */
 class TeraEngine(private val root: File, context: Context,
-                 val sampler: String = TeraQuality.FAST) : AutoCloseable {
+                 val sampler: String = TeraQuality.FAST,
+                 private val allowSpinning: Boolean = false) : AutoCloseable {
     private val llmPrefs = context.applicationContext.getSharedPreferences("llm_settings", Context.MODE_PRIVATE)
     private val pausePrefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private val env = OrtEnvironment.getEnvironment()
     private val sessions = HashMap<String, OrtSession>()
     private val options = OrtSession.SessionOptions().apply {
         setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 6))
+        // Four sequential graphs otherwise keep separate pools spinning between runs.
+        // Keep the parallel kernels and weights; let idle workers sleep.
+        addConfigEntry("session.intra_op.allow_spinning", if (allowSpinning) "1" else "0")
+        addConfigEntry("session.inter_op.allow_spinning", if (allowSpinning) "1" else "0")
         setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
     }
     private val indexer = JSONArray(File(root, "unicode_indexer.json").readText()).let { array ->

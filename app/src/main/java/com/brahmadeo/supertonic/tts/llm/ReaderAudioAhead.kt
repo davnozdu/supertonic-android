@@ -28,6 +28,7 @@ object ReaderAudioAhead {
         val steps: Int, val generation: Long, val cacheGeneration: Long)
     private val snapshots = linkedMapOf<String, Snapshot>()
     @Synchronized private fun isDelivered(owner: String) = owner in delivered
+    @Synchronized private fun isCurrent(owner: String, snapshot: Snapshot) = snapshots[owner] === snapshot
     @Synchronized fun cancel() {
         epoch.incrementAndGet(); preparedTexts.clear(); delivered.clear(); snapshots.clear()
         val waiting=ArrayList<Runnable>();worker.queue.drainTo(waiting)
@@ -51,15 +52,17 @@ object ReaderAudioAhead {
         if (isDelivered(owner) || snapshot.generation != epoch.get()) return
         val prepared = PreparedSpeechText(result.text, !result.fallback, result.voicePlan)
         if (!preparedTexts.replace(source, prepared)) return
+        val refreshed = snapshot.copy()
+        snapshots[owner] = refreshed
         SupertonicTTS.releaseAheadCache(owner)
         android.util.Log.i("ReaderAhead", "Upgraded unplayed roles source=$owner provider=${result.roleProvider}")
         queuedChars.addAndGet(source.length)
-        val task = AheadTask(source.length) { synthesizeAhead(ctx.applicationContext, snapshot, prepared) }
+        val task = AheadTask(source.length) { synthesizeAhead(ctx.applicationContext, refreshed, prepared) }
         try { worker.execute(task) } catch (_: java.util.concurrent.RejectedExecutionException) { task.release() }
     }
     private fun synthesizeAhead(context: Context, snapshot: Snapshot, prepared: PreparedSpeechText) {
         val owner = SpeechTextTrace.fingerprint(snapshot.text)
-        fun obsolete() = isDelivered(owner) || snapshot.generation != epoch.get() ||
+        fun obsolete() = isDelivered(owner) || !isCurrent(owner, snapshot) || snapshot.generation != epoch.get() ||
             snapshot.cacheGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation ||
             snapshot.model != AssetManager.getModelType(context) || SupertonicTTS.isCancelled()
         try {
@@ -100,13 +103,13 @@ object ReaderAudioAhead {
         android.util.Log.i("ReaderAhead","Queued early text chars=${text.length} model=$model")
         val prepare: () -> Unit = work@{
             try {
-                if(isDelivered(owner) || generation!=epoch.get() || !AssetManager.isReady(context) || model!=AssetManager.getModelType(context)) return@work
+                if(isDelivered(owner) || !isCurrent(owner, snapshot) || generation!=epoch.get() || !AssetManager.isReady(context) || model!=AssetManager.getModelType(context)) return@work
                 // Background work has the duration of earlier playback available;
                 // the foreground's short startup deadline is inappropriate here.
                 val result=LlmPreparation.prepareResult(context,text,timeoutMs=30000,retainForPlayback=true)
                 val prepared=result.text
                 val llmProcessed=!result.fallback
-                if(isDelivered(owner) || generation!=epoch.get() || model!=AssetManager.getModelType(context)) return@work
+                if(isDelivered(owner) || !isCurrent(owner, snapshot) || generation!=epoch.get() || model!=AssetManager.getModelType(context)) return@work
                 preparedTexts.put(textGeneration,text,prepared,llmProcessed,result.voicePlan)
                 synthesizeAhead(context, snapshot, PreparedSpeechText(prepared, llmProcessed, result.voicePlan))
             } catch(t: Throwable) { android.util.Log.w("ReaderAhead","Ahead preparation failed; normal synthesis remains available",t) }

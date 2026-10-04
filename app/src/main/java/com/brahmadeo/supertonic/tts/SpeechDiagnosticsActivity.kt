@@ -109,6 +109,31 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             Log.i("SpeechCheck", "Download progress=${(progress*100).toInt()}")
                         }
                     }
+                    if(intent.getBooleanExtra("resourceProbe",false)) {
+                        check(model == AssetManager.TERA_MODEL)
+                        val root = File(filesDir,"${AssetManager.MODEL_VERSION}/tera")
+                        val style = AssetManager.voiceFile(this@SpeechDiagnosticsActivity,"ru_f1.json").path
+                        val sample = "Ти́хий ве́чер. За окно́м шелестя́т дере́вья."
+                        var reference: ByteArray? = null
+                        SupertonicTTS.setCancelled(false)
+                        for(spin in listOf(true,false)) {
+                            com.brahmadeo.supertonic.tts.tera.TeraEngine(root,this@SpeechDiagnosticsActivity,
+                                com.brahmadeo.supertonic.tts.tera.TeraQuality.selected(this@SpeechDiagnosticsActivity),spin).use { engine ->
+                                val warmed = engine.synthesize(sample,"ru",style,1.1f,2.5f,null,0,true)
+                                check(warmed.isNotEmpty())
+                                if(reference == null) reference = warmed else check(reference!!.contentEquals(warmed)) { "Spinning changed PCM" }
+                                repeat(3) { pass ->
+                                    val wall = android.os.SystemClock.elapsedRealtime()
+                                    val cpu = android.os.Process.getElapsedCpuTime()
+                                    val pcm = engine.synthesize(sample,"ru",style,1.1f,2.5f,null,0,true)
+                                    check(reference!!.contentEquals(pcm)) { "PCM changed during resource benchmark" }
+                                    Log.i("SpeechCheck","RESOURCE spin=$spin pass=$pass wallMs=${android.os.SystemClock.elapsedRealtime()-wall} processCpuMs=${android.os.Process.getElapsedCpuTime()-cpu} audioMs=${pcm.size*1000L/88200}")
+                                }
+                            }
+                        }
+                        Log.i("SpeechCheck","RESOURCE PROBE PASSED: PCM identical with spinning on/off")
+                        return@withContext
+                    }
                     if(offline) {
                         val context=this@SpeechDiagnosticsActivity
                         val accented=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(context,"секретарем зеленый ребенок кораблем береза веселый костер ковер. Текст письма. Лене. Позвали Семена.")
@@ -389,6 +414,22 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         queued.forEachIndexed { i,text -> check(tts!!.speak(text,TextToSpeech.QUEUE_ADD,quiet,"queue-check-$i")==TextToSpeech.SUCCESS) }
                         check(finished.await(90,TimeUnit.SECONDS) && failures.get()==0)
                         Log.i("SpeechCheck","SILENT QUEUE PASSED model=$model")
+                    }
+                    if(intent.getBooleanExtra("idleProbe",false)) {
+                        check(model == AssetManager.TERA_MODEL)
+                        val sample = "Контроль сохранения готового звука после простоя."
+                        val style = AssetManager.voiceFile(this@SpeechDiagnosticsActivity,"ru_f1.json").path
+                        SupertonicTTS.setCancelled(false)
+                        val cached = SupertonicTTS.generateAudio(sample,"ru",style,1.1f,0f,5,2.5f)
+                        check(cached != null && cached.isNotEmpty() && SupertonicTTS.teraResident())
+                        val started = android.os.SystemClock.elapsedRealtime()
+                        Log.i("SpeechCheck","IDLE PROBE START: waiting for real two-minute model unload")
+                        while(SupertonicTTS.teraResident() && android.os.SystemClock.elapsedRealtime()-started < 150000) delay(1000)
+                        check(!SupertonicTTS.teraResident()) { "Tera stayed resident after idle" }
+                        val retrieval = android.os.SystemClock.elapsedRealtime()
+                        val hit = SupertonicTTS.generateAudio(sample,"ru",style,1.1f,0f,5,2.5f)
+                        check(hit === cached && !SupertonicTTS.teraResident()) { "Idle unload lost PCM or reloaded model for a cache hit" }
+                        Log.i("SpeechCheck","IDLE PROBE PASSED waitMs=${android.os.SystemClock.elapsedRealtime()-started} cachedMs=${android.os.SystemClock.elapsedRealtime()-retrieval} bytes=${hit!!.size}")
                     }
                     Log.i("SpeechCheck", "ALL CASES PASSED model=$model")
                 } catch (t: Throwable) { Log.e("SpeechCheck", "Integration check failed", t) }

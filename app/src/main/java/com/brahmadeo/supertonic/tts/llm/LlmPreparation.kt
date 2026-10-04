@@ -273,7 +273,7 @@ object LlmPreparation {
         LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
     }
     private fun needsRoleRecovery(c: LlmConfig, results: List<Result>): Boolean =
-        c.multiVoice && c.mode != LlmMode.OFF && results.any {
+        c.multiVoice && c.mode !in listOf(LlmMode.OFF, LlmMode.LOCAL) && results.any {
             !it.rolesReady || (c.mode != LlmMode.LOCAL && it.roleProvider != roleProviders(c).firstOrNull())
         }
     private fun routeRoles(ctx: Context, c: LlmConfig, prepared: List<Result>, preceding: String,
@@ -288,6 +288,10 @@ object LlmPreparation {
         val cached = synchronized(roleCache) { roleCache[key] }?.takeIf {
             it.routing.providers.all { p -> p == roleProviders(c).firstOrNull() } || (!recovering && now - it.time < 30_000)
         }
+        // Local inference was already attempted while preparing these paragraphs.
+        // Repeating the same failed Gemma output every ten seconds burns CPU/GPU
+        // without new context. Recovery probes the clouds; the next paragraph
+        // still gets its normal local fallback, and valid existing roles survive.
         val routing = cached?.routing ?: VoiceRoleRouting.resolve(texts, roleProviders(c), preceding,
             available = { provider ->
                 expectedEpoch == epoch && !cancelled() && SystemClock.elapsedRealtime() < (if(provider=="local") deadline else cloudDeadline) &&
@@ -299,13 +303,7 @@ object LlmPreparation {
                     }
             }, request = { provider, parts, before ->
                 check(expectedEpoch == epoch && !cancelled())
-                // Keep an already validated local plan during an outage. Do not run Gemma
-                // repeatedly on the same paragraph while waiting for connectivity.
-                if (recovering && provider == "local" && prepared.all { it.rolesReady }) {
-                    parts.map { part ->
-                        prepared.firstOrNull { it.text == part }?.voicePlan
-                    }
-                } else roleRequest?.invoke(provider, parts, before) ?: LlmProviders.voiceRoles(ctx, c, parts, before, provider,
+                roleRequest?.invoke(provider, parts, before) ?: LlmProviders.voiceRoles(ctx, c, parts, before, provider,
                     minOf(8000L, (if(provider=="local") deadline else cloudDeadline) - SystemClock.elapsedRealtime()).coerceAtLeast(1))
             }, failed = { provider, error ->
                 val pause = if (Regex("API HTTP (401|403|429)").containsMatchIn(error.message.orEmpty())) 60_000 else 10_000
@@ -315,7 +313,7 @@ object LlmPreparation {
                 if (expectedEpoch == epoch && !cancelled()) resolved(index,
                     prepared[index].copy(voicePlan = plan, rolesReady = true, roleProvider = provider))
             }, existing = if (recovering) null else VoiceRoleRouting.Result(
-                prepared.map { if(it.rolesReady) it.voicePlan else null },prepared.map { it.roleProvider }))
+                prepared.map { if(it.rolesReady) it.voicePlan else null },prepared.map { it.roleProvider }), cloudRecovery = recovering)
         if (expectedEpoch != epoch || cancelled()) return prepared
         if (cached == null && routing.plans.all { it != null }) synchronized(roleCache) {
             val cost = texts.sumOf { it.length } + preceding.length

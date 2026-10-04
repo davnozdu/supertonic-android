@@ -100,4 +100,28 @@ class VoiceRoleRoutingTest {
         assertFalse(requested)
         assertTrue(result.plans.all { it == null })
     }
+    @Test fun prolongedOutageDoesNotRepeatFailedLocalInferenceAndCloudStillRecovers() {
+        var localCalls = 0
+        var online = false
+        val request: (String,List<String>,String) -> List<List<VoiceRoleText>?> = { provider,input,_ ->
+            if(provider == "local") { localCalls++; input.map { null } }
+            else if(!online) throw IOException("Outage") else roles(input)
+        }
+        val initial = VoiceRoleRouting.resolve(texts,listOf("ollama","local"),"",{ true },request)
+        assertEquals(1,localCalls)
+        assertTrue(initial.plans.all { it == null })
+        repeat(6) {
+            val retry = VoiceRoleRouting.resolve(texts,listOf("ollama","local"),"",{ true },request,cloudRecovery=true)
+            assertTrue(retry.plans.all { it == null })
+        }
+        assertEquals(1,localCalls)
+        online = true
+        val recovered = VoiceRoleRouting.resolve(texts,listOf("ollama","local"),"",{ true },request,cloudRecovery=true)
+        assertEquals(listOf("ollama","ollama","ollama"),recovered.providers)
+        assertEquals(1,localCalls)
+        // Fresh text still receives the local reserve; only retries of old text skip it.
+        online = false
+        VoiceRoleRouting.resolve(listOf("Новый абзац."),listOf("ollama","local"),"",{ true },request)
+        assertEquals(2,localCalls)
+    }
 }
