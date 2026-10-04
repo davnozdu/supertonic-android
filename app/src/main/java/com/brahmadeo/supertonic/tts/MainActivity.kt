@@ -18,6 +18,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.activity.viewModels
 import androidx.compose.runtime.remember
 import androidx.compose.material3.ButtonDefaults
