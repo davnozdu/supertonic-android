@@ -265,7 +265,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         Column {
                                             Text("Shtorm PocketTTS RU v2 · экспериментальная",style=MaterialTheme.typography.titleMedium)
-                                            Text("Для книг · ≈439 МБ · CPU · голос Alba. Короткие фразы, поддержка ударений. Скорость проверяется на устройстве.",style=MaterialTheme.typography.bodySmall)
+                                            Text("Для книг · ≈439 МБ · CPU · 7 скачиваемых голосов. Короткие фразы, поддержка ударений. Скорость проверяется на устройстве.",style=MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }
@@ -330,20 +330,6 @@ class MainActivity : ComponentActivity() {
                         onRetry = { startDownload() }
                     )
                 } else {
-                    if(AssetManager.isPocket(this@MainActivity) && !com.brahmadeo.supertonic.tts.pocket.PocketVoices.ready(this@MainActivity)) {
-                        Button(onClick={
-                            viewModel.isDownloading.value=true
-                            lifecycleScope.launch {
-                                try {
-                                    com.brahmadeo.supertonic.tts.pocket.PocketVoices.download(this@MainActivity) { status,progress ->
-                                        viewModel.downloadStatus.value=status;viewModel.downloadProgress.floatValue=progress
-                                    }
-                                    setupVoicesMap(viewModel.currentLang.value)
-                                } catch(t: Exception) { Toast.makeText(this@MainActivity,"Не удалось скачать голоса: ${t.message}",Toast.LENGTH_LONG).show() }
-                                finally { viewModel.isDownloading.value=false }
-                            }
-                        }) { Text("Скачать 7 голосов Shtorm") }
-                    }
                     if (viewModel.showQueueDialog.value) {
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { viewModel.showQueueDialog.value = false },
@@ -426,6 +412,20 @@ class MainActivity : ComponentActivity() {
                     }
 
                     MainScreen(
+                        showPocketVoicesDownload=AssetManager.isPocket(this@MainActivity) && !com.brahmadeo.supertonic.tts.pocket.PocketVoices.ready(this@MainActivity),
+                        onPocketVoicesDownload={
+                            viewModel.isDownloading.value=true
+                            lifecycleScope.launch {
+                                try {
+                                    com.brahmadeo.supertonic.tts.pocket.PocketVoices.download(this@MainActivity) { status,progress ->
+                                        viewModel.downloadStatus.value=status;viewModel.downloadProgress.floatValue=progress
+                                    }
+                                    setupVoicesMap(viewModel.currentLang.value)
+                                    com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                                } catch(t: Exception) { Toast.makeText(this@MainActivity,"Не удалось скачать голоса: ${t.message}",Toast.LENGTH_LONG).show() }
+                                finally { viewModel.isDownloading.value=false }
+                            }
+                        },
                         onModelSelectionClick = {
                             viewModel.selectedModel.value = AssetManager.getModelType(this@MainActivity)
                             viewModel.showModelSelection.value = true

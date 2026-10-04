@@ -88,7 +88,9 @@ fun MainScreen(
     onMiniPlayerPlayPauseClick: () -> Unit,
     onLlmSettingsClick: () -> Unit = {},
     onBackgroundMusicClick: () -> Unit = {},
-    onModelSelectionClick: () -> Unit = {}
+    onModelSelectionClick: () -> Unit = {},
+    showPocketVoicesDownload: Boolean = false,
+    onPocketVoicesDownload: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -279,6 +281,9 @@ fun MainScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         TextButton(onClick = onModelSelectionClick, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(AppR.string.action_model_packs))
+                        }
+                        if(showPocketVoicesDownload) TextButton(onClick=onPocketVoicesDownload,modifier=Modifier.fillMaxWidth()) {
+                            Text("Скачать 7 голосов Shtorm")
                         }
                         DropdownSelector(
                             label = stringResource(AppR.string.language_label),
