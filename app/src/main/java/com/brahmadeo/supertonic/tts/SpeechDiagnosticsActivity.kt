@@ -48,10 +48,10 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         llmPrefs.edit().putString("mode","OFF").commit()
                         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
                     }
-                    require(model in setOf(AssetManager.SILERO_MODEL, AssetManager.SILERO_CIS_MODEL, AssetManager.TERA_MODEL,"standard","android_optimized_int8","android_optimized_fp16","android_optimized_fp32"))
+                    require(model in setOf(AssetManager.SILERO_MODEL, AssetManager.SILERO_CIS_MODEL, AssetManager.TERA_MODEL, AssetManager.POCKET_MODEL,"standard","android_optimized_int8","android_optimized_fp16","android_optimized_fp32"))
                     AssetManager.setModelType(this@SpeechDiagnosticsActivity, model)
                     prefs.edit().putString("selected_lang", "ru")
-                        .putString("selected_voice", when(model) { AssetManager.SILERO_CIS_MODEL -> "ru_alexandr.json"; AssetManager.SILERO_MODEL -> "kseniya.json"; AssetManager.TERA_MODEL -> "ru_f1.json"; else -> "F3.json" }).apply()
+                        .putString("selected_voice", when(model) { AssetManager.POCKET_MODEL -> "alba.json"; AssetManager.SILERO_CIS_MODEL -> "ru_alexandr.json"; AssetManager.SILERO_MODEL -> "kseniya.json"; AssetManager.TERA_MODEL -> "ru_f1.json"; else -> "F3.json" }).apply()
                     SupertonicTTS.release()
                     if (intent.getBooleanExtra("teacherProbe", false)) {
                         check(model == AssetManager.TERA_MODEL)
@@ -212,7 +212,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             check(String(header, 0, 4, Charsets.US_ASCII) == "RIFF")
                             val wave = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
                             val rate = wave.getInt(24); val channels = wave.getShort(22).toInt()
-                            check(rate == if (model in setOf(AssetManager.SILERO_MODEL,AssetManager.SILERO_CIS_MODEL)) 48000 else 44100)
+                            check(rate == when(model) { AssetManager.POCKET_MODEL -> 24000; AssetManager.SILERO_MODEL,AssetManager.SILERO_CIS_MODEL -> 48000; else -> 44100 })
                             check(channels == 1 && output.length() > 44)
                             Log.i("SpeechCheck", "PASS model=$model case=$index rate=$rate channels=$channels bytes=${output.length()} ms=${android.os.SystemClock.elapsedRealtime()-started}")
                         } finally { if (!intent.getBooleanExtra("retainAudio",false)) output.delete() }

@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "source_revision": "8be79efeb2d0a091bda39b5878445f51e1379c9d",
+  "sample_rate": 24000,
+  "files": [
+    {
+      "name": "LICENSE.txt",
+      "size": 313,
+      "sha256": "3189f0af921918a2a29d1ca2fe4ee10d12e85be7ab170f9dd03d44943f44345b"
+    },
+    {
+      "name": "alba.wav",
+      "size": 240044,
+      "sha256": "7f987d0c2866d1c00747f33d56ec457b5348e20065499a84d389d410130980b5"
+    },
+    {
+      "name": "flow_lm_flow.onnx",
+      "size": 39081890,
+      "sha256": "5b47a1593b8bc43941f539497b729bb995335b3077e863f315275287d2a2edba"
+    },
+    {
+      "name": "flow_lm_main.onnx",
+      "size": 302364167,
+      "sha256": "1c26f5046b68a30d6f4894e486ea5f4619c3b8fd961114da4d0faaf1a3fcbaac"
+    },
+    {
+      "name": "mimi_decoder.onnx",
+      "size": 41410972,
+      "sha256": "c5aa9130f66b6100d57044094cc08665fb129944e77f92fe4a1a601992194331"
+    },
+    {
+      "name": "mimi_encoder.onnx",
+      "size": 39282087,
+      "sha256": "9a40beeac20e2d4d1ee9d1af2007c02960fb4b01bec6a46cd9b94cfb396e2c5a"
+    },
+    {
+      "name": "text_conditioner.onnx",
+      "size": 16388309,
+      "sha256": "48f14f835e891798a29abd76838e512b2453b0cb2dc2892779e47e2b4a3e5cf6"
+    },
+    {
+      "name": "tokenizer.model",
+      "size": 316834,
+      "sha256": "95d0b8e61951408c7744e09fb5b87ff8e318612b0c8168cc593ea0a812f34f81"
+    }
+  ]
+}

@@ -139,6 +139,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.brahmadeo.supertonic.tts.music.BackgroundMusic.stopTts()
         serviceScope.cancel()
     }
 
@@ -172,7 +173,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (voiceName == null) return TextToSpeech.ERROR
         if (!voiceName.contains("-supertonic-")) return TextToSpeech.ERROR
         val styleName = voiceName.substringAfter("-supertonic-")
-        if (AssetManager.isRussianModel(this) && styleName !in (if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this) else AssetManager.TERA_VOICES)) return TextToSpeech.ERROR
+        if (AssetManager.isRussianModel(this) && styleName !in AssetManager.russianVoices(this)) return TextToSpeech.ERROR
         val file = AssetManager.voiceFile(this, "$styleName.json")
         return if (file.exists()) TextToSpeech.SUCCESS else TextToSpeech.ERROR
     }
@@ -188,8 +189,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onGetVoices(): List<Voice> {
         val voicesList = mutableListOf<Voice>()
-        val voiceNames = if (AssetManager.isSilero(this)) com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this)
-            else if (AssetManager.isTera(this)) AssetManager.TERA_VOICES
+        val voiceNames = if (AssetManager.isRussianModel(this)) AssetManager.russianVoices(this)
             else listOf("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
         if (!AssetManager.isReady(this)) return voicesList
 

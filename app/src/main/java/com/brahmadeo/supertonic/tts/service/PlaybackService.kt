@@ -735,6 +735,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     fun stopPlayback(removeNotification: Boolean = true) {
+        com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,false)
         synchronized(this) {
             isPlaying = false
             try {
@@ -761,6 +762,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     fun stopServicePlayback() {
         isPlaying = false
+        com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,false)
         com.brahmadeo.supertonic.tts.llm.LlmPreparation.cancelApp()
         try {
             if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -866,6 +868,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     private fun updatePlaybackState(state: Int) {
+        com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,
+            state==PlaybackStateCompat.STATE_PLAYING && isPlaying)
         if (state == PlaybackStateCompat.STATE_STOPPED || state == PlaybackStateCompat.STATE_NONE) {
             // Android can select an INACTIVE session belonging to the last
             // audio UID (the TTS engine). Release it so Moon receives buttons.
@@ -948,6 +952,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     override fun onDestroy() {
         super.onDestroy()
+        com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,false)
         mediaSession?.release()
         try {
             audioTrack?.release()

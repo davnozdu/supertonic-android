@@ -33,6 +33,8 @@
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <activity android:name=".LlmSettingsActivity" android:exported="false" android:label="Подготовка текста LLM" />
+        <activity android:name=".BackgroundMusicActivity" android:exported="false" android:label="Фоновая музыка" />
+        <activity android:name=".MusicDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <activity android:name=".SpeechDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <service android:name=".utils.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".llm.LocalModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />

@@ -42,3 +42,6 @@
 # Our hybrid Kotlin engine — referenced indirectly through SupertonicTTS
 # dispatch; protect it from being merged/renamed by R8.
 -keep class com.brahmadeo.supertonic.tts.tflite.** { *; }
+
+# Native PocketTTS calls AudioSink.onAudio by its exact JVM name.
+-keep class com.brahmadeo.supertonic.tts.pocket.** { *; }

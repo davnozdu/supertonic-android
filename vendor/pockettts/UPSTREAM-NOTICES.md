@@ -44,3 +44,13 @@ Layla is not included in this repository and is not a dependency of the engine.
 
 The complete license texts and notices distributed by downloaded dependencies
 remain controlling for those components.
+
+## Supertonic fork changes
+
+JNI namespace and stream lifetime synchronization adapted for Supertonic.
+Shtorm PocketTTS RU v2 weights: ArtShtorm, CC BY 4.0, stored separately in
+`shtorm-pocket-v2` release. Original source and immutable revision are included
+in manifest.json and LICENSE.txt. Starter voice: Alba MacKenna (Kyutai voices),
+CC BY 4.0, trimmed to five seconds and converted to 24 kHz mono PCM16.
+Sonic (Bill Cox), Apache 2.0, revision b93885dcb70aae50c6f76b0fe4e0868f029a077e,
+used for streaming speed adjustment without pitch shift. License in sonic/LICENSE.

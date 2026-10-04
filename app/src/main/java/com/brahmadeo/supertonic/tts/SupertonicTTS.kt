@@ -19,6 +19,7 @@ object SupertonicTTS {
     private var hybridEngine: HybridEngine? = null
     @Volatile private var teraEngine: TeraEngine? = null
     private var sileroEngine: com.brahmadeo.supertonic.tts.silero.SileroEngine? = null
+    private var pocketEngine: com.brahmadeo.supertonic.tts.pocket.PocketEngine? = null
     private val audioCache = com.brahmadeo.supertonic.tts.utils.SpeechAudioCache()
     private fun audioKey(context: Context, text: String, lang: String, style: String, speed: Float, steps: Int, gain: Float, skipDictionary: Boolean): String {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
@@ -279,7 +280,10 @@ object SupertonicTTS {
                         } else {
                             val russian = if (part.foreign) foreignFallbackNormalizer.normalize(
                                 com.brahmadeo.supertonic.tts.foreign.ForeignText.transliterate(part.text), "ru") else part.text
-                            val pcm = if (AssetManager.isSilero(context)) {
+                            val pcm = if (AssetManager.isPocket(context)) {
+                                val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(context).also { pocketEngine=it }
+                                engine.synthesize(russian,speed,gain,listener,sid)
+                            } else if (AssetManager.isSilero(context)) {
                                 val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(context).also { sileroEngine = it }
                                 engine.synthesize(russian, stylePath, speed, gain, listener, sid)
                             } else {
@@ -292,6 +296,11 @@ object SupertonicTTS {
                     }
                     return output.toByteArray().also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() && !isCancelled() }
                 }
+            }
+            if (appContext?.let { AssetManager.isPocket(it) } == true) {
+                val ctx=appContext!!
+                val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(ctx).also { pocketEngine=it }
+                return engine.synthesize(text,speed,gain,listener,sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isSilero(it) } == true) {
                 val ctx = appContext!!
@@ -342,6 +351,7 @@ object SupertonicTTS {
 
     @Synchronized
     fun getAudioSampleRate(): Int {
+        if (appContext?.let { AssetManager.isPocket(it) } == true) return 24000
         if (appContext?.let { AssetManager.isSilero(it) } == true) return 48000
         if (appContext?.let { AssetManager.isTera(it) } == true) return 44100
         if (nativePtr == 0L) return 44100
@@ -407,6 +417,8 @@ object SupertonicTTS {
     fun release() {
         com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
         com.brahmadeo.supertonic.tts.foreign.ForeignTts.reset()
+        pocketEngine?.close()
+        pocketEngine=null
         sileroEngine?.close()
         sileroEngine = null
         prewarmed = false

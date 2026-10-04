@@ -246,47 +246,6 @@ class MainActivity : ComponentActivity() {
                                 
                                 androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
                                 
-                                // Android Optimized INT8
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                    androidx.compose.material3.RadioButton(
-                                        selected = viewModel.selectedModel.value == "android_optimized_int8",
-                                        onClick = { viewModel.selectedModel.value = "android_optimized_int8" }
-                                    )
-                                    Column {
-                                        Text(getString(R.string.model_android_int8_title), style = MaterialTheme.typography.titleMedium)
-                                        Text(getString(R.string.model_android_int8_desc), style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-
-                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-
-                                // Android Optimized FP32
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                    androidx.compose.material3.RadioButton(
-                                        selected = viewModel.selectedModel.value == "android_optimized_fp32",
-                                        onClick = { viewModel.selectedModel.value = "android_optimized_fp32" }
-                                    )
-                                    Column {
-                                        Text(getString(R.string.model_android_fp32_title), style = MaterialTheme.typography.titleMedium)
-                                        Text(getString(R.string.model_android_fp32_desc), style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-
-                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-
-                                // FP16 (Kyumdroid quantized)
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                    androidx.compose.material3.RadioButton(
-                                        selected = viewModel.selectedModel.value == "android_optimized_fp16",
-                                        onClick = { viewModel.selectedModel.value = "android_optimized_fp16" }
-                                    )
-                                    Column {
-                                        Text(getString(R.string.model_android_fp16_title), style = MaterialTheme.typography.titleMedium)
-                                        Text(getString(R.string.model_android_fp16_desc), style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-
-                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
                                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                     androidx.compose.material3.RadioButton(
                                         selected = viewModel.selectedModel.value == AssetManager.TERA_MODEL,
@@ -295,6 +254,19 @@ class MainActivity : ComponentActivity() {
                                     Column {
                                         Text(getString(R.string.model_tera_title), style = MaterialTheme.typography.titleMedium)
                                         Text(getString(R.string.model_tera_desc), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                if (com.brahmadeo.supertonic.tts.pocket.PocketDownload.supported()) {
+                                    androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        androidx.compose.material3.RadioButton(
+                                            selected = viewModel.selectedModel.value == AssetManager.POCKET_MODEL,
+                                            onClick = { viewModel.selectedModel.value = AssetManager.POCKET_MODEL }
+                                        )
+                                        Column {
+                                            Text("Shtorm PocketTTS RU v2 · экспериментальная",style=MaterialTheme.typography.titleMedium)
+                                            Text("Для книг · ≈439 МБ · CPU · голос Alba. Короткие фразы, поддержка ударений. Скорость проверяется на устройстве.",style=MaterialTheme.typography.bodySmall)
+                                        }
                                     }
                                 }
                                 if (com.brahmadeo.supertonic.tts.silero.SileroDownload.supported()) {
@@ -327,7 +299,7 @@ class MainActivity : ComponentActivity() {
                                 AssetManager.setModelType(this@MainActivity, viewModel.selectedModel.value)
                                 if (AssetManager.isRussianModel(this@MainActivity)) {
                                     viewModel.currentLang.value = "ru"
-                                    viewModel.selectedVoiceFile.value = if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else "ru_f1.json"
+                                    viewModel.selectedVoiceFile.value = if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else if (AssetManager.isPocket(this@MainActivity)) "alba.json" else "ru_f1.json"
                                     saveStringPref("selected_lang", "ru")
                                     saveStringPref("selected_voice", viewModel.selectedVoiceFile.value)
                                     viewModel.isMixingEnabled.value = false
@@ -350,6 +322,7 @@ class MainActivity : ComponentActivity() {
                     DownloadScreen(
                         status = viewModel.downloadStatus.value,
                         progress = viewModel.downloadProgress.floatValue,
+                        isPocketModel = AssetManager.isPocket(this@MainActivity),
                         isTeraModel = AssetManager.isTera(this@MainActivity),
                         isSileroModel = AssetManager.isSilero(this@MainActivity),
                         isCisModel = com.brahmadeo.supertonic.tts.silero.SileroDownload.cis(this@MainActivity),
@@ -381,7 +354,7 @@ class MainActivity : ComponentActivity() {
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { viewModel.showModelDeleteDialog.value = false },
                             title = { Text(getString(R.string.model_delete_title)) },
-                            text = { Text(getString(when { AssetManager.isSilero(this@MainActivity) -> R.string.model_delete_silero_message; AssetManager.isTera(this@MainActivity) -> R.string.model_delete_tera_message; else -> R.string.model_delete_message })) },
+                            text = { Text(if(AssetManager.isPocket(this@MainActivity)) "Удалить Shtorm PocketTTS с телефона? Позже модель можно скачать заново." else getString(when { AssetManager.isSilero(this@MainActivity) -> R.string.model_delete_silero_message; AssetManager.isTera(this@MainActivity) -> R.string.model_delete_tera_message; else -> R.string.model_delete_message })) },
                             confirmButton = {
                                 TextButton(
                                     onClick = {
@@ -539,6 +512,7 @@ class MainActivity : ComponentActivity() {
                         onQueueClick = { startActivity(Intent(this, QueueActivity::class.java)) },
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
                         onLlmSettingsClick = { startActivity(Intent(this, LlmSettingsActivity::class.java)) },
+                        onBackgroundMusicClick = { startActivity(Intent(this, BackgroundMusicActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },
                         onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
 
@@ -748,6 +722,10 @@ class MainActivity : ComponentActivity() {
 
     private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
+        if (AssetManager.isPocket(this)) {
+            viewModel.voiceFiles["Alba · Shtorm RU"]="alba.json"
+            return
+        }
         if (AssetManager.isSilero(this)) {
             com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this).forEach { viewModel.voiceFiles[it] = "$it.json" }
             return

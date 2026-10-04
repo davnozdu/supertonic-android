@@ -87,6 +87,7 @@ fun MainScreen(
     onMiniPlayerClick: () -> Unit,
     onMiniPlayerPlayPauseClick: () -> Unit,
     onLlmSettingsClick: () -> Unit = {},
+    onBackgroundMusicClick: () -> Unit = {},
     onModelSelectionClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -118,6 +119,10 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text("Подготовка текста LLM") },
                             onClick = { showMenu = false; onLlmSettingsClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Фоновая музыка") },
+                            onClick = { showMenu = false; onBackgroundMusicClick() }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_reset)) },

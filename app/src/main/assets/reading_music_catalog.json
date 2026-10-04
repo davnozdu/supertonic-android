@@ -1,0 +1,30 @@
+[
+  {
+    "id": "lamplight_and_paper",
+    "file": "Lamplight_and_Paper.mp3",
+    "title": "Свет лампы и страницы",
+    "size": 4247943,
+    "sha256": "f1048274fd167a826b18b94f52782d89848606e21719deb835e5bde75e42bba2"
+  },
+  {
+    "id": "rain_on_the_windowpane",
+    "file": "Rain_on_the_Windowpane.mp3",
+    "title": "Дождь за окном",
+    "size": 3909396,
+    "sha256": "1c713fe4560a030ce37f6436dd091d89ae9497db9102d6dbaf4000540e9e315d"
+  },
+  {
+    "id": "stillness_of_ink",
+    "file": "Stillness_Of_Ink.mp3",
+    "title": "Тишина чернил",
+    "size": 4069266,
+    "sha256": "63dd10f5dfc6ba563d45fc3ad9b3f3fcc1f0f197fb482fe2f4fc7301684cf190"
+  },
+  {
+    "id": "tidal_breath",
+    "file": "Tidal_Breath.mp3",
+    "title": "Дыхание прилива",
+    "size": 3593419,
+    "sha256": "94ac2ee5bb48792bbadf74e629302b44e94376d83e72f680f825384135decdf9"
+  }
+]

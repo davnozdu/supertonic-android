@@ -13,9 +13,39 @@ import android.util.Log
  * Internal AOSP protocol: unknown SDKs or decoding failures fall back to ordinary TTS.
  */
 class TtsQueueObserver(private val context: Context, private val delegate: IBinder) : Binder() {
+    private val musicCallbacks = HashMap<IBinder, com.brahmadeo.supertonic.tts.music.MusicTtsCallback>()
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
         val position = data.dataPosition()
+        if(Build.VERSION.SDK_INT in 24..36 && code==FIRST_CALL_TRANSACTION+11) {
+            var rewritten: Parcel? = null
+            try {
+                data.enforceInterface("android.speech.tts.ITextToSpeechService")
+                val owner=data.readStrongBinder()
+                val callback=data.readStrongBinder()
+                if(owner!=null) {
+                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.initialize(context)
+                    val proxy=synchronized(musicCallbacks) {
+                        musicCallbacks.remove(owner)?.detach()
+                        callback?.let { com.brahmadeo.supertonic.tts.music.MusicTtsCallback(owner,it) { dead -> synchronized(musicCallbacks) { if(musicCallbacks[owner]===dead) musicCallbacks.remove(owner) } }.also { musicCallbacks[owner]=it } }
+                    }
+                    if(callback==null) com.brahmadeo.supertonic.tts.music.BackgroundMusic.stop(owner)
+                    rewritten=Parcel.obtain().apply {
+                        writeInterfaceToken("android.speech.tts.ITextToSpeechService")
+                        writeStrongBinder(owner)
+                        writeStrongBinder(proxy)
+                        setDataPosition(0)
+                    }
+                }
+            } catch (_: Exception) { Log.w("BackgroundMusic","Callback registration observation unavailable") }
+            finally { data.setDataPosition(position) }
+            if(rewritten!=null) {
+                try { return delegate.transact(code,rewritten,reply,flags) }
+                finally { rewritten.recycle() }
+            }
+        }
         var id: Long? = null
+        var musicOwner: IBinder? = null
+        var musicToken: Long? = null
         var queuedText: String? = null
         var queuedParams: android.os.Bundle? = null
         if (Build.VERSION.SDK_INT in 24..36 && (code == FIRST_CALL_TRANSACTION || code == FIRST_CALL_TRANSACTION + 5)) {
@@ -28,12 +58,19 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                         val mode = data.readInt()
                         if (text != null) {
                             id = LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
+                            val params=if(data.readInt()!=0) android.os.Bundle.CREATOR.createFromParcel(data) else null
+                            val utteranceId=data.readString()
+                            musicOwner=caller
+                            musicToken=com.brahmadeo.supertonic.tts.music.BackgroundMusic.enqueue(context,caller,utteranceId,mode!=TextToSpeech.QUEUE_ADD)
                             if(mode == TextToSpeech.QUEUE_ADD) {
                                 queuedText=text
-                                queuedParams=if(data.readInt()!=0) android.os.Bundle.CREATOR.createFromParcel(data) else null
+                                queuedParams=params
                             } else ReaderAudioAhead.cancel()
                         }
-                    } else { LlmPreparation.cancel(caller); ReaderAudioAhead.cancel() }
+                    } else {
+                        com.brahmadeo.supertonic.tts.music.BackgroundMusic.stop(caller)
+                        LlmPreparation.cancel(caller); ReaderAudioAhead.cancel()
+                    }
                 }
             } catch (_: Exception) {
                 queuedText=null
@@ -42,13 +79,20 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
         }
         try {
             val result = delegate.transact(code, data, reply, flags)
-            if ((id != null || queuedText != null) && reply != null) {
+            if ((id != null || queuedText != null || musicToken != null) && reply != null) {
                 val replyPosition = reply.dataPosition()
-                try { reply.setDataPosition(0); reply.readException(); if (reply.readInt() != TextToSpeech.SUCCESS) { LlmPreparation.rejected(id); queuedText=null } }
+                try { reply.setDataPosition(0); reply.readException(); if (reply.readInt() != TextToSpeech.SUCCESS) {
+                    LlmPreparation.rejected(id); queuedText=null
+                    musicOwner?.let { owner -> musicToken?.let { com.brahmadeo.supertonic.tts.music.BackgroundMusic.rejected(owner,it) } }
+                } }
                 finally { reply.setDataPosition(replyPosition) }
             }
             if(result && queuedText!=null) ReaderAudioAhead.submit(context,queuedText!!,queuedParams)
+            if(!result) musicOwner?.let { owner -> musicToken?.let { com.brahmadeo.supertonic.tts.music.BackgroundMusic.rejected(owner,it) } }
             return result
-        } catch (t: Throwable) { LlmPreparation.rejected(id); throw t }
+        } catch (t: Throwable) {
+            musicOwner?.let { owner -> musicToken?.let { com.brahmadeo.supertonic.tts.music.BackgroundMusic.rejected(owner,it) } }
+            LlmPreparation.rejected(id); throw t
+        }
     }
 }
