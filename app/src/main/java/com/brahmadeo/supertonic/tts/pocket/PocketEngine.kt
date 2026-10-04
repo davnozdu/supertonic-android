@@ -29,19 +29,30 @@ class PocketEngine(context: Context) : AutoCloseable {
             val start=android.os.SystemClock.elapsedRealtime()
             for(chunk in PocketText.chunks(text)) {
                 if(SupertonicTTS.isCancelled()) return ByteArray(0)
+                val frames=ArrayList<FloatArray>()
+                var count=0
+                var peak=0f
                 val okay=engine.synthesize(chunk,java.io.File(root,"alba.wav").path,speed.coerceIn(.5f,2.5f),object: NativePocketTts.AudioSink {
                     override fun onAudio(samples: FloatArray): Boolean {
                         if(SupertonicTTS.isCancelled()) return false
                         check(samples.all { it.isFinite() }) { "PocketTTS produced invalid audio" }
-                        check(output.size().toLong()+samples.size*2L<=64L*1024*1024) { "PocketTTS output exceeds limit" }
-                        val pcm=ByteBuffer.allocate(samples.size*2).order(ByteOrder.LITTLE_ENDIAN)
-                        samples.forEach { pcm.putShort((it*gain.coerceIn(0f,4f)*32767).toInt().coerceIn(-32768,32767).toShort()) }
-                        val bytes=pcm.array()
-                        output.write(bytes);listener?.onAudioChunk(sid,bytes)
+                        check(output.size().toLong()+(count.toLong()+samples.size)*2L<=64L*1024*1024) { "PocketTTS output exceeds limit" }
+                        count+=samples.size
+                        for(sample in samples) peak=maxOf(peak,kotlin.math.abs(sample))
+                        frames.add(samples)
                         return !SupertonicTTS.isCancelled()
                     }
                 })
                 if(!okay || SupertonicTTS.isCancelled()) return ByteArray(0)
+                // Normalize a bounded phrase consistently; never hard-clip the common 2.5x gain.
+                val safeGain=if(peak>0f) minOf(gain.coerceAtLeast(0f),.98f/peak) else 1f
+                for(samples in frames) {
+                    if(SupertonicTTS.isCancelled()) return ByteArray(0)
+                    val pcm=ByteBuffer.allocate(samples.size*2).order(ByteOrder.LITTLE_ENDIAN)
+                    samples.forEach { pcm.putShort((it*safeGain*32767).toInt().coerceIn(-32768,32767).toShort()) }
+                    val bytes=pcm.array()
+                    output.write(bytes);listener?.onAudioChunk(sid,bytes)
+                }
             }
             Log.i("PocketTTS","Synthesized chars=${text.length} accents=${PocketText.prepare(text).count { it=='\u0301' }} ms=${android.os.SystemClock.elapsedRealtime()-start} audioMs=${output.size()*1000L/48000}")
             return output.toByteArray()
