@@ -198,6 +198,8 @@ class TeraEngine(private val root: File, context: Context,
         val maxSamples = (seconds * 44100).roundToInt()
         val output = java.io.ByteArrayOutputStream(min(maxSamples * 2, 1_000_000))
         var emitted = 0
+        val loudness = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.Stream(gain,
+            pausePrefs.getBoolean("voice_loudness_normalization", true))
         for (start in 0 until frames step 16) {
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             val end = min(start + 16, frames)
@@ -211,13 +213,7 @@ class TeraEngine(private val root: File, context: Context,
             val discard = (start - contextStart) * 3072
             val samples = min(min((end - start) * 3072, wave.size - discard), maxSamples - emitted)
             if (samples <= 0) break
-            val pcm = ByteArray(samples * 2)
-            for (i in 0 until samples) {
-                val value = (wave[discard + i] * gain).coerceIn(-1f, 1f)
-                val sample = (value * 32767f).roundToInt()
-                pcm[i * 2] = sample.toByte()
-                pcm[i * 2 + 1] = (sample shr 8).toByte()
-            }
+            val pcm = loudness.pcm(wave.copyOfRange(discard, discard + samples))
             output.write(pcm)
             listener?.onAudioChunk(sessionId, pcm)
             emitted += samples

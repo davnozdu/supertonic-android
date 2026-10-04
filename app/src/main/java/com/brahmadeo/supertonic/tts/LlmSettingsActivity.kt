@@ -109,13 +109,17 @@ class LlmSettingsActivity : ComponentActivity() {
                             if (config.multiVoice) {
                                 if (config.mode == LlmMode.OFF) Text("Включите LLM-обработку для определения ролей. При выключенной LLM используется обычный выбранный голос.")
                                 val roleVoices = com.brahmadeo.supertonic.tts.utils.AssetManager.russianVoices(this@LlmSettingsActivity)
+                                var roleRevision by remember { mutableStateOf(0) }
                                 VoiceRole.entries.forEach { role ->
-                                    var selected by remember(role, roleVoices) { mutableStateOf(MultiVoiceSettings.selected(this@LlmSettingsActivity, role)) }
+                                    var selected by remember(role, roleVoices, roleRevision) { mutableStateOf(MultiVoiceSettings.selected(this@LlmSettingsActivity, role)) }
                                     VoiceRoleChoice(when(role) { VoiceRole.AUTHOR -> "Голос автора"; VoiceRole.MALE -> "Мужской голос"; VoiceRole.FEMALE -> "Женский голос" }, selected, roleVoices,
                                         previewState, voicePreview::toggle) {
-                                        voicePreview.stop(); selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it)
+                                        voicePreview.stop(); selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it); roleRevision++
                                     }
                                 }
+                                if (VoiceRole.entries.map { MultiVoiceSettings.selected(this@LlmSettingsActivity, it) }.distinct().size < 3)
+                                    Text("Для нескольких ролей выбран одинаковый голос. Чтобы слышать переключение, выберите три разных голоса.", style = MaterialTheme.typography.bodySmall)
+                                Text("При обрыве облака используется установленная Gemma 4. Повторные запросы идут в фоне; готовая разметка заменяет резервную в ещё не проигранных фрагментах.", style = MaterialTheme.typography.bodySmall)
                                 if (previewState.message.isNotBlank()) Text(previewState.message, style = MaterialTheme.typography.bodySmall)
                                 Text("У каждого голоса есть кнопка «Прослушать», в том числе в списке выбора. Повторное нажатие останавливает пробу. Для сравнения используется одинаковая короткая фраза без LLM и фоновой музыки.", style = MaterialTheme.typography.bodySmall)
                                 Text("Подготовка идёт заранее в пределах очереди читалки. Чтение не ждёт разметку дольше обычного лимита. Облако рекомендуется; локальная Gemma может ошибаться в ролях.", style = MaterialTheme.typography.bodySmall)
@@ -159,6 +163,12 @@ class LlmSettingsActivity : ComponentActivity() {
                             }
                         }
                         if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
+                            var levelVoices by remember { mutableStateOf(pausePrefs.getBoolean("voice_loudness_normalization", true)) }
+                            Toggle("Выравнивать громкость голосов", levelVoices) {
+                                levelVoices = it; pausePrefs.edit().putBoolean("voice_loudness_normalization", it).apply()
+                                com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            }
+                            Text("Одинаковый ориентир громкости для Silero, Tera и Shtorm. Усиление постоянно внутри фразы: ритм и паузы сохраняются.", style = MaterialTheme.typography.bodySmall)
                             Text("Локальная подготовка книг", style = MaterialTheme.typography.titleMedium)
                             Text("Числа, даты, время, годы, единицы, валюты, дроби, сокращения и сноски обрабатываются на телефоне даже при выключенной LLM.")
                             Toggle("Локальные ударения и ё по контексту", offlineStress) {

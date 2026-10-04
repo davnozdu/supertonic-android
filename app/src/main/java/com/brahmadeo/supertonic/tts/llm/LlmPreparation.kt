@@ -10,9 +10,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
+private typealias RoleRequest = (String, List<String>, String) -> List<List<VoiceRoleText>?>
+
 /** Background preparation of text already submitted by any Android TTS client. */
 object LlmPreparation {
-    data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null, val voicePlan: List<VoiceRoleText> = emptyList())
+    data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null, val voicePlan: List<VoiceRoleText> = emptyList(), val rolesReady: Boolean = false, val roleProvider: String? = null)
     private data class Entry(val id: Long, val caller: Any, val text: String, val input: String,
         val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false, @Volatile var cancelled: Boolean = false, @Volatile var textReady: Result? = null)
     private val lock = Any()
@@ -29,7 +31,9 @@ object LlmPreparation {
     private val preparedCache = LlmTextCache<LlmConfig>()
     private val roleContext = VoiceRoleContext()
     private data class RoleKey(val config: LlmConfig, val preceding: String, val texts: List<String>)
-    private val roleCache = linkedMapOf<RoleKey, List<List<VoiceRoleText>>>()
+    private data class RoleCached(val routing: VoiceRoleRouting.Result, val time: Long)
+    private val roleCache = linkedMapOf<RoleKey, RoleCached>()
+    private val roleCooldown = mutableMapOf<String, Long>()
     private var roleCacheChars = 0
     private var ambiguousLocalYo: Set<String> = setOf("все","узнает","берет")
     private val russianNumbers = com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer()
@@ -46,7 +50,7 @@ object LlmPreparation {
         roleContext.clear()
         synchronized(roleCache) { roleCache.clear(); roleCacheChars = 0 }
         LlmProviders.cancelActive()
-        executor.execute { cooldown.clear(); LlmProviders.unload() }
+        executor.execute { cooldown.clear(); roleCooldown.clear(); LlmProviders.unload() }
     }
     fun submit(ctx: Context, caller: Any, text: String, flush: Boolean = false): Long? {
         if (flush) cancel(caller)
@@ -65,8 +69,22 @@ object LlmPreparation {
         timer.schedule({ startWorker() }, 120, TimeUnit.MILLISECONDS)
         return id
     }
+    /** Consume the latest result, not the immutable future completed before cloud recovery. */
+    fun takeForPlayback(text: String): Result? = synchronized(lock) {
+        val entry = entries.values.firstOrNull { it.text == text && !it.cancelled } ?: return@synchronized null
+        val latest = entry.textReady ?: return@synchronized null
+        if (!entry.future.isDone && !latest.rolesReady) return@synchronized null
+        entries.remove(entry.id)
+        latest
+    }
     fun consumed(text: String) { synchronized(lock) {
-        entries.values.firstOrNull { it.text == text && it.future.isDone }?.let { entries.remove(it.id) }
+        entries.values.firstOrNull { it.text == text }?.let {
+            entries.remove(it.id); it.cancelled = true; it.future.cancel(false)
+        }
+    } }
+    private fun release(entry: Entry) { synchronized(lock) {
+        if (entries[entry.id] === entry) entries.remove(entry.id)
+        if (!entry.future.isDone) { entry.cancelled = true; entry.future.cancel(false) }
     } }
     fun rejected(id: Long?) { synchronized(lock) { entries.remove(id)?.future?.cancel(false) } }
     private fun cancelLocked(caller: Any) {
@@ -94,16 +112,19 @@ object LlmPreparation {
         if (entry == null) return Result(text,"словарь",0,true,"Текст не принят в очередь LLM")
         startWorker()
         return try {
-            val result = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
+            val completed = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
+            val result = entry.textReady ?: completed
             Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
             Log.i("LlmPreparation", "Text trace source=${SpeechTextTrace.fingerprint(text)} prepared=${SpeechTextTrace.fingerprint(result.text)} provider=${result.provider} fallback=${result.fallback}")
-            if (!retainForPlayback) synchronized(lock) { entries.remove(entry.id) }
+            if (!retainForPlayback) release(entry)
             result
         } catch (_: Exception) {
             entry.textReady?.takeIf { !entry.cancelled && !entry.future.isCancelled }?.let {
                 Log.i("MultiVoice","Roles pending; delivering validated LLM text with author voice chars=${it.text.length}")
+                if (!retainForPlayback) release(entry)
                 return it
             }
+            if (!retainForPlayback) release(entry)
             Log.w("LlmPreparation", "Preparation not ready within ${timeoutMs}ms; dictionary fallback chars=${text.length}")
             // Keep the future even if it completed just after get() timed out:
             // the background waiter can still consume the validated result.
@@ -114,6 +135,47 @@ object LlmPreparation {
         initialize(ctx)
         // Use the same single worker as normal reading and idle unload.
         return executor.submit<Result> { process(ctx, c, listOf(text), ignoreCooldown = true, traceSynthetic = traceSynthetic).single() }.get(90, TimeUnit.SECONDS)
+    }
+    /** Private Activity probe: inject one cloud-role outage, exercise real Gemma and
+     * the production scheduled recovery, then consume the latest queued result. */
+    internal fun testRoleRecovery(ctx: Context, c: LlmConfig, text: String): Pair<Result, Result> {
+        require(c.multiVoice && c.mode !in listOf(LlmMode.OFF, LlmMode.LOCAL))
+        initialize(ctx)
+        val probeEpoch = epoch
+        val entry = synchronized(lock) {
+            Entry(++nextId, Any(), text, text, processing = true).also { entries[it.id] = it }
+        }
+        val outages = roleProviders(c).filter { it != "local" }.toMutableSet()
+        var localCalls = 0
+        val request: RoleRequest = { provider, parts, before ->
+            if (provider != "local" && outages.remove(provider)) throw java.io.IOException("Synthetic role outage")
+            if (provider == "local") localCalls++
+            LlmProviders.voiceRoles(ctx, c, parts, before, provider)
+        }
+        try {
+            val initial = executor.submit<Result> {
+                val result = process(ctx, c, listOf(text), probeEpoch, ignoreCooldown = true,
+                    roleRequest = request).single()
+                entry.textReady = result; entry.future.complete(result)
+                scheduleRoleRecovery(ctx, c, listOf(entry), "", probeEpoch, roleRequest = request)
+                result
+            }.get(90, TimeUnit.SECONDS)
+            Log.i("SpeechCheck", "RECOVERY initialRoleProvider=${initial.roleProvider} ready=${initial.rolesReady} localCalls=$localCalls")
+            if (LocalModelDownload.ready(ctx)) check(localCalls > 0) { "Local role fallback was not attempted" }
+            val deadline = SystemClock.elapsedRealtime() + 65_000
+            val preferred = roleProviders(c).first()
+            while (SystemClock.elapsedRealtime() < deadline && probeEpoch == epoch) {
+                val current = entry.textReady
+                if (current?.rolesReady == true && current.roleProvider == preferred) break
+                Thread.sleep(200)
+            }
+            check(entry.textReady?.roleProvider == preferred && entry.textReady?.rolesReady == true) { "Cloud roles did not recover" }
+            val recovered = checkNotNull(takeForPlayback(text))
+            check(VoiceRolePlan.safe(recovered.text, recovered.voicePlan) == recovered.voicePlan)
+            check(entry.future.get().roleProvider == initial.roleProvider) // Immutable future stays old.
+            Log.i("SpeechCheck", "RECOVERY PASSED initial=${initial.roleProvider} recovered=${recovered.roleProvider} latestConsumed=true roles=${recovered.voicePlan.map { it.role }.toSet()}")
+            return initial to recovered
+        } finally { release(entry) }
     }
     private fun startWorker() {
         if (!running.compareAndSet(false, true)) return
@@ -132,11 +194,15 @@ object LlmPreparation {
                             .onEach { it.processing = true }
                     }
                     activeBatch = batch
+                    val preceding = roleContext.get(batch.first().caller)
                     val results = process(ctx, config, batch.map { it.input }, batchEpoch,
-                        preceding = roleContext.get(batch.first().caller),
+                        preceding = preceding,
                         onTextPrepared = { index, result -> if (batchEpoch == epoch) batch[index].textReady = result },
-                        cancelled = { batch.all { it.future.isDone } },
-                        onPrepared = { index, result -> if (batchEpoch == epoch) batch[index].future.complete(result) })
+                        cancelled = { batch.all { it.cancelled } },
+                        onPrepared = { index, result -> if (batchEpoch == epoch && !batch[index].cancelled) {
+                            batch[index].textReady = result
+                            batch[index].future.complete(result)
+                        } })
                     synchronized(lock) { if (batchEpoch == epoch && batch.any { !it.cancelled }) {
                         // Record processed roles too, so a continued quote can keep its voice.
                         roleContext.append(batch.first().caller, results.map { result ->
@@ -145,8 +211,14 @@ object LlmPreparation {
                     }
                     }
                     activeBatch = emptyList()
-                    if (batchEpoch == epoch) batch.zip(results).forEach { (entry, result) -> entry.future.complete(result) }
+                    if (batchEpoch == epoch) {
+                        batch.zip(results).forEach { (entry, result) ->
+                            if (!entry.cancelled) { entry.textReady = result; entry.future.complete(result) }
+                        }
+                        if (needsRoleRecovery(config, results)) scheduleRoleRecovery(ctx, config, batch, preceding, batchEpoch)
+                    }
                     else batch.forEach { it.future.cancel(false) }
+                    return@execute
                 }
             } finally {
                 activeBatch = emptyList()
@@ -163,50 +235,106 @@ object LlmPreparation {
     private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
                         ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, preceding: String = "",
                         cancelled: () -> Boolean = { false }, onPrepared: (Int, Result) -> Unit = { _, _ -> },
-                        onTextPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
+                        onTextPrepared: (Int, Result) -> Unit = { _, _ -> }, roleRequest: RoleRequest? = null): List<Result> {
         val start = SystemClock.elapsedRealtime()
         val multi = c.multiVoice && c.mode != LlmMode.OFF && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)
         val prepared = processText(ctx, c, texts, expectedEpoch, ignoreCooldown, traceSynthetic, cancelled,
             if (multi) onTextPrepared else onPrepared)
-        if (!multi || prepared.all { it.fallback } || expectedEpoch != epoch || cancelled()) return prepared
-        val roleTexts = prepared.map { it.text }
-        val key = RoleKey(c, preceding, roleTexts)
-        val cached = synchronized(roleCache) { roleCache[key] }
-        var provider = prepared.firstOrNull { !it.fallback && it.provider != "кэш" }?.provider?.substringBefore('+')
-        if (provider !in listOf("local", "ollama", "gemini")) provider = when (c.mode) {
-            LlmMode.LOCAL -> "local"; LlmMode.GEMINI -> "gemini"; LlmMode.OLLAMA -> "ollama"
-            else -> if (c.preferGemini) "gemini" else "ollama"
-        }
-        var routingSucceeded = cached != null
-        val plan = cached ?: runCatching {
-            check(expectedEpoch == epoch && !cancelled())
-            require(roleTexts.sumOf { it.length } <= if (provider == "local") 1600 else 8000)
-            require(provider == "local" || connected(ctx))
-            LlmProviders.voiceRoles(ctx, c, roleTexts, if (provider == "local") preceding.takeLast(600) else preceding, provider!!).also { routingSucceeded = true }
-        }.getOrElse {
-            Log.w("MultiVoice", "Roles unavailable provider=$provider error=${it.javaClass.simpleName}; author fallback")
-            roleTexts.map { text -> listOf(VoiceRoleText(text, VoiceRole.AUTHOR)) }
-        }
-        if (expectedEpoch != epoch || cancelled()) return prepared
-        // Cache valid routing, including safe author fallbacks; bounded rolling memory.
-        synchronized(roleCache) {
-            if (cached == null && routingSucceeded) {
-                val cost = roleTexts.sumOf { it.length } + preceding.length
-                while (roleCache.isNotEmpty() && (roleCache.size >= 64 || roleCacheChars + cost > 128_000)) {
-                    val old = roleCache.keys.first()
-                    roleCacheChars -= old.texts.sumOf { it.length } + old.preceding.length
-                    roleCache.remove(old)
-                }
-                roleCache[key] = plan; roleCacheChars += cost
-            }
-        }
-        val results = prepared.mapIndexed { index, result ->
-            result.copy(elapsedMs = SystemClock.elapsedRealtime() - start,
-                voicePlan = if (result.fallback) emptyList() else VoiceRolePlan.safe(result.text, plan[index]))
-        }
+        if (!multi || expectedEpoch != epoch || cancelled()) return prepared
+        val results = routeRoles(ctx, c, prepared, preceding, expectedEpoch, ignoreCooldown, cancelled, resolved = onPrepared, roleRequest = roleRequest)
+            .map { it.copy(elapsedMs = SystemClock.elapsedRealtime() - start) }
         results.forEachIndexed { index, result -> onPrepared(index, result) }
-        Log.i("MultiVoice", "Prepared provider=$provider cache=${cached != null} fragments=${results.size} roles=${results.flatMap { it.voicePlan }.groupingBy { it.role }.eachCount()} ms=${SystemClock.elapsedRealtime()-start}")
         return results
+    }
+    private fun roleProviders(c: LlmConfig) = when (c.mode) {
+        LlmMode.OFF -> emptyList()
+        LlmMode.LOCAL -> listOf("local")
+        LlmMode.OLLAMA -> listOf("ollama", "local")
+        LlmMode.GEMINI -> listOf("gemini", "local")
+        LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
+    }
+    private fun needsRoleRecovery(c: LlmConfig, results: List<Result>): Boolean =
+        c.multiVoice && c.mode != LlmMode.OFF && results.any {
+            !it.rolesReady || (c.mode != LlmMode.LOCAL && it.roleProvider != roleProviders(c).firstOrNull())
+        }
+    private fun routeRoles(ctx: Context, c: LlmConfig, prepared: List<Result>, preceding: String,
+                           expectedEpoch: Long, ignoreCooldown: Boolean, cancelled: () -> Boolean,
+                           recovering: Boolean = false,
+                           resolved: (Int, Result) -> Unit = { _, _ -> }, roleRequest: RoleRequest? = null): List<Result> {
+        val texts = prepared.map { it.text }
+        val key = RoleKey(c, preceding, texts)
+        val now = SystemClock.elapsedRealtime()
+        val deadline = now + 18_000
+        val cloudDeadline = now + 9_000
+        val cached = synchronized(roleCache) { roleCache[key] }?.takeIf {
+            it.routing.providers.all { p -> p == roleProviders(c).firstOrNull() } || (!recovering && now - it.time < 30_000)
+        }
+        val routing = cached?.routing ?: VoiceRoleRouting.resolve(texts, roleProviders(c), preceding,
+            available = { provider ->
+                expectedEpoch == epoch && !cancelled() && SystemClock.elapsedRealtime() < (if(provider=="local") deadline else cloudDeadline) &&
+                    (ignoreCooldown || now >= (roleCooldown[provider] ?: 0L)) &&
+                    when (provider) {
+                        "local" -> LocalModelDownload.ready(ctx)
+                        "gemini" -> connected(ctx) && c.geminiModel.isNotBlank() && c.geminiKey.isNotBlank()
+                        else -> connected(ctx) && c.ollamaModel.isNotBlank()
+                    }
+            }, request = { provider, parts, before ->
+                check(expectedEpoch == epoch && !cancelled())
+                // Keep an already validated local plan during an outage. Do not run Gemma
+                // repeatedly on the same paragraph while waiting for connectivity.
+                if (recovering && provider == "local" && prepared.all { it.rolesReady }) {
+                    parts.map { part ->
+                        prepared.firstOrNull { it.text == part }?.voicePlan
+                    }
+                } else roleRequest?.invoke(provider, parts, before) ?: LlmProviders.voiceRoles(ctx, c, parts, before, provider,
+                    minOf(8000L, (if(provider=="local") deadline else cloudDeadline) - SystemClock.elapsedRealtime()).coerceAtLeast(1))
+            }, failed = { provider, error ->
+                roleCooldown[provider] = SystemClock.elapsedRealtime() + 10_000
+                Log.w("MultiVoice", "Role request failed provider=$provider error=${error.javaClass.simpleName}; trying next provider")
+            }, resolved = { index, plan, provider ->
+                if (expectedEpoch == epoch && !cancelled()) resolved(index,
+                    prepared[index].copy(voicePlan = plan, rolesReady = true, roleProvider = provider))
+            })
+        if (expectedEpoch != epoch || cancelled()) return prepared
+        if (cached == null && routing.plans.all { it != null }) synchronized(roleCache) {
+            val cost = texts.sumOf { it.length } + preceding.length
+            roleCache.remove(key)?.let { roleCacheChars -= cost }
+            while (roleCache.isNotEmpty() && (roleCache.size >= 64 || roleCacheChars + cost > 128_000)) {
+                val old = roleCache.keys.first()
+                roleCacheChars -= old.texts.sumOf { it.length } + old.preceding.length
+                roleCache.remove(old)
+            }
+            roleCache[key] = RoleCached(routing, now); roleCacheChars += cost
+        }
+        val results = prepared.mapIndexed { i, result ->
+            val plan = routing.plans[i]
+            // A failed retry must never erase an existing validated voice plan.
+            if (plan == null) result else result.copy(voicePlan = plan, rolesReady = true, roleProvider = routing.providers[i])
+        }
+        Log.i("MultiVoice", "Prepared routing providers=${results.map { it.roleProvider }.distinct()} ready=${results.count { it.rolesReady }}/${results.size} cache=${cached != null} recovery=$recovering roles=${results.flatMap { it.voicePlan }.groupingBy { it.role }.eachCount()}")
+        return results
+    }
+    private fun scheduleRoleRecovery(ctx: Context, c: LlmConfig, batch: List<Entry>, preceding: String,
+                                     expectedEpoch: Long, attempt: Int = 0, roleRequest: RoleRequest? = null) {
+        timer.schedule({ executor.execute {
+            if (expectedEpoch != epoch) return@execute
+            val pending = synchronized(lock) { batch.filter { entries[it.id] === it && !it.cancelled && it.textReady != null } }
+            if (pending.isEmpty()) return@execute
+            val before = preceding + batch.takeWhile { it !== pending.first() }.joinToString("\n") { it.textReady?.text ?: it.input }
+            val results = pending.map { it.textReady!! }
+            val recovered = if (!connected(ctx) && results.all { it.rolesReady }) results else
+                routeRoles(ctx, c, results, before.takeLast(1800), expectedEpoch, false,
+                    cancelled = { expectedEpoch != epoch || pending.all { it.cancelled } }, recovering = true, roleRequest = roleRequest)
+            pending.zip(recovered).forEach { (entry, result) ->
+                val accepted = synchronized(lock) {
+                    if (expectedEpoch != epoch || entries[entry.id] !== entry || entry.cancelled) false
+                    else { entry.textReady = result; true }
+                }
+                if (accepted && result.rolesReady) ReaderAudioAhead.refreshPrepared(ctx, entry.text, result)
+            }
+            if (needsRoleRecovery(c, recovered)) scheduleRoleRecovery(ctx, c, pending, before.takeLast(1800), expectedEpoch, attempt + 1, roleRequest)
+            else Log.i("MultiVoice", "Cloud/local roles recovered in background fragments=${pending.size}; no cache clear required")
+        } }, if (attempt == 0) 5 else 10, TimeUnit.SECONDS)
     }
     private fun processText(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
                         ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, cancelled: () -> Boolean = { false },
@@ -229,9 +357,9 @@ object LlmPreparation {
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()
             LlmMode.LOCAL -> listOf("local")
-            LlmMode.OLLAMA -> listOf("ollama", "ollama", "local")
-            LlmMode.GEMINI -> listOf("gemini", "gemini", "local")
-            LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "gemini", "ollama", "ollama") else listOf("ollama", "ollama", "gemini", "gemini")) + "local"
+            LlmMode.OLLAMA -> listOf("ollama", "local")
+            LlmMode.GEMINI -> listOf("gemini", "local")
+            LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
         }
         for (provider in providers) {
             if (expectedEpoch != epoch || cancelled()) break
@@ -273,7 +401,7 @@ object LlmPreparation {
                     } else Log.w("LlmPreparation", "Rejected fragment=$index, chars=${source.length}, provider=$provider, reason=$rejection")
                 }
                 if (provider == "local") {
-                    LlmProviders.local(ctx,c,requestTexts,deadlineMs=45000,onOutput=::accept)
+                    LlmProviders.local(ctx,c,requestTexts,deadlineMs=if(c.multiVoice) 12000 else 45000,onOutput=::accept)
                 } else {
                     LlmProviders.cloud(c,requestTexts,provider=="gemini").forEachIndexed { index,text -> accept(index,text) }
                 }

@@ -23,7 +23,7 @@ object SupertonicTTS {
     private val audioCache = com.brahmadeo.supertonic.tts.utils.SpeechAudioCache()
     private fun audioKey(context: Context, text: String, lang: String, style: String, speed: Float, steps: Int, gain: Float, skipDictionary: Boolean): String {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
-        val settings=listOf("tera_teacher","tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
+        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
         return listOf(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
     }
     fun clearAudioCache() { audioCache.clear() }

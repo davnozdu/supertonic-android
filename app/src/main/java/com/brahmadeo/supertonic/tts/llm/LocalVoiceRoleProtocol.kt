@@ -23,10 +23,13 @@ internal object LocalVoiceRoleProtocol {
         val clean = answer.trim().removePrefix("```").removeSuffix("```").trim()
         val count = pieces.sumOf { it.size }
         val labels = (if (clean.contains(':') || clean.contains('=')) {
-            val rows = clean.lines().filter { it.isNotBlank() }
+            val pattern = Regex("(\\d+)\\s*[:=]\\s*([АМЖAMFамжamf])")
+            val rows = pattern.findAll(clean).toList()
             require(rows.size == count)
-            rows.mapIndexed { i, row ->
-                val match = requireNotNull(Regex("\\s*(\\d+)\\s*[:=]\\s*([АМЖAMFамжamf])\\s*").matchEntire(row))
+            // Small models sometimes put complete indexed records on one line.
+            // Accept separators, never explanatory prose, omissions or duplicate indices.
+            require(pattern.replace(clean, "").all { it.isWhitespace() || it in ",;[]" })
+            rows.mapIndexed { i, match ->
                 require(match.groupValues[1].toInt() == i)
                 match.groupValues[2]
             }.joinToString("")

@@ -11,12 +11,8 @@ object MultiVoiceSettings {
         val configured = p.getString(key(ctx, role), "").orEmpty()
         if (configured in voices) return configured
         val current = p.getString("selected_voice", "").orEmpty().removeSuffix(".json")
-        val preferred = when (role) {
-            VoiceRole.AUTHOR -> current
-            VoiceRole.MALE -> when { AssetManager.isTera(ctx) -> "ru_m5"; AssetManager.isPocket(ctx) -> "marius"; AssetManager.getModelType(ctx) == AssetManager.SILERO_CIS_MODEL -> "ru_alexandr"; else -> "aidar" }
-            VoiceRole.FEMALE -> when { AssetManager.isTera(ctx) -> "ru_f1"; AssetManager.isPocket(ctx) -> "alba"; AssetManager.getModelType(ctx) == AssetManager.SILERO_CIS_MODEL -> "ru_ekaterina"; else -> "kseniya" }
-        }
-        return voices.firstOrNull { it.equals(preferred, true) } ?: voices.firstOrNull().orEmpty()
+        val author = p.getString(key(ctx, VoiceRole.AUTHOR), "").orEmpty().takeIf { it in voices } ?: current
+        return VoiceRoleDefaults.select(AssetManager.getModelType(ctx), role, author, voices)
     }
     fun save(ctx: Context, role: VoiceRole, voice: String) {
         require(voice in AssetManager.russianVoices(ctx))

@@ -24,20 +24,61 @@ object ReaderAudioAhead {
     }
     private val preparedTexts=PreparedSpeechHandoff(256)
     private val delivered=linkedSetOf<String>()
+    private data class Snapshot(val text: String, val model: String, val voice: String, val rate: Float,
+        val steps: Int, val generation: Long, val cacheGeneration: Long)
+    private val snapshots = linkedMapOf<String, Snapshot>()
     @Synchronized private fun isDelivered(owner: String) = owner in delivered
     @Synchronized fun cancel() {
-        epoch.incrementAndGet(); preparedTexts.clear(); delivered.clear()
+        epoch.incrementAndGet(); preparedTexts.clear(); delivered.clear(); snapshots.clear()
         val waiting=ArrayList<Runnable>();worker.queue.drainTo(waiting)
         waiting.forEach { (it as? AheadTask)?.release() }
     }
     @Synchronized internal fun takePrepared(text: String): PreparedSpeechText? {
-        val prepared = preparedTexts.takePrepared(text)
-        if (prepared != null) LlmPreparation.consumed(text)
+        val queued = preparedTexts.takePrepared(text)
+        val latest = LlmPreparation.takeForPlayback(text)
+        val prepared = latest?.let { PreparedSpeechText(it.text, !it.fallback, it.voicePlan) } ?: queued
+        if (latest == null && queued != null) LlmPreparation.consumed(text)
         val owner = SpeechTextTrace.fingerprint(text)
+        snapshots.remove(owner)
         delivered.add(owner)
         while (delivered.size > 1024) delivered.remove(delivered.first())
         SupertonicTTS.releaseAheadCache(owner)
         return prepared
+    }
+    @Synchronized internal fun refreshPrepared(ctx: Context, source: String, result: LlmPreparation.Result) {
+        val owner = SpeechTextTrace.fingerprint(source)
+        val snapshot = snapshots[owner] ?: return
+        if (isDelivered(owner) || snapshot.generation != epoch.get()) return
+        val prepared = PreparedSpeechText(result.text, !result.fallback, result.voicePlan)
+        if (!preparedTexts.replace(source, prepared)) return
+        SupertonicTTS.releaseAheadCache(owner)
+        android.util.Log.i("ReaderAhead", "Upgraded unplayed roles source=$owner provider=${result.roleProvider}")
+        queuedChars.addAndGet(source.length)
+        val task = AheadTask(source.length) { synthesizeAhead(ctx.applicationContext, snapshot, prepared) }
+        try { worker.execute(task) } catch (_: java.util.concurrent.RejectedExecutionException) { task.release() }
+    }
+    private fun synthesizeAhead(context: Context, snapshot: Snapshot, prepared: PreparedSpeechText) {
+        val owner = SpeechTextTrace.fingerprint(snapshot.text)
+        fun obsolete() = isDelivered(owner) || snapshot.generation != epoch.get() ||
+            snapshot.cacheGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation ||
+            snapshot.model != AssetManager.getModelType(context) || SupertonicTTS.isCancelled()
+        try {
+            val normalizer = TextNormalizer()
+            val parts = MultiVoiceSettings.parts(context, prepared.text, prepared.voicePlan, AssetManager.voiceFile(context, snapshot.voice).path)
+            sentenceLoop@ for ((part, style) in parts) for (sentence in normalizer.splitIntoSentences(part, "ru", preservePunctuation = true)) {
+                if (obsolete()) break@sentenceLoop
+                while (!SupertonicTTS.aheadCacheHasRoom()) {
+                    if (obsolete()) return
+                    Thread.sleep(200)
+                }
+                val normalized = normalizer.normalize(sentence, "ru", skipStress = prepared.llmProcessed)
+                if (obsolete()) break@sentenceLoop
+                val pcm = SupertonicTTS.generateAudio(normalized, "ru", style, snapshot.rate, 0f, snapshot.steps, 2.5f,
+                    preparationGeneration = snapshot.cacheGeneration, skipDictionary = prepared.llmProcessed, aheadOwner = owner)
+                if (isDelivered(owner)) SupertonicTTS.releaseAheadCache(owner)
+                if (pcm != null) android.util.Log.i("ReaderAhead", "Prepared ahead PCM chars=${normalized.length} bytes=${pcm.size} ${SupertonicTTS.audioCacheStatus()}")
+            }
+        } catch (t: Exception) { android.util.Log.w("ReaderAhead", "Role refresh synthesis failed error=${t.javaClass.simpleName}; foreground remains available") }
     }
     @Synchronized fun submit(ctx: Context, text: String, params: Bundle?) {
         val prefs=ctx.getSharedPreferences("SupertonicPrefs",0)
@@ -53,6 +94,9 @@ object ReaderAudioAhead {
             ?: prefs.getString("selected_voice","ru_f1.json")!!
         val rate=(params?.getInt("rate",100) ?: 100)/100f
         val steps=prefs.getInt("diffusion_steps",5)
+        val snapshot = Snapshot(text, model, voice, rate.coerceIn(.5f, 2.5f), steps, generation, cacheGeneration)
+        snapshots[owner] = snapshot
+        while (snapshots.size > 256) snapshots.remove(snapshots.keys.first())
         android.util.Log.i("ReaderAhead","Queued early text chars=${text.length} model=$model")
         val prepare: () -> Unit = work@{
             try {
@@ -64,20 +108,7 @@ object ReaderAudioAhead {
                 val llmProcessed=!result.fallback
                 if(isDelivered(owner) || generation!=epoch.get() || model!=AssetManager.getModelType(context)) return@work
                 preparedTexts.put(textGeneration,text,prepared,llmProcessed,result.voicePlan)
-                val normalizer=TextNormalizer()
-                val parts = MultiVoiceSettings.parts(context, prepared, result.voicePlan, AssetManager.voiceFile(context,voice).path)
-                sentenceLoop@ for ((part, style) in parts) for(sentence in normalizer.splitIntoSentences(part,"ru",preservePunctuation=true)) {
-                    if(isDelivered(owner) || generation!=epoch.get() || SupertonicTTS.isCancelled() || model!=AssetManager.getModelType(context)) break@sentenceLoop
-                    while (!SupertonicTTS.aheadCacheHasRoom()) {
-                        if(isDelivered(owner) || generation!=epoch.get() || SupertonicTTS.isCancelled()) return@work
-                        Thread.sleep(200) // Background only; playback never waits for cache capacity.
-                    }
-                    val normalized=normalizer.normalize(sentence,"ru",skipStress=llmProcessed)
-                    if(isDelivered(owner) || generation!=epoch.get()) break@sentenceLoop
-                    val pcm=SupertonicTTS.generateAudio(normalized,"ru",style,rate.coerceIn(.5f,2.5f),0f,steps,2.5f,preparationGeneration=cacheGeneration,skipDictionary=llmProcessed,aheadOwner=owner)
-                    if(isDelivered(owner)) SupertonicTTS.releaseAheadCache(owner)
-                    if(pcm!=null) android.util.Log.i("ReaderAhead","Prepared ahead PCM chars=${normalized.length} bytes=${pcm.size} ${SupertonicTTS.audioCacheStatus()}")
-                }
+                synthesizeAhead(context, snapshot, PreparedSpeechText(prepared, llmProcessed, result.voicePlan))
             } catch(t: Throwable) { android.util.Log.w("ReaderAhead","Ahead preparation failed; normal synthesis remains available",t) }
         }
         if(queuedChars.get()+text.length>192000) {

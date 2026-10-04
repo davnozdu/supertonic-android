@@ -11,8 +11,6 @@ import org.pytorch.Module
 import org.pytorch.Tensor
 import org.pytorch.executorch.EValue
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -118,13 +116,9 @@ class SileroEngine(context: Context) : AutoCloseable {
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             val samples = head!!.forward(IValue.from(Tensor.fromBlob(hidden.dataAsFloatArray, hidden.shape())),
                 IValue.from(48000L), IValue.from(0.0), IValue.from(true)).toTensor().dataAsFloatArray
-            // Keep the requested boost without flattening speech peaks at PCM limits.
-            var peak = 0f
-            samples.forEach { require(it.isFinite()) { "Silero produced non-finite audio" }; peak = maxOf(peak, kotlin.math.abs(it)) }
-            val safeGain = if (peak > 0f) minOf(gain.coerceAtLeast(0f), .98f / peak) else 1f
-            val pcm = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            samples.forEach { pcm.putShort((it * safeGain * 32767).toInt().coerceIn(-32768, 32767).toShort()) }
-            val base = pcm.array()
+            val level = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.scale(listOf(samples), gain,
+                prefs.getBoolean("voice_loudness_normalization", true))
+            val base = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.pcm(samples, level)
             val endPause = if (pauses && source.trimEnd().lastOrNull() in listOf('.', '!', '?', '…')) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
             val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(base,endPause,48000)
             val bytes = if (missing > 0) base + ByteArray(missing*2) else base
@@ -135,7 +129,7 @@ class SileroEngine(context: Context) : AutoCloseable {
                 val end = minOf(pos + 48000, bytes.size)
                 listener?.onAudioChunk(sid, bytes.copyOfRange(pos, end)); pos = end
             }
-            Log.i("SileroTTS", "Synthesized chars=${prepared.length} accents=${prepared.count { it == '+' }} endCorrection=${prepared != source} types=${types.toSet()} ms=${android.os.SystemClock.elapsedRealtime()-t} audioMs=${samples.size*1000L/48000}")
+            Log.i("SileroTTS", "Synthesized chars=${prepared.length} accents=${prepared.count { it == '+' }} endCorrection=${prepared != source} speaker=$speaker types=${types.toSet()} ms=${android.os.SystemClock.elapsedRealtime()-t} audioMs=${samples.size*1000L/48000}")
             return if (SupertonicTTS.isCancelled()) ByteArray(0) else bytes
         } finally { lastUsed = android.os.SystemClock.elapsedRealtime() }
     }

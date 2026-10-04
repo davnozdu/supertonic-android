@@ -16,6 +16,15 @@ internal class PreparedSpeechHandoff(private val limit: Int = 32) {
         items.addLast(Item(source,PreparedSpeechText(prepared,llmProcessed,voicePlan)))
         return true
     }
+    /** Upgrade only unplayed text; never append a duplicate request after recovery. */
+    @Synchronized fun replace(source: String, prepared: PreparedSpeechText): Boolean {
+        val copy = items.toMutableList()
+        val index = copy.indexOfFirst { it.source == source }
+        if (index < 0 || copy[index].prepared == prepared) return false
+        copy[index] = Item(source, prepared)
+        items.clear(); items.addAll(copy)
+        return true
+    }
     fun take(source: String): String? = takePrepared(source)?.text
     @Synchronized fun takePrepared(source: String): PreparedSpeechText? {
         val iterator=items.iterator()

@@ -21,6 +21,16 @@ import java.util.concurrent.TimeUnit
 /** Non-exported, root/ADB-only integration check. Synthetic text, no playback. */
 class SpeechDiagnosticsActivity : ComponentActivity() {
     companion object { private val running = java.util.concurrent.atomic.AtomicBoolean() }
+    private fun findPcmStart(bytes: ByteArray): Int {
+        var pos = 12
+        while (pos + 8 <= bytes.size) {
+            val size = ByteBuffer.wrap(bytes,pos+4,4).order(ByteOrder.LITTLE_ENDIAN).int
+            require(size >= 0 && pos.toLong() + 8 + size <= bytes.size)
+            if (String(bytes,pos,4,Charsets.US_ASCII) == "data") return pos + 8
+            pos += 8 + size + size % 2
+        }
+        error("Missing WAV PCM")
+    }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         if (!running.compareAndSet(false,true)) {
@@ -36,7 +46,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val llmPrefs=getSharedPreferences("llm_settings",MODE_PRIVATE)
                 val oldLlmMode=llmPrefs.getString("mode","OFF")
                 val oldMultiVoice=llmPrefs.getBoolean("multi_voice",false)
-                val multiVoiceProbe=intent.getBooleanExtra("multiVoiceProbe",false)
+                val multiVoiceProbe=intent.getBooleanExtra("multiVoiceProbe",false) || intent.getBooleanExtra("roleRecoveryProbe",false)
                 val voicePreviewProbe=intent.getBooleanExtra("voicePreviewProbe",false)
                 val oldRestoreYo=llmPrefs.getBoolean("restore_yo",true)
                 val offline=intent.getBooleanExtra("offline",false)
@@ -153,8 +163,14 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     }
                     if(multiVoiceProbe) {
                         val sample="Павел подошёл к окну.\n— Как красиво! — сказала Ольга.\n— Да, сегодня прекрасный день, — ответил Павел."
-                        val result=com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,
-                            com.brahmadeo.supertonic.tts.llm.LlmSettings.load(this@SpeechDiagnosticsActivity),sample)
+                        val config = com.brahmadeo.supertonic.tts.llm.LlmSettings.load(this@SpeechDiagnosticsActivity)
+                        val result = if (intent.getBooleanExtra("roleRecoveryProbe",false))
+                            com.brahmadeo.supertonic.tts.llm.LlmPreparation.testRoleRecovery(this@SpeechDiagnosticsActivity, config, sample).second
+                        else com.brahmadeo.supertonic.tts.llm.LlmPreparation.test(this@SpeechDiagnosticsActivity,config,sample)
+                        if (config.mode != com.brahmadeo.supertonic.tts.llm.LlmMode.LOCAL) check(result.rolesReady &&
+                            result.voicePlan.map { it.role }.toSet().containsAll(com.brahmadeo.supertonic.tts.llm.VoiceRole.entries)) { "Not all three roles were classified" }
+                        val routes = com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.parts(this@SpeechDiagnosticsActivity,result.text,result.voicePlan,AssetManager.voiceFile(this@SpeechDiagnosticsActivity,"kseniya.json").path)
+                        if (config.mode != com.brahmadeo.supertonic.tts.llm.LlmMode.LOCAL) check(routes.map { it.second }.distinct().size == 3) { "Choose three distinct role voices" }
                         val roles=result.voicePlan.map { it.role }.toSet()
                         check(com.brahmadeo.supertonic.tts.llm.VoiceRolePlan.safe(result.text,result.voicePlan).joinToString("") { it.text }==result.text)
                         Log.i("SpeechCheck","MULTIVOICE provider=${result.provider} fallback=${result.fallback} roles=$roles ms=${result.elapsedMs}")
@@ -168,6 +184,14 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         check(tts!!.synthesizeToFile(sample,Bundle(),output,"multivoice-probe")==TextToSpeech.SUCCESS)
                         done.get(90,TimeUnit.SECONDS)
                         check(output.length()>44)
+                        val waveBytes = output.readBytes()
+                        val pcmStart = findPcmStart(waveBytes)
+                        var squares = 0.0; var count = 0; var peak = 0
+                        for (i in pcmStart until waveBytes.size - 1 step 2) {
+                            val v = ((waveBytes[i].toInt() and 255) or (waveBytes[i+1].toInt() shl 8)).toShort().toInt()
+                            peak = maxOf(peak,kotlin.math.abs(v)); if (kotlin.math.abs(v) > 100) { squares += v.toDouble()*v; count++ }
+                        }
+                        Log.i("SpeechCheck","VOICE LEVEL peak=$peak activeRms=${if(count>0) kotlin.math.sqrt(squares/count).toInt() else 0} samples=${(waveBytes.size-pcmStart)/2}")
                         Log.i("SpeechCheck","MULTIVOICE PIPELINE PASSED model=$model wavBytes=${output.length()} ${SupertonicTTS.audioCacheStatus()}")
                         return@withContext
                     }

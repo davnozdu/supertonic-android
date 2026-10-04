@@ -27,7 +27,11 @@ role=author для повествования и авторских вставо
 
     fun schema() = JSONObject("""{"type":"object","properties":{"paragraphs":{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"segments":{"type":"array","items":{"type":"object","properties":{"start":{"type":"integer"},"end":{"type":"integer"},"role":{"type":"string","enum":["author","male","female"]},"confidence":{"type":"string","enum":["clear","uncertain"]}},"required":["start","end","role","confidence"],"additionalProperties":false}}},"required":["id","segments"],"additionalProperties":false}}},"required":["paragraphs"],"additionalProperties":false}""")
 
-    fun parse(answer: String, texts: List<String>): List<List<VoiceRoleText>> {
+    fun parse(answer: String, texts: List<String>): List<List<VoiceRoleText>> =
+        parseValidated(answer, texts).mapIndexed { i, plan -> plan ?: listOf(VoiceRoleText(texts[i], VoiceRole.AUTHOR)) }
+
+    // An invalid response is NOT a successful author classification. The caller retries it.
+    fun parseValidated(answer: String, texts: List<String>): List<List<VoiceRoleText>?> {
         val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "Некорректная разметка голосов" }
         val paragraphs = JSONObject(answer.substring(start, end + 1)).getJSONArray("paragraphs")
@@ -50,7 +54,7 @@ role=author для повествования и авторских вставо
                     VoiceRoleRange(integer(s, "start"), integer(s, "end"), role, confidence == "clear")
                 }
                 requireNotNull(VoiceRolePlan.render(text, ranges))
-            }.getOrElse { listOf(VoiceRoleText(text, VoiceRole.AUTHOR)) }
+            }.getOrNull()
         }
     }
     private fun integer(o: JSONObject, key: String): Int {

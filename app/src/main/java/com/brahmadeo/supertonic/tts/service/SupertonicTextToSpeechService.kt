@@ -371,7 +371,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                         if (SupertonicTTS.isCancelled()) { success = false; break }
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
                         val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=preserveMarks)
-                        Log.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$llmProcessed model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
+                        Log.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$preserveMarks model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
                         val result = SupertonicTTS.generateAudio(
                             normalizedText, requestedLang, sentenceStyle, effectiveSpeed, 0.0f,
                             steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=preserveMarks

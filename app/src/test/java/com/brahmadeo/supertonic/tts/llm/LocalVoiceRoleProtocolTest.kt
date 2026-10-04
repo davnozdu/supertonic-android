@@ -12,6 +12,13 @@ class LocalVoiceRoleProtocolTest {
             assertThrows(IllegalArgumentException::class.java) { LocalVoiceRoleProtocol.parse(answer,pieces) }
         }
     }
+    @Test fun compactIndexedRecordsAreAcceptedWithoutAllowingProse() {
+        val pieces = listOf(listOf("Автор. ", "Да. ", "Нет."))
+        assertEquals(listOf(VoiceRole.AUTHOR,VoiceRole.MALE,VoiceRole.FEMALE),
+            LocalVoiceRoleProtocol.parse("0:А 1:М 2:Ж",pieces).single().map { it.role })
+        for (answer in listOf("0:А 1:М 2:Ж пояснение", "0:А 2:Ж", "0:А 1:М 1:Ж", "0:А 1:М 2:Ж 3:А"))
+            assertThrows(IllegalArgumentException::class.java) { LocalVoiceRoleProtocol.parse(answer,pieces) }
+    }
     @Test fun unicodeBookSpacesAroundDialogueDashesAreRecognized() {
         val text="Автор.\u00a0— Да!\u202f— сказала Анна."
         assertEquals(3,LocalVoiceRoleProtocol.fragments(text).size)
