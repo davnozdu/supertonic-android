@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <queries>
         <intent>
@@ -34,6 +36,10 @@
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <activity android:name=".LlmSettingsActivity" android:exported="false" android:label="Подготовка текста LLM" />
         <activity android:name=".BackgroundMusicActivity" android:exported="false" android:label="Фоновая музыка" />
+        <activity android:name=".SleepTimerActivity" android:exported="false" android:label="Таймер сна" />
+        <activity android:name=".QuickReadActivity" android:exported="false" android:theme="@style/Theme.MyTTS.QuickRead" />
+        <receiver android:name=".service.SleepTimerReceiver" android:exported="false" />
+        <receiver android:name=".service.ReadingControlReceiver" android:exported="false" />
         <activity android:name=".MusicDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <activity android:name=".SpeechDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <service android:name=".utils.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
@@ -58,6 +64,7 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+                <data android:mimeType="text/html" />
             </intent-filter>
             <!-- Install TTS data intent -->
             <intent-filter>

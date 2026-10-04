@@ -88,6 +88,8 @@ fun MainScreen(
     onMiniPlayerPlayPauseClick: () -> Unit,
     onLlmSettingsClick: () -> Unit = {},
     onBackgroundMusicClick: () -> Unit = {},
+    onArticleLinkClick: () -> Unit = {},
+    onSleepTimerClick: () -> Unit = {},
     onModelSelectionClick: () -> Unit = {},
     showPocketVoicesDownload: Boolean = false,
     onPocketVoicesDownload: () -> Unit = {}
@@ -114,6 +116,10 @@ fun MainScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(text = { Text("Читать по ссылке") },
+                            onClick = { showMenu = false; onArticleLinkClick() })
+                        DropdownMenuItem(text = { Text("Таймер сна") },
+                            onClick = { showMenu = false; onSleepTimerClick() })
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_model_packs)) },
                             onClick = { showMenu = false; onModelSelectionClick() }

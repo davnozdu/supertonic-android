@@ -19,6 +19,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
+import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.viewModels
 import androidx.compose.runtime.remember
 import androidx.compose.material3.ButtonDefaults
@@ -174,6 +176,8 @@ class MainActivity : ComponentActivity() {
 
         loadPreferences()
         checkNotificationPermission()
+        com.brahmadeo.supertonic.tts.service.SleepTimer.initialize(this)
+        com.brahmadeo.supertonic.tts.service.ReadingControls.show(this)
         SupertonicTTS.setApplicationContext(this)
 
         val bindIntent = Intent(this, PlaybackService::class.java)
@@ -216,10 +220,45 @@ class MainActivity : ComponentActivity() {
             initializeEngine()
         }
 
-        handleIntent(intent)
+        if (savedInstanceState == null) handleIntent(intent)
 
         setContent {
             SupertonicTheme(voiceFile = viewModel.selectedVoiceFile.value) {
+                LaunchedEffect(viewModel.pendingArticle.value, viewModel.isInitializing.value, viewModel.showModelSelection.value) {
+                    if (viewModel.pendingArticle.value != null && !viewModel.isInitializing.value && !viewModel.showModelSelection.value) {
+                        lifecycle.withResumed {
+                            viewModel.pendingArticle.value?.let { text ->
+                                viewModel.pendingArticle.value = null
+                                HistoryManager.saveItem(this@MainActivity, text, viewModel.selectedVoiceFile.value)
+                                playNow(text)
+                            }
+                        }
+                    }
+                }
+                if (viewModel.showLinkDialog.value) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { viewModel.cancelArticle(); viewModel.showLinkDialog.value = false },
+                        title = { Text("Читать статью по ссылке") },
+                        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            androidx.compose.material3.OutlinedTextField(
+                                value = viewModel.articleLink.value,
+                                onValueChange = { viewModel.articleLink.value = it },
+                                enabled = !viewModel.articleLoading.value,
+                                label = { Text("Ссылка на статью") }, singleLine = true)
+                            if (viewModel.articleLoading.value) {
+                                androidx.compose.material3.LinearProgressIndicator(modifier = androidx.compose.ui.Modifier.fillMaxWidth())
+                                Text("Загружаем и выделяем текст статьи…")
+                            }
+                            viewModel.articleError.value?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        } },
+                        confirmButton = { TextButton(enabled = !viewModel.articleLoading.value && viewModel.articleLink.value.isNotBlank(), onClick = {
+                            val url = com.brahmadeo.supertonic.tts.article.ArticleExtractor.sharedUrl(viewModel.articleLink.value)
+                            if (url == null) viewModel.articleError.value = "Вставьте ссылку http:// или https://."
+                            else viewModel.readArticle(url)
+                        }) { Text("Читать") } },
+                        dismissButton = { TextButton(onClick = { viewModel.cancelArticle(); viewModel.showLinkDialog.value = false }) { Text("Отмена") } }
+                    )
+                }
                 if (viewModel.showModelSelection.value) {
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = {
@@ -528,6 +567,8 @@ class MainActivity : ComponentActivity() {
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
                         onLlmSettingsClick = { startActivity(Intent(this, LlmSettingsActivity::class.java)) },
                         onBackgroundMusicClick = { startActivity(Intent(this, BackgroundMusicActivity::class.java)) },
+                        onArticleLinkClick = { viewModel.articleError.value = null; viewModel.showLinkDialog.value = true },
+                        onSleepTimerClick = { startActivity(Intent(this, SleepTimerActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },
                         onDeleteModelClick = { viewModel.showModelDeleteDialog.value = true },
 
@@ -878,10 +919,21 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+        if (intent.action == Intent.ACTION_SEND && intent.type in setOf("text/plain", "text/html")) {
+            val sharedText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
             if (!sharedText.isNullOrEmpty()) {
-                viewModel.inputText.value = prepareTextForTts(sharedText, viewModel.currentLang.value)
+                val url = com.brahmadeo.supertonic.tts.article.ArticleExtractor.sharedUrl(sharedText)
+                if (url != null) viewModel.readArticle(url)
+                else {
+                    viewModel.cancelArticle()
+                    val text = if (intent.type == "text/html") org.jsoup.Jsoup.parse(sharedText).text() else sharedText
+                    if (text.length > com.brahmadeo.supertonic.tts.article.ArticleExtractor.MAX_TEXT) {
+                        Toast.makeText(this, "Текст слишком большой. Передайте его частями.", Toast.LENGTH_LONG).show()
+                    } else {
+                        viewModel.inputText.value = prepareTextForTts(text, viewModel.currentLang.value)
+                        viewModel.pendingArticle.value = viewModel.inputText.value
+                    }
+                }
             }
         } else {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: intent.data?.getQueryParameter("text")

@@ -134,7 +134,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
      * (b) absorb temporary RTF dips (thermal throttle, garbage collection,
      * a particularly long sentence) without an underrun click.
      */
-    @Volatile private var currentAudioChannel: Channel<ByteArray>? = null
+    private data class ReadingItem(val text: String, val lang: String, val style: String, val speed: Float, val steps: Int,
+        val chunks: com.brahmadeo.supertonic.tts.utils.ReadingTextChunks)
+    private data class AudioPacket(val bytes: ByteArray, val index: Int = -1, val item: ReadingItem? = null)
+    @Volatile private var currentAudioChannel: Channel<AudioPacket>? = null
+    private var activeReadingItem: ReadingItem? = null
 
     /**
      * Streaming listener installed on SupertonicTTS for the duration of a
@@ -161,7 +165,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             // poll. ClosedSendChannelException is the normal cancellation
             // path — caller invokes channel.close() in its finally block.
             try {
-                runBlocking { ch.send(data) }
+                runBlocking { ch.send(AudioPacket(data)) }
             } catch (_: ClosedSendChannelException) {
                 // Producer closed the channel — synthesis cancelled, fine.
             } catch (_: InterruptedException) {
@@ -187,6 +191,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         SupertonicTTS.setApplicationContext(this)
         createNotificationChannel()
         CallInterruption.register(this, this) { pause() }
+        SleepTimer.initialize(this)
+        ReadingControls.register(this, this, { pause() }, { stopServicePlayback() }, { play() }, { skipParagraph(it) })
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
@@ -262,6 +268,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     private var synthesisJob: Job? = null
 
     fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int = 0) {
+        SleepTimer.manualResume()
+        ReadingControls.internalStarted()
         serviceScope.launch {
             if (CallInterruption.active()) return@launch
             // Cancel any in-flight synthesis, but keep the AudioTrack alive so the
@@ -326,7 +334,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 // earlier ones. Cancellation closes this channel immediately.
                 val preRollSentences = PlaybackPrefs.preRollSentences
                 val channelCapacity = 500
-                val channel = Channel<ByteArray>(capacity = channelCapacity)
+                val channel = Channel<AudioPacket>(capacity = channelCapacity)
                 currentAudioChannel = channel
 
                 // When pre-roll is enabled, the consumer waits on this signal
@@ -375,9 +383,19 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             Log.e(TAG, "AudioTrack.play() failed (post pre-roll)", e)
                         }
                     }
-                    for (data in channel) {
+                    for (packet in channel) {
                         if (!isActive || SupertonicTTS.isCancelled()) break
-                        writeToTrackBlocking(data)
+                        while (!isPlaying && isActive && !SupertonicTTS.isCancelled()) delay(50)
+                        if (!isActive || SupertonicTTS.isCancelled()) break
+                        packet.item?.let { item -> withContext(Dispatchers.Main) {
+                            if (activeReadingItem !== item) getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit()
+                                .putString("last_text", item.text).putString("last_voice_path", item.style)
+                                .putString("last_lang", item.lang).putFloat("last_speed", item.speed).putInt("last_steps", item.steps).apply()
+                            activeReadingItem = item; currentSentenceIndex = packet.index
+                            getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit().putInt("last_index", packet.index).apply()
+                            notifyListenerProgress(packet.index, item.chunks.sentences.size)
+                        } }
+                        if (packet.bytes.isNotEmpty()) writeToTrackBlocking(packet.bytes)
                     }
                 }
 
@@ -399,9 +417,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 var lastTotal = 0
                 try {
                     itemLoop@ while (true) {
-                        val sentences = textNormalizer.splitIntoSentences(
+                        val chunks = com.brahmadeo.supertonic.tts.utils.ReadingTextChunks.split(
                             curText, curLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@PlaybackService)
                         )
+                        val sentences = chunks.sentences
+                        val readingItem = ReadingItem(curText, curLang, curStyle, curSpeed, curSteps, chunks)
                         val totalSentences = sentences.size
                         lastTotal = totalSentences
                         val validStartIndex = if (curStart in 0 until totalSentences) curStart else 0
@@ -432,10 +452,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             }
                             if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break@itemLoop
 
-                            withContext(Dispatchers.Main) {
-                                currentSentenceIndex = index
-                                notifyListenerProgress(index, totalSentences)
-                            }
+                            channel.send(AudioPacket(ByteArray(0), index, readingItem))
 
                             val preparation = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this@PlaybackService, sentences[index], llmIds.remove(index))
                             val preparedSentence = preparation.text
@@ -481,7 +498,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                                 // blocks the inference thread itself, just makes
                                 // the producer wait if the buffer is full.
                                 if (index < totalSentences - 1) {
-                                    try { channel.send(silenceBytes(80)) } catch (_: Exception) { break@itemLoop }
+                                    try { channel.send(AudioPacket(silenceBytes(80))) } catch (_: Exception) { break@itemLoop }
                                 }
                             } else if (SupertonicTTS.isCancelled()) {
                                 break@itemLoop
@@ -492,7 +509,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
                         val nextItem = QueueManager.next() ?: break
                         SupertonicTTS.reset()
-                        try { channel.send(silenceBytes(300)) } catch (_: Exception) { break }
+                        try { channel.send(AudioPacket(silenceBytes(300))) } catch (_: Exception) { break }
                         curText = nextItem.text
                         curLang = autoDetectRussian(nextItem.text, nextItem.lang)
                         curStyle = nextItem.stylePath
@@ -526,6 +543,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         }
                         notifyListenerState(true)
                         if (!wasCancelled) {
+                            SleepTimer.completedText()
                             stopPlayback()
                         }
                     }
@@ -704,6 +722,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     fun play() {
         if (CallInterruption.active()) return
+        SleepTimer.manualResume()
         resumeOnFocusGain = false
         // The reusable AudioTrack survives stops; its presence does not mean
         // there is still a paused job to resume.
@@ -723,6 +742,12 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 startForegroundService(getString(R.string.notif_playing), true)
             }
         }
+    }
+
+    private fun skipParagraph(direction: Int) {
+        val item = activeReadingItem ?: return
+        synthesizeAndPlay(item.text, item.lang, item.style, item.speed, item.steps,
+            item.chunks.moveParagraph(currentSentenceIndex, direction))
     }
 
     fun pause() {
@@ -787,6 +812,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     private fun notifyListenerState(playing: Boolean) {
+        ReadingIsland.state(this, playing || isSynthesizing, playing)
         val n = listeners.beginBroadcast()
         for (i in 0 until n) {
             try {
@@ -807,6 +833,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     private fun notifyListenerPlaybackStopped() {
+        ReadingIsland.state(this, false, false)
         val n = listeners.beginBroadcast()
         for (i in 0 until n) {
             try {
@@ -943,6 +970,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
              builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.cancel),
                 playbackCommand("STOP_PLAYBACK", 3))
         }
+        builder.addAction(android.R.drawable.ic_menu_recent_history, "Таймер сна", SleepTimer.settingsIntent(this))
+        builder.addAction(android.R.drawable.ic_menu_edit, "Текст / ссылка", ReadingControls.panel(this))
         return builder.build()
     }
 
@@ -962,6 +991,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     override fun onDestroy() {
         super.onDestroy()
         CallInterruption.unregister(this)
+        ReadingControls.unregister(this)
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,false)
         mediaSession?.release()
         try {

@@ -59,7 +59,10 @@ object BackgroundMusic {
         Snapshot(reading.playing(),prepared,runCatching { prepared && player?.isPlaying==true }.getOrDefault(false),
             runCatching { player?.isLooping==true }.getOrDefault(false),runCatching { if(prepared) player?.currentPosition ?: 0 else 0 }.getOrDefault(0))
     }
-    private fun refresh() { handler.post { update() } }
+    private fun refresh() { handler.post {
+        update()
+        context?.let { com.brahmadeo.supertonic.tts.service.ReadingControls.audioState(it, reading.playing()) }
+    } }
     private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true
     private fun volume() = (previewVolume ?: prefs?.getInt("background_music_volume",DEFAULT_VOLUME) ?: DEFAULT_VOLUME).coerceIn(0,100) / 100f
     private fun updateVolume() { if (prepared) runCatching { player?.setVolume(volume(),volume()) } }

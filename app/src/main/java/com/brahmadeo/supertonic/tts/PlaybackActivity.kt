@@ -177,19 +177,18 @@ class PlaybackActivity : ComponentActivity() {
     }
 
     private fun setupList(text: String) {
-        val normalizer = TextNormalizer()
-        val sentences = normalizer.splitIntoSentences(
+        val sentences = com.brahmadeo.supertonic.tts.utils.ReadingTextChunks.split(
             text, currentLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this)
-        )
+        ).sentences
         sentencesState.value = sentences
     }
 
     private fun handlePlayPause() {
         try {
             if (isPlayingState.value) {
-                playbackService?.stop() // Or pause if implemented
+                playbackService?.pause()
             } else if (isServiceActiveState.value) {
-                playFromIndex(currentIndexState.intValue)
+                playbackService?.play()
             } else {
                 if (currentIndexState.intValue >= 0) {
                     playFromIndex(currentIndexState.intValue)

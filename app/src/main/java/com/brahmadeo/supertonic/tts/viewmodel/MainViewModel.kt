@@ -5,8 +5,42 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 
 class MainViewModel : ViewModel() {
+    var showLinkDialog = mutableStateOf(false)
+    var articleLink = mutableStateOf("")
+    var articleLoading = mutableStateOf(false)
+    var articleError = mutableStateOf<String?>(null)
+    var pendingArticle = mutableStateOf<String?>(null)
+    private var articleJob: Job? = null
+    private var articleGeneration = 0L
+    fun cancelArticle() {
+        articleGeneration++
+        articleJob?.cancel(); articleJob = null
+        articleLoading.value = false; pendingArticle.value = null
+    }
+    fun readArticle(link: String) {
+        cancelArticle()
+        articleLink.value = link; articleError.value = null
+        showLinkDialog.value = true; articleLoading.value = true
+        val generation = articleGeneration
+        articleJob = viewModelScope.launch {
+            try {
+                val article = com.brahmadeo.supertonic.tts.article.ArticleLoader.load(link)
+                inputText.value = article.text
+                pendingArticle.value = article.text
+                showLinkDialog.value = false
+                android.util.Log.i("ArticleReader", "Extracted article chars=${article.text.length}; pending selected playback pipeline")
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                articleError.value = e.message ?: "Не удалось загрузить статью. Проверьте соединение."
+            } finally { if (generation == articleGeneration) articleLoading.value = false }
+        }
+    }
     // UI State
     var inputText = mutableStateOf("")
     var isInitializing = mutableStateOf(true)

@@ -45,3 +45,8 @@
 
 # Native PocketTTS calls AudioSink.onAudio by its exact JVM name.
 -keep class com.brahmadeo.supertonic.tts.pocket.** { *; }
+
+# Readability uses SLF4J's no-op fallback; no logger binding is shipped on Android.
+-dontwarn org.slf4j.impl.StaticLoggerBinder
+-dontwarn org.slf4j.impl.StaticMDCBinder
+-dontwarn org.slf4j.impl.StaticMarkerBinder
