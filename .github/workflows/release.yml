@@ -162,133 +162,17 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           files: ${{ env.SIGNED_DIR }}/*.apk
           draft: true
-          generate_release_notes: true
+          generate_release_notes: false
           prerelease: ${{ contains(env.RELEASE_TAG, '-beta') }}
-          body: |
-            **MyTTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
+          body_path: .github/release-notes.md
 
-            ### Background music and Shtorm
-            - Download four ready music tracks, import your own MP3, select or delete tracks.
-            - Loop background music at 10% volume by default; pause and resume with reading.
-            - Add experimental Shtorm PocketTTS RU v2 with a verified reusable ONNX download.
-            - Preserve common LLM, local text processing, audio caching and foreign-language fallback.
-            - Hide obsolete INT8, FP32 and FP16 presets from model selection.
-
-            ### Beta 34 changes
-            - Accept structurally valid partial local Gemma edits and fill unmarked Russian words with autonomous processing.
-            - Preserve explicit LLM stress and written ё; do not replace LLM punctuation, words or numbers during supplementation.
-            - Keep strict cloud validation and reject semantic corruption from every provider.
-            - Use a simpler local stress notation and include private device comparisons of prompt formats.
-
-            ### Beta 33 changes
-            - Use ordinary acute stress marks and plain text input for local Gemma; retain strict validation of words, numbers and stress positions.
-            - Extend device checks to contextual е/ё and prevent overlapping diagnostics from interrupting synthesis.
-            - Local model quality is being verified on a real phone; rejected or late answers safely use autonomous processing.
-
-            ### Beta 32 changes
-            - Replace constrained local decoding with short text conversations, bounded output and adjacent context.
-            - Deliver validated fragments as soon as they are ready; retry GPU inference errors on CPU and keep idle unloading.
-
-            ### Beta 29 changes
-            - Deliver cached PCM without acquiring the model inference monitor; background synthesis no longer blocks already prepared audio.
-            - Keep PCM memory accounting under a separate short lock, allocate independent delivery session IDs and log actual cache occupancy.
-            - Add device regression checks that stream cached audio while the model monitor is occupied; preserve Tera and Silero prosody settings.
-
-            ### Beta 28 changes
-            - Restore natural Silero pauses and continuous sentence prosody by default; fixed punctuation pauses are an independent opt-in setting.
-            - Preserve word boundaries and expression controls; invalidate cached audio when the Silero pause setting changes.
-            - Hand already prepared reader text to playback once, avoiding a second LLM wait between paragraphs; bound the handoff and discard stale results on stop/settings changes.
-            - Tera synthesis and its pause settings remain unchanged.
-
-            ### Beta 26 changes
-            - Resume native model downloads with bounded timeouts, retries and SHA-256 validation; retain Tera when switching native presets.
-            - Retry unsupported optimized ONNX graphs with basic optimization for mobile FP16 kernel compatibility.
-
-            ### Beta 25 changes
-            - Preserve nonbreaking/thin book spaces and word boundaries before all synthesis engines; fix short sentences written without spaces after punctuation.
-            - Correct Silero punctuation pause durations using the natural ten-frame prefix in both model packs; zero leaves model pauses intact.
-            - Keep decimals, dates, links, initials and paragraph boundaries; preserve typographic hyphens and separators.
-            - LLM instructions preserve short phrases and avoid inserting artificial punctuation between grammatical words.
-
-            ### Beta 24 changes
-            - Clear text/audio caches manually from text preparation settings; automatically invalidate them when settings change without stopping playback.
-            - The ё switch applies to local dictionaries and Tera too. Preserve written ё, prevent false ё in wall declensions, and use dictionary ё rather than speculative word-model predictions.
-            - Discard stale background audio preparation after cache invalidation.
-
-            ### Beta 23 changes
-            - Visible Models and voice packs button on the main screen and in the menu; choose Silero CIS to access 29 Russian voices without deleting the current pack.
-            - Model picker can be cancelled; installed voice packs are reused when switching.
-
-            ### Beta 22 changes
-            - Model/voice downloads run in a data-sync foreground service, resume partial files and retry network interruptions with full size/SHA validation.
-            - Install the additional Silero CIS pack with 29 Russian voices; all Russian voice packs and offline resources are mirrored in this repository.
-            - Offline Russian book normalization works without LLM: numbers with recognized case/gender, dates, time, years, units, currency, fractions, percentages, degrees, Roman numerals, abbreviations, footnotes and line-break hyphenation.
-            - Shared local Silero Stress accentor, contextual homograph BERT and prebuilt SACC ё dictionary. Explicit user/LLM stress is preserved; idle unload after two minutes.
-            - Queue-ahead PCM synthesis for already submitted reader text, with adjustable RAM cache (64–1024 MB, default 256 MB).
-            - Minimum sentence pauses account for native model silence; Silero native punctuation durations.
-            - Sentence pause minimum applies inside combined paragraphs too; bounded long sentences avoid the native character limit.
-            - Correct native Silero tempo direction: increasing reading speed shortens speech durations.
-            - SIM/PIN/GIF/MIDI/WIFI read as words; Wi-Fi and hi-fi have spoken forms.
-
-            ### Beta 17 changes
-            - Optional Silero v5.5 Russian model with five voices, using ready-made Android TorchScript Lite / ExecuTorch files. No model conversion.
-            - Shared LLM preparation, stress, ё, numbers, text cache and playback buffer apply to Silero too.
-            - Separate question/exclamation intonation switch; idle model unload after two minutes.
-            - Optional foreign passages through another installed Android TTS engine, including English and Czech. Audio joins the existing buffer, with bounded waiting, caching and recursion protection.
-            - Preserve foreign numbers for their own engine; retain Russian contextual number preparation.
-            - Silero requires ARM64. Model licence: CC BY-NC-SA 4.0 (noncommercial use).
-
-            ### Beta 11 changes
-            - LLM toggles and idle-time selections save immediately.
-            - Stopped/flushed preparation no longer starts a fallback model. Cancellation covers active fragments already removed after a reading timeout.
-            - Valid LLM fragments are delivered immediately even if a neighbour needs another provider. Completed results remain available while invalid fragments use fallback.
-            - Queue observation and idle checks no longer decrypt API keys.
-            - Reject detached stress marks; retain explicit stress syntax and arithmetic plus signs.
-            - Tera preserves common Russian abbreviations and initials when inserting pauses; spaced hyphens also create a pause.
-            - Release CI verifies the LiteRT-LM JNI getter names after R8. Manual release builds check out and publish the requested tag.
-            - Local-model downloads support notification channels only on Android 8+ and respect cancellation before publishing the verified file.
-
-            ### Beta 10 changes
-            - Fix a native local-Gemma crash in signed builds: preserve the LiteRT-LM configuration methods called through JNI. A crash previously disconnected Moon+ Reader from the TTS engine.
-
-            ### Beta 9 changes
-            - Cloud model refresh shows progress/results beside its button and opens the current list. Ollama Cloud's public catalogue loads without an API key; configured private endpoints still use their key.
-            - Tested recommendations are highlighted in the dynamically fetched list. Gemini 3.1 Flash Lite and DeepSeek v4.1 Flash are fast choices; Mistral Large 3 is a slower alternative.
-            - Tera inserts only missing punctuation silence: comma 180 ms and sentence end 420 ms by default, with adjustable settings and an off switch. Decimal numbers, dates and clock times retain their numeric boundaries.
-            - Reading waits at most 1.5 seconds for unfinished LLM preparation, then continues with dictionary processing while future queued text is prepared.
-            - Local Gemma uses JSON-constrained output. The text test reports provider errors instead of silently hiding fallback.
-            - Benchmark report and synthetic results are included in the repository; local Gemma E2B requires separate device verification.
-
-            ### Earlier beta changes
-            - Optional LLM text preparation: contextual Russian stress and punctuation, with validation that words and numbers are unchanged.
-            - Separate thinking switches for Ollama, Gemini and local Gemma are off by default. Where a provider cannot disable thinking completely, settings explain the minimum-level limitation.
-            - Strict preparation changes only punctuation and stress; words, digits, quotes and paragraph boundaries are protected. Russian integers and decimal fractions are read as complete numbers, including numbers next to punctuation and grouped thousands.
-            - Ollama and Gemini API keys can be entered in the new LLM settings. Available cloud models are fetched from each provider's API; none are hardcoded.
-            - Download and verify Gemma 4 E2B from Hugging Face for offline preparation. GPU with CPU fallback; the model is unloaded from RAM after configurable idle time.
-            - Auto tries configured clouds, then the downloaded local model. Local mode never contacts clouds; the master switch completely disables LLM preparation.
-            - Background preparation observes text already queued by Android TTS clients. Unsent future text cannot be fetched from arbitrary readers.
-            - LLM is disabled by default. First use of local preparation can take time to load the model; dictionary fallback keeps reading available on failure.
-            - The dictionary no longer forces an arbitrary stress for 19,741 Russian homographs or ambiguous е/ё substitutions. Explicit user stress rules still take priority.
-            - TeraTTSv2 is recommended for Russian. Commas and sentence punctuation are preserved when text is split for synthesis.
-            - The Russian stress index downloads prebuilt from `davnozdu/supertonic-dictionaries`. New installs no longer build the index on the phone.
-            - Russian voice styles and stress marking remain available offline after the first download.
-            - The app downloads new signed releases from GitHub, verifies their SHA-256 digest, and opens Android's installer automatically. Android may request permission for installs from this source.
-            - Release builds require the permanent signing key; CI fails if it is missing.
-
-            ### Which APK to download
-            - **`Supertonic-<tag>-arm64-v8a.apk`** — modern phones (recommended for almost everyone). Smallest download.
-            - `Supertonic-<tag>-armeabi-v7a.apk` — older 32-bit ARM phones.
-            - `Supertonic-<tag>-x86_64.apk` / `Supertonic-<tag>-x86.apk` — emulators, Chrome OS.
-            - `Supertonic-<tag>-universal.apk` — fat fallback if you're not sure. ~2× larger than the per-ABI ones.
-
-            ### Install
-            1. Download the right APK above (arm64-v8a in 99% of cases).
-            2. On the phone: Settings → Apps → Install unknown apps → allow your file manager / browser.
-            3. Tap the APK to install. If `adb install` returns `INSTALL_FAILED_VERIFICATION_FAILURE`, disable `Verify apps over USB` in Developer Options.
-            4. First use downloads the selected model. TeraTTSv2 fetches its ONNX files from Hugging Face and the ready-to-use stress index from GitHub.
-
-            ### Make it the system TTS
-            Settings → Accessibility → Text-to-speech output → Preferred engine → **Supertonic TTS (Fork)**.
-
-            ### Note on signing
-            Releases are signed with a **stable keystore** (repository secrets `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`), so updates install in place. Versions up to and including v4.0.0-beta3 were signed with ephemeral per-build keys — upgrading from those requires uninstalling once.
+      - name: Publish beta after all APK uploads
+        if: contains(env.RELEASE_TAG, '-beta')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION_LABEL="${RELEASE_TAG#v}"
+          VERSION_LABEL="${VERSION_LABEL%%-beta*}"
+          VERSION_LABEL="${VERSION_LABEL%.0}"
+          BETA_LABEL="${RELEASE_TAG##*-beta}"
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease --title "MyTTS $VERSION_LABEL Beta $BETA_LABEL"
