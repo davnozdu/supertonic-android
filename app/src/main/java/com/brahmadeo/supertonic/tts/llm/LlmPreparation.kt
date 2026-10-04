@@ -87,20 +87,21 @@ object LlmPreparation {
         if (!entry.future.isDone) { entry.cancelled = true; entry.future.cancel(false) }
     } }
     fun rejected(id: Long?) { synchronized(lock) { entries.remove(id)?.future?.cancel(false) } }
-    private fun cancelLocked(caller: Any) {
-        roleContext.clear(caller)
+    private fun cancelLocked(caller: Any, clearContext: Boolean = true) {
+        if (clearContext) roleContext.clear(caller)
         val keys = entries.values.filter { it.caller == caller }.map { it.id }
         keys.forEach { entries.remove(it)?.let { entry -> entry.cancelled = true; entry.future.cancel(false) } }
         // prepare() may already have removed a timed-out claimed entry.
         activeBatch.filter { it.caller == caller }.forEach { it.cancelled = true; it.future.cancel(false) }
     }
-    fun cancel(caller: Any) {
-        synchronized(lock) { cancelLocked(caller) }
+    fun cancel(caller: Any, clearContext: Boolean = true) {
+        synchronized(lock) { cancelLocked(caller, clearContext) }
         val batch = activeBatch
         if (batch.any { it.caller == caller } && batch.all { it.future.isDone }) LlmProviders.cancelActive()
     }
     fun prefetch(ctx: Context, texts: List<String>): List<Long?> = texts.map { submit(ctx, appCaller, it) }
     fun cancelApp() = cancel(appCaller)
+    fun pauseApp() = cancel(appCaller, clearContext = false)
     fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): String = prepareResult(ctx,text,id,timeoutMs).text
     fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500, retainForPlayback: Boolean = false): Result {
         if (!enabled(ctx)) return Result(text,"автономно",0,true)

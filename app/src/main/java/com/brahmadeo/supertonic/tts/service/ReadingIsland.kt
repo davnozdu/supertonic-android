@@ -26,6 +26,7 @@ object ReadingIsland {
     private var playing = false
     private var visible = false
     private var cutoutX: Int? = null
+    private var cutoutBottom = 0
     private val tick = object : Runnable {
         override fun run() { refresh(); if (view != null) main.postDelayed(this, 1000) }
     }
@@ -75,22 +76,28 @@ object ReadingIsland {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.LEFT }
             fun position() {
-                val width = if (Build.VERSION.SDK_INT >= 30) manager.currentWindowMetrics.bounds.width() else ctx.resources.displayMetrics.widthPixels
+                val width = maxOf(
+                    if (Build.VERSION.SDK_INT >= 30) manager.maximumWindowMetrics.bounds.width() else 0,
+                    ctx.resources.displayMetrics.widthPixels, (cutoutX ?: 0) * 2, dp(204))
                 params.x = ((cutoutX ?: width / 2) - dp(102)).coerceIn(0, (width - dp(204)).coerceAtLeast(0))
                 params.y = dp(offset(ctx))
+                params.height = maxOf(dp(42), cutoutBottom - params.y + dp(2))
             }
             position()
             if (Build.VERSION.SDK_INT >= 28) {
                 params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 row.setOnApplyWindowInsetsListener { _, insets ->
                     val rect = insets.displayCutout?.boundingRects?.firstOrNull { it.top == 0 && it.width() < dp(100) }
-                    if (rect != null && cutoutX != rect.centerX()) {
-                        cutoutX = rect.centerX(); position(); runCatching { manager.updateViewLayout(row, params) }
+                    if (rect != null && (cutoutX != rect.centerX() || cutoutBottom != rect.bottom)) {
+                        cutoutX = rect.centerX(); cutoutBottom = rect.bottom
+                        position(); runCatching { manager.updateViewLayout(row, params) }
                     }
                     insets
                 }
             }
-            runCatching { manager.addView(row, params); view = row }.onFailure { view = null }
+            runCatching { manager.addView(row, params); view = row
+                android.util.Log.i("ReadingIsland", "Overlay x=${params.x} y=${params.y} width=${params.width} height=${params.height}")
+            }.onFailure { view = null }
         }
         button?.text = if (playing) "Ⅱ" else "▶"
         caption?.text = SleepTimer.remainingLabel().ifBlank { "MyTTS" }

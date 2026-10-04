@@ -759,6 +759,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     fun pause() {
+        com.brahmadeo.supertonic.tts.llm.LlmPreparation.pauseApp()
         resumeOnFocusGain = false
         if (isPlaying) {
             isPlaying = false

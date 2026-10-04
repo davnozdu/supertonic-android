@@ -96,6 +96,10 @@ class QuickReadActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus && pasteRequested) { pasteRequested = false; paste() }
     }
+    override fun onResume() {
+        super.onResume()
+        if (ReadingIsland.enabled(this)) ReadingIsland.configure(this, true)
+    }
     private fun paste() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.let { text.value = it }
