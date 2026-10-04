@@ -108,16 +108,18 @@ object LlmProviders {
         return result.distinct().sorted()
     }
     fun cloud(c: LlmConfig, texts: List<String>, gemini: Boolean): List<String> {
-        val prompt = JSONObject().put("texts", JSONArray(texts)).toString()
-        val answer = if (gemini) {
+        return parse(cloudRequest(c, JSONObject().put("texts", JSONArray(texts)).toString(), instruction(c), schema(), gemini), texts.size)
+    }
+    private fun cloudRequest(c: LlmConfig, prompt: String, system: String, responseSchema: JSONObject, gemini: Boolean, tokens: Int = 6000): String {
+        return if (gemini) {
             require(c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()) { "Выберите модель Gemini и укажите ключ" }
             require(c.geminiModel.matches(Regex("[A-Za-z0-9._-]+"))) { "Некорректное имя модели" }
-            val generationConfig = JSONObject().put("temperature", 0).put("maxOutputTokens", 6000)
-                .put("responseMimeType", "application/json").put("responseJsonSchema", schema())
+            val generationConfig = JSONObject().put("temperature", 0).put("maxOutputTokens", tokens)
+                .put("responseMimeType", "application/json").put("responseJsonSchema", responseSchema)
             ThinkingPolicy.gemini(c.geminiModel, c.geminiThinking)?.let {
                 generationConfig.put("thinkingConfig", JSONObject().put(it.field, it.value).put("includeThoughts", false))
             }
-            val body = JSONObject().put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", instruction(c)))))
+            val body = JSONObject().put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
                 .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
                 .put("generationConfig", generationConfig)
             val response = http("https://generativelanguage.googleapis.com/v1beta/models/${c.geminiModel}:generateContent", c.geminiKey, body, true)
@@ -137,15 +139,21 @@ object LlmProviders {
             }
             val body = JSONObject().put("model", c.ollamaModel).put("stream", false)
                 .put("think", ThinkingPolicy.ollama(controls, c.ollamaThinking, c.ollamaModel))
-                .put("options", JSONObject().put("temperature", 0).put("num_predict", 6000))
-                .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", instruction(c)))
+                .put("options", JSONObject().put("temperature", 0).put("num_predict", tokens))
+                .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))
                     .put(JSONObject().put("role", "user").put("content", prompt)))
             // Ollama Cloud does not support the format/schema parameter.
             // JSON is requested in the instruction and validated after receipt.
-            if (!URL(c.ollamaEndpoint).host.equals("ollama.com", true)) body.put("format", schema())
+            if (!URL(c.ollamaEndpoint).host.equals("ollama.com", true)) body.put("format", responseSchema)
             http(c.ollamaEndpoint.trimEnd('/') + "/api/chat", c.ollamaKey, body).getJSONObject("message").getString("content")
         }
-        return parse(answer, texts.size)
+    }
+    fun voiceRoles(context: Context, c: LlmConfig, texts: List<String>, preceding: String, provider: String): List<List<VoiceRoleText>> {
+        val prompt = VoiceRoleProtocol.prompt(texts, preceding)
+        val answer = if (provider == "local") local(context, c, listOf(prompt), deadlineMs = 12000,
+            protocol = "roles", diagnosticInstruction = VoiceRoleProtocol.INSTRUCTION).single()
+        else cloudRequest(c, prompt, VoiceRoleProtocol.INSTRUCTION, VoiceRoleProtocol.schema(), provider == "gemini", 2400)
+        return VoiceRoleProtocol.parse(answer, texts)
     }
     @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long = 45000,
         onOutput: (Int,String) -> Unit = { _,_ -> }, protocol: String = "caps", diagnosticInstruction: String? = null): List<String> {
@@ -172,14 +180,14 @@ object LlmProviders {
         fun generate(engine: Engine, index: Int): String {
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             val text=texts[index]
-            val prompt=LocalSpeechText.prompt(text,
+            val prompt=if (protocol == "roles") text else LocalSpeechText.prompt(text,
                 texts.getOrNull(index-1)?.takeLast(256).orEmpty(),
                 texts.getOrNull(index+1)?.take(256).orEmpty())
             val timedOut=java.util.concurrent.atomic.AtomicBoolean()
             return engine.createConversation(ConversationConfig(systemInstruction=Contents.of(system),
                 samplerConfig=SamplerConfig(1,0.95,0.0),
                 thinkingConfig=ThinkingConfig(c.localThinking,if(c.localThinking) 512 else 0),
-                maxOutputToken=LocalSpeechText.outputTokens(text.length))).use { conversation ->
+                maxOutputToken=if (protocol == "roles") 1600 else LocalSpeechText.outputTokens(text.length))).use { conversation ->
                 activeConversation=conversation
                 val started=SystemClock.elapsedRealtime()
                 val deadline=timer.schedule({ timedOut.set(true); runCatching { conversation.cancelProcess() } },deadlineMs,java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -188,7 +196,7 @@ object LlmProviders {
                     check(!timedOut.get()) { "LLM локальная: превышен лимит ${deadlineMs}мс" }
                     check(generation==cancelGeneration.get()) { "Подготовка отменена" }
                     Log.i("LlmPreparation","Local Gemma fragment=$index chars=${text.length} outputChars=${raw.length} backend=${if(localGpu==true) "GPU" else "CPU"} ms=${SystemClock.elapsedRealtime()-started}")
-                    LocalSpeechText.response(raw,text,protocol)
+                    if (protocol == "roles") raw else LocalSpeechText.response(raw,text,protocol)
                 } catch(e: Exception) {
                     if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${deadlineMs}мс")
                     throw e

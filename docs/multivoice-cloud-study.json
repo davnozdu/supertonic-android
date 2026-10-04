@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-04",
+  "paragraphs": 14,
+  "source_characters": 1462,
+  "results": [
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "ms": 1913,
+      "characters": 1462,
+      "coverage_errors": [],
+      "first_role_correct": 14,
+      "first_role_total": 14,
+      "wrong_paragraph_ids": [],
+      "usage": {
+        "promptTokenCount": 3336,
+        "candidatesTokenCount": 502,
+        "totalTokenCount": 3838,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 3336
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "provider": "ollama",
+      "model": "deepseek-v4.1-flash",
+      "ms": 1952,
+      "characters": 1462,
+      "coverage_errors": [],
+      "first_role_correct": 14,
+      "first_role_total": 14,
+      "wrong_paragraph_ids": [],
+      "usage": {
+        "input_tokens": 3444,
+        "output_tokens": 507
+      }
+    }
+  ]
+}

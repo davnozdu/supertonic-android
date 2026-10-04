@@ -27,10 +27,17 @@ object SupertonicTTS {
         return listOf(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
     }
     fun clearAudioCache() { audioCache.clear() }
-    private fun cacheAudio(key: String, bytes: ByteArray?) {
+    private fun cacheLimitBytes(): Long =
+        (appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt("reader_pcm_cache_mb",256) ?: 256).coerceIn(64,1024)*1024L*1024L
+    fun releaseAheadCache(owner: String) { audioCache.releaseAhead(owner) }
+    fun aheadCacheHasRoom(): Boolean = audioCache.status().aheadBytes < cacheLimitBytes() - 16*1024L*1024L
+    fun audioCacheStatus(): String {
+        val status = audioCache.status()
+        return "retainedBytes=${status.retainedBytes} aheadBytes=${status.aheadBytes} limitBytes=${cacheLimitBytes()} entries=${status.entries}"
+    }
+    private fun cacheAudio(key: String, bytes: ByteArray?, preparedAhead: Boolean = false, aheadOwner: String? = null) {
         if(bytes==null || isCancelled()) return
-        val limit = (appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt("reader_pcm_cache_mb",256) ?: 256).coerceIn(64,1024)*1024L*1024L
-        audioCache.put(key,bytes,limit)
+        audioCache.put(key,bytes,cacheLimitBytes(),preparedAhead,aheadOwner)
     }
     private val foreignFallbackNormalizer by lazy { com.brahmadeo.supertonic.tts.utils.TextNormalizer() }
 
@@ -223,15 +230,15 @@ object SupertonicTTS {
 
     private val sessionIdCounter = java.util.concurrent.atomic.AtomicLong()
 
-    fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null, skipDictionary: Boolean = false): ByteArray? {
+    fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null, skipDictionary: Boolean = false, aheadOwner: String? = null): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
         val cacheKey=appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) }
-        if(cacheKey!=null) audioCache.get(cacheKey)?.let { return deliverCached(text,it,listener) }
+        if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val waiting=android.os.SystemClock.elapsedRealtime()
         return synchronized(this) {
             val elapsed=android.os.SystemClock.elapsedRealtime()-waiting
             if(elapsed>100) Log.i("ReaderAhead","Uncached model lock wait=${elapsed}ms chars=${text.length}")
-            generateAudioLocked(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary)
+            generateAudioLocked(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
         }
     }
 
@@ -248,10 +255,10 @@ object SupertonicTTS {
     }
 
     /** Called only under the model monitor; cached delivery never enters it. */
-    private fun generateAudioLocked(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean): ByteArray? {
+    private fun generateAudioLocked(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean, aheadOwner: String?): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
         val cacheKey = appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) }
-        if(cacheKey!=null) audioCache.get(cacheKey)?.let { return deliverCached(text,it,listener) }
+        if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val sid = sessionIdCounter.incrementAndGet()
         currentSession.set(SessionContext(sid, listener))
 
@@ -294,23 +301,23 @@ object SupertonicTTS {
                             output.write(pcm)
                         }
                     }
-                    return output.toByteArray().also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() && !isCancelled() }
+                    return output.toByteArray().also { if(cacheKey!=null) cacheAudio(cacheKey,it,preparationGeneration!=null,aheadOwner) }.takeIf { it.isNotEmpty() && !isCancelled() }
                 }
             }
             if (appContext?.let { AssetManager.isPocket(it) } == true) {
                 val ctx=appContext!!
                 val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(ctx).also { pocketEngine=it }
-                return engine.synthesize(text,stylePath,speed,gain,listener,sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
+                return engine.synthesize(text,stylePath,speed,gain,listener,sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it,preparationGeneration!=null,aheadOwner) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isSilero(it) } == true) {
                 val ctx = appContext!!
                 val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(ctx).also { sileroEngine = it }
-                return engine.synthesize(text, stylePath, speed, gain, listener, sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
+                return engine.synthesize(text, stylePath, speed, gain, listener, sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it,preparationGeneration!=null,aheadOwner) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isTera(it) } == true) {
                 val engine = maybeTeraEngine() ?: return null
                 return try {
-                    engine.synthesize(text, lang, stylePath, speed, gain, listener, sid, skipDictionary).also { if(cacheKey!=null) cacheAudio(cacheKey,it) }.takeIf { it.isNotEmpty() }
+                    engine.synthesize(text, lang, stylePath, speed, gain, listener, sid, skipDictionary).also { if(cacheKey!=null) cacheAudio(cacheKey,it,preparationGeneration!=null,aheadOwner) }.takeIf { it.isNotEmpty() }
                 } catch (t: Throwable) {
                     Log.e("SupertonicTTS", "Tera synthesis failed", t)
                     null

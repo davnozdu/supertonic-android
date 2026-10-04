@@ -441,15 +441,20 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             val preparedSentence = preparation.text
                             val llmProcessed = !preparation.fallback
                             if (SupertonicTTS.isCancelled() || !isActive) break@itemLoop
-                            val normalizedText = textNormalizer.normalize(preparedSentence, curLang, isAdvancedEnabled, skipStress=llmProcessed)
+                            val voiceParts = com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.parts(this@PlaybackService,
+                                preparedSentence, preparation.voicePlan, curStyle)
+                            var result: ByteArray? = null
+                            for ((part, partStyle) in voiceParts) {
+                                if (SupertonicTTS.isCancelled() || !isActive) break
+                                val normalizedText = textNormalizer.normalize(part, curLang, isAdvancedEnabled, skipStress=llmProcessed)
 
-                            // Streaming: each finished chunk inside generateAudio is
-                            // pushed via streamingListener.onAudioChunk into the
-                            // channel, where the consumer above picks it up.
-                            val result = SupertonicTTS.generateAudio(
-                                normalizedText, curLang, curStyle, curSpeed, 0.0f, curSteps,
-                                VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=llmProcessed
-                            )
+                                // Every voice streams into the same bounded playback channel.
+                                result = SupertonicTTS.generateAudio(
+                                    normalizedText, curLang, partStyle, curSpeed, 0.0f, curSteps,
+                                    VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=llmProcessed
+                                )
+                                if (result == null) break
+                            }
 
                             if (result != null && result.isNotEmpty()) {
                                 sawAnyAudio = true

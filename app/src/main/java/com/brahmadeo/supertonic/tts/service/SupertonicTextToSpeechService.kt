@@ -356,16 +356,18 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         runBlocking {
             val producer = launch(Dispatchers.IO) {
                 try {
-                    val sentences = textNormalizer.splitIntoSentences(
-                        rawText, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
-                    )
-                    for (sentence in sentences) {
+                    val parts = com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.parts(this@SupertonicTextToSpeechService,
+                        rawText, aheadText?.voicePlan ?: preparation?.voicePlan.orEmpty(), stylePath)
+                    val sentences = parts.flatMap { (part, style) -> textNormalizer.splitIntoSentences(
+                        part, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
+                    ).map { it to style } }
+                    for ((sentence, sentenceStyle) in sentences) {
                         if (SupertonicTTS.isCancelled()) { success = false; break }
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
                         val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=llmProcessed)
                         Log.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$llmProcessed model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
                         val result = SupertonicTTS.generateAudio(
-                            normalizedText, requestedLang, stylePath, effectiveSpeed, 0.0f,
+                            normalizedText, requestedLang, sentenceStyle, effectiveSpeed, 0.0f,
                             steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=llmProcessed
                         )
                         if (result == null || SupertonicTTS.isCancelled()) { success = false; break }

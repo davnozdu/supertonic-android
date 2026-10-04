@@ -31,7 +31,8 @@ data class LlmConfig(
     val punctuation: Boolean = true,
     val stress: Boolean = true,
     val aheadChars: Int = 16000,
-    val restoreYo: Boolean = true
+    val restoreYo: Boolean = true,
+    val multiVoice: Boolean = false
 )
 
 object LlmSettings {
@@ -41,7 +42,11 @@ object LlmSettings {
     fun enabled(context: Context): Boolean {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return p.getString("mode", "OFF") != "OFF" &&
-            (p.getBoolean("stress", true) || p.getBoolean("punctuation", true) || p.getBoolean("restore_yo", true))
+            (p.getBoolean("stress", true) || p.getBoolean("punctuation", true) || p.getBoolean("restore_yo", true) || p.getBoolean("multi_voice", false))
+    }
+    fun multiVoiceEnabled(context: Context): Boolean {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return p.getString("mode", "OFF") != "OFF" && p.getBoolean("multi_voice", false)
     }
     fun idleSeconds(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         .getInt("idle_seconds", 120).coerceIn(30, 600)
@@ -84,7 +89,7 @@ object LlmSettings {
             localThinking = p.getBoolean("local_thinking", false),
             idleSeconds = p.getInt("idle_seconds", 120).coerceIn(30, 600),
             punctuation = p.getBoolean("punctuation", true), stress = p.getBoolean("stress", true),
-            aheadChars = aheadChars(context), restoreYo = p.getBoolean("restore_yo", true)
+            aheadChars = aheadChars(context), restoreYo = p.getBoolean("restore_yo", true), multiVoice = p.getBoolean("multi_voice", false)
         )
     }
     fun save(context: Context, c: LlmConfig) {
@@ -100,7 +105,7 @@ object LlmSettings {
             .putBoolean("local_thinking", c.localThinking)
             .putInt("idle_seconds", c.idleSeconds.coerceIn(30, 600))
             .putBoolean("punctuation", c.punctuation).putBoolean("stress", c.stress)
-            .putBoolean("restore_yo", c.restoreYo)
+            .putBoolean("restore_yo", c.restoreYo).putBoolean("multi_voice", c.multiVoice)
             .putInt("ahead_chars", c.aheadChars.coerceIn(4000, 48000)).apply()
         com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
     }

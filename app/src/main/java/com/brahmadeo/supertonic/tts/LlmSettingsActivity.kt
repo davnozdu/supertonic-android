@@ -95,6 +95,24 @@ class LlmSettingsActivity : ComponentActivity() {
                             config = config.copy(mode = if (it) LlmSettings.previousMode(this@LlmSettingsActivity) else LlmMode.OFF)
                             save()
                         }
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
+                            Text("Мультиголосовая озвучка · эксперимент", style = MaterialTheme.typography.titleMedium)
+                            Toggle("Читать автора и диалоги разными голосами", config.multiVoice) {
+                                config = config.copy(multiVoice = it); save()
+                            }
+                            Text("LLM определяет автора, мужские и женские реплики по соседнему тексту. Слова книги сохраняются. Неясные реплики и фрагменты без готовой разметки читает автор. Голоса сохраняются отдельно для каждой звуковой модели.", style = MaterialTheme.typography.bodySmall)
+                            if (config.multiVoice) {
+                                if (config.mode == LlmMode.OFF) Text("Включите LLM-обработку для определения ролей. При выключенной LLM используется обычный выбранный голос.")
+                                val roleVoices = com.brahmadeo.supertonic.tts.utils.AssetManager.russianVoices(this@LlmSettingsActivity)
+                                VoiceRole.entries.forEach { role ->
+                                    var selected by remember(role, roleVoices) { mutableStateOf(MultiVoiceSettings.selected(this@LlmSettingsActivity, role)) }
+                                    Choice(when(role) { VoiceRole.AUTHOR -> "Голос автора"; VoiceRole.MALE -> "Мужской голос"; VoiceRole.FEMALE -> "Женский голос" }, selected, roleVoices) {
+                                        selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it)
+                                    }
+                                }
+                                Text("Подготовка идёт заранее в пределах очереди читалки. Чтение не ждёт разметку дольше обычного лимита. Облако рекомендуется; локальная Gemma может ошибаться в ролях.", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                         Text("Ударения и пунктуация готовятся до синтеза. При ошибке или превышении времени ожидания используется обычная обработка со словарём.")
                         Button(onClick = {
                             com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()

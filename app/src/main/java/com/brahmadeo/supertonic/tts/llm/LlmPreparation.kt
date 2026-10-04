@@ -12,9 +12,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Background preparation of text already submitted by any Android TTS client. */
 object LlmPreparation {
-    data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null)
+    data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null, val voicePlan: List<VoiceRoleText> = emptyList())
     private data class Entry(val id: Long, val caller: Any, val text: String, val input: String,
-        val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false)
+        val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false, @Volatile var cancelled: Boolean = false)
     private val lock = Any()
     private val entries = linkedMapOf<Long, Entry>()
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "LLM-preparation").apply { isDaemon = true } }
@@ -27,6 +27,10 @@ object LlmPreparation {
     private val cooldown = mutableMapOf<String, Long>() // Only the worker accesses this.
     private val appCaller = Any()
     private val preparedCache = LlmTextCache<LlmConfig>()
+    private val roleContext = VoiceRoleContext()
+    private data class RoleKey(val config: LlmConfig, val preceding: String, val texts: List<String>)
+    private val roleCache = linkedMapOf<RoleKey, List<List<VoiceRoleText>>>()
+    private var roleCacheChars = 0
     private var ambiguousLocalYo: Set<String> = setOf("все","узнает","берет")
     private val russianNumbers = com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer()
     @Synchronized fun initialize(ctx: Context) {
@@ -39,6 +43,8 @@ object LlmPreparation {
     fun settingsChanged() {
         synchronized(lock) { epoch++; entries.values.forEach { it.future.cancel(false) }; entries.clear() }
         preparedCache.clear()
+        roleContext.clear()
+        synchronized(roleCache) { roleCache.clear(); roleCacheChars = 0 }
         LlmProviders.cancelActive()
         executor.execute { cooldown.clear(); LlmProviders.unload() }
     }
@@ -48,7 +54,7 @@ object LlmPreparation {
         if (text.length > 6000 || !enabled(ctx) || text.isBlank() || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
         val id = synchronized(lock) {
             // Bound copied text, even if a reader submits an entire book.
-            while (entries.isNotEmpty() && (entries.size >= 256 || entries.values.sumOf { it.text.length } + text.length > 96_000)) {
+            while (entries.isNotEmpty() && (entries.size >= 512 || entries.values.sumOf { it.text.length } + text.length > 192_000)) {
                 val victim = entries.values.firstOrNull { it.future.isDone || (!it.claimed && !it.processing) } ?: return null
                 entries.remove(victim.id); victim.future.cancel(false)
             }
@@ -61,10 +67,11 @@ object LlmPreparation {
     }
     fun rejected(id: Long?) { synchronized(lock) { entries.remove(id)?.future?.cancel(false) } }
     private fun cancelLocked(caller: Any) {
+        roleContext.clear(caller)
         val keys = entries.values.filter { it.caller == caller }.map { it.id }
-        keys.forEach { entries.remove(it)?.future?.cancel(false) }
+        keys.forEach { entries.remove(it)?.let { entry -> entry.cancelled = true; entry.future.cancel(false) } }
         // prepare() may already have removed a timed-out claimed entry.
-        activeBatch.filter { it.caller == caller }.forEach { it.future.cancel(false) }
+        activeBatch.filter { it.caller == caller }.forEach { it.cancelled = true; it.future.cancel(false) }
     }
     fun cancel(caller: Any) {
         synchronized(lock) { cancelLocked(caller) }
@@ -119,8 +126,16 @@ object LlmPreparation {
                     }
                     activeBatch = batch
                     val results = process(ctx, config, batch.map { it.input }, batchEpoch,
+                        preceding = roleContext.get(batch.first().caller),
                         cancelled = { batch.all { it.future.isDone } },
                         onPrepared = { index, result -> if (batchEpoch == epoch) batch[index].future.complete(result) })
+                    synchronized(lock) { if (batchEpoch == epoch && batch.any { !it.cancelled }) {
+                        // Record processed roles too, so a continued quote can keep its voice.
+                        roleContext.append(batch.first().caller, results.map { result ->
+                            if (result.voicePlan.isEmpty()) result.text else result.voicePlan.joinToString("") { "[${it.role.name}]${it.text}" }
+                        })
+                    }
+                    }
                     activeBatch = emptyList()
                     if (batchEpoch == epoch) batch.zip(results).forEach { (entry, result) -> entry.future.complete(result) }
                     else batch.forEach { it.future.cancel(false) }
@@ -138,6 +153,53 @@ object LlmPreparation {
         manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }.getOrDefault(false)
     private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
+                        ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, preceding: String = "",
+                        cancelled: () -> Boolean = { false }, onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
+        val start = SystemClock.elapsedRealtime()
+        val multi = c.multiVoice && c.mode != LlmMode.OFF && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)
+        val prepared = processText(ctx, c, texts, expectedEpoch, ignoreCooldown, traceSynthetic, cancelled,
+            if (multi) { _, _ -> } else onPrepared)
+        if (!multi || prepared.all { it.fallback } || expectedEpoch != epoch || cancelled()) return prepared
+        val roleTexts = prepared.map { it.text }
+        val key = RoleKey(c, preceding, roleTexts)
+        val cached = synchronized(roleCache) { roleCache[key] }
+        var provider = prepared.firstOrNull { !it.fallback && it.provider != "кэш" }?.provider?.substringBefore('+')
+        if (provider !in listOf("local", "ollama", "gemini")) provider = when (c.mode) {
+            LlmMode.LOCAL -> "local"; LlmMode.GEMINI -> "gemini"; LlmMode.OLLAMA -> "ollama"
+            else -> if (c.preferGemini) "gemini" else "ollama"
+        }
+        var routingSucceeded = cached != null
+        val plan = cached ?: runCatching {
+            check(expectedEpoch == epoch && !cancelled())
+            require(roleTexts.sumOf { it.length } <= if (provider == "local") 1600 else 8000)
+            require(provider == "local" || connected(ctx))
+            LlmProviders.voiceRoles(ctx, c, roleTexts, if (provider == "local") preceding.takeLast(600) else preceding, provider!!).also { routingSucceeded = true }
+        }.getOrElse {
+            Log.w("MultiVoice", "Roles unavailable provider=$provider error=${it.javaClass.simpleName}; author fallback")
+            roleTexts.map { text -> listOf(VoiceRoleText(text, VoiceRole.AUTHOR)) }
+        }
+        if (expectedEpoch != epoch || cancelled()) return prepared
+        // Cache valid routing, including safe author fallbacks; bounded rolling memory.
+        synchronized(roleCache) {
+            if (cached == null && routingSucceeded) {
+                val cost = roleTexts.sumOf { it.length } + preceding.length
+                while (roleCache.isNotEmpty() && (roleCache.size >= 64 || roleCacheChars + cost > 128_000)) {
+                    val old = roleCache.keys.first()
+                    roleCacheChars -= old.texts.sumOf { it.length } + old.preceding.length
+                    roleCache.remove(old)
+                }
+                roleCache[key] = plan; roleCacheChars += cost
+            }
+        }
+        val results = prepared.mapIndexed { index, result ->
+            result.copy(elapsedMs = SystemClock.elapsedRealtime() - start,
+                voicePlan = if (result.fallback) emptyList() else VoiceRolePlan.safe(result.text, plan[index]))
+        }
+        results.forEachIndexed { index, result -> onPrepared(index, result) }
+        Log.i("MultiVoice", "Prepared provider=$provider cache=${cached != null} fragments=${results.size} roles=${results.flatMap { it.voicePlan }.groupingBy { it.role }.eachCount()} ms=${SystemClock.elapsedRealtime()-start}")
+        return results
+    }
+    private fun processText(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
                         ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, cancelled: () -> Boolean = { false },
                         onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
         val started = SystemClock.elapsedRealtime()

@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PreparedSpeechHandoffTest {
+    @Test fun voiceRolesTravelWithExactlyThePreparedText() {
+        val h=PreparedSpeechHandoff()
+        val plan=listOf(VoiceRoleText("Да. ",VoiceRole.MALE),VoiceRoleText("Она улыбнулась.",VoiceRole.AUTHOR))
+        h.put(h.token(),"original","Да. Она улыбнулась.",true,plan)
+        assertEquals(plan,h.takePrepared("original")!!.voicePlan)
+        h.put(h.token(),"another","Нет.",false)
+        assertTrue(h.takePrepared("another")!!.voicePlan.isEmpty())
+    }
     @Test fun llmProvenanceTravelsWithItsTextAndNeverLeaksToFallback() {
         val handoff=PreparedSpeechHandoff()
         handoff.put(handoff.token(),"same","светло́",true)

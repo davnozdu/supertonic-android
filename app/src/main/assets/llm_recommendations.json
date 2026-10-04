@@ -1,5 +1,20 @@
 [
-  {"provider":"ollama","model":"deepseek-v4.1-flash","priority":1,"label":"Рекомендуется для скорости; без размышления"},
-  {"provider":"ollama","model":"mistral-large-3:675b","priority":2,"label":"Рекомендуется для качества; медленнее"},
-  {"provider":"gemini","model":"gemini-3.1-flash-lite","priority":1,"label":"Рекомендуется: скорость и качество в тесте"}
+  {
+    "provider": "ollama",
+    "model": "deepseek-v4.1-flash",
+    "priority": 1,
+    "label": "Рекомендуется: скорость, диалоги; без размышления"
+  },
+  {
+    "provider": "gemini",
+    "model": "gemini-3.1-flash-lite",
+    "priority": 1,
+    "label": "Рекомендуется: скорость и качество в тесте"
+  },
+  {
+    "provider": "gemini",
+    "model": "gemini-3.5-flash-lite",
+    "priority": 1,
+    "label": "Рекомендуется: скорость; проверена разметка диалогов"
+  }
 ]

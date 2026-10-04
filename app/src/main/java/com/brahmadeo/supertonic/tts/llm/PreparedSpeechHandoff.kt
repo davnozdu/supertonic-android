@@ -1,6 +1,6 @@
 package com.brahmadeo.supertonic.tts.llm
 
-internal data class PreparedSpeechText(val text: String, val llmProcessed: Boolean = false)
+internal data class PreparedSpeechText(val text: String, val llmProcessed: Boolean = false, val voicePlan: List<VoiceRoleText> = emptyList())
 
 /** One-time delivery of text already prepared for a queued reader request. */
 internal class PreparedSpeechHandoff(private val limit: Int = 32) {
@@ -10,10 +10,10 @@ internal class PreparedSpeechHandoff(private val limit: Int = 32) {
     init { require(limit>0) }
     @Synchronized fun token(): Long = generation
     @Synchronized fun clear() { generation++; items.clear() }
-    @Synchronized fun put(token: Long, source: String, prepared: String, llmProcessed: Boolean = false): Boolean {
+    @Synchronized fun put(token: Long, source: String, prepared: String, llmProcessed: Boolean = false, voicePlan: List<VoiceRoleText> = emptyList()): Boolean {
         if(token!=generation) return false
         while(items.size>=limit) items.removeFirst()
-        items.addLast(Item(source,PreparedSpeechText(prepared,llmProcessed)))
+        items.addLast(Item(source,PreparedSpeechText(prepared,llmProcessed,voicePlan)))
         return true
     }
     fun take(source: String): String? = takePrepared(source)?.text
