@@ -32,6 +32,7 @@ object ReaderAudioAhead {
     }
     @Synchronized internal fun takePrepared(text: String): PreparedSpeechText? {
         val prepared = preparedTexts.takePrepared(text)
+        if (prepared != null) LlmPreparation.consumed(text)
         val owner = SpeechTextTrace.fingerprint(text)
         delivered.add(owner)
         while (delivered.size > 1024) delivered.remove(delivered.first())
@@ -58,7 +59,7 @@ object ReaderAudioAhead {
                 if(isDelivered(owner) || generation!=epoch.get() || !AssetManager.isReady(context) || model!=AssetManager.getModelType(context)) return@work
                 // Background work has the duration of earlier playback available;
                 // the foreground's short startup deadline is inappropriate here.
-                val result=LlmPreparation.prepareResult(context,text,timeoutMs=30000)
+                val result=LlmPreparation.prepareResult(context,text,timeoutMs=30000,retainForPlayback=true)
                 val prepared=result.text
                 val llmProcessed=!result.fallback
                 if(isDelivered(owner) || generation!=epoch.get() || model!=AssetManager.getModelType(context)) return@work

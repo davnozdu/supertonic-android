@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 object LlmPreparation {
     data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null, val voicePlan: List<VoiceRoleText> = emptyList())
     private data class Entry(val id: Long, val caller: Any, val text: String, val input: String,
-        val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false, @Volatile var cancelled: Boolean = false)
+        val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false, @Volatile var cancelled: Boolean = false, @Volatile var textReady: Result? = null)
     private val lock = Any()
     private val entries = linkedMapOf<Long, Entry>()
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "LLM-preparation").apply { isDaemon = true } }
@@ -41,7 +41,7 @@ object LlmPreparation {
     }
     fun enabled(ctx: Context) = LlmSettings.enabled(ctx)
     fun settingsChanged() {
-        synchronized(lock) { epoch++; entries.values.forEach { it.future.cancel(false) }; entries.clear() }
+        synchronized(lock) { epoch++; entries.values.forEach { it.cancelled = true; it.future.cancel(false) }; entries.clear() }
         preparedCache.clear()
         roleContext.clear()
         synchronized(roleCache) { roleCache.clear(); roleCacheChars = 0 }
@@ -65,6 +65,9 @@ object LlmPreparation {
         timer.schedule({ startWorker() }, 120, TimeUnit.MILLISECONDS)
         return id
     }
+    fun consumed(text: String) { synchronized(lock) {
+        entries.values.firstOrNull { it.text == text && it.future.isDone }?.let { entries.remove(it.id) }
+    } }
     fun rejected(id: Long?) { synchronized(lock) { entries.remove(id)?.future?.cancel(false) } }
     private fun cancelLocked(caller: Any) {
         roleContext.clear(caller)
@@ -81,7 +84,7 @@ object LlmPreparation {
     fun prefetch(ctx: Context, texts: List<String>): List<Long?> = texts.map { submit(ctx, appCaller, it) }
     fun cancelApp() = cancel(appCaller)
     fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): String = prepareResult(ctx,text,id,timeoutMs).text
-    fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): Result {
+    fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500, retainForPlayback: Boolean = false): Result {
         if (!enabled(ctx)) return Result(text,"автономно",0,true)
         initialize(ctx)
         val entry = synchronized(lock) {
@@ -94,9 +97,13 @@ object LlmPreparation {
             val result = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
             Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
             Log.i("LlmPreparation", "Text trace source=${SpeechTextTrace.fingerprint(text)} prepared=${SpeechTextTrace.fingerprint(result.text)} provider=${result.provider} fallback=${result.fallback}")
-            synchronized(lock) { entries.remove(entry.id) }
+            if (!retainForPlayback) synchronized(lock) { entries.remove(entry.id) }
             result
         } catch (_: Exception) {
+            entry.textReady?.takeIf { !entry.cancelled && !entry.future.isCancelled }?.let {
+                Log.i("MultiVoice","Roles pending; delivering validated LLM text with author voice chars=${it.text.length}")
+                return it
+            }
             Log.w("LlmPreparation", "Preparation not ready within ${timeoutMs}ms; dictionary fallback chars=${text.length}")
             // Keep the future even if it completed just after get() timed out:
             // the background waiter can still consume the validated result.
@@ -127,6 +134,7 @@ object LlmPreparation {
                     activeBatch = batch
                     val results = process(ctx, config, batch.map { it.input }, batchEpoch,
                         preceding = roleContext.get(batch.first().caller),
+                        onTextPrepared = { index, result -> if (batchEpoch == epoch) batch[index].textReady = result },
                         cancelled = { batch.all { it.future.isDone } },
                         onPrepared = { index, result -> if (batchEpoch == epoch) batch[index].future.complete(result) })
                     synchronized(lock) { if (batchEpoch == epoch && batch.any { !it.cancelled }) {
@@ -154,11 +162,12 @@ object LlmPreparation {
     }.getOrDefault(false)
     private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
                         ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, preceding: String = "",
-                        cancelled: () -> Boolean = { false }, onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
+                        cancelled: () -> Boolean = { false }, onPrepared: (Int, Result) -> Unit = { _, _ -> },
+                        onTextPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
         val start = SystemClock.elapsedRealtime()
         val multi = c.multiVoice && c.mode != LlmMode.OFF && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)
         val prepared = processText(ctx, c, texts, expectedEpoch, ignoreCooldown, traceSynthetic, cancelled,
-            if (multi) { _, _ -> } else onPrepared)
+            if (multi) onTextPrepared else onPrepared)
         if (!multi || prepared.all { it.fallback } || expectedEpoch != epoch || cancelled()) return prepared
         val roleTexts = prepared.map { it.text }
         val key = RoleKey(c, preceding, roleTexts)

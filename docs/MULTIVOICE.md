@@ -1,4 +1,4 @@
-# Experimental multi-voice reading — Beta 46.1
+# Experimental multi-voice reading — Beta 46.2
 
 The switch is off by default, in LLM text preparation settings. Narrator, male and female voices are selected manually and saved per synthesis engine. This is voice routing, not translation or summarization.
 
@@ -19,7 +19,7 @@ Held-out fragment: Gorky's *The Orlovs*, paragraphs 47–60 of the supplied EPUB
 | gemini-3.5-flash-lite | 1913 ms | 14/14 | 14/14 |
 | deepseek-v4.1-flash | 1952 ms | 14/14 | 14/14 |
 
-The first-role metric is limited: it checks the speaker gender of the beginning, not every word. Inspection found Gemini assigning the last sentence of paragraph 56 to the narrator instead of continuing the male voice. DeepSeek handled this continuation correctly in this sample. Both preserve full source coverage. Local Gemma requires device testing; malformed/late output falls back safely. Mistral removed from recommendations at the user's request; provider catalogues are still fetched dynamically.
+The first-role metric is limited: it checks the speaker gender of the beginning, not every word. Inspection found Gemini assigning the last sentence of paragraph 56 to the narrator instead of continuing the male voice. DeepSeek handled this continuation correctly in this sample. Both preserve full source coverage. Local Gemma timed out on full JSON/index generation on the device; its protocol now uses fixed dash-delimited fragments and a short А/М/Ж label string (maximum 64 output tokens). During role preparation, validated LLM text is independently available: playback uses the author voice rather than reverting good text to dictionaries. Local Gemma requires retesting; malformed/late output falls back safely. Mistral removed from recommendations at the user's request; provider catalogues are still fetched dynamically.
 
 ## Buffer corrections
 
