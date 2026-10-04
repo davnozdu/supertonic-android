@@ -244,8 +244,21 @@ object LlmPreparation {
                         onTextPrepared: (Int, Result) -> Unit = { _, _ -> }, roleRequest: RoleRequest? = null): List<Result> {
         val start = SystemClock.elapsedRealtime()
         val multi = c.multiVoice && c.mode != LlmMode.OFF && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)
+        val earlyRoles = mutableMapOf<Int, Result>()
+        // A rejected word in one paragraph must not hold all accepted paragraphs
+        // behind a slow local text retry (especially with the fast Silero engine).
+        fun routeAcceptedBeforeRetry(partial: List<Result?>) {
+            if (!multi || expectedEpoch != epoch || cancelled()) return
+            val indices = partial.indices.filter { partial[it] != null && earlyRoles[it] == null }
+            if (indices.isEmpty()) return
+            val before = (preceding + "\n" + texts.take(indices.first()).joinToString("\n")).takeLast(1800)
+            val routed = routeRoles(ctx,c,indices.map { partial[it]!! },before,expectedEpoch,ignoreCooldown,cancelled,
+                resolved = { i, result -> if (result.rolesReady) { earlyRoles[indices[i]] = result; onPrepared(indices[i],result) } }, roleRequest = roleRequest)
+            routed.forEachIndexed { i, result -> if (result.rolesReady) { earlyRoles[indices[i]] = result; onPrepared(indices[i],result) } }
+        }
         val prepared = processText(ctx, c, texts, expectedEpoch, ignoreCooldown, traceSynthetic, cancelled,
-            if (multi) onTextPrepared else onPrepared)
+            if (multi) onTextPrepared else onPrepared, beforeRetry = ::routeAcceptedBeforeRetry)
+            .mapIndexed { i, result -> earlyRoles[i]?.takeIf { it.text == result.text } ?: result }
         if (!multi || expectedEpoch != epoch || cancelled()) return prepared
         val results = routeRoles(ctx, c, prepared, preceding, expectedEpoch, ignoreCooldown, cancelled, resolved = onPrepared, roleRequest = roleRequest)
             .map { it.copy(elapsedMs = SystemClock.elapsedRealtime() - start) }
@@ -301,7 +314,8 @@ object LlmPreparation {
             }, resolved = { index, plan, provider ->
                 if (expectedEpoch == epoch && !cancelled()) resolved(index,
                     prepared[index].copy(voicePlan = plan, rolesReady = true, roleProvider = provider))
-            })
+            }, existing = if (recovering) null else VoiceRoleRouting.Result(
+                prepared.map { if(it.rolesReady) it.voicePlan else null },prepared.map { it.roleProvider }))
         if (expectedEpoch != epoch || cancelled()) return prepared
         if (cached == null && routing.plans.all { it != null }) synchronized(roleCache) {
             val cost = texts.sumOf { it.length } + preceding.length
@@ -345,7 +359,7 @@ object LlmPreparation {
     }
     private fun processText(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
                         ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, cancelled: () -> Boolean = { false },
-                        onPrepared: (Int, Result) -> Unit = { _, _ -> }): List<Result> {
+                        onPrepared: (Int, Result) -> Unit = { _, _ -> }, beforeRetry: (List<Result?>) -> Unit = {}): List<Result> {
         val started = SystemClock.elapsedRealtime()
         val results = arrayOfNulls<Result>(texts.size)
         preparedCache.get(c, texts)?.let { cached ->
@@ -369,6 +383,7 @@ object LlmPreparation {
             LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
         }
         for (provider in providers) {
+            if (results.any { it != null } && results.any { it == null }) beforeRetry(results.toList())
             if (expectedEpoch != epoch || cancelled()) break
             if (provider != "local" && !connected(ctx)) continue
             if (provider == "ollama" && c.ollamaModel.isBlank()) continue

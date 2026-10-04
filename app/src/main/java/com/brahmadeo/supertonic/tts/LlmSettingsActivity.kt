@@ -340,17 +340,18 @@ class LlmSettingsActivity : ComponentActivity() {
 @Composable private fun VoiceRoleChoice(label: String, selected: String, options: List<String>,
     preview: VoicePreview.State, listen: (String) -> Unit, change: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    fun voiceLabel(voice: String) = com.brahmadeo.supertonic.tts.tera.TeraVoices.label(voice)
     fun caption(voice: String) = if (preview.activeVoice == voice) "Остановить" else "Прослушать"
     Column {
         Text(label, style = MaterialTheme.typography.labelLarge)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { expanded = true }, enabled = options.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(selected) }
+            OutlinedButton(onClick = { expanded = true }, enabled = options.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(voiceLabel(selected)) }
             OutlinedButton(onClick = { listen(selected) }, enabled = selected in options) { Text(caption(selected)) }
         }
         DropdownMenu(expanded, { expanded = false }, modifier = Modifier.heightIn(max = 420.dp)) {
             options.forEach { voice -> DropdownMenuItem(
-                text = { Text(voice) },
+                text = { Text(voiceLabel(voice)) },
                 trailingIcon = { TextButton(onClick = { listen(voice) }) { Text(caption(voice)) } },
                 modifier = if (voice == selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer) else Modifier,
                 onClick = { expanded = false; change(voice) }) }

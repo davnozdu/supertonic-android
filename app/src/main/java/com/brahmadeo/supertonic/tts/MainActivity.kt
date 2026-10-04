@@ -748,7 +748,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (AssetManager.isTera(this)) {
-            AssetManager.TERA_VOICES.forEach { viewModel.voiceFiles[it] = "$it.json" }
+            AssetManager.TERA_VOICES.forEach { viewModel.voiceFiles[com.brahmadeo.supertonic.tts.tera.TeraVoices.label(it)] = "$it.json" }
             return
         }
         val voiceResources = mapOf(

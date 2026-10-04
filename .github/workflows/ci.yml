@@ -56,6 +56,9 @@ jobs:
           linker = "x86_64-linux-android34-clang"
           EOF
 
+      - name: Verify all bundled Tera voice styles
+        run: python3 tools/verify_tera_styles.py
+
       - name: Prepare pinned Silero runtime
         run: python3 tools/prepare_silero_runtime.py
 

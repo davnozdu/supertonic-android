@@ -43,7 +43,7 @@ object AssetManager {
     private const val TERA_BASE_URL = "https://huggingface.co/TeraSpace/TeraTTSv2/resolve/$TERA_REVISION"
     private const val TERA_DICTIONARY_URL =
         "https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.1"
-    val TERA_VOICES = listOf("ru_f1", "ru_f2", "ru_m1", "ru_m5")
+    val TERA_VOICES = com.brahmadeo.supertonic.tts.tera.TeraVoices.names
 
     fun isPocket(context: Context): Boolean = getModelType(context) == POCKET_MODEL
     fun russianVoices(context: Context): List<String> = when {
@@ -64,6 +64,7 @@ object AssetManager {
             return File(com.brahmadeo.supertonic.tts.silero.SileroDownload.root(context), "$name.json")
         }
         if (!isTera(context)) return File(base, "voice_styles/${File(selected).name}")
+        com.brahmadeo.supertonic.tts.tera.TeraVoices.ensureInstalled(context)
         val voice = File(selected).name.removeSuffix(".json")
             .takeIf { it in TERA_VOICES } ?: "ru_f1"
         return File(base, "tera/styles/$voice/style_ttl.npy")
@@ -156,6 +157,7 @@ object AssetManager {
         }
 
     fun isReady(context: Context): Boolean {
+        if (isTera(context)) com.brahmadeo.supertonic.tts.tera.TeraVoices.ensureInstalled(context)
         if (isRussianModel(context) && !com.brahmadeo.supertonic.tts.local.LocalRussianAssets.ready(context)) return false
         if (isPocket(context)) return com.brahmadeo.supertonic.tts.pocket.PocketDownload.ready(context)
         if (isSilero(context)) return com.brahmadeo.supertonic.tts.silero.SileroDownload.supported() &&
@@ -190,6 +192,7 @@ object AssetManager {
             return
         }
         val modelType = getModelType(context)
+        if (modelType == TERA_MODEL) com.brahmadeo.supertonic.tts.tera.TeraVoices.ensureInstalled(context)
         val files = getFilesForModel(modelType)
 
         withContext(Dispatchers.IO) {

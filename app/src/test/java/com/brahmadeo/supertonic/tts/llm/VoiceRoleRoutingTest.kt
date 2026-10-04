@@ -68,6 +68,15 @@ class VoiceRoleRoutingTest {
             }, resolved = { i, _, _ -> if (i == 0) delivered = true })
         assertTrue(delivered)
     }
+    @Test fun acceptedParagraphRolesSurviveSlowTextRetriesAndAreNotRequestedAgain() {
+        val first=roles(listOf(texts.first())).single()
+        val existing=VoiceRoleRouting.Result(listOf(first,null,null),listOf("ollama",null,null))
+        val result=VoiceRoleRouting.resolve(texts,listOf("ollama","local"),"",{ true },
+            request = { _, input, _ -> assertFalse(texts.first() in input); roles(input) },existing=existing)
+        assertEquals(first,result.plans.first())
+        assertEquals(listOf("ollama","ollama","ollama"),result.providers)
+        assertEquals(setOf(VoiceRole.AUTHOR,VoiceRole.MALE,VoiceRole.FEMALE),result.plans.flatMap { it.orEmpty() }.map { it.role }.toSet())
+    }
     @Test fun unsupportedLocalRuntimeCannotLeaveTheQueueWaitingForever() {
         var failed = false
         val result = VoiceRoleRouting.resolve(texts,listOf("local"),"",{ true },

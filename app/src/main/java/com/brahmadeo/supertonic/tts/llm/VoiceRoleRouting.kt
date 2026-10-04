@@ -9,9 +9,18 @@ internal object VoiceRoleRouting {
                 available: (String) -> Boolean,
                 request: (String, List<String>, String) -> List<List<VoiceRoleText>?>,
                 failed: (String, Exception) -> Unit = { _, _ -> },
-                resolved: (Int, List<VoiceRoleText>, String) -> Unit = { _, _, _ -> }): Result {
+                resolved: (Int, List<VoiceRoleText>, String) -> Unit = { _, _, _ -> },
+                existing: Result? = null): Result {
         val plans = MutableList<List<VoiceRoleText>?>(texts.size) { null }
         val used = MutableList<String?>(texts.size) { null }
+        if (existing != null) {
+            require(existing.plans.size == texts.size && existing.providers.size == texts.size)
+            existing.plans.forEachIndexed { i, plan ->
+                if (plan != null && existing.providers[i] != null && VoiceRolePlan.safe(texts[i],plan) == plan) {
+                    plans[i] = plan; used[i] = existing.providers[i]
+                }
+            }
+        }
         for (provider in providers.distinct()) {
             if (!available(provider)) continue
             val local = provider == "local"
