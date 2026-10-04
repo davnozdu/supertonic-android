@@ -91,7 +91,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             listeners.register(listener)
             try {
                 listener.onStateChanged(isPlaying, audioTrack != null || isSynthesizing, isSynthesizing)
-                listener.onProgress(currentSentenceIndex, -1)
+                listener.onProgress(currentSentenceIndex, -1, activeReadingItem?.contentId.orEmpty())
             } catch (_: RemoteException) {}
         }
     }
@@ -135,7 +135,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
      * a particularly long sentence) without an underrun click.
      */
     private data class ReadingItem(val text: String, val lang: String, val style: String, val speed: Float, val steps: Int,
-        val chunks: com.brahmadeo.supertonic.tts.utils.ReadingTextChunks)
+        val chunks: com.brahmadeo.supertonic.tts.utils.ReadingTextChunks) {
+        val contentId = com.brahmadeo.supertonic.tts.utils.PlaybackContentGate.fingerprint(text)
+    }
     private data class AudioPacket(val bytes: ByteArray, val index: Int = -1, val item: ReadingItem? = null)
     @Volatile private var currentAudioChannel: Channel<AudioPacket>? = null
     private var activeReadingItem: ReadingItem? = null
@@ -175,7 +177,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     companion object {
-        const val CHANNEL_ID = "supertonic_playback"
+        const val CHANNEL_ID = ReadingNotificationChannels.PLAYBACK
         const val NOTIFICATION_ID = 1
         const val TAG = "PlaybackService"
         const val VOLUME_BOOST_FACTOR = 2.5f
@@ -838,7 +840,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         val n = listeners.beginBroadcast()
         for (i in 0 until n) {
             try {
-                listeners.getBroadcastItem(i).onProgress(current, total)
+                listeners.getBroadcastItem(i).onProgress(current, total, activeReadingItem?.contentId.orEmpty())
             } catch (_: RemoteException) {}
         }
         listeners.finishBroadcast()
@@ -964,6 +966,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             .setContentText(status)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
+            .setOngoing(true).setOnlyAlertOnce(true).setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setStyle(androidx.media.app.NotificationCompat.MediaStyle().also { style ->
                 mediaSession?.let { style.setMediaSession(it.sessionToken) }
@@ -994,9 +998,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "Playback", NotificationManager.IMPORTANCE_LOW)
             val manager = attributionContext.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+            ReadingNotificationChannels.create(manager, CHANNEL_ID, "supertonic_playback", "Чтение MyTTS")
         }
     }
 

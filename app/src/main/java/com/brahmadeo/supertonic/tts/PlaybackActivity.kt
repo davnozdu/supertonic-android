@@ -36,6 +36,7 @@ class PlaybackActivity : ComponentActivity() {
     private var currentSpeed = 1.0f
     private var currentSteps = 5
     private var currentLang = "en"
+    private val contentGate = com.brahmadeo.supertonic.tts.utils.PlaybackContentGate()
 
     companion object {
         const val EXTRA_TEXT = "extra_text"
@@ -53,10 +54,11 @@ class PlaybackActivity : ComponentActivity() {
             }
         }
 
-        override fun onProgress(current: Int, total: Int) {
+        override fun onProgress(current: Int, total: Int, contentId: String?) {
             runOnUiThread {
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
                 val text = prefs.getString("last_text", "").orEmpty()
+                if (!contentGate.accept(contentId.orEmpty(), text, total)) return@runOnUiThread
                 if (text.isNotBlank() && text != currentText) {
                     currentText = text
                     currentVoicePath = prefs.getString("last_voice_path", currentVoicePath).orEmpty()
@@ -137,6 +139,7 @@ class PlaybackActivity : ComponentActivity() {
         }
 
         setupList(currentText)
+        if (!intent.getBooleanExtra("is_resume", false)) contentGate.expect(currentText)
 
         setContent {
             SupertonicTheme(voiceFile = currentVoicePath) {
@@ -177,7 +180,7 @@ class PlaybackActivity : ComponentActivity() {
             try {
                 playbackService?.setListener(playbackListenerStub)
                 val serviceIndex = playbackService?.getCurrentIndex() ?: -1
-                if (serviceIndex != -1) {
+                if (serviceIndex != -1 && !contentGate.awaitingReplacement()) {
                     currentIndexState.intValue = serviceIndex
                 }
             } catch (e: RemoteException) {
@@ -221,6 +224,8 @@ class PlaybackActivity : ComponentActivity() {
 
     private fun startPlaybackFromIntent() {
         if (currentText.isEmpty()) return
+        contentGate.expect(currentText)
+        android.util.Log.i("ArticleReader", "Playback request chars=${currentText.length} contentId=${com.brahmadeo.supertonic.tts.utils.PlaybackContentGate.fingerprint(currentText).take(12)}")
         saveState()
         try {
             playbackService?.synthesizeAndPlay(currentText, currentLang, currentVoicePath, currentSpeed, currentSteps, 0)
@@ -231,6 +236,7 @@ class PlaybackActivity : ComponentActivity() {
 
     private fun playFromIndex(index: Int) {
         if (currentText.isEmpty()) return
+        contentGate.expect(currentText)
         saveState()
         try {
             playbackService?.synthesizeAndPlay(currentText, currentLang, currentVoicePath, currentSpeed, currentSteps, index)
@@ -284,5 +290,17 @@ class PlaybackActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (!intent.getBooleanExtra("is_resume", false)) {
+            val text = intent.getStringExtra(EXTRA_TEXT) ?: return
+            currentText = text
+            currentVoicePath = intent.getStringExtra(EXTRA_VOICE_PATH).orEmpty()
+            currentSpeed = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
+            currentSteps = intent.getIntExtra(EXTRA_STEPS, 5)
+            currentLang = intent.getStringExtra(EXTRA_LANG) ?: "en"
+            currentIndexState.intValue = -1
+            contentGate.expect(text)
+            setupList(text)
+            if (isBound) startPlaybackFromIntent()
+        } else contentGate.resume()
     }
 }

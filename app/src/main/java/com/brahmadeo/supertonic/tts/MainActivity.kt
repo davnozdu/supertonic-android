@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        override fun onProgress(current: Int, total: Int) { }
+        override fun onProgress(current: Int, total: Int, contentId: String?) { }
         override fun onPlaybackStopped() {
             runOnUiThread {
                 viewModel.showMiniPlayer.value = false
@@ -928,13 +928,32 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
         if (intent.action == Intent.ACTION_SEND && intent.type in setOf("text/plain", "text/html")) {
-            val sharedText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+            // Stop the old stream before loading; a failed import must never sound like success.
+            com.brahmadeo.supertonic.tts.service.ReadingControls.stop(this)
+            viewModel.cancelArticle()
+            viewModel.inputText.value = ""
+            viewModel.canResume.value = false
+            viewModel.showMiniPlayer.value = false
+            val clip = intent.clipData
+            val candidates = buildList {
+                intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.let(::add)
+                intent.getStringExtra(Intent.EXTRA_HTML_TEXT)?.let(::add)
+                if (clip != null) for (i in 0 until minOf(clip.itemCount, 16)) {
+                    val item = clip.getItemAt(i)
+                    item.text?.toString()?.let(::add)
+                    item.htmlText?.let(::add)
+                    item.uri?.toString()?.takeIf { com.brahmadeo.supertonic.tts.article.ArticleExtractor.validUrl(it) }?.let(::add)
+                }
+                intent.data?.toString()?.takeIf { com.brahmadeo.supertonic.tts.article.ArticleExtractor.validUrl(it) }?.let(::add)
+            }
+            val sharedText = com.brahmadeo.supertonic.tts.article.SharedArticleInput.choose(candidates)
+            Log.i("ArticleReader", "Share received type=${intent.type} candidates=${candidates.size} chars=${sharedText?.length ?: 0}")
             if (!sharedText.isNullOrEmpty()) {
                 val url = com.brahmadeo.supertonic.tts.article.ArticleExtractor.sharedUrl(sharedText)
                 if (url != null) viewModel.readArticle(url)
                 else {
                     viewModel.cancelArticle()
-                    val text = if (intent.type == "text/html") org.jsoup.Jsoup.parse(sharedText).text() else sharedText
+                    val text = if (intent.type == "text/html" || sharedText == intent.getStringExtra(Intent.EXTRA_HTML_TEXT)) org.jsoup.Jsoup.parse(sharedText).text() else sharedText
                     if (text.length > com.brahmadeo.supertonic.tts.article.ArticleExtractor.MAX_TEXT) {
                         Toast.makeText(this, "Текст слишком большой. Передайте его частями.", Toast.LENGTH_LONG).show()
                     } else {
@@ -942,6 +961,10 @@ class MainActivity : ComponentActivity() {
                         viewModel.pendingArticle.value = viewModel.inputText.value
                     }
                 }
+            } else {
+                viewModel.articleLink.value = ""
+                viewModel.articleError.value = "Браузер не передал ссылку или текст. Скопируйте ссылку и вставьте её здесь."
+                viewModel.showLinkDialog.value = true
             }
         } else {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: intent.data?.getQueryParameter("text")

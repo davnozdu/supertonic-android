@@ -35,6 +35,7 @@ class MainViewModel : ViewModel() {
         articleJob = viewModelScope.launch {
             try {
                 val article = com.brahmadeo.supertonic.tts.article.ArticleLoader.load(link)
+                if (generation != articleGeneration) return@launch
                 firstArticle = article
                 inputText.value = article.text
                 pendingArticle.value = article.text
@@ -42,7 +43,7 @@ class MainViewModel : ViewModel() {
                 android.util.Log.i("ArticleReader", "Extracted article chars=${article.text.length}; pending selected playback pipeline")
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                articleError.value = e.message ?: "Не удалось загрузить статью. Проверьте соединение."
+                if (generation == articleGeneration) articleError.value = e.message ?: "Не удалось загрузить статью. Проверьте соединение."
             } finally { if (generation == articleGeneration) articleLoading.value = false }
         }
     }

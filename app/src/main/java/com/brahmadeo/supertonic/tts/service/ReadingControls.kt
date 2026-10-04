@@ -42,7 +42,8 @@ object ReadingControls {
     } }
     fun pause(ctx: Context) = command(ctx, false)
     fun stop(ctx: Context) = command(ctx, true)
-    private fun command(ctx: Context, stop: Boolean) { main.post {
+    private fun command(ctx: Context, stop: Boolean) {
+        val action = Runnable {
         SleepTimer.block()
         paused = !stop
         if (stop) { com.brahmadeo.supertonic.tts.article.ArticleSession.cancel(); com.brahmadeo.supertonic.tts.utils.QueueManager.clear() }
@@ -58,19 +59,22 @@ object ReadingControls {
         listeners.values.toList().forEach { callbacks -> runCatching { if (stop) callbacks.stop() else callbacks.pause() } }
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.stopTts()
         ReadingIsland.state(ctx, !stop, false)
-    } }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) action.run() else main.post(action)
+    }
     fun panel(ctx: Context, paste: Boolean = false): PendingIntent = PendingIntent.getActivity(ctx, if(paste) 5412 else 5411,
         Intent(ctx, QuickReadActivity::class.java).putExtra("paste", paste), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     fun show(ctx: Context) {
         val manager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (android.os.Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
-            NotificationChannel("quick_read", "Быстрое чтение", NotificationManager.IMPORTANCE_LOW))
+        ReadingNotificationChannels.create(manager, ReadingNotificationChannels.PANEL, "quick_read", "Быстрое чтение")
         fun command(action: String, id: Int) = PendingIntent.getBroadcast(ctx, id,
             Intent(ctx, ReadingControlReceiver::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        runCatching { manager.notify(5411, NotificationCompat.Builder(ctx, "quick_read")
+        runCatching { manager.notify(5411, NotificationCompat.Builder(ctx, ReadingNotificationChannels.PANEL)
             .setSmallIcon(R.mipmap.ic_launcher).setContentTitle("MyTTS · быстрое чтение")
             .setContentText("Текст или ссылка · управление чтением · таймер сна")
             .setContentIntent(panel(ctx)).setOnlyAlertOnce(true)
+            .setOngoing(true).setAutoCancel(false).setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(android.R.drawable.ic_menu_edit, "Вставить", panel(ctx, true))
             .addAction(android.R.drawable.ic_media_pause, "Пауза", command("pause", 5413))
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Стоп", command("stop", 5414)).build()) }
