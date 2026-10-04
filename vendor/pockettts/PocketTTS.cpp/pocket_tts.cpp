@@ -2697,6 +2697,8 @@ double ptt_warmup(void* handle) {
     }
 }
 
+void ptt_seed(uint64_t seed) { pocket_tts::rng::seed(seed); }
+
 void ptt_set_eos_extra(void* handle, int value) {
     if (handle) static_cast<pocket_tts::PocketTTS*>(handle)->set_eos_extra(value);
 }

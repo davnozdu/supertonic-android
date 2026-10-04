@@ -34,8 +34,8 @@ internal class NativePocketTts(
         check(handle != 0L) { "Не удалось загрузить Shtorm PocketTTS." }
     }
 
-    fun synthesize(text: String, voiceFile: String, speed: Float, sink: AudioSink): Boolean =
-        lifetime.read { check(handle!=0L); nativeSynthesize(handle, text, voiceFile, speed, sink) }
+    fun synthesize(text: String, voiceFile: String, speed: Float, sink: AudioSink, seed: Long = -1): Boolean =
+        lifetime.read { check(handle!=0L); nativeSynthesize(handle, text, voiceFile, speed, sink, seed) }
     fun stop() = lifetime.read { if (handle != 0L) nativeStop(handle) }
     override fun close() = lifetime.write { if (handle != 0L) nativeDestroy(handle).also { handle = 0 } }
 
@@ -52,7 +52,7 @@ internal class NativePocketTts(
         maxTextTokens: Int,
         eosExtra: Int
     ): Long
-    private external fun nativeSynthesize(handle: Long, text: String, voiceFile: String, speed: Float, sink: AudioSink): Boolean
+    private external fun nativeSynthesize(handle: Long, text: String, voiceFile: String, speed: Float, sink: AudioSink, seed: Long): Boolean
     private external fun nativeStop(handle: Long)
     private external fun nativeDestroy(handle: Long)
 }

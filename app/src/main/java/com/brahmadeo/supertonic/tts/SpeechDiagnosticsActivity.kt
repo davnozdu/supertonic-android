@@ -197,19 +197,25 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                                 Log.i("SpeechCheck","BOOK INPUT llm=${!result.fallback}: $it")
                             }
                         }
-                        for(tail in listOf(-2,-1)) {
-                            com.brahmadeo.supertonic.tts.pocket.NativePocketTts(root.path,root.path,"fp32",.3f,1,4,180,50,tail).use { engine ->
+                        val decodeSteps=intent.getIntExtra("decodeSteps",1).coerceIn(1,4)
+                        val selectedProbeVoice=intent.getStringExtra("probeVoice") ?: "alba"
+                        require(selectedProbeVoice in com.brahmadeo.supertonic.tts.pocket.PocketVoices.names)
+                        val probeVoice=if(intent.getBooleanExtra("legacyVoice",false)) File(root,"alba.wav") else
+                            com.brahmadeo.supertonic.tts.pocket.PocketVoices.voiceFile(this@SpeechDiagnosticsActivity,selectedProbeVoice+".json")
+                        val seed=intent.getLongExtra("seed",42)
+                        for(tail in if(intent.getBooleanExtra("compareTail",false)) listOf(-2,-1) else listOf(-1)) {
+                            com.brahmadeo.supertonic.tts.pocket.NativePocketTts(root.path,root.path,"fp32",.3f,decodeSteps,4,180,50,tail).use { engine ->
                                 for((index,text) in prepared.withIndex()) {
                                     val audio=java.io.ByteArrayOutputStream()
-                                    for(chunk in com.brahmadeo.supertonic.tts.pocket.PocketText.chunks(text)) {
-                                        check(engine.synthesize(com.brahmadeo.supertonic.tts.pocket.PocketText.modelPrompt(chunk),File(root,"alba.wav").path,1f,
+                                    for((part,chunk) in com.brahmadeo.supertonic.tts.pocket.PocketText.chunks(text).withIndex()) {
+                                        check(engine.synthesize(com.brahmadeo.supertonic.tts.pocket.PocketText.modelPrompt(chunk),probeVoice.path,1f,
                                             object: com.brahmadeo.supertonic.tts.pocket.NativePocketTts.AudioSink {
                                                 override fun onAudio(samples: FloatArray): Boolean {
                                                     val bytes=ByteBuffer.allocate(samples.size*2).order(ByteOrder.LITTLE_ENDIAN)
                                                     samples.forEach { bytes.putShort((it*32767).toInt().coerceIn(-32768,32767).toShort()) }
                                                     audio.write(bytes.array());return true
                                                 }
-                                            }))
+                                            },seed+part+index*100))
                                     }
                                     val pcm=audio.toByteArray()
                                     val header=ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
@@ -217,7 +223,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                                         .putShort(1.toShort()).putShort(1.toShort()).putInt(24000).putInt(48000).putShort(2.toShort()).putShort(16.toShort())
                                         .put("data".toByteArray()).putInt(pcm.size)
                                     File(cacheDir,"tail-$tail-$index.wav").outputStream().use { it.write(header.array());it.write(pcm) }
-                                    Log.i("SpeechCheck","TAIL PROBE tail=$tail case=$index audioMs=${pcm.size*1000L/48000}")
+                                    Log.i("SpeechCheck","TAIL PROBE voice=$selectedProbeVoice steps=$decodeSteps seed=$seed tail=$tail case=$index audioMs=${pcm.size*1000L/48000}")
                                 }
                             }
                         }

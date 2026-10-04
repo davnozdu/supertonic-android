@@ -9,6 +9,7 @@ extern "C" {
 void* ptt_create(const char*, const char*, const char*, const char*, float, int, int, int, int);
 void ptt_destroy(void*);
 void ptt_set_eos_extra(void*, int);
+void ptt_seed(uint64_t);
 void* ptt_stream_start(void*, const char*, const char*);
 int ptt_stream_read(void*, float**, int*);
 void ptt_stream_cancel(void*);
@@ -50,12 +51,13 @@ Java_com_brahmadeo_supertonic_tts_pocket_NativePocketTts_nativeCreate(
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_brahmadeo_supertonic_tts_pocket_NativePocketTts_nativeSynthesize(
-        JNIEnv* env, jobject, jlong value, jstring text, jstring voice, jfloat speed, jobject sink) {
+        JNIEnv* env, jobject, jlong value, jstring text, jstring voice, jfloat speed, jobject sink, jlong seed) {
     auto* engine = engine_from(value);
     if (!engine || !engine->tts) return JNI_FALSE;
     std::lock_guard<std::mutex> guard(engine->synth_mutex);
     const char* utf8 = env->GetStringUTFChars(text, nullptr);
     const char* voice_utf8 = env->GetStringUTFChars(voice, nullptr);
+    if(seed>=0) ptt_seed(static_cast<uint64_t>(seed));
     void* stream = ptt_stream_start(engine->tts, utf8, voice_utf8);
     env->ReleaseStringUTFChars(text, utf8);
     env->ReleaseStringUTFChars(voice, voice_utf8);
