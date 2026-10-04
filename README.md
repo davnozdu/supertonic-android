@@ -1,4 +1,4 @@
-# Supertonic 3 Android (fork)
+# MyTTS for Android
 
 Fork of [DevGitPit/supertonic-android](https://github.com/DevGitPit/supertonic-android) upgraded from Supertonic 2 (5 languages) to **Supertonic 3 (31 languages + `na` fallback)** using the [supertonic-3 ONNX weights from Hugging Face](https://huggingface.co/Supertone/supertonic-3).
 

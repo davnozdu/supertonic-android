@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Supertonic TTS (Fork)</string>
+    <string name="app_name">MyTTS</string>
 
     <!-- App updates -->
     <string name="update_available_title">Actualización disponible</string>
@@ -8,7 +8,7 @@
     <string name="update_skip_button">Omitir</string>
 
     <!-- Main Activity -->
-    <string name="default_input_text">Hola mundo, esto es Supertonic TTS en Android. ¡Selecciona una voz y velocidad abajo!</string>
+    <string name="default_input_text">Hola mundo, esto es MyTTS en Android. ¡Selecciona una voz y velocidad abajo!</string>
     <string name="voice_style_label">Estilo de Voz</string>
     <string name="mix_voices_label">Mezclar voces</string>
     <string name="voice_style_2_label">Voz secundaria</string>

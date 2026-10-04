@@ -164,7 +164,7 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(env.RELEASE_TAG, '-beta') }}
           body: |
-            **Supertonic TTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
+            **MyTTS for Android** — TeraTTSv2, Silero v5.5 and Supertonic 3.
 
             ### Background music and Shtorm
             - Download four ready music tracks, import your own MP3, select or delete tracks.

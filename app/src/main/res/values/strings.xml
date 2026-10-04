@@ -1,8 +1,8 @@
 <resources>
-    <string name="app_name">Supertonic TTS (Fork)</string>
+    <string name="app_name">MyTTS</string>
     
     <!-- Main Activity -->
-    <string name="default_input_text">Hello world, this is Supertonic TTS on Android. Select a voice and speed below!</string>
+    <string name="default_input_text">Hello world, this is MyTTS on Android. Select a voice and speed below!</string>
     <string name="voice_style_label">Voice Style</string>
     <string name="mix_voices_label">Mix Voices</string>
     <string name="voice_style_2_label">Secondary Voice</string>

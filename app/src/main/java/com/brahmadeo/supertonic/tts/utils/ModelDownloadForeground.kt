@@ -40,10 +40,10 @@ class ModelDownloadService : Service() {
     override fun onBind(intent: Intent?): IBinder?=null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val manager=getSystemService(NotificationManager::class.java)
-        if(android.os.Build.VERSION.SDK_INT>=26) manager.createNotificationChannel(NotificationChannel("tts_model_download","Установка моделей и голосов",NotificationManager.IMPORTANCE_LOW))
+        if(android.os.Build.VERSION.SDK_INT>=26) manager.createNotificationChannel(NotificationChannel("tts_model_download","Установка моделей, голосов и музыки",NotificationManager.IMPORTANCE_LOW))
         val open=PendingIntent.getActivity(this,0,Intent(this,com.brahmadeo.supertonic.tts.MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         startForeground(4205,NotificationCompat.Builder(this,"tts_model_download")
-            .setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("Supertonic: установка моделей и голосов")
+            .setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("MyTTS: установка моделей, голосов и музыки")
             .setContentText("Загрузка и проверка файлов. Продолжается при выключенном экране.")
             .setOngoing(true).setContentIntent(open).setProgress(0,0,true).build())
         if(wake?.isHeld!=true) wake=(getSystemService(POWER_SERVICE) as PowerManager)
