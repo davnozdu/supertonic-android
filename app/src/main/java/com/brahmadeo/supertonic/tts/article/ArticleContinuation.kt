@@ -6,7 +6,7 @@ import java.net.URI
 
 /** Follow only explicit continuation links, never a recommendation or arbitrary story link. */
 object ArticleContinuation {
-    private val nextLabel = Regex("^(?:далее|дальше|читать дальше|продолжение|продолжение здесь|продолжить чтение|читать продолжение|следующая (?:часть|страница|глава)|next(?: page| part| chapter)?|continue(?: reading)?|(?:читать )?(?:часть|глава) \\d+)(?:[ .:→»›-]*)$", RegexOption.IGNORE_CASE)
+    private val nextLabel = Regex("^(?:далее|дальше|читать дальше|продолжение|продолжение здесь|продолжить чтение|читать продолжение|следующая (?:часть|страница|глава)|next(?: page| part| chapter)?|continue(?: reading)?|(?:читать )?(?:часть|глава) \\d+)(?:[ .:→»›>-]*)$", RegexOption.IGNORE_CASE)
     private val partNumber = Regex("(?:часть|глава|part|chapter)\\s*(\\d+)", RegexOption.IGNORE_CASE)
     fun canonicalUrl(value: String): String = URI(value.substringBefore('#')).normalize().toASCIIString()
     fun find(doc: Document, articleRoot: Element?, url: String, title: String): String? {
