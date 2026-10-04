@@ -1,5 +1,8 @@
 name: Prepare Shtorm model
 on:
+  push:
+    branches: [feature/model-selector]
+    paths: [tools/export_shtorm.py, .github/workflows/shtorm-model.yml]
   workflow_dispatch:
 permissions:
   contents: write
