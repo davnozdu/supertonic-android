@@ -27,6 +27,15 @@ object ArticleExtractor {
 
     fun extract(html: String, url: String): ReadingArticle {
         val doc = Jsoup.parse(html, url)
+        // Bound adversarial/deep markup before Readability and our text traversal.
+        val pending = java.util.ArrayDeque<Pair<org.jsoup.nodes.Node, Int>>()
+        pending.add(doc to 0)
+        var nodes = 0
+        while (pending.isNotEmpty()) {
+            val (node, depth) = pending.removeLast()
+            require(++nodes <= 50_000 && depth <= 200) { "Разметка страницы слишком сложная. Передайте сам текст статьи." }
+            node.childNodes().forEach { pending.add(it to depth + 1) }
+        }
         require(doc.selectFirst("#challenge-running, #cf-challenge-running, .cf-error-details") == null) {
             "Сайт требует проверки в браузере. Скопируйте текст статьи и поделитесь им с MyTTS."
         }

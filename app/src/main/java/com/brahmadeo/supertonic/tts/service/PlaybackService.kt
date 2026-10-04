@@ -278,6 +278,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 SupertonicTTS.setCancelled(true)
                 synthesisJob?.cancelAndJoin()
             }
+            com.brahmadeo.supertonic.tts.llm.LlmPreparation.cancelApp()
 
             val rate = SupertonicTTS.getAudioSampleRate()
             ensureAudioTrack(rate)

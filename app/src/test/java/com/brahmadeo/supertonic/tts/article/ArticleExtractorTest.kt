@@ -39,4 +39,9 @@ class ArticleExtractorTest {
             try { ArticleExtractor.extract(html, url); fail("Expected rejected page") } catch (_: IllegalArgumentException) {} catch (_: IllegalStateException) {}
         }
     }
+    @Test fun rejectDeepMarkupWithoutCrashing() {
+        val html = "<div>".repeat(220) + para + "</div>".repeat(220)
+        try { ArticleExtractor.extract(html, "https://example.org/a"); fail("Expected depth limit") }
+        catch (_: IllegalArgumentException) {}
+    }
 }
