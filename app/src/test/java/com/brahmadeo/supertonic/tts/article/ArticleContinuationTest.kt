@@ -26,6 +26,7 @@ class ArticleContinuationTest {
         assertNull(find("<article><p><a href='/a'>Продолжение</a><a href='/b'>Далее</a></p></article>"))
         assertEquals("https://telegra.ph/story-2", find("<article><p><a href='/story-2'>→ Читать дальше</a></p></article>"))
         assertEquals("https://telegra.ph/story-2", find("<article><p><a href='/story-2'>Продолжение&gt;</a></p></article>"))
+        assertEquals("https://telegra.ph/story-2", find("<article>" + "<p>Текст.</p>".repeat(20) + "<h4><a href='/story-2' rel='nofollow'>Продолжение&gt;</a></h4><p><br></p></article>"))
     }
     @Test fun encodedPathsAreNotChanged() {
         assertEquals("https://telegra.ph/a%2Fb", find("<link rel=next href='/a%2Fb'>"))

@@ -72,7 +72,7 @@ object ArticleExtractor {
         }.forEach { anchor ->
             val parent = anchor.parent()
             anchor.remove()
-            if (parent?.normalName() in setOf("p", "li") && parent?.text().isNullOrBlank()) parent?.remove()
+            if (parent?.normalName() in setOf("p", "li", "h2", "h3", "h4", "h5", "h6") && parent?.text().isNullOrBlank()) parent?.remove()
         }
         val out = StringBuilder()
         val blocks = setOf("p", "div", "section", "article", "blockquote", "li", "h2", "h3", "h4", "pre", "tr")

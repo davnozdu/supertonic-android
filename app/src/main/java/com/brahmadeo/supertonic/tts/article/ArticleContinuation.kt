@@ -24,7 +24,7 @@ object ArticleContinuation {
         val root = articleRoot ?: doc.selectFirst("article, main") ?: return null
         val currentPart = partNumber.find(title)?.groupValues?.get(1)?.toIntOrNull()
         fun seriesTitle(value: String) = partNumber.replace(value, "").replace(Regex("[\\p{P}\\s]+"), " ").trim().lowercase()
-        val paragraphs = root.select("p, li, div")
+        val paragraphs = root.select("p, li, div, h2, h3, h4, h5, h6")
         val tail = paragraphs.takeLast(6)
         val candidates = root.select("a[href]").filter { a ->
             val label = a.text().replace(Regex("\\s+"), " ").trim().trimStart('→', '»', '›', ' ')
