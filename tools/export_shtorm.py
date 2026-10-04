@@ -14,7 +14,15 @@ subprocess.run([sys.executable,str(ROOT/'vendor/pockettts/PocketTTS.cpp/export_o
 # The official CC-BY reference is a starter voice; the Russian model determines language.
 voice=out/'alba.wav'
 urllib.request.urlretrieve('https://huggingface.co/kyutai/tts-voices/resolve/main/alba-mackenna/casual.wav',out/'reference.wav')
-subprocess.run(['ffmpeg','-y','-i',str(out/'reference.wav'),'-t','5','-ar','24000','-ac','1','-c:a','pcm_s16le',str(voice)],check=True)
+import math,numpy as np
+from scipy.io import wavfile
+from scipy.signal import resample_poly
+rate,audio=wavfile.read(out/'reference.wav')
+if np.issubdtype(audio.dtype,np.integer): audio=audio.astype(np.float32)/max(abs(np.iinfo(audio.dtype).min),np.iinfo(audio.dtype).max)
+if audio.ndim>1: audio=audio.mean(axis=1)
+common=math.gcd(rate,24000)
+audio=resample_poly(audio[:rate*5],24000//common,rate//common)
+wavfile.write(voice,24000,(np.clip(audio,-1,1)*32767).astype(np.int16))
 (out/'reference.wav').unlink()
 (out/'LICENSE.txt').write_text('Shtorm PocketTTS RU © ArtShtorm, CC BY 4.0. Base: Kyutai Pocket-TTS © Kyutai Labs.\nStarter reference voice: Alba MacKenna, casual.wav, kyutai/tts-voices, CC BY 4.0, trimmed to 5s and converted to 24kHz mono.\nhttps://creativecommons.org/licenses/by/4.0/\nSource revision: '+revision+'\n')
 files=[]
