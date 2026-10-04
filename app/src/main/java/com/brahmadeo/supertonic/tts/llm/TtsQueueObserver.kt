@@ -14,6 +14,25 @@ import android.util.Log
  */
 class TtsQueueObserver(private val context: Context, private val delegate: IBinder) : Binder() {
     private val musicCallbacks = HashMap<IBinder, com.brahmadeo.supertonic.tts.music.MusicTtsCallback>()
+    /** The local callback proxy cannot die with the remote client; preserve framework cleanup explicitly. */
+    private fun deadClient(owner: IBinder, dead: com.brahmadeo.supertonic.tts.music.MusicTtsCallback) {
+        val removed=synchronized(musicCallbacks) {
+            if(musicCallbacks[owner]===dead) { musicCallbacks.remove(owner);true } else false
+        }
+        if(!removed) return
+        LlmPreparation.cancel(owner)
+        for(code in listOf(FIRST_CALL_TRANSACTION+5,FIRST_CALL_TRANSACTION+11)) {
+            val data=Parcel.obtain();val reply=Parcel.obtain()
+            try {
+                data.writeInterfaceToken("android.speech.tts.ITextToSpeechService")
+                data.writeStrongBinder(owner)
+                if(code==FIRST_CALL_TRANSACTION+11) data.writeStrongBinder(null)
+                data.setDataPosition(0)
+                delegate.transact(code,data,reply,0)
+            } catch (_: Exception) { Log.w("BackgroundMusic","Client-death cleanup unavailable") }
+            finally { data.recycle();reply.recycle() }
+        }
+    }
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
         val position = data.dataPosition()
         if(Build.VERSION.SDK_INT in 24..36 && code==FIRST_CALL_TRANSACTION+11) {
@@ -26,7 +45,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                     com.brahmadeo.supertonic.tts.music.BackgroundMusic.initialize(context)
                     val proxy=synchronized(musicCallbacks) {
                         musicCallbacks.remove(owner)?.detach()
-                        callback?.let { com.brahmadeo.supertonic.tts.music.MusicTtsCallback(owner,it) { dead -> synchronized(musicCallbacks) { if(musicCallbacks[owner]===dead) musicCallbacks.remove(owner) } }.also { musicCallbacks[owner]=it } }
+                        callback?.let { com.brahmadeo.supertonic.tts.music.MusicTtsCallback(owner,it) { dead -> deadClient(owner,dead) }.also { musicCallbacks[owner]=it } }
                     }
                     if(callback==null) com.brahmadeo.supertonic.tts.music.BackgroundMusic.stop(owner)
                     rewritten=Parcel.obtain().apply {
