@@ -188,7 +188,9 @@ class TeraEngine(private val root: File, context: Context,
             "style_dp" to floatTensor(styleDp, 1, 8, 16),
             "text_mask" to floatTensor(durationMask, 1, 1, durationLen)
         ))
-        val seconds = duration[0] * TeraVoices.durationScale(stylePath) / 1.05f / speed.coerceAtLeast(0.1f)
+        val natural = TeraDurationCap.seconds(duration[0] * TeraVoices.durationScale(stylePath) / 1.05f, punctuated,
+            pausePrefs.getBoolean(TeraDurationCap.KEY, true))
+        val seconds = natural / speed.coerceAtLeast(0.1f)
         require(seconds.isFinite() && seconds > 0f)
         val frames = ceil(seconds * 44100 / 3072).toInt().coerceAtLeast(1)
         val noise = FloatArray(144 * frames)

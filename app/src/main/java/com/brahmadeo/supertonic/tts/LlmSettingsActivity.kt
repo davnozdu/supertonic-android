@@ -53,6 +53,7 @@ class LlmSettingsActivity : ComponentActivity() {
                 var teacherEnabled by remember { mutableStateOf(pausePrefs.getBoolean("tera_teacher",false) && teacherReady) }
                 var teacherBusy by remember { mutableStateOf(false) }
                 var teacherStatus by remember { mutableStateOf("") }
+                var shortWordCap by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY, true)) }
                 var kokoroFullReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullReady(this)) }
                 var kokoroFull by remember { mutableStateOf(pausePrefs.getBoolean("kokoro_full_precision",true)) }
                 var kokoroBusy by remember { mutableStateOf(false) }
@@ -160,6 +161,11 @@ class LlmSettingsActivity : ComponentActivity() {
                                 pausePrefs.edit().putBoolean("tera_teacher",it).apply()
                             }
                             Text("Оба варианта используют выбранный голос и подготовку LLM. Загружается только один вариант синтеза; при переключении кэш аудио очищается.",style=MaterialTheme.typography.bodySmall)
+                            Toggle("Не растягивать короткие реплики",shortWordCap) {
+                                shortWordCap=it
+                                pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY,it).apply()
+                            }
+                            Text("Модель даёт «Да.», «Нет.» и «Хорошо.» почти секунду. Для фраз до четырёх гласных длительность ограничивается обычным темпом речи; длинные фразы не меняются.",style=MaterialTheme.typography.bodySmall)
                         }
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
                             Text("Звук Kokoro",style=MaterialTheme.typography.titleMedium)
