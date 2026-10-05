@@ -30,3 +30,22 @@ class PreparedTextRepairTest {
         assertNull(PreparedTextRepair.repair("Он сидит в своём углу и молчит.", "Мужчина тихо сидел в углу, ничего не говоря."))
     }
 }
+
+class NumeralInflectionTest {
+    private val n = com.brahmadeo.supertonic.tts.utils.RussianNumberNormalizer()
+    private fun accept(source: String, answer: String): String? {
+        val prepared = n.prepareForLlm(source)
+        return PreparedTextValidator.validate(prepared.text, answer, numberRanges = prepared.ranges, requireStress = false)
+    }
+    @Test fun casesAndOrdinalsOfTheSameNumberAreAccepted() {
+        assertEquals("Он прочитал сто одну книгу за две недели.", accept("Он прочитал 101 книгу за 2 недели.", "Он прочитал сто одну книгу за две недели."))
+        assertEquals("Было без пяти минут двенадцать.", accept("Было без 5 минут 12.", "Было без пяти минут двенадцать."))
+        assertNotNull(accept("В 1905 году всё изменилось.", "В одна тысяча девятьсот пятом году всё изменилось."))
+        assertNotNull(accept("Прошли 52 версты за 1 сутки.", "Прошли пятьдесят две версты за одни сутки."))
+    }
+    @Test fun aChangedValueIsStillRejected() {
+        assertNull(accept("Он прочитал 101 книгу.", "Он прочитал сто две книги."))
+        assertNull(accept("Было без 5 минут 12.", "Было без шести минут двенадцать."))
+        assertNull(accept("Он сказал пять раз.", "Он сказал пяти раз."))
+    }
+}

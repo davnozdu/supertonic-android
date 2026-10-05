@@ -55,9 +55,12 @@ object PreparedTextValidator {
             fun foldYo(s: String) = s.lowercase().replace('ё', 'е')
             for (j in sourcePlain.indices) if (sourcePlain[j] in "ёЁ" && targetPlain.getOrNull(j)?.lowercaseChar() != 'ё') return reject("lost_yo")
             val changedGender = foldYo(sourcePlain) != foldYo(targetPlain)
-            if (changedGender && !(numberRanges.any { a[i].range.first in it && a[i].range.last in it } &&
-                        numericGender(foldYo(sourcePlain)) == numericGender(foldYo(targetPlain)) &&
-                        numberRanges.any { a[i].range.last == it.last })) return reject("rewritten_word")
+            val inNumber = numberRanges.any { a[i].range.first in it && a[i].range.last in it }
+            // Inside an expanded number any case/ordinal form of the same component is allowed
+            // ("сто одну книгу", "без пяти минут", "пятом году"); its value cannot change.
+            val sameNumeral = NumeralForms.value(sourcePlain)?.let { it == NumeralForms.value(targetPlain) } == true
+            if (changedGender && !(inNumber && (sameNumeral || (numericGender(foldYo(sourcePlain)) == numericGender(foldYo(targetPlain)) &&
+                        numberRanges.any { a[i].range.last == it.last })))) return reject("rewritten_word")
             if (b[i].value.contains('+') && !source.contains('+')) return reject("unexpected_plus")
             val explicit = source.contains('+') || source.contains('\u0301')
             if (!explicit && source.none { it in "ёЁ" } && source.count { it in vowels } > 1) {
