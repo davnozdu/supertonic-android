@@ -431,8 +431,13 @@ object LlmPreparation {
                     if (results[index] != null) return
                     val source = requestTexts[requestIndex]
                     var rejection = "structure"
-                    val validated = PreparedTextValidator.validate(source, proposed, c.punctuation, c.stress,
-                        numericInputs[index].ranges, c.restoreYo, requireStress=provider!="local" && c.stress) { rejection = it }
+                    fun check(text: String, onReject: (String) -> Unit) = PreparedTextValidator.validate(source, text, c.punctuation, c.stress,
+                        numericInputs[index].ranges, c.restoreYo, requireStress=provider!="local" && c.stress, onReject)
+                    // One rewritten word or misplaced mark must not send a whole, otherwise correct
+                    // paragraph to the offline dictionary: repair only those words, then re-validate.
+                    val validated = check(proposed) { rejection = it } ?: PreparedTextRepair.repair(source, proposed)?.let { fix ->
+                        check(fix.text) {}?.also { Log.i("LlmPreparation", "Repaired fragment=$index, chars=${source.length}, provider=$provider, reason=$rejection, replacedWords=${fix.replacedWords}") }
+                    }
                     if (traceSynthetic) Log.i("SpeechCheck","SYNTHETIC PROPOSAL provider=$provider: $proposed")
                     if (validated != null) {
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
