@@ -362,6 +362,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
 
         var success = true
+        var anyAudio = false
+        var failedSentences = 0
         var firstAudioLogged = false
         runBlocking {
             val producer = launch(Dispatchers.IO) {
@@ -373,6 +375,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                     ).map { it to style } }
                     for ((sentence, sentenceStyle) in sentences) {
                         if (SupertonicTTS.isCancelled()) { success = false; break }
+                        // "* * *", a lone quote or dash: nothing to voice. Never let it end the utterance.
+                        if (sentence.none { it.isLetterOrDigit() }) continue
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
                         val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=preserveMarks)
                         Log.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$preserveMarks model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
@@ -380,7 +384,13 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                             normalizedText, requestedLang, sentenceStyle, effectiveSpeed, 0.0f,
                             steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=preserveMarks
                         )
-                        if (result == null || SupertonicTTS.isCancelled()) { success = false; break }
+                        if (SupertonicTTS.isCancelled()) { success = false; break }
+                        // One failed sentence must not drop the rest of the paragraph: the reader
+                        // would treat the error as done and jump ahead (swallowed ending + jump).
+                        if (result == null) {
+                            failedSentences++
+                            Log.w("SupertonicTTS", "Sentence synthesis failed; continuing source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} chars=${normalizedText.length}")
+                        } else anyAudio = true
                     }
                 } catch (t: Throwable) {
                     Log.e("SupertonicTTS", "System TTS synthesis failed", t)
@@ -410,7 +420,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
             producer.join()
         }
-        Log.i("SupertonicTTS", "TTS request finished after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms, success=$success")
+        if (success && !anyAudio && failedSentences > 0) success = false
+        Log.i("SupertonicTTS", "TTS request finished after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms, success=$success failedSentences=$failedSentences")
         if (success) callback.done() else callback.error()
         } finally { activeVoicePreview = false }
     }

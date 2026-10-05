@@ -54,7 +54,8 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
         for(part in parts) {
             if(SupertonicTTS.isCancelled()) return ByteArray(0)
             val bytes=synthesizePart(part,voice,speed,gain,listener,sid)
-            if(bytes.isEmpty()) return ByteArray(0)
+            if(SupertonicTTS.isCancelled()) return ByteArray(0)
+            if(bytes.isEmpty()) { Log.w("SileroTTS","Phrase without Silero symbols skipped chars=${part.length}"); continue }
             output.write(bytes)
         }
         return output.toByteArray()
@@ -116,6 +117,9 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
             val samples = head!!.forward(IValue.from(Tensor.fromBlob(hidden.dataAsFloatArray, hidden.shape())),
                 IValue.from(48000L), IValue.from(0.0), IValue.from(true)).toTensor().dataAsFloatArray
+            com.brahmadeo.supertonic.tts.utils.SpeechTail.inspect(samples, 48000).takeIf { it.abrupt }?.let {
+                Log.w("SileroTTS", "Abrupt phrase end trailingMs=${it.trailingMs} tailRatio=${"%.2f".format(it.tailRatio)} chars=${prepared.length} endCorrection=${prepared != source} source=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(text)}")
+            }
             val level = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.scale(listOf(samples), gain,
                 prefs.getBoolean("voice_loudness_normalization", true))
             val base = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.pcm(samples, level)
