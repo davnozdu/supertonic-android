@@ -2,6 +2,7 @@ package com.brahmadeo.supertonic.tts.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import java.util.Locale
+import kotlin.math.roundToInt
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -362,7 +363,7 @@ fun MainScreen(
                         if (maxCpuThreads > 1) SliderWithLabel(
                             label = "Потоки процессора",
                             value = cpuThreads.toFloat(),
-                            onValueChange = { onCpuThreadsChange(it.toInt()) },
+                            onValueChange = { onCpuThreadsChange(it.roundToInt()) },
                             valueRange = 1f..maxCpuThreads.toFloat(),
                             steps = (maxCpuThreads - 2).coerceAtLeast(0),
                             displayValue = "$cpuThreads",
