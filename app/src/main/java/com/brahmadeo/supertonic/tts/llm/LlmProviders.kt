@@ -56,7 +56,8 @@ object LlmProviders {
         val watchdog = timer.schedule({ expired.set(true); runCatching { connection.disconnect() } },deadlineMs,java.util.concurrent.TimeUnit.MILLISECONDS)
         try {
             connection.connectTimeout = minOf(6000L,deadlineMs).coerceAtLeast(1).toInt()
-            connection.readTimeout = minOf(if (body == null) 10000L else 12000L,deadlineMs).coerceAtLeast(1).toInt()
+            // A non-streaming reply arrives only when generation ends: let the request deadline rule.
+            connection.readTimeout = (if (body == null) minOf(10000L, deadlineMs) else deadlineMs).coerceAtLeast(1).toInt()
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "Supertonic-Android")
@@ -111,7 +112,9 @@ object LlmProviders {
         return result.distinct().sorted()
     }
     fun cloud(c: LlmConfig, texts: List<String>, gemini: Boolean): List<String> {
-        return parse(cloudRequest(c, JSONObject().put("count", texts.size).put("texts", JSONArray(texts)).toString(), instruction(c), schema(), gemini), texts.size)
+        // Output length (stress marks included) grows with input; a fixed 12 s cut off large batches.
+        val deadline = (8000L + texts.sumOf { it.length } * 4L).coerceIn(12000L, 25000L)
+        return parse(cloudRequest(c, JSONObject().put("count", texts.size).put("texts", JSONArray(texts)).toString(), instruction(c), schema(), gemini, deadlineMs = deadline), texts.size)
     }
     private fun cloudRequest(c: LlmConfig, prompt: String, system: String, responseSchema: JSONObject, gemini: Boolean, tokens: Int = 6000, deadlineMs: Long = 12000): String {
         val started = SystemClock.elapsedRealtime()

@@ -204,7 +204,9 @@ object LlmPreparation {
                     val batchEpoch = epoch
                     val ctx = context ?: return@execute
                     val config = LlmSettings.load(ctx)
-                    val batchLimit = if (config.mode == LlmMode.LOCAL) 1000 else 4000
+                    // ~2400 chars return in ~5-8 s; 4000-char batches exceeded the cloud deadline
+                    // on the device and put the provider into cooldown.
+                    val batchLimit = if (config.mode == LlmMode.LOCAL) 1000 else 2400
                     val batch = synchronized(lock) {
                         val first = entries.values.firstOrNull { !it.processing && !it.future.isDone } ?: return@execute
                         var count = 0
@@ -406,6 +408,14 @@ object LlmPreparation {
             if (provider == "ollama" && c.ollamaModel.isBlank()) continue
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
             if (provider == "local" && !LocalModelDownload.ready(ctx)) continue
+            // A cloud already accepted almost the whole batch: a 30-50 s Gemma retry of the last
+            // few fragments would block the single worker and push later paragraphs to the
+            // dictionary. Those few fragments use the offline fallback instead.
+            val resolved = results.count { it != null }
+            if (provider == "local" && resolved > 0 && results.size - resolved <= 3 && resolved * 5 >= results.size * 4) {
+                Log.i("LlmPreparation", "Skipping local retry for ${results.size - resolved} fragment(s) after cloud success")
+                continue
+            }
             if (!ignoreCooldown && SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) continue
             val requestIndices = LlmRetryContext.indices(providerTexts, results.indices.filter { results[it] == null }, if (provider == "local") 1600 else 8000)
             val requestTexts = requestIndices.map { providerTexts[it] }
@@ -460,7 +470,8 @@ object LlmPreparation {
                 val detail = e.message.orEmpty()
                 failure = if (listOf("LLM ", "API HTTP", "Сначала ", "Выберите ", "Подготовка ").any { detail.startsWith(it) }) detail.take(180)
                     else e.javaClass.simpleName + (Regex("Status Code: \\d+").find(detail)?.value?.let { ": $it" } ?: "")
-                cooldown[provider] = SystemClock.elapsedRealtime() + 60_000
+                // Network blips and timeouts recover quickly; only auth/quota errors need a long pause.
+                cooldown[provider] = SystemClock.elapsedRealtime() + if (Regex("API HTTP (401|403|429)").containsMatchIn(failure.orEmpty())) 60_000 else 15_000
                 Log.w("LlmPreparation", "Provider $provider failed: $failure; trying fallback")
             } catch (_: LinkageError) {
                 failure = "Локальная среда выполнения не поддерживается"
