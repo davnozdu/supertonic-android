@@ -290,13 +290,14 @@ object SupertonicTTS {
     // Requests the listener is waiting for right now; reader look-ahead yields the model to them.
     private val foregroundWaiting = java.util.concurrent.atomic.AtomicInteger()
 
-    /** Minimum audible pause after a sentence, for every reading path (Moon, built-in player,
-     * look-ahead, multi-voice parts). Silero and Kokoro often run sentences together inside
-     * one inference; only the missing silence is added. Tera applies its own pauses. */
+    /** Minimum audible pause after a sentence for Kokoro and Shtorm, on every reading path
+     * (Moon, built-in player, look-ahead, multi-voice parts), controlled by the user's
+     * "audible punctuation pauses" switch; only the missing silence is added. Tera and Silero
+     * keep their own switches (Silero's fixed pauses are opt-in: the user found them choppy). */
     private fun sentencePauseMs(ctx: Context): Int {
-        if (!AssetManager.isRussianModel(ctx) || AssetManager.isTera(ctx)) return 0
+        if (!AssetManager.isKokoro(ctx) && !AssetManager.isPocket(ctx)) return 0
         val prefs = ctx.getSharedPreferences("SupertonicPrefs", 0)
-        if (!AssetManager.isSilero(ctx) && !prefs.getBoolean("tera_punctuation_pauses", true)) return 0
+        if (!prefs.getBoolean("tera_punctuation_pauses", true)) return 0
         return prefs.getInt("tera_sentence_pause_ms", 420).coerceIn(0, 900)
     }
 
