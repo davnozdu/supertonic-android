@@ -92,8 +92,8 @@ jobs:
       - name: Verify and build release APK
         run: ./gradlew testReleaseUnitTest assembleRelease --stacktrace
 
-      - name: Verify LiteRT-LM JNI names after R8
-        run: python3 tools/verify_jni_mapping.py app/build/outputs/mapping/release/mapping.txt
+      - name: Verify JNI names and native APK declarations after R8
+        run: python3 tools/verify_jni_mapping.py app/build/outputs/mapping/release/mapping.txt app/build/outputs/apk/release
 
       - name: Prepare signing keystore
         id: keystore
