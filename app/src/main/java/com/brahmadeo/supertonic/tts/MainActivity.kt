@@ -718,7 +718,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveStringPref(key: String, value: String) {
-        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit(commit = true) {
+        // Called per keystroke: apply() coalesces writes off the UI thread.
+        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
             putString(key, value)
         }
     }

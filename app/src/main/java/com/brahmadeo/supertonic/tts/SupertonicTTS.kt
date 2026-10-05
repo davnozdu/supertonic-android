@@ -48,7 +48,9 @@ object SupertonicTTS {
     private val audioCache = com.brahmadeo.supertonic.tts.utils.SpeechAudioCache()
     private fun audioKey(context: Context, text: String, lang: String, style: String, speed: Float, steps: Int, gain: Float, skipDictionary: Boolean): String {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
-        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
+        // prefs.all copies the whole map; take one snapshot per key, not one per setting.
+        val all=prefs.all
+        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
         val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
         return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
     }
@@ -151,6 +153,8 @@ object SupertonicTTS {
     }
 
     private var nativeThreads: Pair<Int, Int>? = null
+    // Read once at init so callback.start() never waits for the model monitor.
+    @Volatile private var nativeSampleRate = 44100
     private external fun init(modelPath: String, libPath: String, ortThreads: Int, xnnThreads: Int): Long
     private external fun synthesize(ptr: Long, text: String, lang: String, stylePath: String, speed: Float, bufferSeconds: Float, steps: Int, gain: Float): ByteArray
     private external fun getSocClass(ptr: Long): Int
@@ -210,6 +214,7 @@ object SupertonicTTS {
         if (success) {
             currentModelPath = modelPath
             nativeThreads = ortThreads to xnnThreads
+            nativeSampleRate = getSampleRate(nativePtr).takeIf { it > 0 } ?: 44100
             Log.i("SupertonicTTS", "Engine initialized successfully (ORT: $ortThreads, XNN: $xnnThreads) with model: $modelPath")
         } else {
             currentModelPath = null
@@ -281,18 +286,28 @@ object SupertonicTTS {
     }
 
     private val sessionIdCounter = java.util.concurrent.atomic.AtomicLong()
+    // Requests the listener is waiting for right now; reader look-ahead yields the model to them.
+    private val foregroundWaiting = java.util.concurrent.atomic.AtomicInteger()
 
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null, skipDictionary: Boolean = false, aheadOwner: String? = null): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
         touchAudio()
         val cacheKey=appContext?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) }
         if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
+        val foreground=preparationGeneration==null
+        // The monitor is unfair: a look-ahead loop could re-take it between its own sentences.
+        if(foreground) foregroundWaiting.incrementAndGet()
+        else while(foregroundWaiting.get()>0 && !isCancelled()) Thread.sleep(5)
+        var counted=foreground
         val waiting=android.os.SystemClock.elapsedRealtime()
-        return synchronized(this) {
-            val elapsed=android.os.SystemClock.elapsedRealtime()-waiting
-            if(elapsed>100) Log.i("ReaderAhead","Uncached model lock wait=${elapsed}ms chars=${text.length}")
-            generateAudioLocked(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
-        }
+        try {
+            return synchronized(this) {
+                if(counted) { foregroundWaiting.decrementAndGet(); counted=false }
+                val elapsed=android.os.SystemClock.elapsedRealtime()-waiting
+                if(elapsed>100) Log.i("ReaderAhead","Uncached model lock wait=${elapsed}ms chars=${text.length} foreground=$foreground")
+                generateAudioLocked(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
+            }
+        } finally { if(counted) foregroundWaiting.decrementAndGet() }
     }
 
     private fun deliverCached(text: String, hit: com.brahmadeo.supertonic.tts.utils.SpeechAudioCache.Hit, listener: ProgressListener?): ByteArray? {
@@ -426,14 +441,14 @@ object SupertonicTTS {
         return getSocClass(nativePtr)
     }
 
-    @Synchronized
+    /** Lock-free: a cached reply must not wait while look-ahead synthesizes later text. */
     fun getAudioSampleRate(): Int {
         if (appContext?.let { AssetManager.isKokoro(it) } == true) return 24000
         if (appContext?.let { AssetManager.isPocket(it) } == true) return 24000
         if (appContext?.let { AssetManager.isSilero(it) } == true) return 48000
         if (appContext?.let { AssetManager.isTera(it) } == true) return 44100
         if (nativePtr == 0L) return 44100
-        return getSampleRate(nativePtr)
+        return nativeSampleRate
     }
 
     // True once the engine has run one full synthesize() pass since process

@@ -208,10 +208,8 @@ class TeraEngine(private val root: File, context: Context,
         var emitted = 0
         val loudness = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.Stream(gain,
             pausePrefs.getBoolean("voice_loudness_normalization", true))
-        for (start in 0 until frames step 16) {
+        for ((contextStart, start, end) in TeraVocoderChunks.plan(frames)) {
             if (SupertonicTTS.isCancelled()) return ByteArray(0)
-            val end = min(start + 16, frames)
-            val contextStart = (start - 20).coerceAtLeast(0)
             val count = end - contextStart
             val slice = FloatArray(144 * count)
             for (channel in 0 until 144) {

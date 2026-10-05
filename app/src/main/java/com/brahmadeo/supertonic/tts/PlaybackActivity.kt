@@ -68,8 +68,9 @@ class PlaybackActivity : ComponentActivity() {
                     setupList(currentText)
                 }
                 currentIndexState.intValue = current
-                updateIndexState(current)
+                // PlaybackService persists the position (throttled); record only completion here.
                 if (total > 0 && current !in 0 until total) {
+                    updateIndexState(current)
                     clearState()
                 }
             }

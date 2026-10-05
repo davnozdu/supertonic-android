@@ -394,8 +394,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             if (activeReadingItem !== item) getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit()
                                 .putString("last_text", item.text).putString("last_voice_path", item.style)
                                 .putString("last_lang", item.lang).putFloat("last_speed", item.speed).putInt("last_steps", item.steps).apply()
+                            val itemChanged = activeReadingItem !== item
                             activeReadingItem = item; currentSentenceIndex = packet.index
-                            getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit().putInt("last_index", packet.index).apply()
+                            persistIndex(itemChanged)
                             notifyListenerProgress(packet.index, item.chunks.sentences.size)
                         } }
                         if (packet.bytes.isNotEmpty()) writeToTrackBlocking(packet.bytes)
@@ -548,6 +549,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     if (isSynthesizing && isActive) {
                         val wasCancelled = SupertonicTTS.isCancelled()
                         isSynthesizing = false
+                        persistIndex()
                         if (!wasCancelled) {
                             notifyListenerProgress(lastTotal, lastTotal)
                         }
@@ -727,6 +729,17 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         }
     }
 
+    // SupertonicPrefs also holds last_text (up to a whole article); rewriting that XML
+    // after every sentence costs flash writes and CPU. Pause/stop/finish always flush.
+    private var indexSavedAt = 0L
+    private fun persistIndex(force: Boolean = true) {
+        if (activeReadingItem == null) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!force && now - indexSavedAt < 15_000) return
+        indexSavedAt = now
+        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit().putInt("last_index", currentSentenceIndex).apply()
+    }
+
     override fun onProgress(sessionId: Long, current: Int, total: Int) {}
     override fun onAudioChunk(sessionId: Long, data: ByteArray) {}
 
@@ -740,6 +753,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         if (!isPlaying) {
             if (requestAudioFocus()) {
                 isPlaying = true
+                wakeLock?.acquire(10 * 60 * 1000L)
                 try {
                     if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
                         audioTrack?.play()
@@ -775,6 +789,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             notifyListenerState(false)
             updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
             updateNotification(getString(R.string.notif_paused))
+            persistIndex()
+            // Paused work only polls the play flag; do not keep the CPU awake for up to 10 min.
+            if (wakeLock?.isHeld == true) wakeLock?.release()
         }
     }
 
@@ -809,6 +826,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             com.brahmadeo.supertonic.tts.article.ArticleSession.cancel(); QueueManager.clear()
         }
         isPlaying = false
+        persistIndex()
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,false)
         com.brahmadeo.supertonic.tts.llm.LlmPreparation.cancelApp()
         try {
@@ -899,6 +917,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     }
                     notifyListenerState(false)
                     updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+                    if (wakeLock?.isHeld == true) wakeLock?.release()
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
