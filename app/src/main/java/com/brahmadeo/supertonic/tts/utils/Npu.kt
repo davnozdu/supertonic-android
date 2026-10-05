@@ -38,7 +38,8 @@ object Npu {
     /** Session on the NPU with fixed symbolic dimensions. The compiled graph is cached once in
      * app storage (one flash write); later loads skip the multi-second HTP compilation. */
     fun session(ctx: Context, env: OrtEnvironment, model: File, dims: Map<String, Long>, cacheName: String,
-                performance: String = "high_performance", allowCpuFallback: Boolean = false, logInfo: Boolean = false): OrtSession {
+                performance: String = "high_performance", allowCpuFallback: Boolean = false, logInfo: Boolean = false,
+                extra: Map<String, String> = emptyMap(), verbose: Boolean = false): OrtSession {
         val cacheDir = File(ctx.filesDir, "npu-cache").apply { mkdirs() }
         val cached = File(cacheDir, "$cacheName-v${version(ctx)}_ctx.onnx")
         cacheDir.listFiles()?.filter { it.name.startsWith("$cacheName-") && it != cached }?.forEach { it.delete() }
@@ -46,8 +47,8 @@ object Npu {
             dims.forEach { (name, value) -> options.setSymbolicDimensionValue(name, value) }
             options.setIntraOpNumThreads(1)
             if (!allowCpuFallback) options.addConfigEntry("session.disable_cpu_ep_fallback", "1")
-            if (logInfo) options.setSessionLogLevel(ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_INFO)
-            options.addQnn(options(ctx, performance))
+            if (logInfo || verbose) options.setSessionLogLevel(if (verbose) ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE else ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_INFO)
+            options.addQnn(options(ctx, performance) + extra)
             return if (cached.isFile) env.createSession(cached.path, options) else {
                 options.addConfigEntry("ep.context_enable", "1")
                 options.addConfigEntry("ep.context_embed_mode", "1")

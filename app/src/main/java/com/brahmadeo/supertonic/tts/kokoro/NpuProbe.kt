@@ -41,9 +41,10 @@ internal object NpuProbe {
 
     fun run(ctx: Context) {
         log("start supported=${Npu.supported(ctx)} soc=${android.os.Build.SOC_MODEL}")
-        runCatching { tera(ctx) }.onFailure { log("tera failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
-        runCatching { teraSampler(ctx) }.onFailure { log("tera sampler failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
-        runCatching { kokoro(ctx) }.onFailure { log("kokoro failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
+        val onlyGeneric = File(ctx.filesDir, "npu-models/only-generic").exists()
+        if (!onlyGeneric) runCatching { tera(ctx) }.onFailure { log("tera failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
+        if (!onlyGeneric) runCatching { teraSampler(ctx) }.onFailure { log("tera sampler failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
+        if (!onlyGeneric) runCatching { kokoro(ctx) }.onFailure { log("kokoro failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
         runCatching { generic(ctx) }.onFailure { log("generic failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
         // Probe graphs are throwaway: keep flash for the production NPU cache only.
         File(ctx.filesDir, "npu-cache").listFiles { f -> f.name.startsWith("probe-") }?.forEach { it.delete() }
@@ -153,13 +154,19 @@ internal object NpuProbe {
                 dims.forEach { (k, v) -> o.setSymbolicDimensionValue(k, v) }
                 env.createSession(model.path, o).use { timed(it, "CPU threads=${j.optInt("cpuThreads", 4)}", null) }
             }
-            for (mode in listOf("burst", "high_performance")) {
+            // Variants: {"label": .., "mode": .., "verbose": bool, "qnn": {option: value}}; default burst + high_performance.
+            val variants = j.optJSONArray("variants")?.let { a -> List(a.length()) { a.getJSONObject(it) } }
+                ?: listOf(JSONObject().put("mode", "burst"), JSONObject().put("mode", "high_performance"))
+            for (v in variants) runCatching {
+                val mode = v.optString("mode", "high_performance"); val label = v.optString("label", mode)
+                val extra = v.optJSONObject("qnn")?.let { q -> q.keys().asSequence().associateWith { q.getString(it) } }.orEmpty()
                 val created = SystemClock.elapsedRealtime()
-                Npu.session(ctx, env, model, dims, "probe-$name-$mode", mode, allowCpuFallback = j.optBoolean("fallback", true), logInfo = true).use { s ->
-                    log("generic $name NPU mode=$mode createMs=${SystemClock.elapsedRealtime() - created}")
-                    timed(s, "NPU mode=$mode", reference)
+                Npu.session(ctx, env, model, dims, "probe-$name-$label", mode, allowCpuFallback = j.optBoolean("fallback", true), logInfo = true,
+                    extra = extra, verbose = v.optBoolean("verbose", false)).use { s ->
+                    log("generic $name NPU $label createMs=${SystemClock.elapsedRealtime() - created}")
+                    timed(s, "NPU $label", reference)
                 }
-            }
+            }.onFailure { log("generic $name variant ${v.optString("label")} failed ${it.javaClass.simpleName}: ${it.message?.take(200)}") }
         }.onFailure { log("generic ${spec.name} failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
     }
 
