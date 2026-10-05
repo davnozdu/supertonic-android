@@ -29,6 +29,7 @@ object LlmPreparation {
     private val cooldown = mutableMapOf<String, Long>() // Only the worker accesses this.
     private val appCaller = Any()
     private val preparedCache = LlmTextCache<LlmConfig>()
+    private val playedResults = LlmResultCache<Result> { input, result -> input.length + result.text.length }
     private val roleContext = VoiceRoleContext()
     private data class RoleKey(val config: LlmConfig, val preceding: String, val texts: List<String>)
     private data class RoleCached(val routing: VoiceRoleRouting.Result, val time: Long)
@@ -47,6 +48,7 @@ object LlmPreparation {
     fun settingsChanged() {
         synchronized(lock) { epoch++; entries.values.forEach { it.cancelled = true; it.future.cancel(false) }; entries.clear() }
         preparedCache.clear()
+        playedResults.clear()
         roleContext.clear()
         synchronized(roleCache) { roleCache.clear(); roleCacheChars = 0 }
         LlmProviders.cancelActive()
@@ -56,15 +58,24 @@ object LlmPreparation {
         if (flush) cancel(caller)
         initialize(ctx)
         if (text.length > 6000 || !enabled(ctx) || text.isBlank() || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
+        val input = com.brahmadeo.supertonic.tts.utils.LexiconManager.apply(text)
+        val reused = playedResults.get(input)
         val id = synchronized(lock) {
             // Bound copied text, even if a reader submits an entire book.
             while (entries.isNotEmpty() && (entries.size >= 512 || entries.values.sumOf { it.text.length } + text.length > 192_000)) {
                 val victim = entries.values.firstOrNull { it.future.isDone || (!it.claimed && !it.processing) } ?: return null
                 entries.remove(victim.id); victim.future.cancel(false)
             }
-            val entry = Entry(++nextId, caller, text, com.brahmadeo.supertonic.tts.utils.LexiconManager.apply(text))
+            val entry = Entry(++nextId, caller, text, input)
+            if (reused != null) { entry.textReady = reused; entry.future.complete(reused) }
             entries[entry.id] = entry
             entry.id
+        }
+        if (reused != null) {
+            // Keep role continuity for the next paragraph, as the worker would.
+            roleContext.append(caller, listOf(if (reused.voicePlan.isEmpty()) reused.text else reused.voicePlan.joinToString("") { "[${it.role.name}]${it.text}" }))
+            Log.i("LlmPreparation", "Reused played preparation chars=${text.length} provider=${reused.provider} roles=${reused.rolesReady} source=${SpeechTextTrace.fingerprint(text)}")
+            return id
         }
         timer.schedule({ startWorker() }, 120, TimeUnit.MILLISECONDS)
         return id
@@ -75,7 +86,13 @@ object LlmPreparation {
         val latest = entry.textReady ?: return@synchronized null
         if (!entry.future.isDone && !latest.rolesReady) return@synchronized null
         entries.remove(entry.id)
+        remember(entry.input, latest)
         latest
+    }
+    /** Only complete LLM results: a dictionary fallback or pending roles must be retried later. */
+    private fun remember(input: String, result: Result) {
+        val ctx = context ?: return
+        if (!result.fallback && (result.rolesReady || !LlmSettings.multiVoiceEnabled(ctx))) playedResults.put(input, result)
     }
     fun consumed(text: String) { synchronized(lock) {
         entries.values.firstOrNull { it.text == text }?.let {
@@ -115,6 +132,7 @@ object LlmPreparation {
         return try {
             val completed = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
             val result = entry.textReady ?: completed
+            remember(entry.input, result)
             Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
             Log.i("LlmPreparation", "Text trace source=${SpeechTextTrace.fingerprint(text)} prepared=${SpeechTextTrace.fingerprint(result.text)} provider=${result.provider} fallback=${result.fallback}")
             if (!retainForPlayback) release(entry)

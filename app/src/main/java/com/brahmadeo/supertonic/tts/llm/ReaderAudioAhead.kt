@@ -95,7 +95,10 @@ object ReaderAudioAhead {
         val cacheGeneration=com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation
         val voice=params?.getString("voiceName")?.substringAfter("-supertonic-","")?.takeIf { it.isNotEmpty() }?.plus(".json")
             ?: prefs.getString("selected_voice","ru_f1.json")!!
-        val rate=(params?.getInt("rate",100) ?: 100)/100f
+        // Same default as TextToSpeechService: without KEY_PARAM_RATE the framework uses the
+        // system TTS rate, so a hard-coded 100 would make every prepared PCM a cache miss.
+        val defaultRate=android.provider.Settings.Secure.getInt(ctx.contentResolver,android.provider.Settings.Secure.TTS_DEFAULT_RATE,100)
+        val rate=(params?.takeIf { it.containsKey("rate") }?.getInt("rate",defaultRate) ?: defaultRate)/100f
         val steps=prefs.getInt("diffusion_steps",5)
         val snapshot = Snapshot(text, model, voice, rate.coerceIn(.5f, 2.5f), steps, generation, cacheGeneration)
         snapshots[owner] = snapshot

@@ -18,7 +18,10 @@ object SpeechPreparationCache {
             revision.incrementAndGet()
             com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
             com.brahmadeo.supertonic.tts.SupertonicTTS.clearAudioCache()
-        } else if(key == null || key in keys) clear()
+        } else if(key == null || key in keys) {
+            clear()
+            if (key == "selected_model") cleaner.execute { com.brahmadeo.supertonic.tts.SupertonicTTS.releaseInactive() }
+        }
     }
     private var prefs: SharedPreferences? = null
     @Synchronized fun initialize(context: Context) {

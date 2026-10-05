@@ -197,13 +197,15 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onGetVoices(): List<Voice> {
         val voicesList = mutableListOf<Voice>()
-        val voiceNames = if (AssetManager.isRussianModel(this)) AssetManager.russianVoices(this)
+        val russian = AssetManager.isRussianModel(this)
+        val voiceNames = if (russian) AssetManager.russianVoices(this)
             else listOf("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
         if (!AssetManager.isReady(this)) return voicesList
+        // One PackageManager query, not one per advertised locale.
+        val foreign = russian && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this)
 
         ANDROID_LOCALE_TRIPLES.forEach { (twoLetter, _, _) ->
-            if (AssetManager.isRussianModel(this) && twoLetter != "ru" &&
-                !(twoLetter in setOf("en", "cs") && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))) return@forEach
+            if (russian && twoLetter != "ru" && !(twoLetter in setOf("en", "cs") && foreign)) return@forEach
             val locale = Locale.forLanguageTag(twoLetter)
             voiceNames.forEach { name ->
                 voicesList.add(

@@ -533,6 +533,22 @@ object SupertonicTTS {
         }
     }
 
+    /** After a model switch the previous engine would stay resident until its idle timer
+     * (up to 2 min), so two large models could share RAM. Keep only the active one. */
+    @Synchronized
+    fun releaseInactive() {
+        val ctx = appContext ?: return
+        if (!AssetManager.isKokoro(ctx)) { kokoroEngine?.close(); kokoroEngine = null }
+        if (!AssetManager.isPocket(ctx)) { pocketEngine?.close(); pocketEngine = null }
+        if (!AssetManager.isSilero(ctx)) { sileroEngine?.close(); sileroEngine = null }
+        if (!AssetManager.isTera(ctx)) {
+            teraIdleTask?.cancel(false); teraIdleTask = null
+            teraEngine?.let { runCatching { it.close() }; teraEngine = null; prewarmed = false }
+        }
+        if (AssetManager.getModelType(ctx) != "android_optimized_int8") hybridEngine?.let { runCatching { it.close() }; hybridEngine = null }
+        Log.i("SupertonicTTS", "Inactive engines released for model=${AssetManager.getModelType(ctx)}")
+    }
+
     @Synchronized
     fun reset() {
         if (nativePtr != 0L) {
