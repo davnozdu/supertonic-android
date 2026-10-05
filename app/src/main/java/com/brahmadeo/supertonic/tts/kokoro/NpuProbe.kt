@@ -22,7 +22,13 @@ import kotlin.math.log10
  * Reads no settings and changes none; only the compiled NPU graphs are cached once. */
 internal object NpuProbe {
     private const val TAG = "SpeechCheck"
-    private fun log(s: String) = Log.i(TAG, "NPU PROBE $s")
+    // OnePlus logd drops a process's lines past its quota while QNN compiles, so results also go
+    // to a small diagnostic file next to the pushed probe models.
+    @Volatile private var results: File? = null
+    private fun log(s: String) {
+        Log.i(TAG, "NPU PROBE $s")
+        results?.let { f -> runCatching { f.appendText("$s\n") } }
+    }
 
     private class Timing(val wallMs: Double, val cpuMs: Double)
     private fun measure(runs: Int, block: () -> Unit): Timing {
@@ -40,6 +46,7 @@ internal object NpuProbe {
     }
 
     fun run(ctx: Context) {
+        results = File(ctx.filesDir, "npu-models").takeIf { it.isDirectory }?.let { File(it, "probe-results.txt") }?.apply { writeText("") }
         log("start supported=${Npu.supported(ctx)} soc=${android.os.Build.SOC_MODEL}")
         val onlyGeneric = File(ctx.filesDir, "npu-models/only-generic").exists()
         if (!onlyGeneric) runCatching { tera(ctx) }.onFailure { log("tera failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
@@ -161,7 +168,7 @@ internal object NpuProbe {
                 val mode = v.optString("mode", "high_performance"); val label = v.optString("label", mode)
                 val extra = v.optJSONObject("qnn")?.let { q -> q.keys().asSequence().associateWith { q.getString(it) } }.orEmpty()
                 val created = SystemClock.elapsedRealtime()
-                Npu.session(ctx, env, model, dims, "probe-$name-$label", mode, allowCpuFallback = j.optBoolean("fallback", true), logInfo = true,
+                Npu.session(ctx, env, model, dims, "probe-$name-$label", mode, allowCpuFallback = j.optBoolean("fallback", true), logInfo = j.optBoolean("logInfo", false),
                     extra = extra, verbose = v.optBoolean("verbose", false)).use { s ->
                     log("generic $name NPU $label createMs=${SystemClock.elapsedRealtime() - created}")
                     timed(s, "NPU $label", reference)

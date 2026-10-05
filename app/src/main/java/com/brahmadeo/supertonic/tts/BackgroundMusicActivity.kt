@@ -86,8 +86,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                                     busy=false
                                 }
                             }
-                        }) { Text(if(installed.size==catalog.size) "Музыка скачана" else "Скачать музыку") }
-                        Text("4 композиции, около 16 МБ. После скачивания интернет не нужен.",style=MaterialTheme.typography.bodySmall)
+                        }) { Text(when { installed.size==catalog.size -> "Музыка скачана"; installed.isEmpty() -> "Скачать музыку"; else -> "Скачать новые композиции" }) }
+                        Text("${catalog.size} ${compositions(catalog.size)}, около ${(catalog.sumOf { it.size } + 524288) / 1048576} МБ. После скачивания интернет не нужен.",style=MaterialTheme.typography.bodySmall)
                         for(track in catalog) {
                             val available=track.id in installed
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
@@ -139,4 +139,11 @@ class BackgroundMusicActivity : ComponentActivity() {
             }
         }
     }
+}
+
+private fun compositions(n: Int) = when {
+    n % 100 in 11..14 -> "композиций"
+    n % 10 == 1 -> "композиция"
+    n % 10 in 2..4 -> "композиции"
+    else -> "композиций"
 }

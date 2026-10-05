@@ -37,7 +37,7 @@ Every app that uses Android's TTS API (Voice Aloud, TalkBack, reader apps, navig
 
 ## Background music
 
-Menu → **Фоновая музыка**. **Скачать музыку** installs four Gemini-generated tracks from the project's `reading-music-v1` release (about 16 MB). Choose an installed track, or import your own MP3; the app copies it into private storage. Each track can be removed from the phone and the ready catalog can be downloaded again.
+Menu → **Фоновая музыка**. **Скачать музыку** installs seven AI-generated tracks from the project's `reading-music-v1` release (about 27 MB); after an update only the new tracks are downloaded. Choose an installed track, or import your own MP3; the app copies it into private storage. Each track can be removed from the phone and the ready catalog can be downloaded again.
 
 Music loops during actual reading, follows pause/stop and resumes at the saved position. Volume is independent of speech, 0–100%, default 10%. Speculative LLM preparation and synthesis to a file do not start music. The music decoder releases after two idle minutes. It creates no competing media session or audio-focus request.
 

@@ -26,5 +26,26 @@
     "title": "Дыхание прилива",
     "size": 3593419,
     "sha256": "94ac2ee5bb48792bbadf74e629302b44e94376d83e72f680f825384135decdf9"
+  },
+  {
+    "id": "midwinter_solitude",
+    "file": "Midwinter_Solitude.mp3",
+    "title": "Зимнее уединение",
+    "size": 4318786,
+    "sha256": "c913e62b171ccac82c8fad0c9bb4a2bdacdc22a4bf2bc742dc87ca92a4b20392"
+  },
+  {
+    "id": "rain_against_the_windowpane",
+    "file": "Rain_Against_the_Windowpane.mp3",
+    "title": "Дождь стучит в стекло",
+    "size": 3874916,
+    "sha256": "5e27172ad20c6d62a389980ae9ec0259bbec8fa31d757079b6117bc5940a4801"
+  },
+  {
+    "id": "where_walls_breathe",
+    "file": "Where_Walls_Breathe.mp3",
+    "title": "Где дышат стены",
+    "size": 4325058,
+    "sha256": "7dc2da4a502de7dd98b6c073723224944be76c4ba04c16407d046a8714cc86fe"
   }
 ]
