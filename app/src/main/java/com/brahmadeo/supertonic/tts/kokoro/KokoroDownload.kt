@@ -20,6 +20,35 @@ object KokoroDownload {
     val voices = listOf("sveta", "masha", "dima")
     private val names = setOf("model_quantized.onnx", "model_dima_quantized.onnx", "sveta.bin", "masha.bin", "dima.bin", "config.json", "espeak-data.zip", "NOTICE.txt", "README.txt", "LICENSE_APACHE2.txt", "LICENSE_ESPEAK.txt")
     data class Asset(val name: String, val size: Long, val sha: String)
+    private val fullModels = listOf(
+        Asset("model.onnx",325634452,"2b784920660089011888fe88f2f48339c01334ad627c91cc0f88d947bc64fcf3"),
+        Asset("model_dima.onnx",325634452,"326bc6d2764263c11a8f5cbcfdcf0a072e441bd0d2dcb4875fa3c25724b201c6"))
+    private val fullFingerprint = fullModels.joinToString("\n") { it.sha }
+    fun fullReady(context: Context): Boolean = supported() && runCatching {
+        val dir = root(context)
+        File(dir,"full.verified.sha256").readText() == fullFingerprint &&
+            fullModels.all { File(dir,it.name).length() == it.size }
+    }.getOrDefault(false)
+    fun fullEnabled(context: Context) = context.getSharedPreferences("SupertonicPrefs",0)
+        .getBoolean("kokoro_full_precision",true) && fullReady(context)
+    suspend fun downloadFull(context: Context, progress: (String,Float) -> Unit) =
+        com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) {
+            withContext(Dispatchers.IO) { lock.withLock {
+                require(supported())
+                if(fullReady(context)) return@withLock
+                val dir=root(context).apply { mkdirs() }
+                val total=fullModels.sumOf { it.size };var complete=0L
+                for(asset in fullModels) {
+                    ResumableModelFile.fetch("$BASE/${asset.name}",File(dir,asset.name),asset.size,asset.sha) { received,_ ->
+                        progress("Kokoro: ${(complete+received)/1048576} / ${total/1048576} МБ",(complete+received).toFloat()/total)
+                    }
+                    complete+=asset.size
+                }
+                File(dir,"full.verified.sha256").writeText(fullFingerprint)
+                com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                progress("Полная точность Kokoro установлена",1f)
+            } }
+        }
     fun supported() = Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a"
     fun root(context: Context) = File(context.filesDir, "kokoro-ru-v2")
     fun label(voice: String) = when (voice) { "dima" -> "Дима · мужской"; "masha" -> "Маша · женский"; else -> "Света · женский" }

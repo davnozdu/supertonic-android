@@ -53,6 +53,10 @@ class LlmSettingsActivity : ComponentActivity() {
                 var teacherEnabled by remember { mutableStateOf(pausePrefs.getBoolean("tera_teacher",false) && teacherReady) }
                 var teacherBusy by remember { mutableStateOf(false) }
                 var teacherStatus by remember { mutableStateOf("") }
+                var kokoroFullReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullReady(this)) }
+                var kokoroFull by remember { mutableStateOf(pausePrefs.getBoolean("kokoro_full_precision",true)) }
+                var kokoroBusy by remember { mutableStateOf(false) }
+                var kokoroStatus by remember { mutableStateOf("") }
                 val foreignEngines = remember { com.brahmadeo.supertonic.tts.foreign.ForeignTts.engines(this) }
                 var foreignEnabled by remember { mutableStateOf(pausePrefs.getBoolean("foreign_tts", true)) }
                 var foreignEngine by remember { mutableStateOf(pausePrefs.getString("foreign_engine", "") ?: "") }
@@ -156,6 +160,28 @@ class LlmSettingsActivity : ComponentActivity() {
                                 pausePrefs.edit().putBoolean("tera_teacher",it).apply()
                             }
                             Text("Оба варианта используют выбранный голос и подготовку LLM. Загружается только один вариант синтеза; при переключении кэш аудио очищается.",style=MaterialTheme.typography.bodySmall)
+                        }
+                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
+                            Text("Звук Kokoro",style=MaterialTheme.typography.titleMedium)
+                            Text("Оба пакета содержат те же русские голоса. Компактный Q8 занимает меньше места; оригинальный пакет полной точности на ARM может считать быстрее, но требует больше памяти. Переключение очищает кэш аудио.",style=MaterialTheme.typography.bodySmall)
+                            Button(enabled=!kokoroBusy && !kokoroFullReady,onClick={
+                                voicePreview.stop();kokoroBusy=true
+                                scope.launch {
+                                    try {
+                                        com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.downloadFull(this@LlmSettingsActivity) { status,_ ->
+                                            runOnUiThread { kokoroStatus=status }
+                                        }
+                                        kokoroFullReady=true;kokoroStatus="Полная точность установлена"
+                                    } catch(t: Exception) { kokoroStatus="Ошибка установки: ${t.message}" }
+                                    finally { kokoroBusy=false }
+                                }
+                            }) { Text(if(kokoroFullReady) "Полная точность установлена" else "Скачать полную точность · 622 МБ") }
+                            if(kokoroStatus.isNotBlank()) Text(kokoroStatus)
+                            Choice("Пакет Kokoro",if(kokoroFull && kokoroFullReady) "Полная точность" else "Компактный Q8",
+                                if(kokoroFullReady) listOf("Компактный Q8","Полная точность") else listOf("Компактный Q8")) {
+                                voicePreview.stop();kokoroFull=it=="Полная точность"
+                                pausePrefs.edit().putBoolean("kokoro_full_precision",kokoroFull).apply()
+                            }
                         }
                         if (config.mode != LlmMode.OFF) {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->

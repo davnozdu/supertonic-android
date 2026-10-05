@@ -19,7 +19,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /** Ready upstream Q8 models, native acute-aware Russian G2P, 24 kHz PCM. */
-class KokoroEngine(context: Context) : AutoCloseable {
+class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload.fullEnabled(context),
+                   private val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2,4)) : AutoCloseable {
     private val root = KokoroDownload.root(context)
     private val prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", 0)
     private val env = OrtEnvironment.getEnvironment()
@@ -32,14 +33,17 @@ class KokoroEngine(context: Context) : AutoCloseable {
     private val idle = Executors.newSingleThreadScheduledExecutor { runnable -> Thread(runnable, "KokoroIdle").apply { isDaemon = true } }
     init {
         require(KokoroDownload.supported())
+        require(threads in 1..8)
+        require(!fullPrecision || KokoroDownload.fullReady(context))
         check(KokoroPhonemizer.initialize(File(root, "espeak-data").path)) { "Не удалось открыть русские фонемы Kokoro" }
         idle.scheduleWithFixedDelay({ synchronized(this) { if (sessions.isNotEmpty() && SystemClock.elapsedRealtime() - used >= 120000) unload() } }, 15, 15, TimeUnit.SECONDS)
     }
     private fun session(voice: String): OrtSession {
-        val key = if (voice == "dima") "model_dima_quantized.onnx" else "model_quantized.onnx"
+        val key = if(fullPrecision) { if(voice=="dima") "model_dima.onnx" else "model.onnx" }
+                  else if (voice == "dima") "model_dima_quantized.onnx" else "model_quantized.onnx"
         return sessions.getOrPut(key) {
             OrtSession.SessionOptions().use { options ->
-                options.setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 4))
+                options.setIntraOpNumThreads(threads)
                 options.addConfigEntry("session.intra_op.allow_spinning", "0")
                 options.addConfigEntry("session.inter_op.allow_spinning", "0")
                 options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
@@ -58,6 +62,8 @@ class KokoroEngine(context: Context) : AutoCloseable {
             val started = used
             val voice = File(voiceFile).name.removeSuffix(".bin").removeSuffix(".json").takeIf { it in KokoroDownload.voices } ?: "sveta"
             val ipa = KokoroG2p.phonemize(text, KokoroPhonemizer::phonemes)
+            val g2pMs=SystemClock.elapsedRealtime()-started
+            var inferenceMs=0L;var loadMs=0L
             val unknown = ipa.filter { it !in vocab }.toSet()
             require(unknown.isEmpty()) { "Kokoro: неподдерживаемые фонемы ${unknown.map { it.code }}" }
             val output = ByteArrayOutputStream()
@@ -69,12 +75,16 @@ class KokoroEngine(context: Context) : AutoCloseable {
                     "style" to OnnxTensor.createTensor(env, FloatBuffer.wrap(style), longArrayOf(1, 256)),
                     "speed" to OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(speed.coerceIn(.5f, 2.5f))), longArrayOf(1)))
                 val wave = try {
-                    session(voice).run(inputs).use { result ->
+                    val loading=SystemClock.elapsedRealtime()
+                    val model=session(voice)
+                    loadMs+=SystemClock.elapsedRealtime()-loading
+                    val inference=SystemClock.elapsedRealtime()
+                    model.run(inputs).use { result ->
                         val tensor = result[0] as OnnxTensor
                         val count = tensor.info.shape.fold(1L) { a, b -> a * b }
                         require(count in 1..2_400_000 && output.size().toLong() + count * 2 <= 64L * 1024 * 1024) { "Kokoro: превышен лимит звука" }
                         FloatArray(count.toInt()).also { tensor.floatBuffer.get(it) }
-                    }
+                    }.also { inferenceMs+=SystemClock.elapsedRealtime()-inference }
                 } finally { inputs.values.forEach { it.close() } }
                 if (SupertonicTTS.isCancelled()) return ByteArray(0)
                 require(wave.all { it.isFinite() }) { "Kokoro: некорректный звук" }
@@ -87,7 +97,7 @@ class KokoroEngine(context: Context) : AutoCloseable {
                     output.write(bytes); listener?.onAudioChunk(sid, bytes); position = end
                 }
             }
-            Log.i("KokoroTTS", "Synthesized chars=${text.length} phonemes=${ipa.length} voice=$voice ms=${SystemClock.elapsedRealtime() - started} audioMs=${output.size() * 1000L / 48000}")
+            Log.i("KokoroTTS", "Synthesized chars=${text.length} phonemes=${ipa.length} voice=$voice full=$fullPrecision threads=$threads ms=${SystemClock.elapsedRealtime() - started} g2pMs=$g2pMs loadMs=$loadMs inferenceMs=$inferenceMs audioMs=${output.size() * 1000L / 48000}")
             return output.toByteArray()
         } finally { used = SystemClock.elapsedRealtime() }
     }

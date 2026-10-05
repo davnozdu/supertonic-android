@@ -49,7 +49,13 @@ object SupertonicTTS {
     private fun audioKey(context: Context, text: String, lang: String, style: String, speed: Float, steps: Int, gain: Float, skipDictionary: Boolean): String {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
-        return listOf(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
+        val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
+        return listOf(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
+    }
+    @Synchronized private fun maybeKokoroEngine(context: Context): com.brahmadeo.supertonic.tts.kokoro.KokoroEngine {
+        val full=com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
+        kokoroEngine?.let { if(it.fullPrecision==full) return it;it.close();kokoroEngine=null }
+        return com.brahmadeo.supertonic.tts.kokoro.KokoroEngine(context,full).also { kokoroEngine=it }
     }
     fun clearAudioCache() { audioCache.clear() }
     private fun cacheLimitBytes(): Long =
@@ -318,7 +324,7 @@ object SupertonicTTS {
                             val russian = if (part.foreign) foreignFallbackNormalizer.normalize(
                                 com.brahmadeo.supertonic.tts.foreign.ForeignText.transliterate(part.text), "ru") else part.text
                             val pcm = if (AssetManager.isKokoro(context)) {
-                                val engine = kokoroEngine ?: com.brahmadeo.supertonic.tts.kokoro.KokoroEngine(context).also { kokoroEngine = it }
+                                val engine = maybeKokoroEngine(context)
                                 engine.synthesize(russian, stylePath, speed, gain, listener, sid)
                             } else if (AssetManager.isPocket(context)) {
                                 val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(context).also { pocketEngine=it }
@@ -339,7 +345,7 @@ object SupertonicTTS {
             }
             if (appContext?.let { AssetManager.isKokoro(it) } == true) {
                 val ctx = appContext!!
-                val engine = kokoroEngine ?: com.brahmadeo.supertonic.tts.kokoro.KokoroEngine(ctx).also { kokoroEngine = it }
+                val engine = maybeKokoroEngine(ctx)
                 return engine.synthesize(text, stylePath, speed, gain, listener, sid).also { if (cacheKey != null) cacheAudio(cacheKey, it, preparationGeneration != null, aheadOwner) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isPocket(it) } == true) {

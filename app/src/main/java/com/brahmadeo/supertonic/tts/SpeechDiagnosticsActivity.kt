@@ -33,6 +33,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
     }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (!running.compareAndSet(false,true)) {
             Log.w("SpeechCheck","Diagnostic already running; duplicate ignored")
             finish()
@@ -108,6 +109,40 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                         AssetManager.download(this@SpeechDiagnosticsActivity) { _, progress ->
                             Log.i("SpeechCheck", "Download progress=${(progress*100).toInt()}")
                         }
+                    }
+                    if(intent.getBooleanExtra("kokoroBenchmark",false)) {
+                        check(model==AssetManager.KOKORO_MODEL)
+                        com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.downloadFull(this@SpeechDiagnosticsActivity) { status,_ ->
+                            Log.i("SpeechCheck",status)
+                        }
+                        val ctx=this@SpeechDiagnosticsActivity
+                        val text=com.brahmadeo.supertonic.tts.llm.VoicePreview.SAMPLE
+                        val baseline=com.brahmadeo.supertonic.tts.kokoro.KokoroEngine(ctx,false,4)
+                        baseline.use { engine ->
+                            SupertonicTTS.setCancelled(false)
+                            for(voice in listOf("sveta","dima")) {
+                                for(pass in 0..1) {
+                                    val wall=android.os.SystemClock.elapsedRealtime();val cpu=android.os.Process.getElapsedCpuTime()
+                                    val pcm=engine.synthesize(text,com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voiceFile(ctx,voice).path,1.1f,2.5f,null,0)
+                                    check(pcm.isNotEmpty())
+                                    val memory=android.os.Debug.MemoryInfo().also { android.os.Debug.getMemoryInfo(it) }
+                                    Log.i("SpeechCheck","KOKORO BENCH full=false threads=4 voice=$voice pass=$pass wallMs=${android.os.SystemClock.elapsedRealtime()-wall} cpuMs=${android.os.Process.getElapsedCpuTime()-cpu} audioMs=${pcm.size*1000L/48000} pssKb=${memory.totalPss}")
+                                }
+                            }
+                        }
+                        for(threads in listOf(2,4,6)) {
+                            com.brahmadeo.supertonic.tts.kokoro.KokoroEngine(ctx,true,threads).use { engine ->
+                                for(voice in listOf("sveta","dima")) for(pass in 0..1) {
+                                    val wall=android.os.SystemClock.elapsedRealtime();val cpu=android.os.Process.getElapsedCpuTime()
+                                    val pcm=engine.synthesize(text,com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voiceFile(ctx,voice).path,1.1f,2.5f,null,0)
+                                    check(pcm.isNotEmpty())
+                                    val memory=android.os.Debug.MemoryInfo().also { android.os.Debug.getMemoryInfo(it) }
+                                    Log.i("SpeechCheck","KOKORO BENCH full=true threads=$threads voice=$voice pass=$pass wallMs=${android.os.SystemClock.elapsedRealtime()-wall} cpuMs=${android.os.Process.getElapsedCpuTime()-cpu} audioMs=${pcm.size*1000L/48000} pssKb=${memory.totalPss}")
+                                }
+                            }
+                        }
+                        Log.i("SpeechCheck","KOKORO BENCH PASSED; cold and warm CPU/memory samples recorded")
+                        return@withContext
                     }
                     if(intent.getBooleanExtra("resourceProbe",false)) {
                         check(model == AssetManager.TERA_MODEL)
