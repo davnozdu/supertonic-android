@@ -12,6 +12,10 @@ import java.net.URL
 object LlmProviders {
     private var local: Engine? = null
     private var localGpu: Boolean? = null
+    // LiteRT-LM MTP speculative decoding (experimental). Greedy sampling (topK=1) means the
+    // target model verifies every drafted token, so the text is unchanged, only faster.
+    private var localSpeculative: Boolean? = null
+    const val SPECULATIVE_KEY = "local_speculative_decoding"
     private var localGpuFailed = false
     private var usedAt = 0L
     @Volatile private var activeConversation: Conversation? = null
@@ -174,9 +178,13 @@ object LlmProviders {
         val generation = cancelGeneration.get()
         require(LocalModelDownload.ready(context)) { "Сначала скачайте Gemma 4" }
         val wantGpu=c.gpu && !localGpuFailed
-        if (local != null && localGpu != wantGpu) { closeLocal() }
+        val wantSpeculative=context.getSharedPreferences("llm_settings", Context.MODE_PRIVATE).getBoolean(SPECULATIVE_KEY, false)
+        if (local != null && (localGpu != wantGpu || localSpeculative != wantSpeculative)) { closeLocal() }
+            @OptIn(ExperimentalApi::class)
             fun load(gpu: Boolean): Engine {
                 Engine.setNativeMinLogSeverity(LogSeverity.ERROR)
+                ExperimentalFlags.enableSpeculativeDecoding = wantSpeculative
+                localSpeculative = wantSpeculative
                 val engine = Engine(EngineConfig(LocalModelDownload.modelFile(context).absolutePath,
                     backend = if (gpu) Backend.GPU() else Backend.CPU(), audioBackend = Backend.CPU(),
                     maxNumTokens = 8192, cacheDir = java.io.File(context.cacheDir, "gemma4").apply { mkdirs() }.path))
@@ -186,7 +194,7 @@ object LlmProviders {
             local = if (wantGpu) try { load(true).also { localGpu=true } } catch (_: Exception) {
                 localGpuFailed=true; Log.w("LlmPreparation", "GPU unavailable; loading CPU"); load(false).also { localGpu=false }
             } else load(false).also { localGpu=false }
-            Log.i("LlmPreparation", "Local Gemma loaded backend=${if(localGpu==true) "GPU" else "CPU"}")
+            Log.i("LlmPreparation", "Local Gemma loaded backend=${if(localGpu==true) "GPU" else "CPU"} speculative=$localSpeculative")
         }
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
@@ -242,7 +250,7 @@ object LlmProviders {
     }
     private fun closeLocal() {
         local?.let { runCatching { it.close() } }
-        local = null; localGpu = null
+        local = null; localGpu = null; localSpeculative = null
         Log.i("LlmPreparation", "Local Gemma unloaded")
     }
 }

@@ -339,6 +339,12 @@ class LlmSettingsActivity : ComponentActivity() {
                             if (!LocalModelDownload.supported()) Text("Для локальной Gemma 4 требуется 64-битный Android")
                         }
                         Toggle("GPU для Gemma 4 (при ошибке — CPU)", config.gpu) { config = config.copy(gpu = it); save() }
+                        var speculative by remember { mutableStateOf(getSharedPreferences("llm_settings", MODE_PRIVATE).getBoolean(LlmProviders.SPECULATIVE_KEY, false)) }
+                        Toggle("Ускоренная генерация Gemma · эксперимент", speculative) {
+                            speculative = it
+                            getSharedPreferences("llm_settings", MODE_PRIVATE).edit().putBoolean(LlmProviders.SPECULATIVE_KEY, it).apply()
+                        }
+                        Text("Спекулятивное декодирование LiteRT-LM: черновые токены проверяет основная модель, текст тот же. По данным Google на Snapdragon того же поколения генерация на GPU ускоряется примерно с 52 до 87 токенов/с.", style = MaterialTheme.typography.bodySmall)
                         Toggle("Размышление в локальной Gemma 4 (медленнее)", config.localThinking) { config = config.copy(localThinking = it); save() }
                         Choice("Выгрузка из RAM после простоя", "${config.idleSeconds} секунд", listOf("30 секунд", "60 секунд", "120 секунд", "300 секунд", "600 секунд")) {
                             config = config.copy(idleSeconds = it.substringBefore(' ').toInt()); save()
