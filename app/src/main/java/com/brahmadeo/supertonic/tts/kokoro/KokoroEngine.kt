@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 
 /** Ready upstream Q8 models, native acute-aware Russian G2P, 24 kHz PCM. */
 class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload.fullEnabled(context),
-                   private val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2,4)) : AutoCloseable {
+                   val threads: Int=com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)) : AutoCloseable {
     private val root = KokoroDownload.root(context)
     private val prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", 0)
     private val env = OrtEnvironment.getEnvironment()
@@ -33,7 +33,7 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
     private val idle = Executors.newSingleThreadScheduledExecutor { runnable -> Thread(runnable, "KokoroIdle").apply { isDaemon = true } }
     init {
         require(KokoroDownload.supported())
-        require(threads in 1..8)
+        require(threads in 1..16)
         require(!fullPrecision || KokoroDownload.fullReady(context))
         check(KokoroPhonemizer.initialize(File(root, "espeak-data").path)) { "Не удалось открыть русские фонемы Kokoro" }
         idle.scheduleWithFixedDelay({ synchronized(this) { if (sessions.isNotEmpty() && SystemClock.elapsedRealtime() - used >= 120000) unload() } }, 15, 15, TimeUnit.SECONDS)

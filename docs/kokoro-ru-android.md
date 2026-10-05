@@ -112,3 +112,28 @@ Beta 4.10 добавляет отдельное скачивание и выбо
 и повторный синтез Q8/FP32, CPU и PSS при 2/4/6 потоках без воспроизведения.
 Диагностическое окно теперь удерживает экран включённым. Android-проверка
 полного пакета выполняется после GitHub-сборки.
+
+### Android full precision results
+
+Beta 4.10 installed over the existing signature (code102). Both full models
+were downloaded through the app from our GitHub release and checksum verified.
+Same synthetic 71-character sentence, speed1.1, no LLM, no playback:
+
+| Variant | Workers | Cold Sveta / Dima, ms | Warm Sveta / Dima, ms | Warm process CPU Sveta / Dima, ms |
+|---|---:|---:|---:|---:|
+| Q8 | 4 | 4205 / 4361 | 3532 / 3516 | 5224 / 5224 |
+| Full | 2 | 3465 / 3181 | 2412 / 2335 | 4488 / 4355 |
+| Full | 4 | 2873 / 2826 | 1996 / 2013 | 6059 / 6069 |
+| Full | 6 | 2396 / 2395 | 1591 / 1595 | 6808 / 6783 |
+
+Output duration 4750/4700ms. Full/4 is ~1.5x faster cold and ~1.75x warm than
+Q8/4. Four workers remain the balanced default, six are available for lower
+latency. Full/2 even spends less total CPU per phrase than Q8/4; instantaneous
+CPU percentages must not be mistaken for energy consumption.
+
+All three full precision voices passed real Android TTS file previews.
+A separately sampled preview of three full voices took8.01s wall/20.38s CPU,
+avg254.6% of one core (31.8% of eight), peak348.5% (43.6% of eight), peak RSS
+1239.5MiB whole process. Corresponding Q8 baseline12.38s/16.64s CPU,16.8% of
+all cores,peak RSS997.7MiB. This measures process load, not battery directly.
+Source logs `/tmp/mytts-kokoro-speed.log`; CPU JSON full/baseline in /tmp.

@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /** Direct Android inference using the exported v5.5 mel/backbone/head files. */
-class SileroEngine(context: Context) : AutoCloseable {
+class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)) : AutoCloseable {
     private val root = SileroDownload.root(context)
     private val metadata = JSONObject(File(root, "pack.json").readText())
     private val nativeTypes = metadata.optBoolean("types", true)
@@ -29,6 +29,7 @@ class SileroEngine(context: Context) : AutoCloseable {
     private val idle = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "SileroIdle").apply { isDaemon = true } }
     init {
         require(SileroDownload.supported())
+        require(threads in 1..16)
         idle.scheduleWithFixedDelay({ synchronized(this) {
             if (mel != null && android.os.SystemClock.elapsedRealtime() - lastUsed > 120000) unload()
         } }, 15, 15, TimeUnit.SECONDS)
@@ -36,13 +37,12 @@ class SileroEngine(context: Context) : AutoCloseable {
     private fun load() {
         if (mel != null) return
         try {
-            val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
             LitePyTorchAndroid.setNumThreads(threads)
             mel = LiteModuleLoader.load(File(root, "tts_mel.ptl").absolutePath)
             head = LiteModuleLoader.load(File(root, "head.ptl").absolutePath)
             backbone = org.pytorch.executorch.Module.load(File(root, "backbone.pte").absolutePath,
                 org.pytorch.executorch.Module.LOAD_MODE_MMAP, threads)
-            Log.i("SileroTTS", "Silero v5.5 loaded")
+            Log.i("SileroTTS", "Silero v5.5 loaded threads=$threads")
         } catch (t: Throwable) { unload(); throw t }
     }
     @Synchronized fun synthesize(text: String, voice: String, speed: Float, gain: Float,

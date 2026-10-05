@@ -23,6 +23,9 @@ import androidx.lifecycle.withResumed
 import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.viewModels
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -473,6 +476,8 @@ class MainActivity : ComponentActivity() {
                         available.mapKeys { getLocalizedResource(this@MainActivity, viewModel.currentLang.value, it.key) }
                     }
 
+                    val threadModel = AssetManager.getModelType(this@MainActivity)
+                    var cpuThreads by remember(threadModel) { mutableStateOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(this@MainActivity, threadModel)) }
                     MainScreen(
                         showPocketVoicesDownload=AssetManager.isPocket(this@MainActivity) && !com.brahmadeo.supertonic.tts.pocket.PocketVoices.ready(this@MainActivity),
                         onPocketVoicesDownload={
@@ -552,6 +557,11 @@ class MainActivity : ComponentActivity() {
                             }
                         },
 
+                        cpuThreads = cpuThreads,
+                        maxCpuThreads = com.brahmadeo.supertonic.tts.utils.EngineThreads.maximum,
+                        recommendedCpuThreads = com.brahmadeo.supertonic.tts.utils.EngineThreads.recommended(threadModel),
+                        onCpuThreadsChange = { cpuThreads = it },
+                        onCpuThreadsFinished = { com.brahmadeo.supertonic.tts.utils.EngineThreads.save(this@MainActivity, threadModel, cpuThreads) },
                         speed = viewModel.currentSpeed.floatValue,
                         onSpeedChange = {
                             viewModel.currentSpeed.floatValue = it

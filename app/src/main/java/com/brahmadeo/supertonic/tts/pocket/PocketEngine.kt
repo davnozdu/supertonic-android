@@ -7,7 +7,7 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-class PocketEngine(context: Context) : AutoCloseable {
+class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)) : AutoCloseable {
     private val root=PocketDownload.root(context)
     private val prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", 0)
     private var native: NativePocketTts?=null
@@ -15,6 +15,7 @@ class PocketEngine(context: Context) : AutoCloseable {
     private val idle=Executors.newSingleThreadScheduledExecutor { runnable -> Thread(runnable,"PocketIdle").apply { isDaemon=true } }
     init {
         require(PocketDownload.supported())
+        require(threads in 1..16)
         idle.scheduleWithFixedDelay({ synchronized(this) {
             if(native!=null && android.os.SystemClock.elapsedRealtime()-used>120000) unload()
         } },15,15,TimeUnit.SECONDS)
@@ -23,7 +24,7 @@ class PocketEngine(context: Context) : AutoCloseable {
         used=android.os.SystemClock.elapsedRealtime()
         try {
             val engine=native ?: NativePocketTts(root.path,root.path,"fp32",.3f,1,
-                Runtime.getRuntime().availableProcessors().coerceIn(1,4),180,50).also { native=it }
+                threads,180,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads") }
             val output=ByteArrayOutputStream()
             val start=android.os.SystemClock.elapsedRealtime()
             for(chunk in PocketText.chunks(text)) {

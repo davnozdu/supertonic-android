@@ -50,13 +50,25 @@ object SupertonicTTS {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { prefs.all[it] }
         val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
-        return listOf(com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
+        return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
     }
     @Synchronized private fun maybeKokoroEngine(context: Context): com.brahmadeo.supertonic.tts.kokoro.KokoroEngine {
         val full=com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
-        kokoroEngine?.let { if(it.fullPrecision==full) return it;it.close();kokoroEngine=null }
+        kokoroEngine?.let { if(it.fullPrecision==full && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)) return it;it.close();kokoroEngine=null }
         return com.brahmadeo.supertonic.tts.kokoro.KokoroEngine(context,full).also { kokoroEngine=it }
     }
+    @Synchronized private fun maybePocketEngine(context: Context): com.brahmadeo.supertonic.tts.pocket.PocketEngine {
+        val threads = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)
+        pocketEngine?.let { if (it.threads == threads) return it; it.close(); pocketEngine = null }
+        return com.brahmadeo.supertonic.tts.pocket.PocketEngine(context, threads).also { pocketEngine = it }
+    }
+    @Synchronized private fun maybeSileroEngine(context: Context): com.brahmadeo.supertonic.tts.silero.SileroEngine {
+        val threads = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)
+        sileroEngine?.let { if (it.threads == threads && sileroModel == AssetManager.getModelType(context)) return it; it.close(); sileroEngine = null }
+        sileroModel = AssetManager.getModelType(context)
+        return com.brahmadeo.supertonic.tts.silero.SileroEngine(context, threads).also { sileroEngine = it }
+    }
+    private var sileroModel: String? = null
     fun clearAudioCache() { audioCache.clear() }
     private fun cacheLimitBytes(): Long =
         com.brahmadeo.supertonic.tts.utils.SpeechCacheBudget.limit(
@@ -96,10 +108,11 @@ object SupertonicTTS {
             hybridEngine?.let { it.close(); hybridEngine = null }
             return null
         }
-        hybridEngine?.let { return it }
+        val threads = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx)
+        hybridEngine?.let { if (it.threads == threads) return it; it.close(); hybridEngine = null }
         val modelDir = File(ctx.filesDir, AssetManager.MODEL_VERSION)
         return try {
-            HybridEngine(modelDir).also { hybridEngine = it }
+            HybridEngine(modelDir, threads).also { hybridEngine = it }
         } catch (t: Throwable) {
             Log.e("SupertonicTTS", "Failed to open HybridEngine: ${t.message}", t)
             null
@@ -116,7 +129,7 @@ object SupertonicTTS {
         }
         val sampler=com.brahmadeo.supertonic.tts.tera.TeraQuality.selected(ctx)
         teraEngine?.let {
-            if(it.sampler==sampler) return it
+            if(it.sampler==sampler && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx)) return it
             it.close()
             teraEngine=null
         }
@@ -137,6 +150,7 @@ object SupertonicTTS {
         }
     }
 
+    private var nativeThreads: Pair<Int, Int>? = null
     private external fun init(modelPath: String, libPath: String, ortThreads: Int, xnnThreads: Int): Long
     private external fun synthesize(ptr: Long, text: String, lang: String, stylePath: String, speed: Float, bufferSeconds: Float, steps: Int, gain: Float): ByteArray
     private external fun getSocClass(ptr: Long): Int
@@ -147,7 +161,9 @@ object SupertonicTTS {
     @Synchronized
     fun isInitialized(modelPath: String): Boolean {
         if (nativePtr == 0L || currentModelPath != modelPath) return false
-        return getSocClass(nativePtr) != -1
+        return getSocClass(nativePtr) != -1 && (appContext?.let {
+            nativeThreads == (com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(it) to recommendedXnnThreads(it))
+        } ?: true)
     }
 
     // XNNPACK executes the bulk of the ONNX graphs (Conv/MatMul) on the
@@ -169,14 +185,14 @@ object SupertonicTTS {
      */
     fun recommendedXnnThreads(context: Context): Int =
         if (AssetManager.getModelType(context) == "android_optimized_fp16") 0
-        else defaultXnnThreads()
+        else com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)
 
     @Synchronized
-    fun initialize(modelPath: String, libPath: String, ortThreads: Int = 4, xnnThreads: Int = defaultXnnThreads()): Boolean {
+    fun initialize(modelPath: String, libPath: String, ortThreads: Int = appContext?.let { com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(it) } ?: 4, xnnThreads: Int = appContext?.let { recommendedXnnThreads(it) } ?: defaultXnnThreads()): Boolean {
         if (nativePtr != 0L) {
             // Health check: Can we still talk to the engine?
             if (getSocClass(nativePtr) != -1) {
-                if (currentModelPath == modelPath) {
+                if (currentModelPath == modelPath && nativeThreads == (ortThreads to xnnThreads)) {
                     Log.i("SupertonicTTS", "Engine already initialized and healthy for this path: $modelPath")
                     return true
                 } else {
@@ -193,6 +209,7 @@ object SupertonicTTS {
         val success = nativePtr != 0L
         if (success) {
             currentModelPath = modelPath
+            nativeThreads = ortThreads to xnnThreads
             Log.i("SupertonicTTS", "Engine initialized successfully (ORT: $ortThreads, XNN: $xnnThreads) with model: $modelPath")
         } else {
             currentModelPath = null
@@ -327,10 +344,10 @@ object SupertonicTTS {
                                 val engine = maybeKokoroEngine(context)
                                 engine.synthesize(russian, stylePath, speed, gain, listener, sid)
                             } else if (AssetManager.isPocket(context)) {
-                                val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(context).also { pocketEngine=it }
+                                val engine=maybePocketEngine(context)
                                 engine.synthesize(russian,stylePath,speed,gain,listener,sid)
                             } else if (AssetManager.isSilero(context)) {
-                                val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(context).also { sileroEngine = it }
+                                val engine = maybeSileroEngine(context)
                                 engine.synthesize(russian, stylePath, speed, gain, listener, sid)
                             } else {
                                 val engine = maybeTeraEngine() ?: return null
@@ -350,12 +367,12 @@ object SupertonicTTS {
             }
             if (appContext?.let { AssetManager.isPocket(it) } == true) {
                 val ctx=appContext!!
-                val engine=pocketEngine ?: com.brahmadeo.supertonic.tts.pocket.PocketEngine(ctx).also { pocketEngine=it }
+                val engine=maybePocketEngine(ctx)
                 return engine.synthesize(text,stylePath,speed,gain,listener,sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it,preparationGeneration!=null,aheadOwner) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isSilero(it) } == true) {
                 val ctx = appContext!!
-                val engine = sileroEngine ?: com.brahmadeo.supertonic.tts.silero.SileroEngine(ctx).also { sileroEngine = it }
+                val engine = maybeSileroEngine(ctx)
                 return engine.synthesize(text, stylePath, speed, gain, listener, sid).also { if(cacheKey!=null) cacheAudio(cacheKey,it,preparationGeneration!=null,aheadOwner) }.takeIf { it.isNotEmpty() }
             }
             if (appContext?.let { AssetManager.isTera(it) } == true) {
@@ -383,6 +400,13 @@ object SupertonicTTS {
             if (nativePtr == 0L) {
                 Log.e("SupertonicTTS", "Engine not initialized")
                 return null
+            }
+            appContext?.let { ctx ->
+                val threads = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx)
+                if (nativeThreads != (threads to recommendedXnnThreads(ctx))) {
+                    val model = currentModelPath ?: return null
+                    if (!initialize(model, ctx.applicationInfo.nativeLibraryDir + "/libonnxruntime.so")) return null
+                }
             }
             val data = synthesize(nativePtr, text, lang, stylePath, speed, bufferDuration, steps, gain)
             return if (data.isNotEmpty()) data else null

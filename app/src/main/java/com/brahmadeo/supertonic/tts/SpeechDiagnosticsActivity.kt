@@ -110,6 +110,39 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             Log.i("SpeechCheck", "Download progress=${(progress*100).toInt()}")
                         }
                     }
+                    if (intent.getBooleanExtra("threadsProbe", false)) {
+                        val ctx = this@SpeechDiagnosticsActivity
+                        SupertonicTTS.setApplicationContext(ctx)
+                        val key = com.brahmadeo.supertonic.tts.utils.EngineThreadPolicy.key(model)
+                        val saved = if (prefs.contains(key)) prefs.getInt(key, 4) else null
+                        val voice = prefs.getString("selected_voice", "sveta.json")!!
+                        val style = AssetManager.voiceFile(ctx, voice).path
+                        val sample = com.brahmadeo.supertonic.tts.llm.VoicePreview.SAMPLE
+                        try {
+                            for (threads in listOf(2, 4, 6).filter { it <= com.brahmadeo.supertonic.tts.utils.EngineThreads.maximum }) {
+                                com.brahmadeo.supertonic.tts.utils.EngineThreads.save(ctx, model, threads)
+                                delay(150)
+                                check(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx) == threads)
+                                SupertonicTTS.setCancelled(false)
+                                // Cold pass loads the model; second pass measures inference without a PCM hit.
+                                for (pass in 0..1) {
+                                    SupertonicTTS.clearAudioCache()
+                                    val wall = android.os.SystemClock.elapsedRealtime()
+                                    val cpu = android.os.Process.getElapsedCpuTime()
+                                    val pcm = SupertonicTTS.generateAudio(sample,"ru",style,1.1f,0f,5,2.5f,skipDictionary=true)
+                                    check(pcm != null && pcm.size > 24000) { "No PCM at threads=$threads" }
+                                    val elapsed = android.os.SystemClock.elapsedRealtime()-wall
+                                    val elapsedCpu = android.os.Process.getElapsedCpuTime()-cpu
+                                    val memory = android.os.Debug.MemoryInfo().also { android.os.Debug.getMemoryInfo(it) }
+                                    Log.i("SpeechCheck","THREAD BENCH model=$model threads=$threads pass=$pass wallMs=$elapsed cpuMs=$elapsedCpu audioMs=${pcm.size*1000L/(SupertonicTTS.getAudioSampleRate()*2)} pssKb=${memory.totalPss}")
+                                }
+                            }
+                            Log.i("SpeechCheck","THREAD PROBE PASSED model=$model; settings reached inference workers")
+                        } finally {
+                            if (saved == null) prefs.edit().remove(key).commit() else prefs.edit().putInt(key,saved).commit()
+                        }
+                        return@withContext
+                    }
                     if(intent.getBooleanExtra("kokoroBenchmark",false)) {
                         check(model==AssetManager.KOKORO_MODEL)
                         com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.downloadFull(this@SpeechDiagnosticsActivity) { status,_ ->

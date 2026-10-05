@@ -24,13 +24,14 @@ import kotlin.math.roundToInt
 /** Android port of the distilled TeraTTSv2 ONNX pipeline. */
 class TeraEngine(private val root: File, context: Context,
                  val sampler: String = TeraQuality.FAST,
-                 private val allowSpinning: Boolean = false) : AutoCloseable {
+                 private val allowSpinning: Boolean = false,
+                 val threads: Int = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)) : AutoCloseable {
     private val llmPrefs = context.applicationContext.getSharedPreferences("llm_settings", Context.MODE_PRIVATE)
     private val pausePrefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private val env = OrtEnvironment.getEnvironment()
     private val sessions = HashMap<String, OrtSession>()
     private val options = OrtSession.SessionOptions().apply {
-        setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 6))
+        setIntraOpNumThreads(threads)
         // Four sequential graphs otherwise keep separate pools spinning between runs.
         // Keep the parallel kernels and weights; let idle workers sleep.
         addConfigEntry("session.intra_op.allow_spinning", if (allowSpinning) "1" else "0")
@@ -50,7 +51,9 @@ class TeraEngine(private val root: File, context: Context,
 
     init {
         require(sampler in setOf("sampler_distilled_cfg3_8step", "sampler_teacher_8step"))
+        require(threads in 1..16)
         require(indexer.size == 65536)
+        android.util.Log.i("TeraTTS", "Loading sampler=$sampler threads=$threads")
         try {
             for (name in listOf("text_encoder", "duration_predictor", sampler, "vocoder")) {
                 sessions[name] = env.createSession(File(root, "models/$name.onnx").absolutePath, options)

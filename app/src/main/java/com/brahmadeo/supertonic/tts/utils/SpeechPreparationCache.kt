@@ -14,7 +14,11 @@ object SpeechPreparationCache {
         "local_russian_stress","reader_early_prepare","reader_pcm_cache_mb","tera_punctuation_pauses","tera_teacher","kokoro_full_precision",
         "tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language")
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if(key == null || key in keys) clear()
+        if (key?.startsWith(EngineThreadPolicy.PREFIX) == true) {
+            revision.incrementAndGet()
+            com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
+            com.brahmadeo.supertonic.tts.SupertonicTTS.clearAudioCache()
+        } else if(key == null || key in keys) clear()
     }
     private var prefs: SharedPreferences? = null
     @Synchronized fun initialize(context: Context) {

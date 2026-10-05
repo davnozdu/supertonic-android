@@ -22,18 +22,18 @@ import java.nio.LongBuffer
  *   total_step:    float32 [1]
  * Output: denoised_latent [1, 144, latentLen]
  */
-class OrtVectorEstimator(modelFile: File) : AutoCloseable {
+class OrtVectorEstimator(modelFile: File, threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 6)) : AutoCloseable {
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
     private val session: OrtSession
 
     init {
         val opts = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(6)
+            setIntraOpNumThreads(threads)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             // Match the Rust pipeline: XNNPACK kernels for ARM Conv/MatMul.
             try {
-                addXnnpack(mapOf("intra_op_num_threads" to "6"))
+                addXnnpack(mapOf("intra_op_num_threads" to threads.toString()))
             } catch (_: Throwable) {
             }
         }

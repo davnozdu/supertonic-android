@@ -92,7 +92,12 @@ fun MainScreen(
     onSleepTimerClick: () -> Unit = {},
     onModelSelectionClick: () -> Unit = {},
     showPocketVoicesDownload: Boolean = false,
-    onPocketVoicesDownload: () -> Unit = {}
+    onPocketVoicesDownload: () -> Unit = {},
+    cpuThreads: Int = 4,
+    maxCpuThreads: Int = 8,
+    recommendedCpuThreads: Int = 4,
+    onCpuThreadsChange: (Int) -> Unit = {},
+    onCpuThreadsFinished: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -340,7 +345,7 @@ fun MainScreen(
                 }
 
                 SettingsGroup(
-                    title = "Playback Settings",
+                    title = "Настройки генерации",
                     icon = Icons.Default.Tune
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -354,6 +359,22 @@ fun MainScreen(
                             leadingIcon = Icons.Default.Speed
                         )
 
+                        if (maxCpuThreads > 1) SliderWithLabel(
+                            label = "Потоки процессора",
+                            value = cpuThreads.toFloat(),
+                            onValueChange = { onCpuThreadsChange(it.toInt()) },
+                            valueRange = 1f..maxCpuThreads.toFloat(),
+                            steps = (maxCpuThreads - 2).coerceAtLeast(0),
+                            displayValue = "$cpuThreads",
+                            onValueChangeFinished = onCpuThreadsFinished
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Для этой модели рекомендуется $recommendedCpuThreads. Применяется к следующему фрагменту.",
+                                modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { onCpuThreadsChange(recommendedCpuThreads); onCpuThreadsFinished() }) {
+                                Text("Сбросить")
+                            }
+                        }
                         if (!isTeraModel) SliderWithLabel(
                             label = stringResource(AppR.string.quality_label),
                             value = steps.toFloat(),
@@ -492,7 +513,8 @@ fun SliderWithLabel(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     displayValue: String,
-    leadingIcon: ImageVector? = null
+    leadingIcon: ImageVector? = null,
+    onValueChangeFinished: () -> Unit = {}
 ) {
     Column {
         Row(
@@ -513,7 +535,8 @@ fun SliderWithLabel(
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,
-            steps = steps
+            steps = steps,
+            onValueChangeFinished = onValueChangeFinished
         )
     }
 }

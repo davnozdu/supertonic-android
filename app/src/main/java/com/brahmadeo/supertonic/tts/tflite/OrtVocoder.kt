@@ -15,17 +15,17 @@ import java.nio.FloatBuffer
  * Inputs:  latent float32 [1, 144, latent_length]
  * Outputs: wav_tts float32 [1, latent_length * CHUNK_SIZE]
  */
-class OrtVocoder(modelFile: File) : AutoCloseable {
+class OrtVocoder(modelFile: File, threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 6)) : AutoCloseable {
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
     private val session: OrtSession
 
     init {
         val opts = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(6)
+            setIntraOpNumThreads(threads)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             try {
-                addXnnpack(mapOf("intra_op_num_threads" to "6"))
+                addXnnpack(mapOf("intra_op_num_threads" to threads.toString()))
             } catch (_: Throwable) {
             }
         }

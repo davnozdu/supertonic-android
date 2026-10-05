@@ -21,6 +21,7 @@ import java.util.concurrent.Future
  */
 class HybridEngine(
     private val modelDir: File,
+    val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 6),
 ) : AutoCloseable {
 
     private companion object {
@@ -41,7 +42,7 @@ class HybridEngine(
     private val voc: OrtVocoder
 
     init {
-        // 4 threads per Interpreter — they share the inference cores with
+        // Configurable threads per Interpreter — they share inference cores with
         // the ORT sessions at runtime, and at load time we use a separate
         // 5-wide pool just for parallel construction.
         val loaderPool = Executors.newFixedThreadPool(5) { r ->
@@ -53,17 +54,17 @@ class HybridEngine(
             }
             val dpF = loaderPool.submit<Interpreter> {
                 Interpreter(File(onnxDir, "duration_predictor.tflite"),
-                    Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
+                    Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true))
             }
             val teF = loaderPool.submit<Interpreter> {
                 Interpreter(File(onnxDir, "text_encoder.tflite"),
-                    Interpreter.Options().setNumThreads(4).setUseXNNPACK(true))
+                    Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true))
             }
             val veF = loaderPool.submit<OrtVectorEstimator> {
-                OrtVectorEstimator(File(onnxDir, "vector_estimator.onnx"))
+                OrtVectorEstimator(File(onnxDir, "vector_estimator.onnx"), threads)
             }
             val vocF = loaderPool.submit<OrtVocoder> {
-                OrtVocoder(File(onnxDir, "vocoder.onnx"))
+                OrtVocoder(File(onnxDir, "vocoder.onnx"), threads)
             }
             tokenizer = tokF.get()
             dp = dpF.get()
