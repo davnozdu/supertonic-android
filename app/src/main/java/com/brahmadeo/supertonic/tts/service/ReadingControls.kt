@@ -26,7 +26,6 @@ object ReadingControls {
     fun unregister(owner: Any) { main.post { listeners.remove(owner) } }
     fun externalStarted(ctx: Context) { externalReading = true; paused = false; main.post { show(ctx) } }
     fun internalStarted() { externalReading = false; paused = false }
-    fun audioState(ctx: Context, playing: Boolean) { if (externalReading) ReadingIsland.state(ctx, playing || paused, playing && !paused) }
     fun play(ctx: Context) { main.post {
         SleepTimer.manualResume()
         paused = false
@@ -58,7 +57,6 @@ object ReadingControls {
         }
         listeners.values.toList().forEach { callbacks -> runCatching { if (stop) callbacks.stop() else callbacks.pause() } }
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.stopTts()
-        ReadingIsland.state(ctx, !stop, false)
         }
         if (Looper.myLooper() == Looper.getMainLooper()) action.run() else main.post(action)
     }

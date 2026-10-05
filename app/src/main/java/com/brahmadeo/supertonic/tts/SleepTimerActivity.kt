@@ -20,17 +20,12 @@ class SleepTimerActivity : ComponentActivity() {
         setContent { SupertonicTheme {
             val status by SleepTimer.status.collectAsState()
             var minutes by remember { mutableStateOf("30") }
-            var island by remember { mutableStateOf(SleepTimer.islandEnabled(this@SleepTimerActivity)) }
             Scaffold(topBar = { TopAppBar(title = { Text("Таймер сна") }, navigationIcon = {
                 TextButton(onClick = { finish() }) { Text("Назад") }
             }) }) { padding -> Column(Modifier.padding(padding).padding(20.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(status, style = MaterialTheme.typography.titleMedium)
                 Text("Таймер останавливает чтение и фоновую музыку. Доступен из уведомления во время чтения.")
-                if (android.os.Build.VERSION.SDK_INT >= 36) Row {
-                    Checkbox(checked = island, onCheckedChange = { island = it; SleepTimer.setIsland(this@SleepTimerActivity, it) })
-                    Text("Остров таймера · экспериментально", modifier = Modifier.padding(top = 12.dp))
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (time in listOf(15, 30, 60)) Button(onClick = { SleepTimer.setMinutes(this@SleepTimerActivity, time); finish() }) { Text("$time мин.") }
                 }

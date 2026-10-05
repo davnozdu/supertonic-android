@@ -45,6 +45,7 @@ object SleepTimer {
         if (context != null) return
         context = ctx.applicationContext
         val prefs = ctx.getSharedPreferences("sleep_timer", Context.MODE_PRIVATE)
+        prefs.edit { remove("island"); remove("camera_island"); remove("island_y") }
         val savedWall = prefs.getLong("bootWall", 0)
         val currentBootWall = System.currentTimeMillis() - SystemClock.elapsedRealtime()
         // An elapsed deadline from before a reboot is invalid.
@@ -69,11 +70,6 @@ object SleepTimer {
     fun manualResume() { blocked = false }
     fun block() { blocked = true }
     fun remainingLabel(): String = if (deadline > 0) "${((deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0) + 59_999) / 60_000} мин." else ""
-    fun islandEnabled(ctx: Context) = ctx.getSharedPreferences("sleep_timer", Context.MODE_PRIVATE).getBoolean("island", false)
-    fun setIsland(ctx: Context, enabled: Boolean) { main.post {
-        initialize(ctx); ctx.getSharedPreferences("sleep_timer", Context.MODE_PRIVATE).edit { putBoolean("island", enabled) }
-        update()
-    } }
     fun completedText() { main.post { if (finishAtEnd) fire() } }
     fun checkDeadline() {
         if (Looper.myLooper() != Looper.getMainLooper()) { main.post { checkDeadline() }; return }
@@ -116,8 +112,6 @@ object SleepTimer {
             .addAction(android.R.drawable.ic_menu_recent_history, "Изменить таймер", settingsIntent(ctx))
         if (deadline > 0) builder.setWhen(System.currentTimeMillis() + (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
             .setUsesChronometer(true).setChronometerCountDown(true)
-        if (deadline > 0 && android.os.Build.VERSION.SDK_INT >= 36 && islandEnabled(ctx))
-            builder.setOngoing(true).setRequestPromotedOngoing(true)
         runCatching { manager.notify(ID, builder.build()) }
     }
 }

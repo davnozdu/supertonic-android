@@ -61,7 +61,6 @@ object BackgroundMusic {
     }
     private fun refresh() { handler.post {
         update()
-        context?.let { com.brahmadeo.supertonic.tts.service.ReadingControls.audioState(it, reading.playing()) }
     } }
     private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true
     private fun volume() = (previewVolume ?: prefs?.getInt("background_music_volume",DEFAULT_VOLUME) ?: DEFAULT_VOLUME).coerceIn(0,100) / 100f

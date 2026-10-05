@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.service.ReadingControls
 import com.brahmadeo.supertonic.tts.service.SleepTimer
-import com.brahmadeo.supertonic.tts.service.ReadingIsland
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 
 /** Dialog activity rather than a draw-over-other-apps window: no overlay permission. */
@@ -30,9 +29,6 @@ class QuickReadActivity : ComponentActivity() {
         setContent { SupertonicTheme {
             var timerExpanded by remember { mutableStateOf(false) }
             var minutes by remember { mutableStateOf("30") }
-            var island by remember { mutableStateOf(SleepTimer.islandEnabled(this@QuickReadActivity)) }
-            var cameraIsland by remember { mutableStateOf(ReadingIsland.enabled(this@QuickReadActivity)) }
-            var islandOffset by remember { mutableFloatStateOf(ReadingIsland.offset(this@QuickReadActivity).toFloat()) }
             val timerStatus by SleepTimer.status.collectAsState()
             Surface { Column(Modifier.heightIn(max = 600.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Быстрое чтение · MyTTS", style = MaterialTheme.typography.titleLarge)
@@ -60,10 +56,6 @@ class QuickReadActivity : ComponentActivity() {
                 }
                 TextButton(onClick = { timerExpanded = !timerExpanded }) { Text("Таймер сна · $timerStatus") }
                 if (timerExpanded) {
-                    if (android.os.Build.VERSION.SDK_INT >= 36) Row {
-                        Checkbox(checked = island, onCheckedChange = { island = it; SleepTimer.setIsland(this@QuickReadActivity, it) })
-                        Text("Остров таймера · экспериментально", modifier = Modifier.padding(top = 12.dp))
-                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (time in listOf(15, 30, 60)) OutlinedButton(onClick = { SleepTimer.setMinutes(this@QuickReadActivity, time) }) { Text("$time мин.") }
                     }
@@ -74,20 +66,6 @@ class QuickReadActivity : ComponentActivity() {
                     Text("В Moon+ Reader используйте время: конец книги не передаётся движку.", style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = { SleepTimer.cancel(this@QuickReadActivity) }) { Text("Выключить таймер") }
                 }
-                Row {
-                    Checkbox(checked = cameraIsland, onCheckedChange = {
-                        cameraIsland = it; ReadingIsland.configure(this@QuickReadActivity, it)
-                        if (it && !android.provider.Settings.canDrawOverlays(this@QuickReadActivity)) {
-                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                android.net.Uri.parse("package:$packageName")))
-                        }
-                    })
-                    Text("Остров вокруг камеры · экспериментально", modifier = Modifier.padding(top = 12.dp))
-                }
-                if (cameraIsland) {
-                    Text("Сдвиг острова вниз: ${islandOffset.toInt()} dp", style = MaterialTheme.typography.bodySmall)
-                    Slider(value = islandOffset, onValueChange = { islandOffset = it; ReadingIsland.configure(this@QuickReadActivity, true, it.toInt()) }, valueRange = 0f..80f)
-                }
                 TextButton(onClick = { finish() }) { Text("Закрыть") }
             } }
         } }
@@ -95,10 +73,6 @@ class QuickReadActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus && pasteRequested) { pasteRequested = false; paste() }
-    }
-    override fun onResume() {
-        super.onResume()
-        if (ReadingIsland.enabled(this)) ReadingIsland.configure(this, true)
     }
     private fun paste() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

@@ -826,7 +826,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     private fun notifyListenerState(playing: Boolean) {
-        ReadingIsland.state(this, playing || isSynthesizing, playing)
         val n = listeners.beginBroadcast()
         for (i in 0 until n) {
             try {
@@ -847,7 +846,6 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     }
 
     private fun notifyListenerPlaybackStopped() {
-        ReadingIsland.state(this, false, false)
         val n = listeners.beginBroadcast()
         for (i in 0 until n) {
             try {
