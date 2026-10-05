@@ -12,9 +12,12 @@ set(USE_LIBSONIC OFF)
 set(USE_LIBPCAUDIO OFF)
 set(HAVE_MKSTEMP ON)
 add_library(espeak-include INTERFACE)
-target_include_directories(espeak-include INTERFACE "${ESPEAK_SOURCE}/src/include" "${ESPEAK_SOURCE}/src/include/compat")
+target_include_directories(espeak-include INTERFACE "${ESPEAK_SOURCE}/src/include")
 add_subdirectory("${ESPEAK_SOURCE}/src/ucd-tools" ucd)
 add_subdirectory("${ESPEAK_SOURCE}/src/libespeak-ng" espeak)
+# eSpeak's C-only wctype compatibility header must not shadow libc++ headers
+# while compiling the JNI bridge. Its UCD dependency belongs to espeak-ng.
+target_include_directories(espeak-ng PRIVATE "${ESPEAK_SOURCE}/src/include/compat")
 if(ANDROID)
   add_library(kokoro_g2p SHARED kokoro_g2p.cpp)
   target_link_libraries(kokoro_g2p PRIVATE espeak-ng)

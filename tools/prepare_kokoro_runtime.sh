@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-NDK=${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}
-if [ -z "$NDK" ]; then NDK=$(sed -n 's/^ndk.dir=//p' "$ROOT/local.properties"); fi
+NDK=$(sed -n 's/^ndk.dir=//p' "$ROOT/local.properties")
+if [ -z "$NDK" ]; then NDK=${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}; fi
 ESPEAK_REV=4870adfa25b1a32b4361592f1be8a40337c58d6c
 SOURCE="$ROOT/build/kokoro-espeak-src"
 if [ ! -d "$SOURCE/.git" ]; then git clone https://github.com/espeak-ng/espeak-ng.git "$SOURCE"; fi
