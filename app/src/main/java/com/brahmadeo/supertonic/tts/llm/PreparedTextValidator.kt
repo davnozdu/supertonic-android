@@ -58,7 +58,11 @@ object PreparedTextValidator {
             val inNumber = numberRanges.any { a[i].range.first in it && a[i].range.last in it }
             // Inside an expanded number any case/ordinal form of the same component is allowed
             // ("сто одну книгу", "без пяти минут", "пятом году"); its value cannot change.
-            val sameNumeral = NumeralForms.value(sourcePlain)?.let { it == NumeralForms.value(targetPlain) } == true
+            // Only the last word agrees with the noun; earlier ones keep their gender ("одна тысяча").
+            fun gender(w: String) = when (foldYo(w)) { "одна", "одной", "одну", "одною", "две" -> 'f'; "один", "одного", "одному", "одним", "одном", "одно", "два" -> 'm'; else -> null }
+            val lastInNumber = numberRanges.any { a[i].range.last == it.last }
+            val genderKept = lastInNumber || gender(sourcePlain) == null || gender(targetPlain) == null || gender(sourcePlain) == gender(targetPlain)
+            val sameNumeral = genderKept && NumeralForms.value(sourcePlain)?.let { it == NumeralForms.value(targetPlain) } == true
             if (changedGender && !(inNumber && (sameNumeral || (numericGender(foldYo(sourcePlain)) == numericGender(foldYo(targetPlain)) &&
                         numberRanges.any { a[i].range.last == it.last })))) return reject("rewritten_word")
             if (b[i].value.contains('+') && !source.contains('+')) return reject("unexpected_plus")
