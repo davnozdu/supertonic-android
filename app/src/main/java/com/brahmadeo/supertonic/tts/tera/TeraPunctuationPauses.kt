@@ -58,8 +58,13 @@ object TeraPunctuationPauses {
     }
 
     fun synthesisParts(parts: List<Part>): List<Part> {
-        fun short(part: Part) = part.text.count { it.lowercaseChar() in "аеёиоуыэюя" } <= 2 &&
-            part.text.count { it.isLetter() } <= 8
+        // The released duration predictor has an approximately one-second
+        // floor for isolated Russian interjections, including three-syllable
+        // replies such as "Хорошо," and "Понятно,". Give those replies adjacent
+        // context too; keep their punctuation and never trim generated speech.
+        // A standalone reply has no neighbouring text and stays intact.
+        fun short(part: Part) = part.text.count { it.lowercaseChar() in "аеёиоуыэюя" } <= 3 &&
+            part.text.count { it.isLetter() } <= 12
         val result = mutableListOf<Part>()
         var pending: Part? = null
         for (part in parts) {

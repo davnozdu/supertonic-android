@@ -6,10 +6,25 @@ import org.junit.Test
 class TeraPunctuationPausesTest {
     @Test fun shortInterjectionsKeepTheirContextInsteadOfSeparateVowelSynthesis() {
         val parts = TeraPunctuationPauses.synthesisParts(TeraPunctuationPauses.split("Ну, пока он собирался, она ждала. А, понял."))
-        assertEquals(listOf("Ну, пока он собирался,", "она ждала.", "А, понял."), parts.map { it.text })
-        assertEquals(listOf(180, 420, 420), parts.map { it.pauseMs })
+        assertEquals(listOf("Ну, пока он собирался,", "она ждала. А, понял."), parts.map { it.text })
+        assertEquals(listOf(180, 420), parts.map { it.pauseMs })
         assertEquals(listOf("Она вернулась. Пока!"), TeraPunctuationPauses.synthesisParts(
             TeraPunctuationPauses.split("Она вернулась. Пока!")).map { it.text })
+    }
+    @Test fun threeSyllableRepliesKeepAdjacentContextAndExplicitStress() {
+        val text = "Хорошо, он вернулся домой. Пон+ятно, будем ждать."
+        val parts = TeraPunctuationPauses.synthesisParts(TeraPunctuationPauses.split(text))
+        assertEquals(listOf("Хорошо, он вернулся домой.", "Пон+ятно, будем ждать."), parts.map { it.text })
+        assertEquals(text, parts.joinToString(" ") { it.text })
+        assertEquals(listOf(420, 420), parts.map { it.pauseMs })
+        assertEquals(listOf("Понятно!"), TeraPunctuationPauses.synthesisParts(
+            TeraPunctuationPauses.split("Понятно!")).map { it.text })
+    }
+    @Test fun normalClausesKeepTheirSeparatePunctuationPauses() {
+        val text = "Над городом сгущались тучи, ветер раскачивал деревья."
+        val parts = TeraPunctuationPauses.split(text)
+        assertEquals(parts, TeraPunctuationPauses.synthesisParts(parts))
+        assertEquals(listOf(180, 420), parts.map { it.pauseMs })
     }
     @Test fun distinguishesCommaAndSentence() {
         val parts = TeraPunctuationPauses.split("Светло, но прохладно. Ты готов?")
