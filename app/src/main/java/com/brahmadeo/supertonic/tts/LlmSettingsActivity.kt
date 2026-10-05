@@ -238,6 +238,9 @@ class LlmSettingsActivity : ComponentActivity() {
                         Text("Движущийся буфер заранее обрабатывает следующие части загруженного текста и пополняется во время чтения. Для сторонней читалки доступны только уже переданные ею фрагменты.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Паузы русских моделей при чтении", style = MaterialTheme.typography.titleLarge)
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
+                            Text("Kokoro сама задаёт ритм по пунктуации: запятые, точки, вопросы и восклицания передаются в модель. Дополнительные фиксированные паузы для неё не применяются.", style = MaterialTheme.typography.bodySmall)
+                        } else {
                         Toggle(if(sileroPauses) "Дополнительные фиксированные паузы Silero" else "Слышимые паузы по пунктуации", punctuationPauses) {
                             punctuationPauses = it; pausePrefs.edit().putBoolean(pauseKey, it).apply()
                         }
@@ -248,6 +251,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             sentencePause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_sentence_pause_ms", sentencePause).apply()
                         }
                         Text(if(sileroPauses) "По умолчанию используется естественный ритм Silero: модель сама задаёт паузы и сохраняет связную интонацию. Дополнительные паузы можно включить вручную." else "Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу.", style = MaterialTheme.typography.bodySmall)
+                        }
                         HorizontalDivider()
                         Text("Ollama Cloud", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.ollamaEndpoint, { config = config.copy(ollamaEndpoint = it) }, label = { Text("Адрес API (HTTPS)") }, singleLine = true, modifier = Modifier.fillMaxWidth())

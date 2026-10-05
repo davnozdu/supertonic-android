@@ -85,6 +85,9 @@ jobs:
       - name: Build PocketTTS ARM64 runtime
         run: bash tools/prepare_pocket_runtime.sh
 
+      - name: Build Kokoro Russian phonemizer
+        run: bash tools/prepare_kokoro_runtime.sh
+
 
       - name: Verify and build release APK
         run: ./gradlew testReleaseUnitTest assembleRelease --stacktrace

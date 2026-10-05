@@ -304,6 +304,19 @@ class MainActivity : ComponentActivity() {
                                         Text(getString(R.string.model_tera_desc), style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
+                                if (com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.supported()) {
+                                    androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        androidx.compose.material3.RadioButton(
+                                            selected = viewModel.selectedModel.value == AssetManager.KOKORO_MODEL,
+                                            onClick = { viewModel.selectedModel.value = AssetManager.KOKORO_MODEL }
+                                        )
+                                        Column {
+                                            Text("Kokoro-RU v2 · экспериментальная", style = MaterialTheme.typography.titleMedium)
+                                            Text("Русский · 3 голоса: Света, Маша, Дима · ≈266 МБ · CPU · 24 кГц. Скорость и звучание проверяются на телефоне.", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                }
                                 if (com.brahmadeo.supertonic.tts.pocket.PocketDownload.supported()) {
                                     androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
                                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -347,7 +360,7 @@ class MainActivity : ComponentActivity() {
                                 AssetManager.setModelType(this@MainActivity, viewModel.selectedModel.value)
                                 if (AssetManager.isRussianModel(this@MainActivity)) {
                                     viewModel.currentLang.value = "ru"
-                                    viewModel.selectedVoiceFile.value = if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else if (AssetManager.isPocket(this@MainActivity)) "alba.json" else "ru_f1.json"
+                                    viewModel.selectedVoiceFile.value = if (AssetManager.isKokoro(this@MainActivity)) "sveta.json" else if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else if (AssetManager.isPocket(this@MainActivity)) "alba.json" else "ru_f1.json"
                                     saveStringPref("selected_lang", "ru")
                                     saveStringPref("selected_voice", viewModel.selectedVoiceFile.value)
                                     viewModel.isMixingEnabled.value = false
@@ -371,6 +384,7 @@ class MainActivity : ComponentActivity() {
                         status = viewModel.downloadStatus.value,
                         progress = viewModel.downloadProgress.floatValue,
                         isPocketModel = AssetManager.isPocket(this@MainActivity),
+                        isKokoroModel = AssetManager.isKokoro(this@MainActivity),
                         isTeraModel = AssetManager.isTera(this@MainActivity),
                         isSileroModel = AssetManager.isSilero(this@MainActivity),
                         isCisModel = com.brahmadeo.supertonic.tts.silero.SileroDownload.cis(this@MainActivity),
@@ -402,7 +416,7 @@ class MainActivity : ComponentActivity() {
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { viewModel.showModelDeleteDialog.value = false },
                             title = { Text(getString(R.string.model_delete_title)) },
-                            text = { Text(if(AssetManager.isPocket(this@MainActivity)) "Удалить Shtorm PocketTTS с телефона? Позже модель можно скачать заново." else getString(when { AssetManager.isSilero(this@MainActivity) -> R.string.model_delete_silero_message; AssetManager.isTera(this@MainActivity) -> R.string.model_delete_tera_message; else -> R.string.model_delete_message })) },
+                            text = { Text(if (AssetManager.isKokoro(this@MainActivity)) "Удалить Kokoro-RU и её три голоса с телефона? Позже модель можно скачать заново." else if(AssetManager.isPocket(this@MainActivity)) "Удалить Shtorm PocketTTS с телефона? Позже модель можно скачать заново." else getString(when { AssetManager.isSilero(this@MainActivity) -> R.string.model_delete_silero_message; AssetManager.isTera(this@MainActivity) -> R.string.model_delete_tera_message; else -> R.string.model_delete_message })) },
                             confirmButton = {
                                 TextButton(
                                     onClick = {
@@ -786,6 +800,12 @@ class MainActivity : ComponentActivity() {
 
     private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
+        if (AssetManager.isKokoro(this)) {
+            com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voices.forEach {
+                viewModel.voiceFiles[com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.label(it)] = "$it.json"
+            }
+            return
+        }
         if (AssetManager.isPocket(this)) {
             com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(this).forEach {
                 viewModel.voiceFiles["${it.replaceFirstChar { c -> c.uppercase() }} · Shtorm RU"]="$it.json"

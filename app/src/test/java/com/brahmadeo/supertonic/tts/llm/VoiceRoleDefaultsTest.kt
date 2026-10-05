@@ -2,6 +2,13 @@ package com.brahmadeo.supertonic.tts.llm
 import org.junit.Assert.*
 import org.junit.Test
 class VoiceRoleDefaultsTest {
+    @Test fun kokoroUsesItsTwoFemaleAndOneMaleVoices() {
+        val voices = listOf("sveta", "masha", "dima")
+        assertEquals(listOf("sveta", "dima", "masha"), VoiceRole.entries.map {
+            VoiceRoleDefaults.select("kokoro_ru_v2", it, "sveta", voices)
+        })
+        assertEquals("sveta", VoiceRoleDefaults.select("kokoro_ru_v2", VoiceRole.FEMALE, "masha", voices))
+    }
     @Test fun sileroAllThreeRolesUseDifferentInstalledVoices() {
         val voices=listOf("aidar","baya","kseniya","eugene","xenia")
         for(author in voices) {

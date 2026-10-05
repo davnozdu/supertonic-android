@@ -15,13 +15,14 @@ fun DownloadScreen(
     status: String,
     progress: Float,
     isPocketModel: Boolean = false,
+    isKokoroModel: Boolean = false,
     isTeraModel: Boolean = false,
     isSileroModel: Boolean = false,
     isCisModel: Boolean = false,
     error: String? = null,
     onRetry: () -> Unit = {}
 ) {
-    val message = if (isPocketModel) "Shtorm PocketTTS RU v2: готовый ONNX-пакет и локальная обработка текста. Скачиваются один раз, работают без интернета." else if (isCisModel) "29 русских голосов Silero CIS. После установки работают без интернета." else stringResource(when { isSileroModel -> AppR.string.download_intro_silero; isTeraModel -> AppR.string.download_intro_tera; else -> AppR.string.download_intro })
+    val message = if (isKokoroModel) "Kokoro-RU v2: Света, Маша, Дима и русская фонетическая обработка. Скачиваются с GitHub один раз, работают без интернета." else if (isPocketModel) "Shtorm PocketTTS RU v2: готовый ONNX-пакет и локальная обработка текста. Скачиваются один раз, работают без интернета." else if (isCisModel) "29 русских голосов Silero CIS. После установки работают без интернета." else stringResource(when { isSileroModel -> AppR.string.download_intro_silero; isTeraModel -> AppR.string.download_intro_tera; else -> AppR.string.download_intro })
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -35,7 +36,7 @@ fun DownloadScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = if (isPocketModel && error == null) "Установка Shtorm PocketTTS RU" else if (isCisModel && error == null) "Установка пака Silero CIS" else stringResource(
+                text = if (isKokoroModel && error == null) "Установка Kokoro-RU" else if (isPocketModel && error == null) "Установка Shtorm PocketTTS RU" else if (isCisModel && error == null) "Установка пака Silero CIS" else stringResource(
                     when {
                         error != null -> AppR.string.download_failed
                         isSileroModel -> AppR.string.download_silero_in_progress

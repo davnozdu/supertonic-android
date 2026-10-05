@@ -37,6 +37,7 @@ object AssetManager {
     const val DEFAULT_MODEL = "teratts_v2"
     const val TERA_MODEL = "teratts_v2"
     const val POCKET_MODEL = "shtorm_pocket_ru"
+    const val KOKORO_MODEL = "kokoro_ru_v2"
     const val SILERO_MODEL = "silero_v5_5_ru"
     const val SILERO_CIS_MODEL = "silero_cis_ru"
     private const val TERA_REVISION = "f05ea799094571a3553904a555df3834fb0b963b"
@@ -46,17 +47,20 @@ object AssetManager {
     val TERA_VOICES = com.brahmadeo.supertonic.tts.tera.TeraVoices.names
 
     fun isPocket(context: Context): Boolean = getModelType(context) == POCKET_MODEL
+    fun isKokoro(context: Context): Boolean = getModelType(context) == KOKORO_MODEL
     fun russianVoices(context: Context): List<String> = when {
+        isKokoro(context) -> com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voices
         isPocket(context) -> com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(context)
         isSilero(context) -> com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(context)
         else -> TERA_VOICES
     }
     fun isTera(context: Context): Boolean = getModelType(context) == TERA_MODEL
     fun isSilero(context: Context): Boolean = getModelType(context) in setOf(SILERO_MODEL, SILERO_CIS_MODEL)
-    fun isRussianModel(context: Context): Boolean = isTera(context) || isSilero(context) || isPocket(context)
+    fun isRussianModel(context: Context): Boolean = isTera(context) || isSilero(context) || isPocket(context) || isKokoro(context)
 
     fun voiceFile(context: Context, selected: String): File {
         val base = File(context.filesDir, MODEL_VERSION)
+        if (isKokoro(context)) return com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voiceFile(context, selected)
         if (isPocket(context)) return com.brahmadeo.supertonic.tts.pocket.PocketVoices.voiceFile(context,selected)
         if (isSilero(context)) {
             val name = File(selected).name.removeSuffix(".json")
@@ -159,6 +163,7 @@ object AssetManager {
     fun isReady(context: Context): Boolean {
         if (isTera(context)) com.brahmadeo.supertonic.tts.tera.TeraVoices.ensureInstalled(context)
         if (isRussianModel(context) && !com.brahmadeo.supertonic.tts.local.LocalRussianAssets.ready(context)) return false
+        if (isKokoro(context)) return com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.ready(context)
         if (isPocket(context)) return com.brahmadeo.supertonic.tts.pocket.PocketDownload.ready(context)
         if (isSilero(context)) return com.brahmadeo.supertonic.tts.silero.SileroDownload.supported() &&
             com.brahmadeo.supertonic.tts.silero.SileroDownload.ready(context)
@@ -181,6 +186,11 @@ object AssetManager {
         downloadInForeground(context,onProgress)
     }
     private suspend fun downloadInForeground(context: Context, onProgress: (String, Float) -> Unit) {
+        if (isKokoro(context)) {
+            com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.download(context) { status, value -> onProgress(status, value * .9f) }
+            com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(context) { status, value -> onProgress(status, .9f + value * .1f) }
+            return
+        }
         if (isPocket(context)) {
             com.brahmadeo.supertonic.tts.pocket.PocketDownload.download(context) { status,value -> onProgress(status,value*.9f) }
             com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(context) { status,value -> onProgress(status,.9f+value*.1f) }
@@ -291,6 +301,10 @@ object AssetManager {
     }
 
     fun delete(context: Context) {
+        if (isKokoro(context)) {
+            com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.root(context).deleteRecursively()
+            return
+        }
         if (isPocket(context)) {
             com.brahmadeo.supertonic.tts.pocket.PocketDownload.root(context).deleteRecursively()
             return

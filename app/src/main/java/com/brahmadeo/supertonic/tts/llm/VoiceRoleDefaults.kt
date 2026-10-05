@@ -8,6 +8,7 @@ internal object VoiceRoleDefaults {
         val male = role == VoiceRole.MALE
         val candidates = when (model) {
             "teratts_v2" -> if (male) listOf("ru_m5", "ru_m1") else listOf("ru_f1", "ru_f2")
+            "kokoro_ru_v2" -> if (male) listOf("dima") else listOf("masha", "sveta")
             "shtorm_pocket_ru" -> if (male) listOf("marius", "jean", "javert") else listOf("alba", "eponine", "fantine", "cosette")
             "silero_cis_ru" -> if (male) listOf("ru_alexandr", "ru_bogdan", "ru_roman") else listOf("ru_ekaterina", "ru_saida", "ru_karina")
             else -> if (male) listOf("aidar", "eugene") else listOf("kseniya", "baya", "xenia")

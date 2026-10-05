@@ -1,0 +1,110 @@
+{
+  "repo": "zaakirio/kokoro-ru",
+  "revision": "d649c57b239b18c4c384378127cbf01dba039bc1",
+  "espeak_revision": "4870adfa25b1a32b4361592f1be8a40337c58d6c",
+  "sample_rate": 24000,
+  "voices": [
+    "sveta",
+    "masha",
+    "dima"
+  ],
+  "files": [
+    {
+      "name": "model_quantized.onnx",
+      "size": 138285043,
+      "sha256": "03ab70fbd197ea249cca965cdda0cf76575c2cee45a30f673e67f42c830c69de"
+    },
+    {
+      "name": "model_dima_quantized.onnx",
+      "size": 138285044,
+      "sha256": "e5bc91f0b15fa85886a82a4fb87e2345fc3de3e6025820a059dde215eb154071"
+    },
+    {
+      "name": "sveta.bin",
+      "size": 522240,
+      "sha256": "10df737d434a84a04e9de193ff5e9be8a4bbe4944706a236bb64dab317620508"
+    },
+    {
+      "name": "masha.bin",
+      "size": 522240,
+      "sha256": "627c261c34391d16f3b7b21a3aad73e289d97623a4eb5f125a8b7e7fe214b97a"
+    },
+    {
+      "name": "dima.bin",
+      "size": 522240,
+      "sha256": "e774e8859604164aa27c393fa4393c3a4ff2162d37911a39574551edbc801dcb"
+    },
+    {
+      "name": "config.json",
+      "size": 2542,
+      "sha256": "e4da95d48ae0f937adeda8dd99a804941913327e6d7607a7a15de11abb69a120"
+    },
+    {
+      "name": "espeak-data.zip",
+      "size": 479223,
+      "sha256": "e89fc0710b0bf8ea838e8de5454451dc20040588ae3d0f7db7d18efa6a02eca4"
+    },
+    {
+      "name": "NOTICE.txt",
+      "size": 616,
+      "sha256": "a25cc723b615c57254bb71058e17735b46ae1fa20968b0abaefa14df66052332"
+    },
+    {
+      "name": "README.txt",
+      "size": 7042,
+      "sha256": "0f8c792f3c88ebaf2ffa9136861a18d82579fa92153dc887347c4e2565db2dc0"
+    },
+    {
+      "name": "LICENSE_APACHE2.txt",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "name": "LICENSE_ESPEAK.txt",
+      "size": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    }
+  ],
+  "espeak_entries": [
+    {
+      "name": "espeak-data/en_dict",
+      "size": 168204,
+      "sha256": "1053f74a34af38abb6fbd64b7838dacbc655a687c48ce1bb663d364a127b05de"
+    },
+    {
+      "name": "espeak-data/intonations",
+      "size": 2312,
+      "sha256": "031a105bf6bb2ebcd73a2c579ccfb42469b27266db0078af65ae298fd3588b21"
+    },
+    {
+      "name": "espeak-data/lang/gmw/en",
+      "size": 140,
+      "sha256": "4605d5330801de3641c6e366d15f129ea1f5ffbce8722642aba01ace07ab9c83"
+    },
+    {
+      "name": "espeak-data/lang/zle/ru",
+      "size": 57,
+      "sha256": "9f52d00a279aaeaa45a786b4fd3a98b34e95fedbf823f8cdb9fecc1339751d3a"
+    },
+    {
+      "name": "espeak-data/phondata",
+      "size": 554740,
+      "sha256": "a0b643b155cb6b12628d9e7865b57d9fca0d35844614f2594a5e009c80c80bb4"
+    },
+    {
+      "name": "espeak-data/phonindex",
+      "size": 43316,
+      "sha256": "384e5fa6f714ba5356c58008249b78699c31c1ad044b243068d263fb806b7d73"
+    },
+    {
+      "name": "espeak-data/phontab",
+      "size": 58652,
+      "sha256": "1b40690667e1e9aa1ba5e5234773c799e7e72ea751426e5150423d53c3f24fa2"
+    },
+    {
+      "name": "espeak-data/ru_dict",
+      "size": 108695,
+      "sha256": "fec9c58731c7670b31ec6c36045d954760308234057c449565878b7e17266433"
+    }
+  ]
+}
