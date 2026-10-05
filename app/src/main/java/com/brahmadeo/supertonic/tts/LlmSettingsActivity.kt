@@ -53,6 +53,7 @@ class LlmSettingsActivity : ComponentActivity() {
                 var teacherEnabled by remember { mutableStateOf(pausePrefs.getBoolean("tera_teacher",false) && teacherReady) }
                 var teacherBusy by remember { mutableStateOf(false) }
                 var teacherStatus by remember { mutableStateOf("") }
+                var npuEnabled by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, false)) }
                 var shortWordCap by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY, true)) }
                 var kokoroFullReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullReady(this)) }
                 var kokoroFull by remember { mutableStateOf(pausePrefs.getBoolean("kokoro_full_precision",true)) }
@@ -166,6 +167,18 @@ class LlmSettingsActivity : ComponentActivity() {
                                 pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY,it).apply()
                             }
                             Text("Модель даёт «Да.», «Нет.» и «Хорошо.» почти секунду. Для фраз до четырёх гласных длительность ограничивается обычным темпом речи; длинные фразы не меняются.",style=MaterialTheme.typography.bodySmall)
+                            val npuSupported = remember { com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity) }
+                            if (npuSupported) {
+                                Toggle("Ускоритель NPU · эксперимент", npuEnabled) {
+                                    npuEnabled = it
+                                    if (it) com.brahmadeo.supertonic.tts.utils.Npu.clearFailure(this@LlmSettingsActivity)
+                                    pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, it).apply()
+                                }
+                                Text(if (npuEnabled && com.brahmadeo.supertonic.tts.utils.Npu.failed(this@LlmSettingsActivity))
+                                    "NPU не запустился на этом телефоне; используется процессор."
+                                    else "Вокодер Tera выполняется на нейропроцессоре Snapdragon (FP16). Первый запуск компилирует модель несколько секунд. При ошибке чтение продолжается на процессоре.",
+                                    style=MaterialTheme.typography.bodySmall)
+                            }
                         }
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
                             Text("Звук Kokoro",style=MaterialTheme.typography.titleMedium)

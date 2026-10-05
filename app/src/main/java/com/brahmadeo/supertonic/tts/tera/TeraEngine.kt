@@ -41,6 +41,25 @@ class TeraEngine(private val root: File, context: Context,
     private val indexer = JSONArray(File(root, "unicode_indexer.json").readText()).let { array ->
         IntArray(array.length()) { array.getInt(it) }
     }
+    private val appContext = context.applicationContext
+    // Optional NPU vocoder: fixed 16- and 84-frame windows (TeraVocoderChunks). The vocoder is
+    // causal, so a shorter window is zero-padded at its end without changing earlier samples.
+    private val npuVocoder = HashMap<Int, OrtSession>()
+    val npuRequested = com.brahmadeo.supertonic.tts.utils.Npu.enabled(context)
+    private var npuOff = !npuRequested
+    private fun npuSession(frames: Int): OrtSession? {
+        if (npuOff) return null
+        val size = if (frames <= TeraVocoderChunks.FIRST) TeraVocoderChunks.FIRST else TeraVocoderChunks.NEXT + TeraVocoderChunks.CONTEXT
+        if (frames > size) return null
+        return npuVocoder[size] ?: try {
+            com.brahmadeo.supertonic.tts.utils.Npu.session(appContext, env, File(root, "models/vocoder.onnx"),
+                mapOf("batch" to 1L, "generated_latent_length" to size.toLong()), "tera-vocoder-$size").also { npuVocoder[size] = it }
+        } catch (t: Throwable) {
+            npuOff = true
+            com.brahmadeo.supertonic.tts.utils.Npu.markFailed(appContext, "Tera vocoder: ${t.javaClass.simpleName}")
+            null
+        }
+    }
     private val styles = HashMap<String, Pair<FloatArray, FloatArray>>()
     private val accents = TeraStressLookup(root)
     private val yoWords by lazy { readDictionary("yo_words.json.gz") }
@@ -217,7 +236,19 @@ class TeraEngine(private val root: File, context: Context,
             for (channel in 0 until 144) {
                 System.arraycopy(latent, channel * frames + contextStart, slice, channel * count, count)
             }
-            val (wave, _) = run("vocoder", mapOf("latent" to floatTensor(slice, 1, 144, count.toLong())))
+            val npu = npuSession(count)
+            val (wave, _) = if (npu == null) run("vocoder", mapOf("latent" to floatTensor(slice, 1, 144, count.toLong()))) else {
+                val size = if (count <= TeraVocoderChunks.FIRST) TeraVocoderChunks.FIRST else TeraVocoderChunks.NEXT + TeraVocoderChunks.CONTEXT
+                val padded = FloatArray(144 * size)
+                for (channel in 0 until 144) System.arraycopy(slice, channel * count, padded, channel * size, count)
+                val input = floatTensor(padded, 1, 144, size.toLong())
+                try {
+                    npu.run(mapOf("latent" to input)).use { result ->
+                        val tensor = result[0] as OnnxTensor
+                        FloatArray(tensor.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { tensor.floatBuffer.get(it) } to tensor.info.shape
+                    }
+                } finally { input.close() }
+            }
             val discard = (start - contextStart) * 3072
             val samples = min(min((end - start) * 3072, wave.size - discard), maxSamples - emitted)
             if (samples <= 0) break
@@ -230,6 +261,8 @@ class TeraEngine(private val root: File, context: Context,
     }
 
     override fun close() {
+        npuVocoder.values.forEach { runCatching { it.close() } }
+        npuVocoder.clear()
         sessions.values.forEach { it.close() }
         sessions.clear()
         options.close()

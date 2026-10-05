@@ -62,6 +62,15 @@ tasks.register('extractOnnxLib', Copy) {
     include "jni/**/libonnxruntime.so"
 }
 
+// The QNN (NPU) build of ORT ships arm64 only; other ABIs keep the standard ORT libraries.
+tasks.register('extractOrtOtherAbis', Copy) {
+    from { zipTree(configurations.onnxRuntime.singleFile) }
+    into layout.buildDirectory.dir("ortOtherAbis")
+    include "jni/armeabi-v7a/**", "jni/x86/**", "jni/x86_64/**"
+    eachFile { path = path.replaceFirst("^jni/", "") }
+    includeEmptyDirs = false
+}
+
 // Task to manually copy the built Rust library to a location Gradle WILL package
 tasks.register('copyRustLibs', Copy) {
     dependsOn 'cargoBuild'
@@ -80,6 +89,7 @@ tasks.configureEach { task ->
     }
     if (task.name.startsWith('merge') && (task.name.endsWith('NativeLibs') || task.name.endsWith('JniLibFolders'))) {
         task.dependsOn copyRustLibs
+        task.dependsOn extractOrtOtherAbis
     }
 }
 
@@ -103,8 +113,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 117
-        versionName "5.0.0-beta4.12.10"
+        versionCode 118
+        versionName "5.0.0-beta4.13"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
@@ -167,12 +177,16 @@ android {
             pickFirst '**/libLiteRtClGlAccelerator.so'
             pickFirst '**/libc++_shared.so'
             pickFirst '**/libfbjni.so'
+            // NPU runtime: keep the Snapdragon 8 Elite (V79) and 8 Elite Gen 5 (V81) HTP only.
+            excludes += ['**/libQnnDsp*.so', '**/libQnnGpu.so', '**/libQnnHtpV68*.so', '**/libQnnHtpV69*.so',
+                         '**/libQnnHtpV73*.so', '**/libQnnHtpV75*.so']
         }
     }
 }
 
 afterEvaluate {
-    android.sourceSets.main.jniLibs.setSrcDirs(["src/main/jniLibs", layout.buildDirectory.dir("finalJniLibs").get().asFile.absolutePath])
+    android.sourceSets.main.jniLibs.setSrcDirs(["src/main/jniLibs", layout.buildDirectory.dir("finalJniLibs").get().asFile.absolutePath,
+        layout.buildDirectory.dir("ortOtherAbis").get().asFile.absolutePath])
 }
 
 kotlin {
@@ -204,7 +218,8 @@ dependencies {
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3:1.4.0'
     implementation 'androidx.compose.material:material-icons-extended'
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.26.0'
+    // Same ORT 1.26 API with the Qualcomm QNN execution provider (NPU) for arm64.
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android-qnn:1.26.0'
     onnxRuntime 'com.microsoft.onnxruntime:onnxruntime-android:1.26.0'
 
     // LiteRT (TensorFlow Lite rebrand) for running INT4 .tflite assets on Android.

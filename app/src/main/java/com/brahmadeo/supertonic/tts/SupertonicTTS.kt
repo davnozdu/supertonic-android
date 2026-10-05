@@ -50,7 +50,7 @@ object SupertonicTTS {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         // prefs.all copies the whole map; take one snapshot per key, not one per setting.
         val all=prefs.all
-        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_short_word_cap","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
+        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
         val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
         return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
     }
@@ -132,7 +132,8 @@ object SupertonicTTS {
         }
         val sampler=com.brahmadeo.supertonic.tts.tera.TeraQuality.selected(ctx)
         teraEngine?.let {
-            if(it.sampler==sampler && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx)) return it
+            if(it.sampler==sampler && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx) &&
+                it.npuRequested==com.brahmadeo.supertonic.tts.utils.Npu.enabled(ctx)) return it
             it.close()
             teraEngine=null
         }

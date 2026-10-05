@@ -41,6 +41,11 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
+                // Read-only NPU benchmark: never touches model, voice or reading settings.
+                if (intent.getBooleanExtra("npuProbe", false)) {
+                    try { com.brahmadeo.supertonic.tts.kokoro.NpuProbe.run(this@SpeechDiagnosticsActivity) } finally { running.set(false) }
+                    return@withContext
+                }
                 val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
                 val oldModel = AssetManager.getModelType(this@SpeechDiagnosticsActivity)
                 val oldVoice = prefs.getString("selected_voice", "F3.json")
