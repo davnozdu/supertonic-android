@@ -55,10 +55,14 @@ class TeraEngine(private val root: File, context: Context,
             com.brahmadeo.supertonic.tts.utils.Npu.session(appContext, env, File(root, "models/vocoder.onnx"),
                 mapOf("batch" to 1L, "generated_latent_length" to size.toLong()), "tera-vocoder-$size").also { npuVocoder[size] = it }
         } catch (t: Throwable) {
-            npuOff = true
-            com.brahmadeo.supertonic.tts.utils.Npu.markFailed(appContext, "Tera vocoder: ${t.javaClass.simpleName}")
+            disableNpu("create: ${t.javaClass.simpleName}")
             null
         }
+    }
+    private fun disableNpu(reason: String) {
+        npuOff = true
+        npuVocoder.values.forEach { runCatching { it.close() } }; npuVocoder.clear()
+        com.brahmadeo.supertonic.tts.utils.Npu.markFailed(appContext, "Tera vocoder $reason")
     }
     private val styles = HashMap<String, Pair<FloatArray, FloatArray>>()
     private val accents = TeraStressLookup(root)
@@ -242,12 +246,19 @@ class TeraEngine(private val root: File, context: Context,
                 val padded = FloatArray(144 * size)
                 for (channel in 0 until 144) System.arraycopy(slice, channel * count, padded, channel * size, count)
                 val input = floatTensor(padded, 1, 144, size.toLong())
-                try {
+                val result = try {
                     npu.run(mapOf("latent" to input)).use { result ->
                         val tensor = result[0] as OnnxTensor
-                        FloatArray(tensor.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { tensor.floatBuffer.get(it) } to tensor.info.shape
+                        val wave = FloatArray(tensor.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { tensor.floatBuffer.get(it) }
+                        require(wave.all { it.isFinite() }) { "non-finite NPU audio" }
+                        wave to tensor.info.shape
                     }
+                } catch (t: Throwable) {
+                    // A failure during inference must not drop audio: disable the NPU, redo on CPU.
+                    disableNpu("run: ${t.javaClass.simpleName}")
+                    null
                 } finally { input.close() }
+                result ?: run("vocoder", mapOf("latent" to floatTensor(slice, 1, 144, count.toLong())))
             }
             val discard = (start - contextStart) * 3072
             val samples = min(min((end - start) * 3072, wave.size - discard), maxSamples - emitted)

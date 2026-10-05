@@ -42,6 +42,7 @@ internal object NpuProbe {
     fun run(ctx: Context) {
         log("start supported=${Npu.supported(ctx)} soc=${android.os.Build.SOC_MODEL}")
         runCatching { tera(ctx) }.onFailure { log("tera failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
+        runCatching { teraSampler(ctx) }.onFailure { log("tera sampler failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
         runCatching { kokoro(ctx) }.onFailure { log("kokoro failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
         log("done")
     }
@@ -76,6 +77,44 @@ internal object NpuProbe {
                     }
                 }
             }
+        }
+    }
+
+    /** Ceiling check only: the unrolled 8-step sampler (pushed for the probe) at one exact shape.
+     * Frame padding changes the result, so production would need one graph per frame count. */
+    private fun teraSampler(ctx: Context) {
+        val unrolled = File(ctx.filesDir, "npu-models/sampler_unrolled.onnx")
+        val original = File(ctx.filesDir, "${AssetManager.MODEL_VERSION}/tera/models/sampler_distilled_cfg3_8step.onnx")
+        if (!unrolled.isFile || !original.isFile) { log("tera sampler skipped: no unrolled model"); return }
+        val env = OrtEnvironment.getEnvironment()
+        val frames = 60L; val text = 74L; val r = java.util.Random(3)
+        fun arr(n: Int, scale: Float = 1f) = FloatArray(n) { r.nextGaussian().toFloat() * scale }
+        val noise = arr(144 * 60); val emb = arr(256 * 74, .5f); val style = arr(50 * 256, .5f)
+        fun inputs() = mapOf(
+            "initial_latent" to OnnxTensor.createTensor(env, FloatBuffer.wrap(noise), longArrayOf(1, 144, frames)),
+            "text_emb" to OnnxTensor.createTensor(env, FloatBuffer.wrap(emb), longArrayOf(1, 256, text)),
+            "style_ttl" to OnnxTensor.createTensor(env, FloatBuffer.wrap(style), longArrayOf(1, 50, 256)),
+            "latent_mask" to OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(60) { 1f }), longArrayOf(1, 1, frames)),
+            "text_mask" to OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(74) { 1f }), longArrayOf(1, 1, text)),
+            "guidance" to OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(3f)), longArrayOf(1)))
+        var reference: FloatArray? = null
+        OrtSession.SessionOptions().use { o ->
+            o.setIntraOpNumThreads(2); o.addConfigEntry("session.intra_op.allow_spinning", "0")
+            env.createSession(original.path, o).use { s ->
+                val x = inputs()
+                try { reference = output(s, x); val t = measure(3) { output(s, x) }
+                    log("tera sampler CPU threads=2 frames=$frames wallMs=${"%.0f".format(t.wallMs)} cpuMs=${"%.0f".format(t.cpuMs)}") }
+                finally { x.values.forEach { it.close() } }
+            }
+        }
+        val created = SystemClock.elapsedRealtime()
+        Npu.session(ctx, env, unrolled, mapOf("batch" to 1L, "generated_latent_length" to frames, "text_length" to text),
+            "probe-tera-sampler-60x74", allowCpuFallback = true, logInfo = true).use { s ->
+            val createMs = SystemClock.elapsedRealtime() - created
+            val x = inputs()
+            try { val y = output(s, x); val t = measure(3) { output(s, x) }
+                log("tera sampler NPU createMs=$createMs wallMs=${"%.0f".format(t.wallMs)} cpuMs=${"%.0f".format(t.cpuMs)} ${snr(reference!!, y)}") }
+            finally { x.values.forEach { it.close() } }
         }
     }
 
