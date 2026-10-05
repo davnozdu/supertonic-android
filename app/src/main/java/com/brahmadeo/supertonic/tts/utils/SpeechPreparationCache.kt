@@ -16,7 +16,7 @@ object SpeechPreparationCache {
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key?.startsWith(EngineThreadPolicy.PREFIX) == true) {
             revision.incrementAndGet()
-            com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
+            context?.let { com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.invalidate(it) } ?: com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
             com.brahmadeo.supertonic.tts.SupertonicTTS.clearAudioCache()
         } else if(key == null || key in keys) {
             clear()
@@ -24,14 +24,17 @@ object SpeechPreparationCache {
         }
     }
     private var prefs: SharedPreferences? = null
+    @Volatile private var context: Context? = null
     @Synchronized fun initialize(context: Context) {
         if(prefs != null) return
+        this.context = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs",0).also { it.registerOnSharedPreferenceChangeListener(listener) }
     }
     fun clear() {
         revision.incrementAndGet()
-        com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
+        // LLM first: requeued look-ahead must not be cancelled by the LLM invalidation.
         com.brahmadeo.supertonic.tts.llm.LlmPreparation.settingsChanged()
+        context?.let { com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.invalidate(it) } ?: com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
         cleaner.execute {
             com.brahmadeo.supertonic.tts.local.LocalRussianStress.clearCache()
             com.brahmadeo.supertonic.tts.SupertonicTTS.clearAudioCache()

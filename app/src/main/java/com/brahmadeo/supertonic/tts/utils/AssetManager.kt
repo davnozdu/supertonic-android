@@ -48,6 +48,10 @@ object AssetManager {
 
     fun isPocket(context: Context): Boolean = getModelType(context) == POCKET_MODEL
     fun isKokoro(context: Context): Boolean = getModelType(context) == KOKORO_MODEL
+    /** Model-picker entry: Kokoro has an economical Q8 and a full-precision variant of one model. */
+    const val KOKORO_FULL_CHOICE = "kokoro_ru_v2:full"
+    fun modelChoice(context: Context): String =
+        if (isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)) KOKORO_FULL_CHOICE else getModelType(context)
     fun russianVoices(context: Context): List<String> = when {
         isKokoro(context) -> com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voices
         isPocket(context) -> com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(context)
@@ -189,6 +193,10 @@ object AssetManager {
         if (isKokoro(context)) {
             com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.download(context) { status, value -> onProgress(status, value * .9f) }
             com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(context) { status, value -> onProgress(status, .9f + value * .1f) }
+            val prefs = context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
+            // Only an explicit "full precision" choice fetches the extra ~620 MB.
+            if (prefs.contains("kokoro_full_precision") && prefs.getBoolean("kokoro_full_precision", false))
+                com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.downloadFull(context, onProgress)
             return
         }
         if (isPocket(context)) {

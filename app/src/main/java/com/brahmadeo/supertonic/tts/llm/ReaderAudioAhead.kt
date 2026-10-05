@@ -25,7 +25,7 @@ object ReaderAudioAhead {
     private val preparedTexts=PreparedSpeechHandoff(256)
     private val delivered=linkedSetOf<String>()
     private data class Snapshot(val text: String, val model: String, val voice: String, val rate: Float,
-        val steps: Int, val generation: Long, val cacheGeneration: Long)
+        val steps: Int, val generation: Long, val cacheGeneration: Long, val requestedVoice: String? = null)
     private val snapshots = linkedMapOf<String, Snapshot>()
     @Synchronized private fun isDelivered(owner: String) = owner in delivered
     @Synchronized private fun isCurrent(owner: String, snapshot: Snapshot) = snapshots[owner] === snapshot
@@ -90,17 +90,33 @@ object ReaderAudioAhead {
         if (packageNames.any { it.contains("talkback") || it.contains("jieshuo") || it.contains("accessibility") }) return
         val owner = SpeechTextTrace.fingerprint(text)
         delivered.remove(owner)
-        val context=ctx.applicationContext;val generation=epoch.get();val model=AssetManager.getModelType(ctx)
-        val textGeneration=preparedTexts.token()
-        val cacheGeneration=com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation
-        val voice=params?.getString("voiceName")?.substringAfter("-supertonic-","")?.takeIf { it.isNotEmpty() }?.plus(".json")
-            ?: prefs.getString("selected_voice","ru_f1.json")!!
+        val requestedVoice=params?.getString("voiceName")?.substringAfter("-supertonic-","")?.takeIf { it.isNotEmpty() }?.plus(".json")
         // Same default as TextToSpeechService: without KEY_PARAM_RATE the framework uses the
         // system TTS rate, so a hard-coded 100 would make every prepared PCM a cache miss.
         val defaultRate=android.provider.Settings.Secure.getInt(ctx.contentResolver,android.provider.Settings.Secure.TTS_DEFAULT_RATE,100)
         val rate=(params?.takeIf { it.containsKey("rate") }?.getInt("rate",defaultRate) ?: defaultRate)/100f
+        enqueue(ctx, text, requestedVoice, rate)
+    }
+    /** Settings changed mid-reading: redo the reader's undelivered queue with the new settings
+     * instead of dropping it (each paragraph would otherwise wait for the LLM deadline and
+     * synthesize on demand until the reader queues new text). Call after LLM invalidation. */
+    @Synchronized fun invalidate(ctx: Context) {
+        val pending = snapshots.filterKeys { it !in delivered }.values.map { it.text to (it.requestedVoice to it.rate) }
+        cancel()
+        if (pending.isEmpty() || !AssetManager.isRussianModel(ctx) ||
+            !ctx.getSharedPreferences("SupertonicPrefs",0).getBoolean("reader_early_prepare",true)) return
+        pending.forEach { (text, voiceRate) -> enqueue(ctx, text, voiceRate.first, voiceRate.second) }
+        android.util.Log.i("ReaderAhead", "Requeued undelivered texts=${pending.size} after settings change")
+    }
+    @Synchronized private fun enqueue(ctx: Context, text: String, requestedVoice: String?, rate: Float) {
+        val prefs=ctx.getSharedPreferences("SupertonicPrefs",0)
+        val owner = SpeechTextTrace.fingerprint(text)
+        val context=ctx.applicationContext;val generation=epoch.get();val model=AssetManager.getModelType(ctx)
+        val textGeneration=preparedTexts.token()
+        val cacheGeneration=com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation
+        val voice=requestedVoice ?: prefs.getString("selected_voice","ru_f1.json")!!
         val steps=prefs.getInt("diffusion_steps",5)
-        val snapshot = Snapshot(text, model, voice, rate.coerceIn(.5f, 2.5f), steps, generation, cacheGeneration)
+        val snapshot = Snapshot(text, model, voice, rate.coerceIn(.5f, 2.5f), steps, generation, cacheGeneration, requestedVoice)
         snapshots[owner] = snapshot
         while (snapshots.size > 256) snapshots.remove(snapshots.keys.first())
         android.util.Log.i("ReaderAhead","Queued early text chars=${text.length} model=$model")

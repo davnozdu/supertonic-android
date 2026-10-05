@@ -274,7 +274,7 @@ class MainActivity : ComponentActivity() {
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = {
                             if (AssetManager.isReady(this@MainActivity)) {
-                                viewModel.selectedModel.value = AssetManager.getModelType(this@MainActivity)
+                                viewModel.selectedModel.value = AssetManager.modelChoice(this@MainActivity)
                                 viewModel.showModelSelection.value = false
                             }
                         },
@@ -315,8 +315,19 @@ class MainActivity : ComponentActivity() {
                                             onClick = { viewModel.selectedModel.value = AssetManager.KOKORO_MODEL }
                                         )
                                         Column {
-                                            Text("Kokoro-RU v2 · экспериментальная", style = MaterialTheme.typography.titleMedium)
-                                            Text("Русский · 3 голоса: Света, Маша, Дима · ≈266 МБ · CPU · 24 кГц. Скорость и звучание проверяются на телефоне.", style = MaterialTheme.typography.bodySmall)
+                                            Text("Kokoro-RU v2 · экономная (Q8)", style = MaterialTheme.typography.titleMedium)
+                                            Text("Русский · Света, Маша, Дима · ≈266 МБ · меньше RAM, медленнее синтез · 24 кГц.", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                    androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        androidx.compose.material3.RadioButton(
+                                            selected = viewModel.selectedModel.value == AssetManager.KOKORO_FULL_CHOICE,
+                                            onClick = { viewModel.selectedModel.value = AssetManager.KOKORO_FULL_CHOICE }
+                                        )
+                                        Column {
+                                            Text("Kokoro-RU v2 · полная точность", style = MaterialTheme.typography.titleMedium)
+                                            Text("Те же голоса · оригинальные FP32-веса · ещё ≈620 МБ · быстрее синтез, больше RAM.", style = MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }
@@ -360,8 +371,18 @@ class MainActivity : ComponentActivity() {
                         },
                         confirmButton = {
                             TextButton(onClick = {
-                                AssetManager.setModelType(this@MainActivity, viewModel.selectedModel.value)
-                                if (AssetManager.isRussianModel(this@MainActivity)) {
+                                val choice = viewModel.selectedModel.value
+                                val model = if (choice == AssetManager.KOKORO_FULL_CHOICE) AssetManager.KOKORO_MODEL else choice
+                                val modelChanged = model != AssetManager.getModelType(this@MainActivity)
+                                if (model == AssetManager.KOKORO_MODEL) getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
+                                    putBoolean("kokoro_full_precision", choice == AssetManager.KOKORO_FULL_CHOICE)
+                                }
+                                if (modelChanged) AssetManager.setModelType(this@MainActivity, model)
+                                // Re-confirming the same model keeps the chosen voice.
+                                if (AssetManager.isRussianModel(this@MainActivity) && !modelChanged) {
+                                    viewModel.currentLang.value = "ru"
+                                    saveStringPref("selected_lang", "ru")
+                                } else if (AssetManager.isRussianModel(this@MainActivity)) {
                                     viewModel.currentLang.value = "ru"
                                     viewModel.selectedVoiceFile.value = if (AssetManager.isKokoro(this@MainActivity)) "sveta.json" else if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else if (AssetManager.isPocket(this@MainActivity)) "alba.json" else "ru_f1.json"
                                     saveStringPref("selected_lang", "ru")
@@ -377,7 +398,7 @@ class MainActivity : ComponentActivity() {
                         },
                         dismissButton = {
                             if (AssetManager.isReady(this@MainActivity)) TextButton(onClick = {
-                                viewModel.selectedModel.value = AssetManager.getModelType(this@MainActivity)
+                                viewModel.selectedModel.value = AssetManager.modelChoice(this@MainActivity)
                                 viewModel.showModelSelection.value = false
                             }) { Text(getString(R.string.cancel)) }
                         }
@@ -494,7 +515,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onModelSelectionClick = {
-                            viewModel.selectedModel.value = AssetManager.getModelType(this@MainActivity)
+                            viewModel.selectedModel.value = AssetManager.modelChoice(this@MainActivity)
                             viewModel.showModelSelection.value = true
                         },
                         inputText = viewModel.inputText.value,
@@ -698,7 +719,7 @@ class MainActivity : ComponentActivity() {
         viewModel.currentSpeed.floatValue = prefs.getFloat("speed", MainViewModel.DEFAULT_SPEED)
         viewModel.currentSteps.intValue = prefs.getInt("diffusion_steps", MainViewModel.DEFAULT_STEPS)
         viewModel.isAdvancedNormalizationEnabled.value = prefs.getBoolean("is_advanced_normalization", false)
-        viewModel.selectedModel.value = AssetManager.getModelType(this)
+        viewModel.selectedModel.value = AssetManager.modelChoice(this)
     }
 
     private fun checkNotificationPermission() {
