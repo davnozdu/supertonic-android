@@ -17,7 +17,6 @@ import com.brahmadeo.supertonic.tts.service.PlaybackService
 import com.brahmadeo.supertonic.tts.ui.PlaybackScreen
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 import com.brahmadeo.supertonic.tts.utils.TextNormalizer
-import androidx.core.content.edit
 
 class PlaybackActivity : ComponentActivity() {
 
@@ -56,15 +55,15 @@ class PlaybackActivity : ComponentActivity() {
 
         override fun onProgress(current: Int, total: Int, contentId: String?) {
             runOnUiThread {
-                val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-                val text = prefs.getString("last_text", "").orEmpty()
+                val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
+                val text = memory.text
                 if (!contentGate.accept(contentId.orEmpty(), text, total)) return@runOnUiThread
                 if (text.isNotBlank() && text != currentText) {
                     currentText = text
-                    currentVoicePath = prefs.getString("last_voice_path", currentVoicePath).orEmpty()
-                    currentLang = prefs.getString("last_lang", currentLang).orEmpty()
-                    currentSpeed = prefs.getFloat("last_speed", currentSpeed)
-                    currentSteps = prefs.getInt("last_steps", currentSteps)
+                    currentVoicePath = memory.voicePath.ifEmpty { currentVoicePath }
+                    currentLang = memory.lang.ifEmpty { currentLang }
+                    currentSpeed = memory.speed
+                    currentSteps = memory.steps
                     setupList(currentText)
                 }
                 currentIndexState.intValue = current
@@ -130,13 +129,13 @@ class PlaybackActivity : ComponentActivity() {
         currentLang = intent.getStringExtra(EXTRA_LANG) ?: "en"
 
         if (intent.getBooleanExtra("is_resume", false) && currentText.isEmpty()) {
-             val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-             currentText = prefs.getString("last_text", "") ?: ""
-             currentVoicePath = prefs.getString("last_voice_path", "") ?: ""
-             currentSpeed = prefs.getFloat("last_speed", 1.0f)
-             currentSteps = prefs.getInt("last_steps", 5)
-             currentLang = prefs.getString("last_lang", "en") ?: "en"
-             currentIndexState.intValue = prefs.getInt("last_index", 0)
+             val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
+             currentText = memory.text
+             currentVoicePath = memory.voicePath
+             currentSpeed = memory.speed
+             currentSteps = memory.steps
+             currentLang = memory.lang
+             currentIndexState.intValue = memory.index
         }
 
         setupList(currentText)
@@ -164,15 +163,15 @@ class PlaybackActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (intent.getBooleanExtra("is_resume", false)) {
-            val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-            val newText = prefs.getString("last_text", "") ?: ""
+            val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
+            val newText = memory.text
             if (newText != currentText) {
                 currentText = newText
-                currentVoicePath = prefs.getString("last_voice_path", "") ?: ""
-                currentSpeed = prefs.getFloat("last_speed", 1.0f)
-                currentSteps = prefs.getInt("last_steps", 5)
-                currentLang = prefs.getString("last_lang", "en") ?: "en"
-                currentIndexState.intValue = prefs.getInt("last_index", 0)
+                currentVoicePath = memory.voicePath
+                currentSpeed = memory.speed
+                currentSteps = memory.steps
+                currentLang = memory.lang
+                currentIndexState.intValue = memory.index
                 setupList(currentText)
             }
         }
@@ -247,26 +246,17 @@ class PlaybackActivity : ComponentActivity() {
     }
 
     private fun saveState() {
-        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
-            putString("last_text", currentText)
-                .putString("last_voice_path", currentVoicePath)
-                .putFloat("last_speed", currentSpeed)
-                .putInt("last_steps", currentSteps)
-                .putString("last_lang", currentLang)
-                .putBoolean("is_playing", true)
-        }
+        val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
+        memory.text = currentText; memory.voicePath = currentVoicePath; memory.speed = currentSpeed
+        memory.steps = currentSteps; memory.lang = currentLang; memory.playing = true
     }
 
     private fun updateIndexState(index: Int) {
-        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
-            putInt("last_index", index)
-        }
+        com.brahmadeo.supertonic.tts.utils.ReadingMemory.index = index
     }
 
     private fun clearState() {
-        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
-            putBoolean("is_playing", false)
-        }
+        com.brahmadeo.supertonic.tts.utils.ReadingMemory.playing = false
     }
 
     private fun restoreState() {

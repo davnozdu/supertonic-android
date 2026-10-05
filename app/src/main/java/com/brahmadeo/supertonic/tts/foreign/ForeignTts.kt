@@ -74,6 +74,7 @@ object ForeignTts {
         val providerKey = "$engine:$language"
         if (lastUse < (cooldown[providerKey] ?: 0)) return null
         var file: File? = null
+        var sink: android.os.ParcelFileDescriptor? = null
         try {
             if (clientEngine != engine) {
                 closeClient(); val ready = CompletableFuture<Int>(); init = ready
@@ -105,9 +106,16 @@ object ForeignTts {
                     }
                 }
             })
-            file = File.createTempFile("foreign-", ".wav", ctx.cacheDir)
             val params = Bundle().apply { putBoolean("supertonic_foreign_proxy", true) }
-            check(tts.synthesizeToFile(text, params, file, id) == TextToSpeech.SUCCESS)
+            // PCM arrives through onAudioAvailable; the engine's WAV copy is never read.
+            // Android 11+ accepts a descriptor, so send it to /dev/null instead of flash.
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                sink = android.os.ParcelFileDescriptor.open(File("/dev/null"), android.os.ParcelFileDescriptor.MODE_WRITE_ONLY)
+                check(tts.synthesizeToFile(text, params, sink, id) == TextToSpeech.SUCCESS)
+            } else {
+                file = File.createTempFile("foreign-", ".wav", ctx.cacheDir)
+                check(tts.synthesizeToFile(text, params, file, id) == TextToSpeech.SUCCESS)
+            }
             waitFor(done, 8000)
             val source = synchronized(audio) { audio.toByteArray() }
             check(source.isNotEmpty()) { "External engine did not return audio chunks" }
@@ -126,6 +134,6 @@ object ForeignTts {
                 Log.w("ForeignTTS", "External engine unavailable lang=$language: ${t.javaClass.simpleName}")
             }
             return null
-        } finally { file?.delete(); lastUse = android.os.SystemClock.elapsedRealtime() }
+        } finally { runCatching { sink?.close() }; file?.delete(); lastUse = android.os.SystemClock.elapsedRealtime() }
     }
 }

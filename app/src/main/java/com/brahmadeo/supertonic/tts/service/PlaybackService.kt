@@ -391,12 +391,13 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         while (!isPlaying && isActive && !SupertonicTTS.isCancelled()) delay(50)
                         if (!isActive || SupertonicTTS.isCancelled()) break
                         packet.item?.let { item -> withContext(Dispatchers.Main) {
-                            if (activeReadingItem !== item) getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit()
-                                .putString("last_text", item.text).putString("last_voice_path", item.style)
-                                .putString("last_lang", item.lang).putFloat("last_speed", item.speed).putInt("last_steps", item.steps).apply()
-                            val itemChanged = activeReadingItem !== item
+                            if (activeReadingItem !== item) {
+                                val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
+                                memory.text = item.text; memory.voicePath = item.style; memory.lang = item.lang
+                                memory.speed = item.speed; memory.steps = item.steps
+                            }
                             activeReadingItem = item; currentSentenceIndex = packet.index
-                            persistIndex(itemChanged)
+                            persistIndex()
                             notifyListenerProgress(packet.index, item.chunks.sentences.size)
                         } }
                         if (packet.bytes.isNotEmpty()) writeToTrackBlocking(packet.bytes)
@@ -729,15 +730,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         }
     }
 
-    // SupertonicPrefs also holds last_text (up to a whole article); rewriting that XML
-    // after every sentence costs flash writes and CPU. Pause/stop/finish always flush.
-    private var indexSavedAt = 0L
-    private fun persistIndex(force: Boolean = true) {
-        if (activeReadingItem == null) return
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (!force && now - indexSavedAt < 15_000) return
-        indexSavedAt = now
-        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit().putInt("last_index", currentSentenceIndex).apply()
+    // Reading position lives in RAM (ReadingMemory), never in flash-backed preferences.
+    private fun persistIndex() {
+        if (activeReadingItem != null) com.brahmadeo.supertonic.tts.utils.ReadingMemory.index = currentSentenceIndex
     }
 
     override fun onProgress(sessionId: Long, current: Int, total: Int) {}

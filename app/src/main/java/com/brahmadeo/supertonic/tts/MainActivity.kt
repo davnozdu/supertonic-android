@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.isSynthesizing.value = isSynthesizing
                 if (hasContent || isSynthesizing) {
                     viewModel.showMiniPlayer.value = true
-                    val lastText = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getString("last_text", "")
+                    val lastText = com.brahmadeo.supertonic.tts.utils.ReadingMemory.text
                     if (!lastText.isNullOrEmpty()) {
                         viewModel.miniPlayerTitle.value = lastText
                     }
@@ -500,7 +500,7 @@ class MainActivity : ComponentActivity() {
                         inputText = viewModel.inputText.value,
                         onInputTextChange = { 
                             viewModel.inputText.value = it
-                            saveStringPref("last_text", it)
+                            com.brahmadeo.supertonic.tts.utils.ReadingMemory.text = it
                         },
                         placeholderText = placeholder,
                         isInitializing = viewModel.isInitializing.value,
@@ -689,7 +689,7 @@ class MainActivity : ComponentActivity() {
 
     private fun loadPreferences() {
         val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-        viewModel.inputText.value = prefs.getString("last_text", "") ?: ""
+        viewModel.inputText.value = com.brahmadeo.supertonic.tts.utils.ReadingMemory.text
         viewModel.currentLang.value = prefs.getString("selected_lang", MainViewModel.DEFAULT_LANG) ?: MainViewModel.DEFAULT_LANG
         viewModel.selectedVoiceFile.value = prefs.getString("selected_voice", MainViewModel.DEFAULT_VOICE) ?: MainViewModel.DEFAULT_VOICE
         viewModel.selectedVoiceFile2.value = prefs.getString("selected_voice_2", MainViewModel.DEFAULT_VOICE_2) ?: MainViewModel.DEFAULT_VOICE_2
@@ -718,7 +718,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveStringPref(key: String, value: String) {
-        // Called per keystroke: apply() coalesces writes off the UI thread.
+        // apply(): asynchronous, coalesced write off the UI thread.
         getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
             putString(key, value)
         }
@@ -1008,9 +1008,8 @@ class MainActivity : ComponentActivity() {
     private fun checkResumeState() {
         if (viewModel.isDownloading.value) return
 
-        val prefs = getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
-        val lastText = prefs.getString("last_text", null)
-        val isPlayingPref = prefs.getBoolean("is_playing", false)
+        val lastText = com.brahmadeo.supertonic.tts.utils.ReadingMemory.text.ifEmpty { null }
+        val isPlayingPref = com.brahmadeo.supertonic.tts.utils.ReadingMemory.playing
 
         if (lastText.isNullOrEmpty()) {
             viewModel.canResume.value = false

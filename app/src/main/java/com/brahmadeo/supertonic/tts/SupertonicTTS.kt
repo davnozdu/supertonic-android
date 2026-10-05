@@ -100,6 +100,7 @@ object SupertonicTTS {
         appContext = context.applicationContext
         com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.initialize(context)
         com.brahmadeo.supertonic.tts.utils.TextNormalizer.context = context.applicationContext
+        com.brahmadeo.supertonic.tts.utils.ReadingMemory.purgeLegacy(context.applicationContext)
     }
 
     @Synchronized
