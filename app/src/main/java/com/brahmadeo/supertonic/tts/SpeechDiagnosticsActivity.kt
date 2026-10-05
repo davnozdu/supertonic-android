@@ -57,6 +57,10 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val model = intent.getStringExtra("model") ?: AssetManager.SILERO_MODEL
                 var tts: TextToSpeech? = null
                 try {
+                    if (intent.getBooleanExtra("exportComparison", false)) {
+                        com.brahmadeo.supertonic.tts.comparison.SpeechSamples.export(this@SpeechDiagnosticsActivity)
+                        return@withContext
+                    }
                     if(multiVoiceProbe) {
                         val requested = intent.getStringExtra("roleProvider") ?: oldLlmMode
                         require(requested in listOf("LOCAL", "GEMINI", "OLLAMA", "AUTO"))
