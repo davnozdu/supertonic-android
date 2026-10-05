@@ -87,28 +87,26 @@ internal object SpeechSamples {
                     val wav = readWave(speech)
                     val output = File(directory,names[index]+"-music.wav")
                     val decoded = decodeMusic(music,wav.samples.size.toDouble()/wav.rate + 1)
-                    val mix = ByteBuffer.allocate(wav.samples.size*4).order(ByteOrder.LITTLE_ENDIAN)
+                    // Match the hardware mixer at 48kHz; do not downsample music to a 24kHz voice.
+                    val speechFrames = resample(wav.samples,wav.rate,1,48000)
+                    val musicFrames = resample(decoded.samples,decoded.rate,decoded.channels,48000)
+                    val musicCount = musicFrames.size/decoded.channels
+                    val mix = ByteBuffer.allocate(speechFrames.size*4).order(ByteOrder.LITTLE_ENDIAN)
                     var clipped = 0
-                    for (frame in wav.samples.indices) {
-                        val position = frame.toDouble()*decoded.rate/wav.rate
-                        val left = position.toLong()%decoded.frames
-                        val right = (left+1)%decoded.frames
-                        val alpha = (position-position.toLong()).toFloat()
+                    for (frame in speechFrames.indices) {
                         for (channel in 0..1) {
                             val ch = channel.coerceAtMost(decoded.channels-1)
-                            val a = decoded.samples[(left*decoded.channels+ch).toInt()]
-                            val b = decoded.samples[(right*decoded.channels+ch).toInt()]
-                            val value = (wav.samples[frame] + (a+(b-a)*alpha)*gain).roundToInt()
+                            val value = (speechFrames[frame] + musicFrames[(frame%musicCount)*decoded.channels+ch]*gain).roundToInt()
                             if (value !in -32768..32767) clipped++
                             mix.putShort(value.coerceIn(-32768,32767).toShort())
                         }
                     }
-                    writeWave(output,wav.rate,2,mix.array())
+                    writeWave(output,48000,2,mix.array())
                     File(directory,names[index]+"-prepared.txt").writeText(prepared.text)
                     val row = JSONObject().put("model",model).put("file",output.name).put("voices",JSONArray(chosen))
                         .put("sourceHash",SpeechTextTrace.fingerprint(source)).put("preparedHash",SpeechTextTrace.fingerprint(prepared.text))
                         .put("provider",prepared.provider).put("roleProvider",prepared.roleProvider).put("roles",JSONArray(prepared.voicePlan.map { it.role.name }.distinct()))
-                        .put("durationMs",wav.samples.size*1000L/wav.rate).put("rate",wav.rate).put("speed",1.0)
+                        .put("durationMs",wav.samples.size*1000L/wav.rate).put("rate",48000).put("nativeRate",wav.rate).put("speed",1.0)
                         .put("wallMs",SystemClock.elapsedRealtime()-started).put("music",track).put("musicGain",gain.toDouble()).put("clippedSamples",clipped)
                     report.put(row)
                     File(directory,"report.json").writeText(report.toString(2))
@@ -191,6 +189,39 @@ internal object SpeechSamples {
             check(samples.size>=channels && samples.size%channels==0)
             return Music(rate,channels,samples)
         } finally { runCatching { codec?.stop() };codec?.release();extractor.release() }
+    }
+    /** Windowed sinc with a cached polyphase kernel: preserves fricatives and prevents aliasing. */
+    private fun resample(samples: ShortArray, rate: Int, channels: Int, target: Int): FloatArray {
+        if (rate == target) return FloatArray(samples.size) { samples[it].toFloat() }
+        fun gcd(a: Int,b: Int): Int = if(b==0) a else gcd(b,a%b)
+        val common=gcd(rate,target); val phases=target/common; val step=rate/common
+        val taps=32; val radius=taps/2; val cutoff=minOf(1.0,target.toDouble()/rate)*0.94
+        val coefficients=Array(phases) { phase ->
+            val fraction=phase.toDouble()/phases
+            val kernel=FloatArray(taps) { tap ->
+                val distance=tap-(radius-1)-fraction
+                val window=if(kotlin.math.abs(distance)<radius) 0.5+0.5*kotlin.math.cos(Math.PI*distance/radius) else 0.0
+                val sinc=if(kotlin.math.abs(distance)<1e-9) cutoff else kotlin.math.sin(Math.PI*distance*cutoff)/(Math.PI*distance)
+                (window*sinc).toFloat()
+            }
+            val sum=kernel.sum(); for(i in kernel.indices) kernel[i]/=sum
+            kernel
+        }
+        val sourceFrames=samples.size/channels
+        val frames=((sourceFrames.toLong()*target+rate/2)/rate).toInt()
+        val result=FloatArray(frames*channels)
+        for(frame in 0 until frames) {
+            val numerator=frame.toLong()*step; val center=(numerator/phases).toInt(); val kernel=coefficients[(numerator%phases).toInt()]
+            for(channel in 0 until channels) {
+                var sum=0f
+                for(tap in 0 until taps) {
+                    val index=center+tap-(radius-1)
+                    if(index in 0 until sourceFrames) sum+=samples[index*channels+channel]*kernel[tap]
+                }
+                result[frame*channels+channel]=sum
+            }
+        }
+        return result
     }
     private fun writeWave(file: File, rate: Int, channels: Int, pcm: ByteArray) {
         val header=ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
