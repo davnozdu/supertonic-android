@@ -44,6 +44,9 @@ internal object NpuProbe {
         runCatching { tera(ctx) }.onFailure { log("tera failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
         runCatching { teraSampler(ctx) }.onFailure { log("tera sampler failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
         runCatching { kokoro(ctx) }.onFailure { log("kokoro failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
+        runCatching { generic(ctx) }.onFailure { log("generic failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
+        // Probe graphs are throwaway: keep flash for the production NPU cache only.
+        File(ctx.filesDir, "npu-cache").listFiles { f -> f.name.startsWith("probe-") }?.forEach { it.delete() }
         log("done")
     }
 
@@ -116,6 +119,48 @@ internal object NpuProbe {
                 log("tera sampler NPU createMs=$createMs wallMs=${"%.0f".format(t.wallMs)} cpuMs=${"%.0f".format(t.cpuMs)} ${snr(reference!!, y)}") }
             finally { x.values.forEach { it.close() } }
         }
+    }
+
+    /** Any pushed model: files/npu-models/<name>.probe.json = {"model": file, "dims": {sym: n},
+     * "inputs": {name: {"shape": [..], "file": raw little-endian float32}}, "fallback": bool}.
+     * Real recorded inputs keep FP16 behaviour representative. */
+    private fun generic(ctx: Context) {
+        val dir = File(ctx.filesDir, "npu-models")
+        val specs = dir.listFiles { f -> f.name.endsWith(".probe.json") }.orEmpty().sortedBy { it.name }
+        if (specs.isEmpty()) { log("generic skipped: no specs"); return }
+        val env = OrtEnvironment.getEnvironment()
+        for (spec in specs) runCatching {
+            val j = JSONObject(spec.readText()); val name = spec.name.removeSuffix(".probe.json")
+            val model = File(dir, j.getString("model"))
+            val dims = j.getJSONObject("dims").let { d -> d.keys().asSequence().associateWith { d.getLong(it) } }
+            val ins = j.getJSONObject("inputs")
+            val data = ins.keys().asSequence().associateWith { key ->
+                val e = ins.getJSONObject(key); val shape = e.getJSONArray("shape").let { a -> LongArray(a.length()) { a.getLong(it) } }
+                val bytes = File(dir, e.getString("file")).readBytes()
+                shape to FloatArray(bytes.size / 4).also { ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(it) }
+            }
+            fun inputs() = data.mapValues { (_, v) -> OnnxTensor.createTensor(env, FloatBuffer.wrap(v.second), v.first) }
+            fun timed(s: OrtSession, label: String, ref: FloatArray?): FloatArray {
+                val x = inputs()
+                try {
+                    val y = output(s, x); val t = measure(3) { output(s, x) }
+                    log("generic $name $label wallMs=${"%.1f".format(t.wallMs)} cpuMs=${"%.1f".format(t.cpuMs)} finite=${y.all { it.isFinite() }}" + (ref?.let { " " + snr(it, y) } ?: ""))
+                    return y
+                } finally { x.values.forEach { it.close() } }
+            }
+            val reference = OrtSession.SessionOptions().use { o ->
+                o.setIntraOpNumThreads(j.optInt("cpuThreads", 4)); o.addConfigEntry("session.intra_op.allow_spinning", "0")
+                dims.forEach { (k, v) -> o.setSymbolicDimensionValue(k, v) }
+                env.createSession(model.path, o).use { timed(it, "CPU threads=${j.optInt("cpuThreads", 4)}", null) }
+            }
+            for (mode in listOf("burst", "high_performance")) {
+                val created = SystemClock.elapsedRealtime()
+                Npu.session(ctx, env, model, dims, "probe-$name-$mode", mode, allowCpuFallback = j.optBoolean("fallback", true), logInfo = true).use { s ->
+                    log("generic $name NPU mode=$mode createMs=${SystemClock.elapsedRealtime() - created}")
+                    timed(s, "NPU mode=$mode", reference)
+                }
+            }
+        }.onFailure { log("generic ${spec.name} failed ${it.javaClass.simpleName}: ${it.message?.take(300)}") }
     }
 
     private fun kokoro(ctx: Context) {
