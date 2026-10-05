@@ -166,10 +166,14 @@ object UpdateChecker {
         if (r.pre == null && l.pre == null) return false
         if (r.pre == null) return true   // remote final > local pre-release
         if (l.pre == null) return false  // remote pre-release < local final
-        return r.pre > l.pre
+        for (k in 0 until maxOf(r.pre.size,l.pre.size)) {
+            val remote=r.pre.getOrElse(k) { 0 };val local=l.pre.getOrElse(k) { 0 }
+            if(remote!=local) return remote>local
+        }
+        return false
     }
 
-    private data class Parsed(val nums: IntArray, val pre: Int?)
+    private data class Parsed(val nums: IntArray, val pre: IntArray?)
 
     private fun parse(version: String): Parsed? {
         val v = version.trim().removePrefix("v").removePrefix("V")
@@ -183,11 +187,14 @@ object UpdateChecker {
         for (k in 0 until 3) {
             nums[k] = parts.getOrNull(k)?.toIntOrNull() ?: 0
         }
-        // Extract the trailing integer of a "betaN"/"rcN" suffix; a suffix
-        // with no number (plain "beta") sorts as 0.
+        // Dotted beta revisions compare numerically: beta4.10 > beta4.9.2.
+        // A suffix with no number (plain "beta") sorts as zero.
         val pre = suffix?.let { s ->
             val digits = s.dropWhile { !it.isDigit() }
-            if (digits.isEmpty()) 0 else digits.toIntOrNull() ?: 0
+            if (digits.isEmpty()) intArrayOf(0) else {
+                val values=digits.split('.').map { it.toIntOrNull() ?: return null }
+                values.toIntArray()
+            }
         }
         return Parsed(nums, pre)
     }
