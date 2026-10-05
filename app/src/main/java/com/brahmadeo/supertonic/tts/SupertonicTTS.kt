@@ -290,10 +290,10 @@ object SupertonicTTS {
     // Requests the listener is waiting for right now; reader look-ahead yields the model to them.
     private val foregroundWaiting = java.util.concurrent.atomic.AtomicInteger()
 
-    /** Minimum audible pause after a sentence for Kokoro and Shtorm, on every reading path
-     * (Moon, built-in player, look-ahead, multi-voice parts), controlled by the user's
-     * "audible punctuation pauses" switch; only the missing silence is added. Tera and Silero
-     * keep their own switches (Silero's fixed pauses are opt-in: the user found them choppy). */
+    /** Minimum audible pause at the end of a Kokoro/Shtorm chunk that ends a sentence, on every
+     * reading path (Moon, built-in player, look-ahead, multi-voice parts), controlled by the
+     * "audible punctuation pauses" switch; only missing silence is added. Tera and Silero keep
+     * their own switches (Silero's fixed pauses are opt-in: the user found them choppy). */
     private fun sentencePauseMs(ctx: Context): Int {
         if (!AssetManager.isKokoro(ctx) && !AssetManager.isPocket(ctx)) return 0
         val prefs = ctx.getSharedPreferences("SupertonicPrefs", 0)
@@ -302,20 +302,16 @@ object SupertonicTTS {
     }
 
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null, skipDictionary: Boolean = false, aheadOwner: String? = null): ByteArray? {
+        val pcm = generateAudioOne(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
         val pauseMs = appContext?.let { sentencePauseMs(it) } ?: 0
-        val parts = if (pauseMs > 0) com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.split(text, 0, pauseMs, sentenceOnly = true) else emptyList()
-        if (parts.isEmpty() || (parts.size == 1 && parts[0].pauseMs == 0))
-            return generateAudioOne(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
-        val output = java.io.ByteArrayOutputStream()
-        for (part in parts) {
-            if (isCancelled()) return null
-            val pcm = generateAudioOne(part.text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
-            if (pcm == null) { if (isCancelled() || preparationGeneration != null) return null else continue }
-            output.write(pcm)
-            val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(pcm, part.pauseMs, getAudioSampleRate())
-            if (missing > 0) { val silence = ByteArray(missing * 2); output.write(silence); listener?.onAudioChunk(0L, silence) }
-        }
-        return output.toByteArray().takeIf { it.isNotEmpty() && !isCancelled() }
+        // One inference per chunk: Kokoro pays ~0.5 s per call, so splitting sentences into
+        // separate calls cost far more than it gained. Only the chunk end gets a pause.
+        if (pcm == null || pauseMs <= 0 || isCancelled() || text.trimEnd('"', '\'', '»', '”', ')', ']', ' ').lastOrNull() !in listOf('.', '!', '?', '…')) return pcm
+        val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(pcm, pauseMs, getAudioSampleRate())
+        if (missing <= 0) return pcm
+        val silence = ByteArray(missing * 2)
+        listener?.onAudioChunk(0L, silence)
+        return pcm + silence
     }
 
     private fun generateAudioOne(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean, aheadOwner: String?): ByteArray? {
