@@ -12,9 +12,10 @@ class EngineThreadPolicyTest {
         assertEquals(16,EngineThreadPolicy.maximum(64))
     }
     @Test fun measuredAndConservativeDefaults() {
-        assertEquals(6,EngineThreadPolicy.recommended("teratts_v2",8))
-        for (model in listOf("kokoro_ru_v2","silero_v5_5_ru","silero_cis_ru","shtorm_pocket_ru"))
-            assertEquals(4,EngineThreadPolicy.recommended(model,8))
+        assertEquals(2,EngineThreadPolicy.recommended("teratts_v2",8))
+        assertEquals(4,EngineThreadPolicy.recommended("kokoro_ru_v2",8))
+        for (model in listOf("silero_v5_5_ru","silero_cis_ru","shtorm_pocket_ru"))
+            assertEquals(2,EngineThreadPolicy.recommended(model,8))
     }
     @Test fun userChoiceIsRetainedAndClamped() {
         assertEquals(2,EngineThreadPolicy.selected("teratts_v2",8,2))
