@@ -30,6 +30,19 @@ object MusicCatalog {
         it.isFile && it.length()==track.size && runCatching { marker(context,track).readText()==track.sha }.getOrDefault(false)
     }
     fun selected(context: Context, id: String): File? = tracks(context).firstOrNull { it.id==id }?.let { ready(context,it) }
+    /** No choice yet, or the chosen file is gone: fall back to the first installed track. "" when none is installed. */
+    fun ensureDefault(context: Context): String {
+        val prefs = context.getSharedPreferences("SupertonicPrefs",0)
+        val current = prefs.getString("background_music_track","").orEmpty()
+        val valid = when {
+            current == "custom" -> MusicFiles.custom(context) != null
+            current.startsWith("ready:") -> selected(context, current.removePrefix("ready:")) != null
+            else -> false
+        }
+        if (valid) return current
+        val first = tracks(context).firstOrNull { ready(context,it) != null } ?: return ""
+        return "ready:${first.id}".also { prefs.edit().putString("background_music_track", it).apply() }
+    }
     suspend fun download(context: Context, progress: (Int,String)->Unit) = withContext(Dispatchers.IO) {
         lock.withLock {
             ModelDownloadForeground.run(context) {
@@ -52,12 +65,13 @@ object MusicCatalog {
     suspend fun remove(context: Context, track: Track) = withContext(Dispatchers.IO) {
         lock.withLock {
             val prefs = context.getSharedPreferences("SupertonicPrefs",0)
-            if(prefs.getString("background_music_track","")=="ready:${track.id}") {
-                check(prefs.edit().remove("background_music_track").putBoolean("background_music_enabled",false).commit())
-            }
+            val wasSelected = prefs.getString("background_music_track","")=="ready:${track.id}"
+            if(wasSelected) check(prefs.edit().remove("background_music_track").commit())
             check(!path(context,track).exists() || path(context,track).delete()) { "Не удалось удалить композицию" }
             marker(context,track).delete()
             File(directory(context),"${track.file}.partial").delete()
+            // The removed track was playing: continue with another installed one, or switch music off.
+            if(wasSelected && ensureDefault(context).isEmpty()) check(prefs.edit().putBoolean("background_music_enabled",false).commit())
             Unit
         }
     }

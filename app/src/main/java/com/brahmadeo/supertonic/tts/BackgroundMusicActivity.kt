@@ -31,7 +31,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 val catalog=remember { MusicCatalog.tracks(this) }
                 var installed by remember { mutableStateOf(catalog.filter { MusicCatalog.ready(this,it)!=null }.map { it.id }.toSet()) }
                 var enabled by remember { mutableStateOf(prefs.getBoolean("background_music_enabled",false)) }
-                var selected by remember { mutableStateOf(prefs.getString("background_music_track","").orEmpty()) }
+                var selected by remember { mutableStateOf(MusicCatalog.ensureDefault(this)) }
                 var customName by remember { mutableStateOf(if(MusicFiles.custom(this)!=null) prefs.getString("background_music_name","Свой MP3").orEmpty() else "") }
                 var volume by remember { mutableIntStateOf(prefs.getInt("background_music_volume",BackgroundMusic.DEFAULT_VOLUME).coerceIn(0,100)) }
                 var busy by remember { mutableStateOf(false) }
@@ -83,6 +83,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 } catch(t: Exception) { message="Не удалось скачать: ${t.message.orEmpty()}" }
                                 finally {
                                     installed=catalog.filter { MusicCatalog.ready(this@BackgroundMusicActivity,it)!=null }.map { it.id }.toSet()
+                                    selected=MusicCatalog.ensureDefault(this@BackgroundMusicActivity)
                                     busy=false
                                 }
                             }
@@ -100,7 +101,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                                     try {
                                         MusicCatalog.remove(this@BackgroundMusicActivity,track)
                                         installed=installed-track.id
-                                        if(selected=="ready:${track.id}") { selected=""; enabled=false }
+                                        selected=prefs.getString("background_music_track","").orEmpty()
+                                        enabled=prefs.getBoolean("background_music_enabled",false)
                                         message="Композиция удалена с телефона"
                                     } catch(t: Exception) { message="Не удалось удалить: ${t.message.orEmpty()}" }
                                     finally { busy=false }

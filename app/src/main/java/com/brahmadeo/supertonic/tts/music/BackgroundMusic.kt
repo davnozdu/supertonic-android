@@ -68,7 +68,7 @@ object BackgroundMusic {
 
     private fun update() {
         val ctx = context ?: return
-        val track = prefs?.getString("background_music_track", "").orEmpty()
+        val track = prefs?.getString("background_music_track", "").orEmpty().ifEmpty { MusicCatalog.ensureDefault(ctx) }
         val source = if(track=="custom") "custom:${prefs?.getString("background_music_file","")}" else track
         if (source != loadedSource && loadedSource.isNotEmpty()) {
             release(false)
