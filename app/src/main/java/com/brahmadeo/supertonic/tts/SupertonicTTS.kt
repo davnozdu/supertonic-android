@@ -56,7 +56,8 @@ object SupertonicTTS {
     }
     @Synchronized private fun maybeKokoroEngine(context: Context): com.brahmadeo.supertonic.tts.kokoro.KokoroEngine {
         val full=com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
-        kokoroEngine?.let { if(it.fullPrecision==full && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)) return it;it.close();kokoroEngine=null }
+        val npu=full && com.brahmadeo.supertonic.tts.utils.Npu.enabled(context, com.brahmadeo.supertonic.tts.utils.Npu.KOKORO)
+        kokoroEngine?.let { if(it.fullPrecision==full && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context) && it.npuRequested==npu) return it;it.close();kokoroEngine=null }
         return com.brahmadeo.supertonic.tts.kokoro.KokoroEngine(context,full).also { kokoroEngine=it }
     }
     @Synchronized private fun maybePocketEngine(context: Context): com.brahmadeo.supertonic.tts.pocket.PocketEngine {

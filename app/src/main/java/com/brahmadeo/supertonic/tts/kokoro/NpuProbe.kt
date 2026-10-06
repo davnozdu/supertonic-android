@@ -211,4 +211,52 @@ internal object NpuProbe {
             timed(s, "NPU+CPU fallback")
         }
     }
+
+    /** Kokoro NPU kit: the same prepared front through the NPU and CPU orchestrations and the original model.
+     * Compiling warms the production NPU cache; no settings are read or changed. */
+    fun kokoroKit(ctx: Context) {
+        results = File(ctx.filesDir, "npu-models").apply { mkdirs() }.let { File(it, "probe-results.txt") }.apply { writeText("") }
+        log("kokoro-kit start supported=${Npu.supported(ctx)}")
+        try {
+            val root = KokoroDownload.root(ctx)
+            if (!KokoroDownload.fullReady(ctx)) { log("kokoro-kit skipped: full model missing"); return }
+            check(KokoroPhonemizer.initialize(File(root, "espeak-data").path))
+            val vocab = JSONObject(File(root, "config.json").readText()).getJSONObject("vocab").let { o -> o.keys().asSequence().associate { it.single() to o.getInt(it) } }
+            val pack = File(root, "sveta.bin").readBytes().let { b -> FloatArray(b.size / 4).also { ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(it) } }
+            val env = OrtEnvironment.getEnvironment()
+            fun created(label: String, block: () -> KokoroNpuDecoder): KokoroNpuDecoder {
+                val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
+                return block().also { log("kokoro-kit $label createMs=${SystemClock.elapsedRealtime() - wall} cpuMs=${Process.getElapsedCpuTime() - cpu}") }
+            }
+            created("NPU cold", { KokoroNpuDecoder(ctx, root, "model.onnx", 4) }).close()
+            val npu = created("NPU warm", { KokoroNpuDecoder(ctx, root, "model.onnx", 4) })
+            val ref = created("CPU segments", { KokoroNpuDecoder(ctx, root, "model.onnx", 4, onNpu = false) })
+            val original = OrtSession.SessionOptions().use { o -> o.setIntraOpNumThreads(4); o.addConfigEntry("session.intra_op.allow_spinning", "0"); env.createSession(File(root, "model.onnx").path, o) }
+            try {
+                for (text in listOf("Ти́хий ве́чер. За окно́м шелестя́т дере́вья.",
+                        "Когда́ по́езд наконе́ц останови́лся, на перро́не уже́ никого́ не́ было. Она́ до́лго смотре́ла в окно́ и ду́мала о том, что сказа́л ей муж вчера́ ве́чером.")) {
+                    val ipa = KokoroG2p.phonemize(text, KokoroPhonemizer::phonemes)
+                    val ids = longArrayOf(0) + ipa.mapNotNull { vocab[it]?.toLong() }.toLongArray() + longArrayOf(0)
+                    val style = pack.copyOfRange((ids.size - 3) * 256, (ids.size - 2) * 256)
+                    lateinit var pre: KokoroNpuDecoder.Pre
+                    val tp = measure(1) { pre = npu.prepare(ids, style, 1f) }
+                    lateinit var y: FloatArray; lateinit var yr: FloatArray
+                    val calls0 = npu.calls
+                    val tn = measure(2) { y = npu.generate(pre) }
+                    val callsPer = (npu.calls - calls0) / 4
+                    val tr = measure(1) { yr = ref.generate(pre) }
+                    val inputs = mapOf("input_ids" to OnnxTensor.createTensor(env, LongBuffer.wrap(ids), longArrayOf(1, ids.size.toLong())),
+                        "style" to OnnxTensor.createTensor(env, FloatBuffer.wrap(style), longArrayOf(1, 256)),
+                        "speed" to OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(1f)), longArrayOf(1)))
+                    val to = try { measure(2) { output(original, inputs) } } finally { inputs.values.forEach { it.close() } }
+                    val audio = y.size * 1000L / 24000
+                    log("kokoro-kit frames=${npu.frames(pre)} audioMs=$audio calls=$callsPer pre wall=${"%.0f".format(tp.wallMs)} cpu=${"%.0f".format(tp.cpuMs)}" +
+                        " | NPU gen wall=${"%.0f".format(tn.wallMs)} cpu=${"%.0f".format(tn.cpuMs)}" +
+                        " | CPU-seg gen wall=${"%.0f".format(tr.wallMs)} | original wall=${"%.0f".format(to.wallMs)} cpu=${"%.0f".format(to.cpuMs)}" +
+                        " | NPU vs CPU-seg ${snr(yr, y)} finite=${y.all { it.isFinite() }}")
+                }
+            } finally { original.close(); npu.close(); ref.close() }
+        } catch (t: Throwable) { log("kokoro-kit failed ${t.javaClass.simpleName}: ${t.message?.take(300)}") }
+        log("done")
+    }
 }

@@ -201,6 +201,17 @@ class LlmSettingsActivity : ComponentActivity() {
                                 voicePreview.stop();kokoroFull=it=="Полная точность"
                                 pausePrefs.edit().putBoolean("kokoro_full_precision",kokoroFull).apply()
                             }
+                            if (kokoroFull && kokoroFullReady && com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity)) {
+                                Toggle("Ускоритель NPU · эксперимент", npuEnabled) {
+                                    npuEnabled = it
+                                    if (it) com.brahmadeo.supertonic.tts.utils.Npu.clearFailure(this@LlmSettingsActivity)
+                                    pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, it).apply()
+                                }
+                                Text(if (npuEnabled && com.brahmadeo.supertonic.tts.utils.Npu.failed(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.Npu.KOKORO))
+                                    "NPU не запустился для Kokoro; используется процессор."
+                                    else "Генератор звука Kokoro считается на нейропроцессоре Snapdragon (FP16), текст и финальная сборка звука — на процессоре. Первый запуск около минуты готовит графы в фоне; в это время чтение идёт на процессоре. Переключатель общий с Tera.",
+                                    style=MaterialTheme.typography.bodySmall)
+                            }
                         }
                         if (config.mode != LlmMode.OFF) {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->

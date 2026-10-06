@@ -19,13 +19,15 @@ object Npu {
     private fun backend(ctx: Context) = File(ctx.applicationInfo.nativeLibraryDir, "libQnnHtp.so")
 
     fun supported(ctx: Context) = Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a" && backend(ctx).isFile
-    fun failed(ctx: Context) = prefs(ctx).getLong(FAILED, -1L) == version(ctx)
-    fun enabled(ctx: Context) = prefs(ctx).getBoolean(KEY, false) && supported(ctx) && !failed(ctx)
-    fun markFailed(ctx: Context, reason: String) {
-        Log.w(TAG, "NPU disabled for this version: $reason")
-        prefs(ctx).edit().putLong(FAILED, version(ctx)).apply()
+    /** Scopes keep a Kokoro failure from switching off the Tera vocoder and vice versa. */
+    const val KOKORO = "_kokoro"
+    fun failed(ctx: Context, scope: String = "") = prefs(ctx).getLong(FAILED + scope, -1L) == version(ctx)
+    fun enabled(ctx: Context, scope: String = "") = prefs(ctx).getBoolean(KEY, false) && supported(ctx) && !failed(ctx, scope)
+    fun markFailed(ctx: Context, reason: String, scope: String = "") {
+        Log.w(TAG, "NPU$scope disabled for this version: $reason")
+        prefs(ctx).edit().putLong(FAILED + scope, version(ctx)).apply()
     }
-    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).apply() }
+    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).apply() }
 
     fun options(ctx: Context, performance: String = "high_performance"): Map<String, String> {
         // The DSP loads the HTP skel through FastRPC from the app's extracted native libraries.

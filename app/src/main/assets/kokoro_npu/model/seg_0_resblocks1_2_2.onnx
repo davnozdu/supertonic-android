@@ -1,0 +1,81 @@
+:¹
+
+X
+Axa"Mul
+
+xa
+By"Add
+;
+-kmodel.decoder.generator.resblocks.1.alpha2.2
+yay"Mul
+
+ays"Sin
+
+s
+ss2"Mul
+?
+-kmodel.decoder.generator.resblocks.1.alpha2.2ra"
+Reciprocal
+
+ra
+s2t"Mul
+
+y
+tsn"Add
+
+sn
+Msnm"Mul
+­
+snm
+onnx::Conv_8006
+2kmodel.decoder.generator.resblocks.1.convs2.2.biascconv"Conv*
+	dilations@ *
+group *
+kernel_shape@ *
+pads@@ *
+strides@ 
+
+c
+RY"Addseg_resblocks.1_2_2*w€B2kmodel.decoder.generator.resblocks.1.convs2.2.biasj
+location
+model.onnxj
+offset22308939j
+length1024p*v€B-kmodel.decoder.generator.resblocks.1.alpha2.2j
+location
+model.onnxj
+offset23901441j
+length1024p*]€€Bonnx::Conv_8006j
+location
+model.onnxj
+offset	292261963j
+length1835008pZ
+X
+
+
+€
+wZ
+A
+
+
+€
+Z
+B
+
+
+€
+Z
+M
+
+
+
+wZ
+R
+
+
+€
+wb
+Y
+
+
+€
+wB
