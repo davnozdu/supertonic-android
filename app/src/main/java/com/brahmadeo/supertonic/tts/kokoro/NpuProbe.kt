@@ -229,7 +229,11 @@ internal object NpuProbe {
                 return block().also { log("kokoro-kit $label createMs=${SystemClock.elapsedRealtime() - wall} cpuMs=${Process.getElapsedCpuTime() - cpu}") }
             }
             created("NPU cold", { KokoroNpuDecoder(ctx, root, "model.onnx", 4) }).close()
+            created("NPU dima cold", { KokoroNpuDecoder(ctx, root, "model_dima.onnx", 4) }).close()
             val npu = created("NPU warm", { KokoroNpuDecoder(ctx, root, "model.onnx", 4) })
+            val dima = created("NPU dima warm", { KokoroNpuDecoder(ctx, root, "model_dima.onnx", 4) })
+            // Both NPU decoders resident: measure process memory from outside (dmabuf_dump / smaps).
+            log("kokoro-kit holding pssKb=${android.os.Debug.getPss()}"); Thread.sleep(20000); dima.close()
             val ref = created("CPU segments", { KokoroNpuDecoder(ctx, root, "model.onnx", 4, onNpu = false) })
             val original = OrtSession.SessionOptions().use { o -> o.setIntraOpNumThreads(4); o.addConfigEntry("session.intra_op.allow_spinning", "0"); env.createSession(File(root, "model.onnx").path, o) }
             try {

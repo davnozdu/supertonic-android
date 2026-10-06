@@ -177,6 +177,30 @@ def build_segment(model, nodes, stage, blk, j, half):
     return helper.make_graph(ns, f"seg_{blk}_{half}_{j}", ins, [helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, C, "w"])], initializer=inits)
 
 
+def build_up(model, nodes, name, convt, cin, cout, alpha):
+    """LeakyRelu as max(x, a*x) (exact; HTP mis-evaluates LeakyRelu(0.01)) -> ConvTranspose, chunked on the NPU."""
+    ct = nodes[convt]
+    a = numpy_helper.from_array(np.array(alpha, dtype=np.float32), f"_kit_{name}_alpha")
+    ns = [helper.make_node("Mul", ["X", a.name], ["ax"]), helper.make_node("Max", ["X", "ax"], ["lx"]),
+          helper.make_node("ConvTranspose", ["lx"] + list(ct.input[1:]), ["Y"], name="up",
+                           **{x.name: helper.get_attribute_value(x) for x in ct.attribute})]
+    inits = [i for i in model.graph.initializer if i.name in set(ct.input[1:])] + [a]
+    stride = [helper.get_attribute_value(x) for x in ct.attribute if x.name == "strides"][0][0]
+    return helper.make_graph(ns, name, [helper.make_tensor_value_info("X", TensorProto.FLOAT, [1, cin, "w"])],
+                             [helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, cout, None])], initializer=inits), stride
+
+
+def build_post_conv(model, nodes):
+    conv = nodes[GEN + "conv_post/Conv"]
+    a = numpy_helper.from_array(np.array(0.01, dtype=np.float32), "_kit_post_alpha")
+    ns = [helper.make_node("Mul", ["X", a.name], ["ax"]), helper.make_node("Max", ["X", "ax"], ["lx"]),
+          helper.make_node("Conv", ["lx"] + list(conv.input[1:]), ["Y"], name="post",
+                           **{x.name: helper.get_attribute_value(x) for x in conv.attribute})]
+    inits = [i for i in model.graph.initializer if i.name in set(conv.input[1:])] + [a]
+    return helper.make_graph(ns, "npost", [helper.make_tensor_value_info("X", TensorProto.FLOAT, [1, 128, "w"])],
+                             [helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, 22, "w"])], initializer=inits)
+
+
 def externalize(graph, offsets, location, original):
     """Point every original initializer at its bytes inside the model file; keep kit constants inline."""
     for t in graph.initializer:
@@ -206,6 +230,11 @@ def main(model_path, out_dir):
     save(build_glue(model, "up0", "/decoder/decode.3/Mul_output_0", GEN + "ups.0/ConvTranspose_output_0", "u0", 512), "up0.onnx")
     save(build_glue(model, "up1", GEN + "Div_1_output_0", GEN + "reflection_pad/Pad_output_0", "u1", 256), "up1.onnx")
     save(build_glue(model, "post", GEN + "Div_2_output_0", "waveform", "waveform", 128), "post.onnx")
+    # NPU glue: both upsamplers and conv_post in chunks; only the iSTFT tail stays on the CPU.
+    g, s0 = build_up(model, nodes, "nup0", GEN + "ups.0/ConvTranspose", 512, 256, 0.1); save(g, "nup0.onnx")
+    g, s1 = build_up(model, nodes, "nup1", GEN + "ups.1/ConvTranspose", 256, 128, 0.1); save(g, "nup1.onnx")
+    save(build_post_conv(model, nodes), "npost.onnx")
+    save(build_glue(model, "tail", GEN + "conv_post/Conv_output_0", "waveform", "waveform", 22), "tail.onnx")
     segments = []
     for k, (stage, blk, j, half) in enumerate(adain_list()):
         file = f"seg_{stage}_{blk.replace('.', '')}_{half}_{j}.onnx"
@@ -215,7 +244,9 @@ def main(model_path, out_dir):
     for stage, *_ in adain_list(): offs.append(o); o += CHANNELS[stage]
     manifest = {"version": 1, "model": location, "modelSize": os.path.getsize(model_path), "eps": 1e-5, "halo": HALO,
                 "stages": [{"channels": CHANNELS[s], "blocks": STAGES[s]} for s in range(2)],
-                "segments": [dict(s, coef=offs[i]) for i, s in enumerate(segments)], "coefSize": o}
+                "segments": [dict(s, coef=offs[i]) for i, s in enumerate(segments)], "coefSize": o,
+                "glue": {"nup0": {"in": 512, "out": 256, "scale": s0, "halo": 2}, "nup1": {"in": 256, "out": 128, "scale": s1, "halo": 2},
+                         "npost": {"in": 128, "out": 22, "scale": 1, "halo": HALO}}}
     json.dump(manifest, open(os.path.join(out_dir, "kit.json"), "w"), indent=1)
     print("kit", out_dir, "segments", len(segments), "coef", o)
 

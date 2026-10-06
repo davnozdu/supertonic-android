@@ -15,7 +15,10 @@ so plain windows change the sound (LSD 3.5–6 dB vs Kokoro's own 2.2 dB run-to-
 - `pre.onnx` (CPU): text → generator input, both noise branches, AdaIN coefficients P = (1+γ)·w, Q = (1+γ)·b + β.
 - 48 `seg_*.onnx` (NPU): `A·x + B → Snake → mask → Conv [+ residual]` between two norms, 32-frame chunks
   (640 / 3840 samples) with a 32-sample halo.
-- `up0/up1/post.onnx` (CPU): upsampling, reflection pad, conv_post and the iSTFT head.
+- `nup0/nup1/npost.onnx` (NPU): both upsamplers and conv_post in chunks (LeakyRelu as `max(x, a·x)`);
+  `tail.onnx` (CPU): the iSTFT head. The reflection pad is an index shift in Kotlin.
+- All 51 NPU graphs are compiled into ONE QNN context (`ep.share_ep_contexts`, external `_qnn.bin`,
+  `.done` marker): 4.13.6 used one context per graph and held ~1.5 GB of dmabuf for both voices' models.
 - The app computes mean/variance of every norm input over the full phrase: A = P/σ, B = Q − P·μ/σ.
 - Initializers are external-data references into the pinned `model.onnx` / `model_dima.onnx`
   (sha256 in `kit.json`): no weights are duplicated, ~1 MB of graphs per model.
@@ -26,7 +29,9 @@ model) and 120 dB (Dima) against the untouched generator on the same front outpu
 ## Runtime
 
 Graphs compile in the background on first use (cached in `npu-cache`); until then chunks run on the CPU
-model, afterwards the CPU model is released. Phrases above 520 frames (~13 s) stay on the CPU. Any NPU error
+model, afterwards the CPU model is released. Phrases above 800 frames (~20 s) stay on the CPU. Once compiled, a decoder loads synchronously (~2 s) instead of
+keeping the CPU model resident; norm statistics are gathered while chunk results are copied out; the CPU parts use
+at most two threads. Any NPU error
 switches Kokoro back to the CPU and is remembered for this app version (`npu_failed_version_kokoro`), without
 affecting Tera. Probe: `SpeechDiagnosticsActivity --ez kokoroNpuProbe true` (results also in
 `files/npu-models/probe-results.txt`).

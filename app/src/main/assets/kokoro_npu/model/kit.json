@@ -459,5 +459,25 @@
   }
  ],
  "coefSize": 9216,
+ "glue": {
+  "nup0": {
+   "in": 512,
+   "out": 256,
+   "scale": 10,
+   "halo": 2
+  },
+  "nup1": {
+   "in": 256,
+   "out": 128,
+   "scale": 6,
+   "halo": 2
+  },
+  "npost": {
+   "in": 128,
+   "out": 22,
+   "scale": 1,
+   "halo": 32
+  }
+ },
  "modelSha256": "2b784920660089011888fe88f2f48339c01334ad627c91cc0f88d947bc64fcf3"
 }

@@ -16,6 +16,7 @@ man = json.load(open(os.path.join(kit, "kit.json")))
 o = ort.SessionOptions(); o.intra_op_num_threads = 8; o.log_severity_level = 3
 S = lambda f: ort.InferenceSession(os.path.join(kit, f), o, providers=["CPUExecutionProvider"])
 pre, up0, up1, post = S("pre.onnx"), S("up0.onnx"), S("up1.onnx"), S("post.onnx")
+nup0, nup1, npost, tail = S("nup0.onnx"), S("nup1.onnx"), S("npost.onnx"), S("tail.onnx")
 segs = {(s["stage"], s["block"], s["dilation"], s["half"]): (S(s["file"]), s) for s in man["segments"]}
 H = man["halo"]; EPS = man["eps"]; CH = [frames * 20, frames * 120]  # samples per frame per stage
 
@@ -51,6 +52,17 @@ def resblock(stage, blk, x):
     return x
 
 
+def chunked(sess, x, core, h, scale, cout, out_len, shift):
+    """Chunk an op that maps input length L to scale*L (ConvTranspose) or L (conv) with a halo."""
+    C, L = x.shape[1], x.shape[2]; w = core + 2 * h; out = np.zeros((1, cout, out_len), np.float32)
+    for start in range(0, L, core):
+        lo = start - h; X = np.zeros((1, C, w), np.float32); s0, s1 = max(lo, 0), min(lo + w, L)
+        X[:, :, s0 - lo:s1 - lo] = x[:, :, s0:s1]; Y = sess.run(None, {"X": X})[0]; calls[0] += 1
+        n = min(core, L - start) * scale
+        out[:, :, shift + start * scale:shift + start * scale + n] = Y[:, :, scale * h:scale * h + n]
+    return out
+
+
 t = time.perf_counter()
 blocks = man["stages"]
 x = up0.run(None, {"x": xin})[0] + resblock(0, blocks[0]["blocks"][0], nc0)
@@ -59,6 +71,16 @@ x = up1.run(None, {"x": xs})[0] + resblock(1, blocks[1]["blocks"][0], nc1)
 xs = sum(resblock(1, b, x) for b in blocks[1]["blocks"][1:]) / 3
 wave = post.run(None, {"x": xs})[0]
 dt = time.perf_counter() - t
+# all-NPU glue path: chunked upsamplers + conv_post, CPU iSTFT tail only
+g = man["glue"]; L0 = nc0.shape[2]; L1 = nc1.shape[2]
+u0 = chunked(nup0, xin, 2 * frames, 2, g["nup0"]["scale"], 256, L0, 0)
+x = u0 + resblock(0, blocks[0]["blocks"][0], nc0)
+xs = sum(resblock(0, b, x) for b in blocks[0]["blocks"][1:]) / 3
+u1 = chunked(nup1, xs, CH[0], 2, g["nup1"]["scale"], 128, L1, 1); u1[:, :, 0] = u1[:, :, 2]
+x = u1 + resblock(1, blocks[1]["blocks"][0], nc1)
+xs = sum(resblock(1, b, x) for b in blocks[1]["blocks"][1:]) / 3
+pc = chunked(npost, xs, CH[1], H, 1, 22, L1, 0)
+wave2 = tail.run(None, {"x": pc})[0]
 
 # reference: the untouched generator from model.onnx on the same pre outputs
 model = onnx.load(os.path.join(kit, man["model"]))
@@ -68,4 +90,6 @@ ref_m = helper.make_model(helper.make_graph(nodes, "ref", gin, [helper.make_tens
 ref = ort.InferenceSession(ref_m.SerializeToString(), o, providers=["CPUExecutionProvider"]).run(None, dict(zip(names, [xin, nc0, nc1, style128])))[0]
 r, w = ref.ravel(), wave.ravel(); n = min(len(r), len(w))
 snr = 10 * np.log10((r[:n] ** 2).sum() / max(((r[:n] - w[:n]) ** 2).sum(), 1e-30))
+w2 = wave2.ravel()[:n]; snr2 = 10 * np.log10((r[:n] ** 2).sum() / max(((r[:n] - w2) ** 2).sum(), 1e-30))
+print(f"NPU-glue path: SNR={snr2:.1f} dB maxAbs={np.abs(r[:n]-w2).max():.2e}")
 print(f"frames/chunk={frames} T={xin.shape[2]} samples={len(w)} ref={len(r)} calls={calls[0]} orchestrated {dt*1000:.0f} ms  SNR={snr:.1f} dB maxAbs={np.abs(r[:n]-w[:n]).max():.2e}")

@@ -59,4 +59,49 @@ object Npu {
             }
         }
     }
+
+    /** True when a shared context for [cacheName] is compiled for this app version (loading takes seconds). */
+    fun sharedCacheReady(ctx: Context, cacheName: String) = File(File(ctx.filesDir, "npu-cache"), "$cacheName-v${version(ctx)}.done").isFile
+
+    /** Many small graphs compiled into ONE QNN context (ORT ep.share_ep_contexts): one HTP context, one
+     * context binary and shared HTP memory instead of a full context per graph. The binary is written when
+     * the last graph compiles; a ".done" marker guards against a half-written cache. */
+    fun sharedSessions(ctx: Context, env: OrtEnvironment, models: List<Pair<File, Map<String, Long>>>, cacheName: String,
+                       performance: String = "high_performance"): List<OrtSession> {
+        val cacheDir = File(ctx.filesDir, "npu-cache").apply { mkdirs() }
+        val tag = "$cacheName-v${version(ctx)}"
+        cacheDir.listFiles()?.filter { it.name.startsWith("$cacheName-") && !it.name.startsWith("$tag-") && !it.name.startsWith("$tag.") }?.forEach { it.delete() }
+        fun ctxFile(i: Int) = File(cacheDir, "$tag-${i}_ctx.onnx")
+        val bin = File(cacheDir, "$tag-0_ctx_qnn.bin")
+        val done = File(cacheDir, "$tag.done")
+        val cached = done.isFile && bin.isFile && models.indices.all { ctxFile(it).isFile }
+        fun clean() = cacheDir.listFiles()?.filter { it.name.startsWith("$tag-") || it.name.startsWith("$tag.") }?.forEach { it.delete() }
+        if (!cached) clean()
+        val sessions = mutableListOf<OrtSession>()
+        try {
+            models.forEachIndexed { i, (model, dims) ->
+                OrtSession.SessionOptions().use { o ->
+                    dims.forEach { (name, value) -> o.setSymbolicDimensionValue(name, value) }
+                    o.setIntraOpNumThreads(1)
+                    o.addConfigEntry("session.disable_cpu_ep_fallback", "1")
+                    o.addConfigEntry("ep.share_ep_contexts", "1")
+                    if (!cached) {
+                        o.addConfigEntry("ep.context_enable", "1")
+                        o.addConfigEntry("ep.context_embed_mode", "0")
+                        o.addConfigEntry("ep.context_file_path", ctxFile(i).path)
+                        if (i == models.lastIndex) o.addConfigEntry("ep.stop_share_ep_contexts", "1")
+                    }
+                    o.addQnn(options(ctx, performance))
+                    sessions += env.createSession(if (cached) ctxFile(i).path else model.path, o)
+                }
+            }
+            if (!cached) { check(bin.isFile) { "shared NPU context binary missing" }; done.writeText(models.size.toString()) }
+            return sessions
+        } catch (t: Throwable) {
+            sessions.forEach { runCatching { it.close() } }
+            clean()
+            throw t
+        }
+    }
 }
+

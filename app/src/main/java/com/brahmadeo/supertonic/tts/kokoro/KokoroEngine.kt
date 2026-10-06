@@ -53,6 +53,14 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
         if (npuOff) return null
         val key = modelKey(voice)
         npuDecoders[key]?.let { return it }
+        // Compiled once: load now (~2 s) instead of keeping the 650 MB CPU model resident alongside.
+        if (!npuBuilding.contains(key) && com.brahmadeo.supertonic.tts.utils.Npu.sharedCacheReady(appContext, "kokoro-${KokoroNpuDecoder.kitName(key)}")) {
+            val started = SystemClock.elapsedRealtime()
+            return try {
+                KokoroNpuDecoder(appContext, root, key, threads).also { npuDecoders[key] = it
+                    Log.i("KokoroTTS", "NPU decoder loaded model=$key ms=${SystemClock.elapsedRealtime() - started}") }
+            } catch (t: Throwable) { disableNpu("load ${t.javaClass.simpleName}: ${t.message?.take(160)}"); null }
+        }
         if (npuBuilding.add(key)) npuBuilder.execute {
             val started = SystemClock.elapsedRealtime()
             try {
