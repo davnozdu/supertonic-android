@@ -32,12 +32,20 @@ class ProbeActivity : Activity() {
     private fun memory(): JSONObject {
         val info = Debug.MemoryInfo()
         Debug.getMemoryInfo(info)
-        val available = File("/proc/meminfo").useLines { lines ->
-            lines.first { it.startsWith("MemAvailable:") }.trim().split(Regex("\\s+"))[1].toLong()
+        fun counters(path: String): Map<String, Long> = File(path).useLines { lines ->
+            lines.mapNotNull { line ->
+                val parts = line.trim().split(Regex("\\s+"))
+                parts.getOrNull(1)?.toLongOrNull()?.let { parts[0].removeSuffix(":") to it }
+            }.toMap()
         }
+        val system = counters("/proc/meminfo")
+        val own = counters("/proc/self/status")
         peakPssKiB = maxOf(peakPssKiB, info.totalPss.toLong())
         return JSONObject().put("pssKiB", info.totalPss).put("peakPssKiB", peakPssKiB)
-            .put("memAvailableKiB", available)
+            .put("rssKiB", own["VmRSS"]).put("vmSwapKiB", own["VmSwap"])
+            .put("memAvailableKiB", system.getValue("MemAvailable"))
+            .put("swapFreeKiB", system["SwapFree"]).put("ionUsedKiB", system["IonTotalUsed"])
+            .put("gpuUsedKiB", system["GPUTotalUsed"])
     }
 
     // Native model loading may block cancellation. The isolated probe can end its
@@ -157,9 +165,10 @@ class ProbeActivity : Activity() {
                     record("generated", JSONObject().put("index", index).put("wallMs", SystemClock.elapsedRealtime() - t0)
                         .put("cpuMs", android.os.Process.getElapsedCpuTime() - cpu0)
                         .put("text", response.text).put("framework", response.framework)
-                        .put("executedOn", response.executed_on.name).put("tokens", response.response_tokens)
+                        .put("executedOn", response.executed_on?.name).put("tokens", response.response_tokens)
                         .put("decodeMs", response.decode_time_ms).put("error", response.error?.toString()))
                     check(response.error == null && response.text.isNotBlank()) { "No usable generation" }
+                    check(response.executed_on == ExecutionTarget.EXECUTION_TARGET_ON_DEVICE) { "Not on-device" }
                 }
                 record("complete", JSONObject().put("success", true))
             } catch (cancelled: CancellationException) {
