@@ -47,3 +47,35 @@ Probe APKs use the repository's stable signing certificate; initial debug APKs
 used temporary GitHub runner keys and must be replaced once with model files
 preserved outside the package directory. Move files back under the new app UID
 or restore their read permissions; do not uninstall MyTTS.
+
+## Matched-request comparison
+
+The same package can explicitly select `npu`, `gpu`, or `cpu`; run each backend
+in a fresh process. LiteRT-LM 0.17.1 uses the same 2,588,147,712-byte E2B file as
+MyTTS, SHA256 `181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c`.
+Copy it into the probe's `files/models/gemma-4-E2B-it.litertlm`, preserving the
+original. GPU requests must succeed on GPU; there is no CPU fallback in the probe.
+
+```sh
+adb -s SERIAL shell am force-stop com.davnozdu.gemma4.npuprobe
+adb -s SERIAL shell am start -n com.davnozdu.gemma4.npuprobe/.ProbeActivity \
+  --ez run true --ez benchmark true --es backend gpu
+# Repeat with backend npu, or backend cpu --ei threads 2 / 4.
+```
+
+Benchmark runs `ProbeCases.story` and `ProbeCases.speech` twice, with fresh
+conversations and no retained chat history. Both use 512 context tokens,
+128 output-token limits and greedy sampling. LiteRT thinking/speculation are
+explicitly disabled. QHexRT owns its bundle's chat template; its SDK wrapper does
+not expose a Gemma-specific thinking template override or public power-mode knob.
+Formats and quantization differ (QHexRT decoder INT8 versus LiteRT bundle), so
+this compares deployable backends for the task, not identical kernels or weights.
+
+Wall time includes conversation setup/prefill; CPU time includes process overhead,
+including the equal memory monitor. LiteRT reports decode token counts/throughput;
+QHexRT's earlier decode-time field was zero, so use wall time for comparison.
+Output can differ: inspect the speech result for changed/missing words, incomplete
+text and accents before treating a faster backend as suitable for integration.
+No battery charge/current measurement is required or performed by this comparison.
+Energy per completed task depends on both average power and total duration;
+CPU time alone does not establish energy savings.

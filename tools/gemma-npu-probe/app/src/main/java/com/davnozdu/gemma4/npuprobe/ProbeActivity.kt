@@ -249,6 +249,7 @@ class ProbeActivity : Activity() {
         record("before_load", before)
         check(before.getLong("memAvailableKiB") >= 2L * 1024 * 1024) { "Less than 2 GiB available" }
         ExperimentalFlags.enableSpeculativeDecoding = false
+        ExperimentalFlags.enableBenchmark = true
         val engine = Engine(EngineConfig(file.path,
             backend = if (backend == "gpu") Backend.GPU() else Backend.CPU(threadCount = cpuThreads),
             audioBackend = Backend.CPU(), maxNumTokens = 512,
@@ -274,12 +275,14 @@ class ProbeActivity : Activity() {
                         val response = conversation.sendMessage(trial.prompt).toString()
                         val wall = SystemClock.elapsedRealtime() - started
                         val cpu = android.os.Process.getElapsedCpuTime() - cpu0
-                        val metrics = conversation.getBenchmarkInfo()
+                        // Optional metrics must not discard an otherwise valid response.
+                        val metrics = runCatching { conversation.getBenchmarkInfo() }.getOrNull()
                         record("generated", JSONObject().put("index", index).put("case", trial.id).put("round", round)
                             .put("limit", trial.limit).put("wallMs", wall).put("cpuMs", cpu).put("text", response)
-                            .put("tokens", metrics.lastDecodeTokenCount).put("prefillTokens", metrics.lastPrefillTokenCount)
-                            .put("ttftSeconds", metrics.timeToFirstTokenInSecond)
-                            .put("decodeTokensPerSecond", metrics.lastDecodeTokensPerSecond))
+                            .put("tokens", metrics?.lastDecodeTokenCount).put("prefillTokens", metrics?.lastPrefillTokenCount)
+                            .put("ttftSeconds", metrics?.timeToFirstTokenInSecond)
+                            .put("decodeTokensPerSecond", metrics?.lastDecodeTokensPerSecond)
+                            .put("metricsAvailable", metrics != null))
                         check(response.isNotBlank()) { "No usable generation" }
                         activeConversation = null
                     }
