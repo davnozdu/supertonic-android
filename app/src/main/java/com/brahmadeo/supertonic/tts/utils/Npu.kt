@@ -60,6 +60,10 @@ object Npu {
         }
     }
 
+    /** Diagnostics only: "key=value;key=value" from a pref to try QNN/session options without a rebuild. */
+    private fun debug(ctx: Context, key: String): Map<String, String> = prefs(ctx).getString(key, null).orEmpty()
+        .split(';').mapNotNull { it.split('=', limit = 2).takeIf { p -> p.size == 2 && p[0].isNotBlank() }?.let { p -> p[0].trim() to p[1].trim() } }.toMap()
+
     /** True when a shared context for [cacheName] is compiled for this app version (loading takes seconds). */
     fun sharedCacheReady(ctx: Context, cacheName: String) = File(File(ctx.filesDir, "npu-cache"), "$cacheName-v${version(ctx)}.done").isFile
 
@@ -91,7 +95,8 @@ object Npu {
                         o.addConfigEntry("ep.context_file_path", ctxFile(i).path)
                         if (i == models.lastIndex) o.addConfigEntry("ep.stop_share_ep_contexts", "1")
                     }
-                    o.addQnn(options(ctx, performance))
+                    debug(ctx, "npu_debug_cfg").forEach { (k, v) -> o.addConfigEntry(k, v) }
+                    o.addQnn(options(ctx, performance) + debug(ctx, "npu_debug_qnn"))
                     sessions += env.createSession(if (cached) ctxFile(i).path else model.path, o)
                 }
             }
