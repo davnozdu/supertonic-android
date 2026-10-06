@@ -340,15 +340,32 @@ class LlmSettingsActivity : ComponentActivity() {
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Локальная Gemma 4 E2B", style = MaterialTheme.typography.titleLarge)
-                        Text(if (LocalModelDownload.ready(this@LlmSettingsActivity)) "Модель установлена и проверена" else downloadStatus)
-                        Text("Скачивание из Hugging Face: 2,59 ГБ. После установки модель работает без сети и без ключей. Скачанный файл остаётся на устройстве; из RAM модель выгружается после простоя.", style = MaterialTheme.typography.bodySmall)
+                        val llmPrefs = remember { getSharedPreferences("llm_settings", MODE_PRIVATE) }
+                        val npuPossible = remember { com.brahmadeo.supertonic.tts.llm.GemmaHexagon.supported(this@LlmSettingsActivity) }
+                        var engine by remember { mutableStateOf(llmPrefs.getString(LocalModelDownload.ENGINE_KEY, "gpu") ?: "gpu") }
+                        if (npuPossible) {
+                            // One local engine at a time: choosing one switches the other off.
+                            Choice("Движок локальной Gemma", if (engine == "npu") "NPU · Hexagon (эксперимент)" else "GPU · LiteRT",
+                                listOf("GPU · LiteRT", "NPU · Hexagon (эксперимент)")) {
+                                engine = if (it.startsWith("NPU")) "npu" else "gpu"
+                                llmPrefs.edit().putString(LocalModelDownload.ENGINE_KEY, engine).apply()
+                                scope.launch { withContext(Dispatchers.IO) { LlmProviders.unload() } }
+                                com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            }
+                            Text(if (engine == "npu") "Та же Gemma 4 E2B в формате Q4_0 на нейропроцессоре Snapdragon (llama.cpp ggml-hexagon), отдельный файл 2,44 ГБ. Цель — меньше нагрузки на процессор и батарею; при сбое NPU локальная обработка не подменяется GPU, работает обычный резерв."
+                                else "Модель LiteRT на графическом процессоре (при ошибке — CPU). NPU-вариант можно выбрать здесь же; одновременно работает только один.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        val localSpec = if (engine == "npu" && npuPossible) LocalModelDownload.HEXAGON else LocalModelDownload.LITERT
+                        Text(if (LocalModelDownload.ready(this@LlmSettingsActivity, localSpec)) "Модель установлена и проверена" else downloadStatus)
+                        Text("Скачивание из Hugging Face: ${localSpec.sizeLabel}. После установки модель работает без сети и без ключей. Скачанный файл остаётся на устройстве; из RAM модель выгружается после простоя.", style = MaterialTheme.typography.bodySmall)
                         if (downloading) {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                             OutlinedButton(onClick = { LocalModelDownload.cancel(this@LlmSettingsActivity) }) { Text("Приостановить скачивание") }
-                        } else if (!LocalModelDownload.ready(this@LlmSettingsActivity)) {
-                            Button(enabled = LocalModelDownload.supported(), onClick = { LocalModelDownload.start(this@LlmSettingsActivity) }) { Text("Поставить / скачать локальную модель") }
+                        } else if (!LocalModelDownload.ready(this@LlmSettingsActivity, localSpec)) {
+                            Button(enabled = LocalModelDownload.supported(), onClick = { LocalModelDownload.start(this@LlmSettingsActivity, localSpec) }) { Text("Поставить / скачать локальную модель") }
                             if (!LocalModelDownload.supported()) Text("Для локальной Gemma 4 требуется 64-битный Android")
                         }
+                        if (engine != "npu" || !npuPossible) {
                         Toggle("GPU для Gemma 4 (при ошибке — CPU)", config.gpu) { config = config.copy(gpu = it); save() }
                         var speculative by remember { mutableStateOf(getSharedPreferences("llm_settings", MODE_PRIVATE).getBoolean(LlmProviders.SPECULATIVE_KEY, false)) }
                         Toggle("Ускоренная генерация Gemma · эксперимент", speculative) {
@@ -356,6 +373,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             getSharedPreferences("llm_settings", MODE_PRIVATE).edit().putBoolean(LlmProviders.SPECULATIVE_KEY, it).apply()
                         }
                         Text("Спекулятивное декодирование LiteRT-LM: черновые токены проверяет основная модель, текст тот же. По данным Google на Snapdragon того же поколения генерация на GPU ускоряется примерно с 52 до 87 токенов/с.", style = MaterialTheme.typography.bodySmall)
+                        }
                         Toggle("Размышление в локальной Gemma 4 (медленнее)", config.localThinking) { config = config.copy(localThinking = it); save() }
                         Choice("Выгрузка из RAM после простоя", "${config.idleSeconds} секунд", listOf("30 секунд", "60 секунд", "120 секунд", "300 секунд", "600 секунд")) {
                             config = config.copy(idleSeconds = it.substringBefore(' ').toInt()); save()

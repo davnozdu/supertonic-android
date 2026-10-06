@@ -180,7 +180,7 @@ object LlmPreparation {
                 result
             }.get(90, TimeUnit.SECONDS)
             Log.i("SpeechCheck", "RECOVERY initialRoleProvider=${initial.roleProvider} ready=${initial.rolesReady} localCalls=$localCalls")
-            if (LocalModelDownload.ready(ctx)) check(localCalls > 0) { "Local role fallback was not attempted" }
+            if (LocalModelDownload.activeReady(ctx)) check(localCalls > 0) { "Local role fallback was not attempted" }
             val deadline = SystemClock.elapsedRealtime() + 65_000
             val preferred = roleProviders(c).first()
             while (SystemClock.elapsedRealtime() < deadline && probeEpoch == epoch) {
@@ -318,7 +318,7 @@ object LlmPreparation {
                 expectedEpoch == epoch && !cancelled() && SystemClock.elapsedRealtime() < (if(provider=="local") deadline else cloudDeadline) &&
                     (ignoreCooldown || now >= (roleCooldown[provider] ?: 0L)) &&
                     when (provider) {
-                        "local" -> LocalModelDownload.ready(ctx)
+                        "local" -> LocalModelDownload.activeReady(ctx)
                         "gemini" -> connected(ctx) && c.geminiModel.isNotBlank() && c.geminiKey.isNotBlank()
                         else -> connected(ctx) && c.ollamaModel.isNotBlank()
                     }
@@ -407,7 +407,7 @@ object LlmPreparation {
             if (provider != "local" && !connected(ctx)) continue
             if (provider == "ollama" && c.ollamaModel.isBlank()) continue
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
-            if (provider == "local" && !LocalModelDownload.ready(ctx)) continue
+            if (provider == "local" && !LocalModelDownload.activeReady(ctx)) continue
             // A cloud already accepted almost the whole batch: a 30-50 s Gemma retry of the last
             // few fragments would block the single worker and push later paragraphs to the
             // dictionary. Those few fragments use the offline fallback instead.

@@ -113,8 +113,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 133
-        versionName "5.0.0-beta4.13.15"
+        versionCode 134
+        versionName "5.0.0-beta4.14"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
@@ -178,6 +178,8 @@ android {
             pickFirst '**/libc++_shared.so'
             pickFirst '**/libfbjni.so'
             // NPU runtime: keep the Snapdragon 8 Elite (V79) and 8 Elite Gen 5 (V81) HTP only.
+            // Hexagon DSP code for Gemma NPU (not ARM ELF): package as-is, no host strip.
+            keepDebugSymbols += ['**/libggml-htp-v79.so', '**/libggml-htp-v81.so']
             excludes += ['**/libQnnDsp*.so', '**/libQnnGpu.so', '**/libQnnHtpV68*.so', '**/libQnnHtpV69*.so',
                          '**/libQnnHtpV73*.so', '**/libQnnHtpV75*.so']
         }

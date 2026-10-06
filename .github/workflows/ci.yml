@@ -74,6 +74,9 @@ jobs:
       - name: Build Kokoro Russian phonemizer
         run: bash tools/prepare_kokoro_runtime.sh
 
+      - name: Prepare Gemma 4 Hexagon NPU runtime
+        run: bash tools/prepare_gemma_npu_runtime.sh
+
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
