@@ -170,12 +170,17 @@ class ProbeActivity : Activity() {
                     execution_target = ExecutionTarget.EXECUTION_TARGET_ON_DEVICE,
                     system_prompt = "Отвечай кратко по-русски.")
                 val prompts = listOf("Сколько будет два плюс два? Ответь одной короткой фразой.",
-                    "Назови столицу Чехии одним словом.")
+                    "Назови столицу Чехии одним словом.",
+                    "Напиши небольшой рассказ по-русски из восьми предложений. " +
+                        "Героиня Анна утром приехала в Прагу на поезде, встретила друга, " +
+                        "перешла через мост и нашла тихое кафе. Опиши прогулку и их разговор.")
                 for ((index, prompt) in prompts.withIndex()) {
                     ensureActive()
                     val t0 = SystemClock.elapsedRealtime()
                     val cpu0 = android.os.Process.getElapsedCpuTime()
-                    val response = withTimeout(120_000) { RunAnywhere.generate(prompt, options) }
+                    val trialOptions = if (index < 2) options else options.copy(
+                        max_output_tokens = 128, system_prompt = "Пиши по-русски.")
+                    val response = withTimeout(120_000) { RunAnywhere.generate(prompt, trialOptions) }
                     record("generated", JSONObject().put("index", index).put("wallMs", SystemClock.elapsedRealtime() - t0)
                         .put("cpuMs", android.os.Process.getElapsedCpuTime() - cpu0)
                         .put("text", response.text).put("framework", response.framework)
@@ -184,6 +189,7 @@ class ProbeActivity : Activity() {
                     check(response.error == null && response.text.isNotBlank()) { "No usable generation" }
                     check(response.executed_on == ExecutionTarget.EXECUTION_TARGET_ON_DEVICE) { "Not on-device" }
                 }
+                delay(5000) // Check sustained residency before unloading the native model.
                 record("complete", JSONObject().put("success", true))
             } catch (cancelled: CancellationException) {
                 runCatching { RunAnywhere.cancelGeneration() }

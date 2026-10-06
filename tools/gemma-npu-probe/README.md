@@ -40,3 +40,10 @@ model can never fit on a 16 GB phone.
 Success requires real generated responses on NPU, stable memory during load and
 decode, and acceptable coexistence with MyTTS. Until measured, no memory-fit or
 performance claim is justified. E4B is outside this trial.
+
+The third request exercises up to 128 generated tokens; it tests RAM during
+longer decode, not the literary quality or accent accuracy of the model.
+Probe APKs use the repository's stable signing certificate; initial debug APKs
+used temporary GitHub runner keys and must be replaced once with model files
+preserved outside the package directory. Move files back under the new app UID
+or restore their read permissions; do not uninstall MyTTS.
