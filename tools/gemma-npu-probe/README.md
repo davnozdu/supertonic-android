@@ -106,6 +106,8 @@ adb -s SERIAL shell am start -n com.davnozdu.gemma4.npuprobe/.ProbeActivity \
 adb -s SERIAL shell am force-stop com.davnozdu.gemma4.npuprobe
 adb -s SERIAL shell am start -n com.davnozdu.gemma4.npuprobe/.ProbeActivity \
   --ez run true --es backend hexagon --es hexDevice HTP0 --es hexMode cli
+# Larger context/RAM trial with a synthetic ~3200-character input:
+# add --ei hexContext 4096 --ez hexLongInput true to the CLI invocation.
 ```
 
 Native benchmark: identical GGUF/runtime, pp128 and tg128, two repetitions,

@@ -1,0 +1,282 @@
+{
+  "source": "/tmp/mytts-gemma4-comparison-final.jsonl",
+  "notes": [
+    "CPU busy percentage is not power or energy.",
+    "Global GPU/Ion may overlap process PSS; do not add them.",
+    "Formats, quantization and chat templates differ between runtimes.",
+    "End-to-end throughput includes prefill and conversation setup."
+  ],
+  "runs": [
+    {
+      "backend": "gpu",
+      "threads": null,
+      "startUptimeMs": 270292348,
+      "success": true,
+      "baseline": {
+        "pssKiB": 91158,
+        "peakPssKiB": 91158,
+        "rssKiB": 192904,
+        "vmSwapKiB": 20132,
+        "memAvailableKiB": 5056136,
+        "swapFreeKiB": 3869080,
+        "ionUsedKiB": 1557524,
+        "gpuUsedKiB": 521688
+      },
+      "loaded": {
+        "loadMs": 4479,
+        "framework": "LiteRT-LM 0.17.1",
+        "deviceKind": "gpu",
+        "context": 512,
+        "speculative": false
+      },
+      "samples": 43,
+      "generations": [
+        {
+          "index": 0,
+          "case": "story",
+          "round": 0,
+          "limit": 128,
+          "wallMs": 6208,
+          "cpuMs": 2379,
+          "text": "Вот небольшой рассказ:\n\nАнна утром прибыла в Прагу на поезде, ощущая предвкушение нового города. Спустя всего несколько минут она встретила своего давнего друга, который ждал ее у вокзала. Вместе они решили пересечь живописный мост, откуда открывался прекрасный вид на старые крыши. После прогулки они нашли тихое, уютное кафе в самом сердце города. За столиком они заказали кофе и начали неспешно беседовать о планах на будущее. Разговоры текли легко и искренне, наполненные общими мечтами",
+          "tokens": 128,
+          "prefillTokens": 72,
+          "ttftSeconds": 0.6589216865,
+          "decodeTokensPerSecond": 23.538689054376597,
+          "metricsAvailable": true,
+          "cpuBusyPercentOfEightCores": 4.79,
+          "endToEndTokensPerSecond": 20.62,
+          "outputCharacters": 490
+        },
+        {
+          "index": 1,
+          "case": "speech",
+          "round": 0,
+          "limit": 128,
+          "wallMs": 1921,
+          "cpuMs": 615,
+          "text": "В восьми часах Анна вышла из дома и купила две чашки кофе. За окном шёл дождь. Старый замок стоял у реки, а ключ открывал дверной замок. Она всё поняла и сказала: «Сегодня мы прочитаем ещё три страницы».",
+          "tokens": 60,
+          "prefillTokens": 116,
+          "ttftSeconds": 0.32182270300000004,
+          "decodeTokensPerSecond": 37.001568886254944,
+          "metricsAvailable": true,
+          "cpuBusyPercentOfEightCores": 4.0,
+          "endToEndTokensPerSecond": 31.23,
+          "outputCharacters": 203
+        },
+        {
+          "index": 0,
+          "case": "story",
+          "round": 1,
+          "limit": 128,
+          "wallMs": 3729,
+          "cpuMs": 1258,
+          "text": "Вот небольшой рассказ:\n\nАнна утром прибыла в Прагу на поезде, ощущая предвкушение нового города. Спустя всего несколько минут она встретила своего давнего друга, который ждал ее у вокзала. Вместе они решили пересечь живописный мост, откуда открывался прекрасный вид на старые крыши. После прогулки они нашли тихое, уютное кафе в самом сердце города. За столиком они заказали кофе и начали неспешно беседовать о планах на будущее. Разговоры текли легко и искренне, наполненные общими мечтами",
+          "tokens": 128,
+          "prefillTokens": 72,
+          "ttftSeconds": 0.09379599975,
+          "decodeTokensPerSecond": 34.99733540814745,
+          "metricsAvailable": true,
+          "cpuBusyPercentOfEightCores": 4.22,
+          "endToEndTokensPerSecond": 34.33,
+          "outputCharacters": 490
+        },
+        {
+          "index": 1,
+          "case": "speech",
+          "round": 1,
+          "limit": 128,
+          "wallMs": 1975,
+          "cpuMs": 547,
+          "text": "В восьми часах Анна вышла из дома и купила две чашки кофе. За окном шёл дождь. Старый замок стоял у реки, а ключ открывал дверной замок. Она всё поняла и сказала: «Сегодня мы прочитаем ещё три страницы».",
+          "tokens": 60,
+          "prefillTokens": 116,
+          "ttftSeconds": 0.10140436024999999,
+          "decodeTokensPerSecond": 31.57870240079227,
+          "metricsAvailable": true,
+          "cpuBusyPercentOfEightCores": 3.46,
+          "endToEndTokensPerSecond": 30.38,
+          "outputCharacters": 203
+        }
+      ],
+      "failures": [],
+      "afterUnload": {
+        "pssKiB": 246249,
+        "peakPssKiB": 967309,
+        "rssKiB": 343064,
+        "vmSwapKiB": 14356,
+        "memAvailableKiB": 4613512,
+        "swapFreeKiB": 3808924,
+        "ionUsedKiB": 1557524,
+        "gpuUsedKiB": 534684
+      },
+      "peak_pssKiB": 967309,
+      "peak_rssKiB": 1067092,
+      "peak_vmSwapKiB": 20128,
+      "peak_ionUsedKiB": 1557524,
+      "peak_gpuUsedKiB": 1638664,
+      "min_memAvailableKiB": 3407460
+    },
+    {
+      "backend": "npu",
+      "threads": null,
+      "startUptimeMs": 270346559,
+      "success": true,
+      "baseline": {
+        "pssKiB": 113535,
+        "peakPssKiB": 113535,
+        "rssKiB": 210416,
+        "vmSwapKiB": 20304,
+        "memAvailableKiB": 5338032,
+        "swapFreeKiB": 3608776,
+        "ionUsedKiB": 1571472,
+        "gpuUsedKiB": 521928
+      },
+      "loaded": {
+        "loadMs": 3936,
+        "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+        "deviceKind": "npu",
+        "deviceName": "QHexRT (Qualcomm Hexagon NPU)"
+      },
+      "samples": 116,
+      "generations": [
+        {
+          "index": 0,
+          "case": "story",
+          "round": 0,
+          "limit": 128,
+          "wallMs": 16621,
+          "cpuMs": 11400,
+          "text": "Солнечный свет пробивался сквозь туманный туман над Прагой, когда Анна наконец добралась до старого города. Она вышла на вок станции, вдохнув прохладный воздух с ароматом старых камней и свежей выпечки. Вскоре она встретила друга у выхода, и они отправились гулять по историческим улочкам. Они прошли мимо старинных мостов, наслаждаясь видами Старого города. Затем они нашли уютное кафе, где заказывали кофе и говорили о планах на день. Атмосфера была тихой и располага",
+          "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+          "executedOn": "EXECUTION_TARGET_ON_DEVICE",
+          "tokens": 129,
+          "decodeMs": 0,
+          "cpuBusyPercentOfEightCores": 8.57,
+          "endToEndTokensPerSecond": 7.76,
+          "outputCharacters": 469
+        },
+        {
+          "index": 1,
+          "case": "speech",
+          "round": 0,
+          "limit": 128,
+          "wallMs": 14391,
+          "cpuMs": 9623,
+          "text": "В восьми часах А́нна вы́шла из дома и купила два чашки кофе. За окном шел дождь. Ей старый замок стоял у реки, а ключ открывал дверной замок. Она ви́дела всё и сказала: «Сегодня мы прочитаем три страницы».",
+          "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+          "executedOn": "EXECUTION_TARGET_ON_DEVICE",
+          "tokens": 66,
+          "decodeMs": 0,
+          "cpuBusyPercentOfEightCores": 8.36,
+          "endToEndTokensPerSecond": 4.59,
+          "outputCharacters": 205
+        },
+        {
+          "index": 0,
+          "case": "story",
+          "round": 1,
+          "limit": 128,
+          "wallMs": 15408,
+          "cpuMs": 10578,
+          "text": "Солнечный свет пробивался сквозь туманный туман над Прагой, когда Анна наконец добралась до старого города. Она вышла на вок станции, вдохнув прохладный воздух с ароматом старых камней и свежей выпечки. Вскоре она встретила друга у выхода, и они отправились гулять по историческим улочкам. Они прошли мимо старинных мостов, наслаждаясь видами Старого города. Затем они нашли уютное кафе, где заказывали кофе и говорили о планах на день. Атмосфера была тихой и располага",
+          "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+          "executedOn": "EXECUTION_TARGET_ON_DEVICE",
+          "tokens": 129,
+          "decodeMs": 0,
+          "cpuBusyPercentOfEightCores": 8.58,
+          "endToEndTokensPerSecond": 8.37,
+          "outputCharacters": 469
+        },
+        {
+          "index": 1,
+          "case": "speech",
+          "round": 1,
+          "limit": 128,
+          "wallMs": 13351,
+          "cpuMs": 9136,
+          "text": "В восьми часах А́нна вы́шла из дома и купила два чашки кофе. За окном шел дождь. Ей старый замок стоял у реки, а ключ открывал дверной замок. Она ви́дела всё и сказала: «Сегодня мы прочитаем три страницы».",
+          "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+          "executedOn": "EXECUTION_TARGET_ON_DEVICE",
+          "tokens": 66,
+          "decodeMs": 0,
+          "cpuBusyPercentOfEightCores": 8.55,
+          "endToEndTokensPerSecond": 4.94,
+          "outputCharacters": 205
+        }
+      ],
+      "failures": [],
+      "afterUnload": {
+        "pssKiB": 186148,
+        "peakPssKiB": 2297324,
+        "rssKiB": 266484,
+        "vmSwapKiB": 30776,
+        "memAvailableKiB": 5317316,
+        "swapFreeKiB": 3317728,
+        "ionUsedKiB": 1584800,
+        "gpuUsedKiB": 522964
+      },
+      "peak_pssKiB": 2297324,
+      "peak_rssKiB": 2361736,
+      "peak_vmSwapKiB": 41180,
+      "peak_ionUsedKiB": 4287444,
+      "peak_gpuUsedKiB": 522964,
+      "min_memAvailableKiB": 3062728
+    },
+    {
+      "backend": "cpu",
+      "threads": 2,
+      "startUptimeMs": 270438244,
+      "success": false,
+      "baseline": {
+        "pssKiB": 97573,
+        "peakPssKiB": 97573,
+        "rssKiB": 189012,
+        "vmSwapKiB": 21656,
+        "memAvailableKiB": 5506580,
+        "swapFreeKiB": 3650172,
+        "ionUsedKiB": 1571472,
+        "gpuUsedKiB": 521920
+      },
+      "loaded": {
+        "loadMs": 5772,
+        "framework": "LiteRT-LM 0.17.1",
+        "deviceKind": "cpu",
+        "context": 512,
+        "speculative": false
+      },
+      "samples": 14,
+      "generations": [],
+      "failures": [
+        {
+          "stage": "failed",
+          "backend": "cpu",
+          "benchmark": true,
+          "threads": 2,
+          "uptimeMs": 270445378,
+          "details": {
+            "type": "com.google.ai.edge.litertlm.LiteRtLmJniException",
+            "message": "Failed to call nativeSendMessage: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor.cc:746]\n└ Failed to invoke the compiled model\n└ Failed to allocate tensors"
+          }
+        }
+      ],
+      "afterUnload": {
+        "pssKiB": 454803,
+        "peakPssKiB": 605930,
+        "rssKiB": 548444,
+        "vmSwapKiB": 15372,
+        "memAvailableKiB": 5165532,
+        "swapFreeKiB": 3625852,
+        "ionUsedKiB": 1571472,
+        "gpuUsedKiB": 521932
+      },
+      "peak_pssKiB": 605930,
+      "peak_rssKiB": 695908,
+      "peak_vmSwapKiB": 21652,
+      "peak_ionUsedKiB": 1571472,
+      "peak_gpuUsedKiB": 521932,
+      "min_memAvailableKiB": 5165584
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 """Summarize each ordinary-app native invocation; retain failed trials."""
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -23,6 +24,10 @@ def summarize(path):
         run["result"] = result
         if result and result.get("mode", "bench") == "bench" and result["exitCode"] == 0:
             run["benchmarks"] = json.loads(result["stdout"])
+        if result and result.get("mode") == "cli":
+            rates = re.search(r"Prompt: ([0-9.]+) t/s \| Generation: ([0-9.]+) t/s", result["stdout"])
+            run["reportedRates"] = {"promptTokensPerSecond": float(rates[1]),
+                "generationTokensPerSecond": float(rates[2])} if rates else None
         run["success"] = any(r["stage"] == "complete" for r in rows) and not any(
             r["stage"] in ("failed", "budget_stop", "cancelled") for r in rows)
         run["failures"] = [r for r in rows if r["stage"] in ("failed", "budget_stop", "cancelled")]
