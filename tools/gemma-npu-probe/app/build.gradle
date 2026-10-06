@@ -1,0 +1,34 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+android {
+    namespace 'com.davnozdu.gemma4.npuprobe'
+    compileSdk 37
+    defaultConfig {
+        applicationId 'com.davnozdu.gemma4.npuprobe'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '0.1-experiment'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+            // Both SDK artifacts carry the same C++ runtime. QNN is owned
+            // entirely by this separate app; no MyTTS QNN libraries are used.
+            pickFirst '**/libc++_shared.so'
+        }
+    }
+}
+dependencies {
+    implementation 'io.github.sanchitmonga22:runanywhere-sdk:0.20.19'
+    implementation 'io.github.sanchitmonga22:runanywhere-qhexrt-android:0.20.19'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
+}

@@ -1,0 +1,56 @@
+{
+  "repo": "runanywhere/gemma4_e2b_HNPU",
+  "revision": "c3bc94b2d0064ccdc78d993abe2c9fdb038aed3e",
+  "files": [
+    {
+      "name": "gemma4-e2b.json",
+      "size": 1358,
+      "sha256": "d504d42bfffb845ffaf5772f385c0939348a99e8941f63d749a49f3226d24c64"
+    },
+    {
+      "name": "gemma4_dec_i8.bin",
+      "size": 1881649152,
+      "sha256": "1a946eee7425fe80afd6fcb1acdb9fbb3d1fb69ac47a919ba43338420ee591d6"
+    },
+    {
+      "name": "gemma4_lmhead_f16.bin",
+      "size": 807014400,
+      "sha256": "8a1afed4f7038b006e51db47fca5068d0726577288f8d0d0e77a127192eb9d06"
+    },
+    {
+      "name": "gemma4_embed_f16.bin",
+      "size": 805306368,
+      "sha256": "fc6055646b44b9eca25abe2941612b1f104d56dd2f9b8b54776e328e351d4fd7"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 32169626,
+      "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f"
+    },
+    {
+      "name": "gemma4_ple_table_f16.bin",
+      "size": 4697620480,
+      "sha256": "7d7bf38285e3f007b5d28c3cd4d81e0b8f69c2534a53d25fb2952ab9b17b48ca"
+    },
+    {
+      "name": "gemma4_ple_projw_f16.bin",
+      "size": 27525120,
+      "sha256": "9d3db373cb38470e868fbf45bbddb13198fd61bbe57073340cfd9035028bb062"
+    },
+    {
+      "name": "gemma4_ple_norm_f16.bin",
+      "size": 512,
+      "sha256": "3eecb2c889390409ba9561279764e00f025d82fa5658812dba617156650b152d"
+    },
+    {
+      "name": "gemma4_rope_inv_s.bin",
+      "size": 512,
+      "sha256": "cc63341a0ac42a60b986ed638fd0d45b838b72fabeffec059c463eac4ed9ea15"
+    },
+    {
+      "name": "gemma4_rope_inv_f.bin",
+      "size": 1024,
+      "sha256": "71a80d617056a8be95eeeb385ebcc01c7fb2c73d5430a8ce862ed6c94179d076"
+    }
+  ]
+}

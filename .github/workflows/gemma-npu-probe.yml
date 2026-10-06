@@ -1,0 +1,29 @@
+name: Gemma NPU Probe
+on:
+  push:
+    branches: [experiment/gemma4-npu]
+    paths:
+      - 'tools/gemma-npu-probe/**'
+      - '.github/workflows/gemma-npu-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build independent probe APK
+        run: ./gradlew -p tools/gemma-npu-probe assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v5
+        with:
+          name: gemma-npu-probe-${{ github.sha }}
+          path: tools/gemma-npu-probe/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
