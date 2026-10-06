@@ -30,5 +30,6 @@ android {
 dependencies {
     implementation 'io.github.sanchitmonga22:runanywhere-sdk:0.20.19'
     implementation 'io.github.sanchitmonga22:runanywhere-qhexrt-android:0.20.19'
+    implementation 'com.google.ai.edge.litertlm:litertlm-android:0.17.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
 }

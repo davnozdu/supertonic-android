@@ -18,6 +18,15 @@ import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
+import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.ExperimentalFlags
 
 /** Independent, offline NPU experiment. Does not bind Android TTS or touch MyTTS. */
 class ProbeActivity : Activity() {
@@ -28,6 +37,10 @@ class ProbeActivity : Activity() {
     private val memoryScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var monitor: Job? = null
     private var peakPssKiB = 0L
+    private val backend by lazy { intent.getStringExtra("backend") ?: "npu" }
+    private val benchmark by lazy { intent.getBooleanExtra("benchmark", false) }
+    private val cpuThreads by lazy { intent.getIntExtra("threads", 2).coerceIn(1, 8) }
+    @Volatile private var activeConversation: com.google.ai.edge.litertlm.Conversation? = null
 
     private fun memory(): JSONObject {
         val info = Debug.MemoryInfo()
@@ -85,6 +98,7 @@ class ProbeActivity : Activity() {
             text = "Отменить"
             setOnClickListener {
                 scope.launch(Dispatchers.IO) { runCatching { RunAnywhere.cancelGeneration() } }
+                runCatching { activeConversation?.cancelProcess() }
                 running?.cancel()
             }
         })
@@ -95,7 +109,9 @@ class ProbeActivity : Activity() {
     }
 
     @Synchronized private fun record(stage: String, details: JSONObject) {
-        val entry = JSONObject().put("stage", stage).put("uptimeMs", SystemClock.elapsedRealtime()).put("details", details)
+        val entry = JSONObject().put("stage", stage).put("backend", backend)
+            .put("benchmark", benchmark).put("threads", if (backend == "cpu") cpuThreads else JSONObject.NULL)
+            .put("uptimeMs", SystemClock.elapsedRealtime()).put("details", details)
         resultFile.appendText(entry.toString() + "\n")
         Log.i("GemmaNpuProbe", entry.toString())
         runOnUiThread { output.append("\n$stage: $details\n") }
@@ -105,6 +121,10 @@ class ProbeActivity : Activity() {
         if (running?.isActive == true) return
         running = scope.launch(Dispatchers.IO) {
             try {
+                if (backend != "npu") {
+                    if (generate) runLiteRt()
+                    return@launch
+                }
                 RunAnywhere.initialize(applicationContext)
                 val capability = QHexRT.probeNpu()
                 record("capability", JSONObject().put("soc", capability.soc_model)
@@ -169,25 +189,23 @@ class ProbeActivity : Activity() {
                     preferred_framework = InferenceFramework.INFERENCE_FRAMEWORK_QHEXRT,
                     execution_target = ExecutionTarget.EXECUTION_TARGET_ON_DEVICE,
                     system_prompt = "Отвечай кратко по-русски.")
-                val prompts = listOf("Сколько будет два плюс два? Ответь одной короткой фразой.",
-                    "Назови столицу Чехии одним словом.",
-                    "Напиши небольшой рассказ по-русски из восьми предложений. " +
-                        "Героиня Анна утром приехала в Прагу на поезде, встретила друга, " +
-                        "перешла через мост и нашла тихое кафе. Опиши прогулку и их разговор.")
-                for ((index, prompt) in prompts.withIndex()) {
+                val cases = if (benchmark) ProbeCases.benchmark else ProbeCases.legacy
+                repeat(if (benchmark) 2 else 1) { round ->
+                for ((index, trial) in cases.withIndex()) {
                     ensureActive()
                     val t0 = SystemClock.elapsedRealtime()
                     val cpu0 = android.os.Process.getElapsedCpuTime()
-                    val trialOptions = if (index < 2) options else options.copy(
-                        max_output_tokens = 128, system_prompt = "Пиши по-русски.")
-                    val response = withTimeout(120_000) { RunAnywhere.generate(prompt, trialOptions) }
-                    record("generated", JSONObject().put("index", index).put("wallMs", SystemClock.elapsedRealtime() - t0)
+                    val trialOptions = options.copy(max_output_tokens = trial.limit, system_prompt = trial.system)
+                    val response = withTimeout(120_000) { RunAnywhere.generate(trial.prompt, trialOptions) }
+                    record("generated", JSONObject().put("index", index).put("case", trial.id).put("round", round)
+                        .put("limit", trial.limit).put("wallMs", SystemClock.elapsedRealtime() - t0)
                         .put("cpuMs", android.os.Process.getElapsedCpuTime() - cpu0)
                         .put("text", response.text).put("framework", response.framework)
                         .put("executedOn", response.executed_on?.name).put("tokens", response.response_tokens)
                         .put("decodeMs", response.decode_time_ms).put("error", response.error?.toString()))
                     check(response.error == null && response.text.isNotBlank()) { "No usable generation" }
                     check(response.executed_on == ExecutionTarget.EXECUTION_TARGET_ON_DEVICE) { "Not on-device" }
+                }
                 }
                 delay(5000) // Check sustained residency before unloading the native model.
                 record("complete", JSONObject().put("success", true))
@@ -198,7 +216,7 @@ class ProbeActivity : Activity() {
                 record("failed", JSONObject().put("type", failure.javaClass.name).put("message", failure.message))
                 Log.e("GemmaNpuProbe", "Probe failed", failure)
             } finally {
-                if (generate) withContext(NonCancellable) {
+                if (generate && backend == "npu") withContext(NonCancellable) {
                     runCatching { RunAnywhere.unloadModel(ModelUnloadRequest(
                         category = ModelCategory.MODEL_CATEGORY_LANGUAGE,
                         framework = InferenceFramework.INFERENCE_FRAMEWORK_QHEXRT,
@@ -207,6 +225,73 @@ class ProbeActivity : Activity() {
                     record("after_unload", memory())
                 }
             }
+        }
+    }
+
+    @OptIn(ExperimentalApi::class)
+    private suspend fun runLiteRt() {
+        check(backend == "gpu" || backend == "cpu") { "Unknown backend: $backend" }
+        val file = File(getExternalFilesDir(null), "models/gemma-4-E2B-it.litertlm")
+        check(file.length() == 2588147712L) { "LiteRT Gemma file missing or incomplete" }
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buf = ByteArray(1024 * 1024)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val n = input.read(buf)
+                if (n < 0) break
+                digest.update(buf, 0, n)
+            }
+        }
+        check(digest.digest().joinToString("") { "%02x".format(it) } ==
+            "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c") { "LiteRT model SHA-256 mismatch" }
+        val before = memory()
+        record("before_load", before)
+        check(before.getLong("memAvailableKiB") >= 2L * 1024 * 1024) { "Less than 2 GiB available" }
+        ExperimentalFlags.enableSpeculativeDecoding = false
+        val engine = Engine(EngineConfig(file.path,
+            backend = if (backend == "gpu") Backend.GPU() else Backend.CPU(threadCount = cpuThreads),
+            audioBackend = Backend.CPU(), maxNumTokens = 512,
+            cacheDir = File(cacheDir, "litert-$backend").apply { mkdirs() }.path))
+        startMemoryMonitor()
+        try {
+            val t0 = SystemClock.elapsedRealtime()
+            engine.initialize()
+            record("loaded", JSONObject().put("loadMs", SystemClock.elapsedRealtime() - t0)
+                .put("framework", "LiteRT-LM 0.17.1").put("deviceKind", backend).put("context", 512)
+                .put("speculative", false))
+            val cases = if (benchmark) ProbeCases.benchmark else ProbeCases.legacy
+            repeat(if (benchmark) 2 else 1) { round ->
+                for ((index, trial) in cases.withIndex()) {
+                    currentCoroutineContext().ensureActive()
+                    // Include conversation creation/prefill in the wall/CPU measurement.
+                    val started = SystemClock.elapsedRealtime()
+                    val cpu0 = android.os.Process.getElapsedCpuTime()
+                    engine.createConversation(ConversationConfig(systemInstruction = Contents.of(trial.system),
+                        samplerConfig = SamplerConfig(1, 0.95, 0.0),
+                        thinkingConfig = ThinkingConfig(false, 0), maxOutputToken = trial.limit)).use { conversation ->
+                        activeConversation = conversation
+                        val response = conversation.sendMessage(trial.prompt).toString()
+                        val wall = SystemClock.elapsedRealtime() - started
+                        val cpu = android.os.Process.getElapsedCpuTime() - cpu0
+                        val metrics = conversation.getBenchmarkInfo()
+                        record("generated", JSONObject().put("index", index).put("case", trial.id).put("round", round)
+                            .put("limit", trial.limit).put("wallMs", wall).put("cpuMs", cpu).put("text", response)
+                            .put("tokens", metrics.lastDecodeTokenCount).put("prefillTokens", metrics.lastPrefillTokenCount)
+                            .put("ttftSeconds", metrics.timeToFirstTokenInSecond)
+                            .put("decodeTokensPerSecond", metrics.lastDecodeTokensPerSecond))
+                        check(response.isNotBlank()) { "No usable generation" }
+                        activeConversation = null
+                    }
+                }
+            }
+            delay(5000)
+            record("complete", JSONObject().put("success", true))
+        } finally {
+            activeConversation = null
+            runCatching { engine.close() }
+            monitor?.cancel()
+            record("after_unload", memory())
         }
     }
 

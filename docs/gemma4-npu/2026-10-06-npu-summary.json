@@ -1,0 +1,68 @@
+{
+  "baseline": {
+    "pssKiB": 109443,
+    "peakPssKiB": 109443,
+    "rssKiB": 212608,
+    "vmSwapKiB": 16468,
+    "memAvailableKiB": 5514764,
+    "swapFreeKiB": 4636184,
+    "ionUsedKiB": 950476,
+    "gpuUsedKiB": 522992
+  },
+  "peakPssKiB": 2494833,
+  "peakRssKiB": 2478648,
+  "peakVmSwapKiB": 34524,
+  "minMemAvailableKiB": 3327036,
+  "peakIonKiB": 3666448,
+  "samples": 50,
+  "loaded": [
+    {
+      "loadMs": 3940,
+      "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+      "deviceKind": "npu",
+      "deviceName": "QHexRT (Qualcomm Hexagon NPU)"
+    }
+  ],
+  "generated": [
+    {
+      "index": 0,
+      "wallMs": 2260,
+      "cpuMs": 1561,
+      "text": "Четыре.",
+      "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+      "executedOn": "EXECUTION_TARGET_ON_DEVICE",
+      "tokens": 4,
+      "decodeMs": 0
+    },
+    {
+      "index": 1,
+      "wallMs": 1696,
+      "cpuMs": 1160,
+      "text": "Прага",
+      "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+      "executedOn": "EXECUTION_TARGET_ON_DEVICE",
+      "tokens": 2,
+      "decodeMs": 0
+    },
+    {
+      "index": 2,
+      "wallMs": 16228,
+      "cpuMs": 10822,
+      "text": "Утро в Праге было прохладным и свежим. Анна вышла из поезда, ощущая свежий воздух старого города. Она встретила друга у вокзала, и они отправились гулять по старым улочкам. Они прошли через мост над рекой, наслаждаясь видом на Старый город. Затем они зашли в тихое кафе, где заказывали кофе и говорили о планах на день. Обсуждение было легким и полным смеха и планов. Они говорили о планах на вечер, смеясь над прошлыми историями. Солнце медленно поднима",
+      "framework": "INFERENCE_FRAMEWORK_QHEXRT",
+      "executedOn": "EXECUTION_TARGET_ON_DEVICE",
+      "tokens": 129,
+      "decodeMs": 0
+    }
+  ],
+  "afterUnload": {
+    "pssKiB": 186587,
+    "peakPssKiB": 2494833,
+    "rssKiB": 277468,
+    "vmSwapKiB": 25896,
+    "memAvailableKiB": 5496444,
+    "swapFreeKiB": 4178492,
+    "ionUsedKiB": 935908,
+    "gpuUsedKiB": 524028
+  }
+}

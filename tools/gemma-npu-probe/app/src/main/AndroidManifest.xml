@@ -2,6 +2,8 @@
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <application android:label="Gemma 4 NPU Probe" android:allowBackup="false"
         android:extractNativeLibs="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <activity android:name=".ProbeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
