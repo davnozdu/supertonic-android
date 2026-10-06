@@ -1,0 +1,42 @@
+{
+ "version": 1,
+ "model": "sampler_distilled_cfg3_8step.onnx",
+ "modelSize": 256417643,
+ "steps": 8,
+ "timeShapes": [
+  [
+   1,
+   512,
+   1
+  ],
+  [
+   1,
+   512,
+   1
+  ],
+  [
+   1,
+   512,
+   1
+  ],
+  [
+   1,
+   512,
+   1
+  ]
+ ],
+ "edgePads": 28,
+ "modelSha256": "921a050f19794bf97234ca8ffc0298559eaca466d9f7f3b72ec41dfefb37acc6",
+ "frameBuckets": [
+  32,
+  64,
+  128,
+  256
+ ],
+ "textBuckets": [
+  64,
+  128,
+  256
+ ],
+ "npuFromStep": 4
+}

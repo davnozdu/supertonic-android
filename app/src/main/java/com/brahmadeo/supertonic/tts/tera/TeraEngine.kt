@@ -64,6 +64,17 @@ class TeraEngine(private val root: File, context: Context,
         npuVocoder.values.forEach { runCatching { it.close() } }; npuVocoder.clear()
         com.brahmadeo.supertonic.tts.utils.Npu.markFailed(appContext, "Tera vocoder $reason")
     }
+    // Optional hybrid NPU sampler (TeraNpuSampler): compiled once in the background; until it is ready the
+    // 8-step ONNX Loop runs on the CPU, afterwards that session is released.
+    @Volatile private var npuSampler: TeraNpuSampler? = null
+    @Volatile private var npuSamplerOff = !npuRequested || !com.brahmadeo.supertonic.tts.utils.Npu.enabled(context, com.brahmadeo.supertonic.tts.utils.Npu.TERA_SAMPLER)
+    @Volatile private var closed = false
+    private val npuBuilder = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "TeraNpuBuild").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
+    private fun disableNpuSampler(reason: String) {
+        npuSamplerOff = true
+        npuSampler?.let { runCatching { it.close() } }; npuSampler = null
+        com.brahmadeo.supertonic.tts.utils.Npu.markFailed(appContext, "Tera sampler $reason", com.brahmadeo.supertonic.tts.utils.Npu.TERA_SAMPLER)
+    }
     private val styles = HashMap<String, Pair<FloatArray, FloatArray>>()
     private val accents = TeraStressLookup(root)
     private val yoWords by lazy { readDictionary("yo_words.json.gz") }
@@ -80,6 +91,14 @@ class TeraEngine(private val root: File, context: Context,
         try {
             for (name in listOf("text_encoder", "duration_predictor", sampler, "vocoder")) {
                 sessions[name] = env.createSession(File(root, "models/$name.onnx").absolutePath, options)
+            }
+            if (sampler == TeraQuality.FAST && !npuSamplerOff) npuBuilder.execute {
+                val started = android.os.SystemClock.elapsedRealtime()
+                try {
+                    val built = TeraNpuSampler(appContext, File(root, "models"), threads)
+                    if (closed || npuSamplerOff) built.close() else npuSampler = built
+                    android.util.Log.i("TeraTTS", "NPU sampler ready ms=${android.os.SystemClock.elapsedRealtime() - started}")
+                } catch (t: Throwable) { disableNpuSampler("build ${t.javaClass.simpleName}: ${t.message?.take(160)}") }
             }
         } catch (t: Throwable) {
             sessions.values.forEach { it.close() }
@@ -152,7 +171,8 @@ class TeraEngine(private val root: File, context: Context,
 
     private fun run(name: String, inputs: Map<String, OnnxTensor>): Pair<FloatArray, LongArray> {
         try {
-            sessions.getValue(name).run(inputs).use { result ->
+            // The CPU sampler is released once the NPU sampler runs; bring it back if needed.
+            sessions.getOrPut(name) { env.createSession(File(root, "models/$name.onnx").absolutePath, options) }.run(inputs).use { result ->
                 val output = result[0] as OnnxTensor
                 val shape = output.info.shape
                 val data = FloatArray(shape.fold(1L) { a, b -> a * b }.toInt())
@@ -219,7 +239,14 @@ class TeraEngine(private val root: File, context: Context,
         val noise = FloatArray(144 * frames)
         val random = Random(1234)
         for (i in noise.indices) noise[i] = random.nextGaussian().toFloat()
-        val (latent, _) = run(sampler, mapOf(
+        val samplerStarted = android.os.SystemClock.elapsedRealtime()
+        val hybrid = npuSampler?.let { npuS ->
+            try { npuS.sample(noise, frames, embedding, embeddingShape.last().toInt(), styleTtl)
+                .also { sessions.remove(sampler)?.close() } }
+            catch (t: Throwable) { disableNpuSampler("run ${t.javaClass.simpleName}: ${t.message?.take(160)}"); null }
+        }
+        if (hybrid != null) android.util.Log.i("TeraTTS", "Sampler hybrid frames=$frames text=${embeddingShape.last()} ms=${android.os.SystemClock.elapsedRealtime() - samplerStarted} npuSteps=${npuSampler?.npuSteps} fallback=${npuSampler?.fallbackSteps}")
+        val (latent, _) = if (hybrid != null) hybrid to longArrayOf(1, 144, frames.toLong()) else run(sampler, mapOf(
             "initial_latent" to floatTensor(noise, 1, 144, frames.toLong()),
             "text_emb" to floatTensor(embedding, *embeddingShape),
             "style_ttl" to floatTensor(styleTtl, 1, 50, 256),
@@ -272,6 +299,8 @@ class TeraEngine(private val root: File, context: Context,
     }
 
     override fun close() {
+        closed = true; npuBuilder.shutdownNow()
+        npuSampler?.let { runCatching { it.close() } }; npuSampler = null
         npuVocoder.values.forEach { runCatching { it.close() } }
         npuVocoder.clear()
         sessions.values.forEach { it.close() }

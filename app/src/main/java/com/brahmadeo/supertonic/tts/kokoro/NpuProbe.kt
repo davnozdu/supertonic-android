@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.util.Log
 import com.brahmadeo.supertonic.tts.utils.AssetManager
 import com.brahmadeo.supertonic.tts.utils.Npu
+import com.brahmadeo.supertonic.tts.tera.TeraNpuSamplerProbe
 import org.json.JSONObject
 import java.io.File
 import java.nio.ByteBuffer
@@ -265,4 +266,53 @@ internal object NpuProbe {
         } catch (t: Throwable) { log("kokoro-kit failed ${t.javaClass.simpleName}: ${t.message?.take(300)}") }
         log("done")
     }
+
+    /** Tera hybrid sampler vs the CPU 8-step Loop on the same text embedding and noise; silent, read-only. */
+    fun teraHybrid(ctx: Context) {
+        results = File(ctx.filesDir, "npu-models").apply { mkdirs() }.let { File(it, "probe-results.txt") }.apply { writeText("") }
+        log("tera-hybrid start supported=${Npu.supported(ctx)}")
+        try {
+            val root = File(ctx.filesDir, "${AssetManager.MODEL_VERSION}/tera"); val models = File(root, "models")
+            val env = OrtEnvironment.getEnvironment()
+            fun cpu(name: String) = OrtSession.SessionOptions().use { o -> o.setIntraOpNumThreads(2); o.addConfigEntry("session.intra_op.allow_spinning", "0")
+                env.createSession(File(models, "$name.onnx").path, o) }
+            val indexer = org.json.JSONArray(File(root, "unicode_indexer.json").readText()).let { a -> IntArray(a.length()) { a.getInt(it) } }
+            val styleFile = File(root, "styles/ru_m1/style_ttl.npy").readBytes()
+            val header = (styleFile[8].toInt() and 255) or ((styleFile[9].toInt() and 255) shl 8)
+            val style = FloatArray(12800).also { ByteBuffer.wrap(styleFile, 10 + header, 12800 * 4).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(it) }
+            val wall = SystemClock.elapsedRealtime(); val cpu0 = Process.getElapsedCpuTime()
+            val hybrid = TeraNpuSamplerProbe.create(ctx, models)
+            log("tera-hybrid create ms=${SystemClock.elapsedRealtime() - wall} cpuMs=${Process.getElapsedCpuTime() - cpu0}")
+            val encoder = cpu("text_encoder"); val loop = cpu("sampler_distilled_cfg3_8step"); val vocoder = cpu("vocoder")
+            try {
+                for (text in listOf("Он медленно подн+ял голову и посмотр+ел на н+ебо.",
+                        "Когда п+оезд наконец остановился, на перр+оне уже никого не было, и только ветер гонял по асфальту старые газеты.")) {
+                    val prepared = java.text.Normalizer.normalize("<ru>$text</ru>", java.text.Normalizer.Form.NFKD)
+                    val ids = prepared.mapNotNull { c -> c.code.takeIf { it < indexer.size && indexer[it] >= 0 }?.let { indexer[it].toLong() } }.toLongArray()
+                    val l = ids.size
+                    val enc = mapOf("text_ids" to OnnxTensor.createTensor(env, LongBuffer.wrap(ids), longArrayOf(1, l.toLong())),
+                        "style_ttl" to OnnxTensor.createTensor(env, FloatBuffer.wrap(style), longArrayOf(1, 50, 256)),
+                        "text_mask" to OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(l) { 1f }), longArrayOf(1, 1, l.toLong())))
+                    val emb = try { output(encoder, enc) } finally { enc.values.forEach { it.close() } }
+                    val frames = (l * 1.1).toInt().coerceIn(20, 250)
+                    val random = java.util.Random(1234); val noise = FloatArray(144 * frames) { random.nextGaussian().toFloat() }
+                    lateinit var ref: FloatArray; lateinit var hyb: FloatArray
+                    val loopIn = { mapOf("initial_latent" to OnnxTensor.createTensor(env, FloatBuffer.wrap(noise), longArrayOf(1, 144, frames.toLong())),
+                        "text_emb" to OnnxTensor.createTensor(env, FloatBuffer.wrap(emb), longArrayOf(1, 256, l.toLong())),
+                        "style_ttl" to OnnxTensor.createTensor(env, FloatBuffer.wrap(style), longArrayOf(1, 50, 256)),
+                        "latent_mask" to OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(frames) { 1f }), longArrayOf(1, 1, frames.toLong())),
+                        "text_mask" to OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(l) { 1f }), longArrayOf(1, 1, l.toLong())),
+                        "guidance" to OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(3f)), longArrayOf(1))) }
+                    val tl = measure(1) { val x = loopIn(); try { ref = output(loop, x) } finally { x.values.forEach { it.close() } } }
+                    val th = measure(1) { hyb = TeraNpuSamplerProbe.sample(hybrid, noise, frames, emb, l, style) }
+                    fun wave(lat: FloatArray): FloatArray { val x = mapOf("latent" to OnnxTensor.createTensor(env, FloatBuffer.wrap(lat), longArrayOf(1, 144, frames.toLong())))
+                        return try { output(vocoder, x) } finally { x.values.forEach { it.close() } } }
+                    log("tera-hybrid text=$l frames=$frames | loop wall=${"%.0f".format(tl.wallMs)} cpu=${"%.0f".format(tl.cpuMs)} | hybrid wall=${"%.0f".format(th.wallMs)} cpu=${"%.0f".format(th.cpuMs)}" +
+                        " | latent ${snr(ref, hyb)} | audio ${snr(wave(ref), wave(hyb))} | ${TeraNpuSamplerProbe.counters(hybrid)}")
+                }
+            } finally { encoder.close(); loop.close(); vocoder.close(); hybrid.close() }
+        } catch (t: Throwable) { log("tera-hybrid failed ${t.javaClass.simpleName}: ${t.message?.take(300)}") }
+        log("done")
+    }
 }
+
