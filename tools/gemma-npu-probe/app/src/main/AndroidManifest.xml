@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- llama-cli 0ef6e55 uses an in-process loopback server even for -m local.gguf.
+         No server-base/model URL is passed. QHexRT still requires ON_DEVICE. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="Gemma 4 NPU Probe" android:allowBackup="false"
         android:extractNativeLibs="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
