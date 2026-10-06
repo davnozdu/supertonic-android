@@ -1,0 +1,483 @@
+{
+ "version": 1,
+ "model": "model_dima_quantized.onnx",
+ "modelSize": 138285044,
+ "eps": 1e-05,
+ "halo": 32,
+ "stages": [
+  {
+   "channels": 256,
+   "blocks": [
+    "noise_res.0",
+    "resblocks.0",
+    "resblocks.1",
+    "resblocks.2"
+   ]
+  },
+  {
+   "channels": 128,
+   "blocks": [
+    "noise_res.1",
+    "resblocks.3",
+    "resblocks.4",
+    "resblocks.5"
+   ]
+  }
+ ],
+ "segments": [
+  {
+   "file": "seg_0_noise_res0_1_0.onnx",
+   "stage": 0,
+   "block": "noise_res.0",
+   "dilation": 0,
+   "half": 1,
+   "channels": 256,
+   "coef": 0
+  },
+  {
+   "file": "seg_0_noise_res0_2_0.onnx",
+   "stage": 0,
+   "block": "noise_res.0",
+   "dilation": 0,
+   "half": 2,
+   "channels": 256,
+   "coef": 256
+  },
+  {
+   "file": "seg_0_noise_res0_1_1.onnx",
+   "stage": 0,
+   "block": "noise_res.0",
+   "dilation": 1,
+   "half": 1,
+   "channels": 256,
+   "coef": 512
+  },
+  {
+   "file": "seg_0_noise_res0_2_1.onnx",
+   "stage": 0,
+   "block": "noise_res.0",
+   "dilation": 1,
+   "half": 2,
+   "channels": 256,
+   "coef": 768
+  },
+  {
+   "file": "seg_0_noise_res0_1_2.onnx",
+   "stage": 0,
+   "block": "noise_res.0",
+   "dilation": 2,
+   "half": 1,
+   "channels": 256,
+   "coef": 1024
+  },
+  {
+   "file": "seg_0_noise_res0_2_2.onnx",
+   "stage": 0,
+   "block": "noise_res.0",
+   "dilation": 2,
+   "half": 2,
+   "channels": 256,
+   "coef": 1280
+  },
+  {
+   "file": "seg_0_resblocks0_1_0.onnx",
+   "stage": 0,
+   "block": "resblocks.0",
+   "dilation": 0,
+   "half": 1,
+   "channels": 256,
+   "coef": 1536
+  },
+  {
+   "file": "seg_0_resblocks0_2_0.onnx",
+   "stage": 0,
+   "block": "resblocks.0",
+   "dilation": 0,
+   "half": 2,
+   "channels": 256,
+   "coef": 1792
+  },
+  {
+   "file": "seg_0_resblocks0_1_1.onnx",
+   "stage": 0,
+   "block": "resblocks.0",
+   "dilation": 1,
+   "half": 1,
+   "channels": 256,
+   "coef": 2048
+  },
+  {
+   "file": "seg_0_resblocks0_2_1.onnx",
+   "stage": 0,
+   "block": "resblocks.0",
+   "dilation": 1,
+   "half": 2,
+   "channels": 256,
+   "coef": 2304
+  },
+  {
+   "file": "seg_0_resblocks0_1_2.onnx",
+   "stage": 0,
+   "block": "resblocks.0",
+   "dilation": 2,
+   "half": 1,
+   "channels": 256,
+   "coef": 2560
+  },
+  {
+   "file": "seg_0_resblocks0_2_2.onnx",
+   "stage": 0,
+   "block": "resblocks.0",
+   "dilation": 2,
+   "half": 2,
+   "channels": 256,
+   "coef": 2816
+  },
+  {
+   "file": "seg_0_resblocks1_1_0.onnx",
+   "stage": 0,
+   "block": "resblocks.1",
+   "dilation": 0,
+   "half": 1,
+   "channels": 256,
+   "coef": 3072
+  },
+  {
+   "file": "seg_0_resblocks1_2_0.onnx",
+   "stage": 0,
+   "block": "resblocks.1",
+   "dilation": 0,
+   "half": 2,
+   "channels": 256,
+   "coef": 3328
+  },
+  {
+   "file": "seg_0_resblocks1_1_1.onnx",
+   "stage": 0,
+   "block": "resblocks.1",
+   "dilation": 1,
+   "half": 1,
+   "channels": 256,
+   "coef": 3584
+  },
+  {
+   "file": "seg_0_resblocks1_2_1.onnx",
+   "stage": 0,
+   "block": "resblocks.1",
+   "dilation": 1,
+   "half": 2,
+   "channels": 256,
+   "coef": 3840
+  },
+  {
+   "file": "seg_0_resblocks1_1_2.onnx",
+   "stage": 0,
+   "block": "resblocks.1",
+   "dilation": 2,
+   "half": 1,
+   "channels": 256,
+   "coef": 4096
+  },
+  {
+   "file": "seg_0_resblocks1_2_2.onnx",
+   "stage": 0,
+   "block": "resblocks.1",
+   "dilation": 2,
+   "half": 2,
+   "channels": 256,
+   "coef": 4352
+  },
+  {
+   "file": "seg_0_resblocks2_1_0.onnx",
+   "stage": 0,
+   "block": "resblocks.2",
+   "dilation": 0,
+   "half": 1,
+   "channels": 256,
+   "coef": 4608
+  },
+  {
+   "file": "seg_0_resblocks2_2_0.onnx",
+   "stage": 0,
+   "block": "resblocks.2",
+   "dilation": 0,
+   "half": 2,
+   "channels": 256,
+   "coef": 4864
+  },
+  {
+   "file": "seg_0_resblocks2_1_1.onnx",
+   "stage": 0,
+   "block": "resblocks.2",
+   "dilation": 1,
+   "half": 1,
+   "channels": 256,
+   "coef": 5120
+  },
+  {
+   "file": "seg_0_resblocks2_2_1.onnx",
+   "stage": 0,
+   "block": "resblocks.2",
+   "dilation": 1,
+   "half": 2,
+   "channels": 256,
+   "coef": 5376
+  },
+  {
+   "file": "seg_0_resblocks2_1_2.onnx",
+   "stage": 0,
+   "block": "resblocks.2",
+   "dilation": 2,
+   "half": 1,
+   "channels": 256,
+   "coef": 5632
+  },
+  {
+   "file": "seg_0_resblocks2_2_2.onnx",
+   "stage": 0,
+   "block": "resblocks.2",
+   "dilation": 2,
+   "half": 2,
+   "channels": 256,
+   "coef": 5888
+  },
+  {
+   "file": "seg_1_noise_res1_1_0.onnx",
+   "stage": 1,
+   "block": "noise_res.1",
+   "dilation": 0,
+   "half": 1,
+   "channels": 128,
+   "coef": 6144
+  },
+  {
+   "file": "seg_1_noise_res1_2_0.onnx",
+   "stage": 1,
+   "block": "noise_res.1",
+   "dilation": 0,
+   "half": 2,
+   "channels": 128,
+   "coef": 6272
+  },
+  {
+   "file": "seg_1_noise_res1_1_1.onnx",
+   "stage": 1,
+   "block": "noise_res.1",
+   "dilation": 1,
+   "half": 1,
+   "channels": 128,
+   "coef": 6400
+  },
+  {
+   "file": "seg_1_noise_res1_2_1.onnx",
+   "stage": 1,
+   "block": "noise_res.1",
+   "dilation": 1,
+   "half": 2,
+   "channels": 128,
+   "coef": 6528
+  },
+  {
+   "file": "seg_1_noise_res1_1_2.onnx",
+   "stage": 1,
+   "block": "noise_res.1",
+   "dilation": 2,
+   "half": 1,
+   "channels": 128,
+   "coef": 6656
+  },
+  {
+   "file": "seg_1_noise_res1_2_2.onnx",
+   "stage": 1,
+   "block": "noise_res.1",
+   "dilation": 2,
+   "half": 2,
+   "channels": 128,
+   "coef": 6784
+  },
+  {
+   "file": "seg_1_resblocks3_1_0.onnx",
+   "stage": 1,
+   "block": "resblocks.3",
+   "dilation": 0,
+   "half": 1,
+   "channels": 128,
+   "coef": 6912
+  },
+  {
+   "file": "seg_1_resblocks3_2_0.onnx",
+   "stage": 1,
+   "block": "resblocks.3",
+   "dilation": 0,
+   "half": 2,
+   "channels": 128,
+   "coef": 7040
+  },
+  {
+   "file": "seg_1_resblocks3_1_1.onnx",
+   "stage": 1,
+   "block": "resblocks.3",
+   "dilation": 1,
+   "half": 1,
+   "channels": 128,
+   "coef": 7168
+  },
+  {
+   "file": "seg_1_resblocks3_2_1.onnx",
+   "stage": 1,
+   "block": "resblocks.3",
+   "dilation": 1,
+   "half": 2,
+   "channels": 128,
+   "coef": 7296
+  },
+  {
+   "file": "seg_1_resblocks3_1_2.onnx",
+   "stage": 1,
+   "block": "resblocks.3",
+   "dilation": 2,
+   "half": 1,
+   "channels": 128,
+   "coef": 7424
+  },
+  {
+   "file": "seg_1_resblocks3_2_2.onnx",
+   "stage": 1,
+   "block": "resblocks.3",
+   "dilation": 2,
+   "half": 2,
+   "channels": 128,
+   "coef": 7552
+  },
+  {
+   "file": "seg_1_resblocks4_1_0.onnx",
+   "stage": 1,
+   "block": "resblocks.4",
+   "dilation": 0,
+   "half": 1,
+   "channels": 128,
+   "coef": 7680
+  },
+  {
+   "file": "seg_1_resblocks4_2_0.onnx",
+   "stage": 1,
+   "block": "resblocks.4",
+   "dilation": 0,
+   "half": 2,
+   "channels": 128,
+   "coef": 7808
+  },
+  {
+   "file": "seg_1_resblocks4_1_1.onnx",
+   "stage": 1,
+   "block": "resblocks.4",
+   "dilation": 1,
+   "half": 1,
+   "channels": 128,
+   "coef": 7936
+  },
+  {
+   "file": "seg_1_resblocks4_2_1.onnx",
+   "stage": 1,
+   "block": "resblocks.4",
+   "dilation": 1,
+   "half": 2,
+   "channels": 128,
+   "coef": 8064
+  },
+  {
+   "file": "seg_1_resblocks4_1_2.onnx",
+   "stage": 1,
+   "block": "resblocks.4",
+   "dilation": 2,
+   "half": 1,
+   "channels": 128,
+   "coef": 8192
+  },
+  {
+   "file": "seg_1_resblocks4_2_2.onnx",
+   "stage": 1,
+   "block": "resblocks.4",
+   "dilation": 2,
+   "half": 2,
+   "channels": 128,
+   "coef": 8320
+  },
+  {
+   "file": "seg_1_resblocks5_1_0.onnx",
+   "stage": 1,
+   "block": "resblocks.5",
+   "dilation": 0,
+   "half": 1,
+   "channels": 128,
+   "coef": 8448
+  },
+  {
+   "file": "seg_1_resblocks5_2_0.onnx",
+   "stage": 1,
+   "block": "resblocks.5",
+   "dilation": 0,
+   "half": 2,
+   "channels": 128,
+   "coef": 8576
+  },
+  {
+   "file": "seg_1_resblocks5_1_1.onnx",
+   "stage": 1,
+   "block": "resblocks.5",
+   "dilation": 1,
+   "half": 1,
+   "channels": 128,
+   "coef": 8704
+  },
+  {
+   "file": "seg_1_resblocks5_2_1.onnx",
+   "stage": 1,
+   "block": "resblocks.5",
+   "dilation": 1,
+   "half": 2,
+   "channels": 128,
+   "coef": 8832
+  },
+  {
+   "file": "seg_1_resblocks5_1_2.onnx",
+   "stage": 1,
+   "block": "resblocks.5",
+   "dilation": 2,
+   "half": 1,
+   "channels": 128,
+   "coef": 8960
+  },
+  {
+   "file": "seg_1_resblocks5_2_2.onnx",
+   "stage": 1,
+   "block": "resblocks.5",
+   "dilation": 2,
+   "half": 2,
+   "channels": 128,
+   "coef": 9088
+  }
+ ],
+ "coefSize": 9216,
+ "glue": {
+  "nup0": {
+   "in": 512,
+   "out": 256,
+   "scale": 10,
+   "halo": 2
+  },
+  "nup1": {
+   "in": 256,
+   "out": 128,
+   "scale": 6,
+   "halo": 2
+  },
+  "npost": {
+   "in": 128,
+   "out": 22,
+   "scale": 1,
+   "halo": 32
+  }
+ },
+ "modelSha256": "e5bc91f0b15fa85886a82a4fb87e2345fc3de3e6025820a059dde215eb154071"
+}

@@ -91,5 +91,8 @@ ref = ort.InferenceSession(ref_m.SerializeToString(), o, providers=["CPUExecutio
 r, w = ref.ravel(), wave.ravel(); n = min(len(r), len(w))
 snr = 10 * np.log10((r[:n] ** 2).sum() / max(((r[:n] - w[:n]) ** 2).sum(), 1e-30))
 w2 = wave2.ravel()[:n]; snr2 = 10 * np.log10((r[:n] ** 2).sum() / max(((r[:n] - w2) ** 2).sum(), 1e-30))
-print(f"NPU-glue path: SNR={snr2:.1f} dB maxAbs={np.abs(r[:n]-w2).max():.2e}")
+def lsd(a, b):
+    fr = lambda x: 20 * np.log10(np.abs(np.fft.rfft(np.lib.stride_tricks.sliding_window_view(x, 1024)[::256] * np.hanning(1024))) + 1e-5)
+    return float(np.sqrt(((fr(a) - fr(b)) ** 2).mean(1)).mean())
+print(f"NPU-glue path: SNR={snr2:.1f} dB maxAbs={np.abs(r[:n]-w2).max():.2e} LSD={lsd(r[:n], w2):.2f} dB (Kokoro's own run-to-run noise ~2.2 dB)")
 print(f"frames/chunk={frames} T={xin.shape[2]} samples={len(w)} ref={len(r)} calls={calls[0]} orchestrated {dt*1000:.0f} ms  SNR={snr:.1f} dB maxAbs={np.abs(r[:n]-w[:n]).max():.2e}")

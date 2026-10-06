@@ -14,7 +14,7 @@ import java.nio.FloatBuffer
 import java.nio.LongBuffer
 import kotlin.math.sqrt
 
-/** Kokoro full-precision generator on the Snapdragon NPU (kit: tools/kokoro_npu/build_kit.py).
+/** Kokoro generator (full or Q8 package) on the Snapdragon NPU (kit: tools/kokoro_npu/build_kit.py).
  *
  * The generator's AdaIN InstanceNorms need statistics over the whole phrase, so every resblock runs as
  * small NPU graphs between two norms (AdaIN apply -> Snake -> Conv) in fixed chunks with a halo, and the

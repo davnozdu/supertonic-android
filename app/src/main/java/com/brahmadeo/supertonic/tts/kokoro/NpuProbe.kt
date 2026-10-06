@@ -214,12 +214,14 @@ internal object NpuProbe {
 
     /** Kokoro NPU kit: the same prepared front through the NPU and CPU orchestrations and the original model.
      * Compiling warms the production NPU cache; no settings are read or changed. */
-    fun kokoroKit(ctx: Context) {
+    fun kokoroKit(ctx: Context, modelFile: String = "model.onnx") {
         results = File(ctx.filesDir, "npu-models").apply { mkdirs() }.let { File(it, "probe-results.txt") }.apply { writeText("") }
         log("kokoro-kit start supported=${Npu.supported(ctx)}")
         try {
             val root = KokoroDownload.root(ctx)
-            if (!KokoroDownload.fullReady(ctx)) { log("kokoro-kit skipped: full model missing"); return }
+            val dimaFile = modelFile.replace("model", "model_dima")
+            if (!File(root, modelFile).isFile || !File(root, dimaFile).isFile) { log("kokoro-kit skipped: $modelFile missing"); return }
+            log("kokoro-kit model=$modelFile")
             check(KokoroPhonemizer.initialize(File(root, "espeak-data").path))
             val vocab = JSONObject(File(root, "config.json").readText()).getJSONObject("vocab").let { o -> o.keys().asSequence().associate { it.single() to o.getInt(it) } }
             val pack = File(root, "sveta.bin").readBytes().let { b -> FloatArray(b.size / 4).also { ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(it) } }
@@ -228,14 +230,14 @@ internal object NpuProbe {
                 val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
                 return block().also { log("kokoro-kit $label createMs=${SystemClock.elapsedRealtime() - wall} cpuMs=${Process.getElapsedCpuTime() - cpu}") }
             }
-            created("NPU cold", { KokoroNpuDecoder(ctx, root, "model.onnx", 4) }).close()
-            created("NPU dima cold", { KokoroNpuDecoder(ctx, root, "model_dima.onnx", 4) }).close()
-            val npu = created("NPU warm", { KokoroNpuDecoder(ctx, root, "model.onnx", 4) })
-            val dima = created("NPU dima warm", { KokoroNpuDecoder(ctx, root, "model_dima.onnx", 4) })
+            created("NPU cold", { KokoroNpuDecoder(ctx, root, modelFile, 4) }).close()
+            created("NPU dima cold", { KokoroNpuDecoder(ctx, root, dimaFile, 4) }).close()
+            val npu = created("NPU warm", { KokoroNpuDecoder(ctx, root, modelFile, 4) })
+            val dima = created("NPU dima warm", { KokoroNpuDecoder(ctx, root, dimaFile, 4) })
             // Both NPU decoders resident: measure process memory from outside (dmabuf_dump / smaps).
             log("kokoro-kit holding pssKb=${android.os.Debug.getPss()}"); Thread.sleep(20000); dima.close()
-            val ref = created("CPU segments", { KokoroNpuDecoder(ctx, root, "model.onnx", 4, onNpu = false) })
-            val original = OrtSession.SessionOptions().use { o -> o.setIntraOpNumThreads(4); o.addConfigEntry("session.intra_op.allow_spinning", "0"); env.createSession(File(root, "model.onnx").path, o) }
+            val ref = created("CPU segments", { KokoroNpuDecoder(ctx, root, modelFile, 4, onNpu = false) })
+            val original = OrtSession.SessionOptions().use { o -> o.setIntraOpNumThreads(4); o.addConfigEntry("session.intra_op.allow_spinning", "0"); env.createSession(File(root, modelFile).path, o) }
             try {
                 for (text in listOf("Ти́хий ве́чер. За окно́м шелестя́т дере́вья.",
                         "Когда́ по́езд наконе́ц останови́лся, на перро́не уже́ никого́ не́ было. Она́ до́лго смотре́ла в окно́ и ду́мала о том, что сказа́л ей муж вчера́ ве́чером.")) {

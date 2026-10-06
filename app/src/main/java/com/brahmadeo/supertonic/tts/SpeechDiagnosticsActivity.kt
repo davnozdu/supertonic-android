@@ -43,7 +43,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
             withContext(Dispatchers.IO) {
                 // Read-only NPU benchmark: never touches model, voice or reading settings.
                 if (intent.getBooleanExtra("kokoroNpuProbe", false)) {
-                    try { com.brahmadeo.supertonic.tts.kokoro.NpuProbe.kokoroKit(this@SpeechDiagnosticsActivity) } finally { running.set(false) }
+                    try { com.brahmadeo.supertonic.tts.kokoro.NpuProbe.kokoroKit(this@SpeechDiagnosticsActivity, intent.getStringExtra("kokoroNpuModel") ?: "model.onnx") } finally { running.set(false) }
                     return@withContext
                 }
                 if (intent.getBooleanExtra("npuProbe", false)) {

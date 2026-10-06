@@ -31,9 +31,9 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
     }
     private var used = SystemClock.elapsedRealtime()
     private val appContext = context.applicationContext
-    // NPU generator (full precision only). Graphs compile in the background; until a decoder is ready the
+    // NPU generator (both packages; Q8 weights are dequantized for an FP16 NPU graph). Graphs compile in the background; until a decoder is ready the
     // chunk runs on the CPU model, after that the CPU model is released.
-    val npuRequested = fullPrecision && com.brahmadeo.supertonic.tts.utils.Npu.enabled(context, com.brahmadeo.supertonic.tts.utils.Npu.KOKORO)
+    val npuRequested = com.brahmadeo.supertonic.tts.utils.Npu.enabled(context, com.brahmadeo.supertonic.tts.utils.Npu.KOKORO)
     @Volatile private var npuOff = !npuRequested
     @Volatile private var closed = false
     private val npuDecoders = java.util.concurrent.ConcurrentHashMap<String, KokoroNpuDecoder>()

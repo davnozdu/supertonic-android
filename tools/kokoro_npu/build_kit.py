@@ -155,7 +155,7 @@ def build_glue(model, name, inp, out_tensor, out_name, channels):
 def build_segment(model, nodes, stage, blk, j, half):
     """X*A+B -> Snake(alpha) -> *M -> Conv [+R]: everything between two AdaIN norms."""
     C = CHANNELS[stage]; pre = f"{GEN}{blk}/"
-    conv = nodes[f"{pre}convs{half}.{j}/Conv"]
+    conv = nodes.get(f"{pre}convs{half}.{j}/Conv")
     # alpha: the Snake Mul that feeds this conv's Sin
     alpha = f"kmodel.decoder.generator.{blk}.alpha{half}.{j}"
     ins = [helper.make_tensor_value_info("X", TensorProto.FLOAT, [1, C, "w"]),
@@ -166,14 +166,28 @@ def build_segment(model, nodes, stage, blk, j, half):
           helper.make_node("Mul", [alpha, "y"], ["ay"]), helper.make_node("Sin", ["ay"], ["s"]),
           helper.make_node("Mul", ["s", "s"], ["s2"]),  # HTP mis-evaluates Pow(x, 2)
           helper.make_node("Reciprocal", [alpha], ["ra"]), helper.make_node("Mul", ["ra", "s2"], ["t"]),
-          helper.make_node("Add", ["y", "t"], ["sn"]), helper.make_node("Mul", ["sn", "M"], ["snm"]),
-          helper.make_node("Conv", ["snm"] + list(conv.input[1:]), ["c"] if half == 2 else ["Y"], name="conv",
-                           **{a.name: helper.get_attribute_value(a) for a in conv.attribute})]
+          helper.make_node("Add", ["y", "t"], ["sn"]), helper.make_node("Mul", ["sn", "M"], ["snm"])]
+    if conv is not None:
+        weights = list(conv.input[1:]); attrs = conv.attribute
+    else:
+        # Q8 package: uint8 weights + per-tensor scale/zero point (ConvInteger). Dequantize in the graph
+        # with plain ops on initializers; ORT constant-folds them, the NPU then runs the conv in FP16.
+        cq = nodes[f"{pre}convs{half}.{j}/Conv_quant"]; attrs = cq.attribute
+        scale = nodes[f"{pre}convs{half}.{j}/Conv_quant_scales_mul"].input[1]
+        producer = {o: n for n in model.graph.node for o in n.output}
+        bias = producer[nodes[f"{pre}convs{half}.{j}/Conv_output_0_bias_add"].input[1]].input[0]
+        ns += [helper.make_node("Cast", [cq.input[1]], ["wq"], to=TensorProto.FLOAT),
+               helper.make_node("Cast", [cq.input[3]], ["wz"], to=TensorProto.FLOAT),
+               helper.make_node("Sub", ["wq", "wz"], ["wc"]), helper.make_node("Mul", ["wc", scale], ["wd"])]
+        weights = ["wd", bias]
+    ns.append(helper.make_node("Conv", ["snm"] + weights, ["c"] if half == 2 else ["Y"], name="conv",
+                               **{a.name: helper.get_attribute_value(a) for a in attrs}))
     if half == 2:
         ins.append(helper.make_tensor_value_info("R", TensorProto.FLOAT, [1, C, "w"]))
         ns.append(helper.make_node("Add", ["c", "R"], ["Y"]))
-    inits = [i for i in model.graph.initializer if i.name in {alpha} | set(conv.input[1:])]
-    if len(inits) != 1 + len(conv.input[1:]): raise ValueError(f"segment weights missing for {blk} {half}.{j}")
+    used = {x for n in ns for x in n.input}
+    inits = [i for i in model.graph.initializer if i.name in used]
+    if alpha not in {i.name for i in inits} or len(inits) < 3: raise ValueError(f"segment weights missing for {blk} {half}.{j}")
     return helper.make_graph(ns, f"seg_{blk}_{half}_{j}", ins, [helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, C, "w"])], initializer=inits)
 
 
@@ -207,6 +221,7 @@ def externalize(graph, offsets, location, original):
         if t.name.startswith("_kit"): continue
         off = offsets.get(t.name)
         src = original.get(t.name)
+        if off is None and src is not None and not src.raw_data and t.ByteSize() < 4096: continue  # tiny typed scalar: inline
         if off is None or src is None or src.raw_data != t.raw_data: raise ValueError(f"no raw bytes for {t.name}")
         t.ClearField("raw_data"); t.data_location = TensorProto.EXTERNAL
         del t.external_data[:]

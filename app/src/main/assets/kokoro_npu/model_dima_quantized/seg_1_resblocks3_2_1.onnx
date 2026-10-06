@@ -1,0 +1,91 @@
+:Á	
+
+X
+Axa"Mul
+
+xa
+By"Add
+;
+-kmodel.decoder.generator.resblocks.3.alpha2.1
+yay"Mul
+
+ays"Sin
+
+s
+ss2"Mul
+?
+-kmodel.decoder.generator.resblocks.3.alpha2.1ra"
+Reciprocal
+
+ra
+s2t"Mul
+
+y
+tsn"Add
+
+sn
+Msnm"Mul
+0
+onnx::Conv_8078_quantizedwq"Cast*	
+to 
+1
+onnx::Conv_8078_zero_pointwz"Cast*	
+to 
+
+wq
+wzwc"Sub
+$
+wc
+onnx::Conv_8078_scalewd"Mul
+ 
+snm
+wd
+2kmodel.decoder.generator.resblocks.3.convs2.1.biascconv"Conv*
+	dilations@ *
+group *
+kernel_shape@ *
+pads@@ *
+strides@ 
+
+c
+RY"Addseg_resblocks.3_2_1*„€B2kmodel.decoder.generator.resblocks.3.convs2.1.biasj%
+locationmodel_dima_quantized.onnxj
+offset1605118j
+length512p*ƒ€B-kmodel.decoder.generator.resblocks.3.alpha2.1j%
+locationmodel_dima_quantized.onnxj
+offset1615115j
+length512p*"$H‡;Bonnx::Conv_8078_scale*!*gBonnx::Conv_8078_zero_point*t€€Bonnx::Conv_8078_quantizedj%
+locationmodel_dima_quantized.onnxj
+offset	135519401j
+length49152pZ
+X
+
+
+€
+wZ
+A
+
+
+€
+Z
+B
+
+
+€
+Z
+M
+
+
+
+wZ
+R
+
+
+€
+wb
+Y
+
+
+€
+wBB
+com.microsoft

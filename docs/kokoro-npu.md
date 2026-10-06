@@ -1,6 +1,9 @@
 # Kokoro-RU on the Snapdragon NPU (experimental)
 
-Only the full-precision package; the same "Ускоритель NPU" switch as Tera. Q8 stays on the CPU.
+Both packages; the same "Ускоритель NPU" switch as Tera. For Q8 (uint8 ConvInteger weights with a per-tensor
+scale/zero point) the segment graphs dequantize the weights with plain ops that ORT constant-folds, and the NPU runs
+the convs in FP16 with FP16 activations (the CPU Q8 path also quantizes activations to 8 bit). Desktop check against
+the CPU Q8 generator: SNR 31 dB, LSD 2.2–2.6 dB, i.e. within Kokoro's own run-to-run noise (~2.2 dB).
 
 ## Why a split executor
 

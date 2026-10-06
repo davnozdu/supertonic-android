@@ -201,7 +201,7 @@ class LlmSettingsActivity : ComponentActivity() {
                                 voicePreview.stop();kokoroFull=it=="Полная точность"
                                 pausePrefs.edit().putBoolean("kokoro_full_precision",kokoroFull).apply()
                             }
-                            if (kokoroFull && kokoroFullReady && com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity)) {
+                            if (com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity)) {
                                 Toggle("Ускоритель NPU · эксперимент", npuEnabled) {
                                     npuEnabled = it
                                     if (it) com.brahmadeo.supertonic.tts.utils.Npu.clearFailure(this@LlmSettingsActivity)
