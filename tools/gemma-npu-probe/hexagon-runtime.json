@@ -1,0 +1,71 @@
+{
+  "repo": "h2loop-ai/gemma-4-e2b-hexagon",
+  "revision": "1bb2044c313769541558f2c27fa67561894d0f26",
+  "files": [
+    {
+      "path": "llama.cpp/lib/libggml-base.so",
+      "size": 998632,
+      "sha256": "6811afc2a4df388a9394127aff14501573c3c685b8a42969e77b5783186540f0"
+    },
+    {
+      "path": "llama.cpp/lib/libggml-cpu.so",
+      "size": 734912,
+      "sha256": "308136f06dad87c9047b53de0a6fa43e82a0f7d52753637885f51b488ec7e2c9"
+    },
+    {
+      "path": "llama.cpp/lib/libggml-hexagon.so",
+      "size": 778008,
+      "sha256": "fea9e8edaf68c5db48a41f58c805bf1c37a1ed401b15efb5b00ed2736fd87378"
+    },
+    {
+      "path": "llama.cpp/lib/libggml-htp-v79.so",
+      "size": 730248,
+      "sha256": "6eb04178e0c2109be42c2c822d7dd2b4283b9c8bf933decb2e89bdb6f2a02a0b"
+    },
+    {
+      "path": "llama.cpp/lib/libggml-htp-v81.so",
+      "size": 730280,
+      "sha256": "231f49d60abebe7e3475bcb6f9b53034a329616787d0b57bc9477bd2ca2838e7"
+    },
+    {
+      "path": "llama.cpp/lib/libggml-opencl.so",
+      "size": 3152680,
+      "sha256": "ecf531570c37748ff05b861ce7f40b23a9ba541dbed1a7cc4a1e92cc3b4dd120"
+    },
+    {
+      "path": "llama.cpp/lib/libggml.so",
+      "size": 30576,
+      "sha256": "cfd2afe24027d8b57c926240272874b15eb61d72367d0748a759646fa8e7e961"
+    },
+    {
+      "path": "llama.cpp/lib/libllama-bench-impl.so",
+      "size": 245824,
+      "sha256": "e9314a3f0b883bc630fd80d67d06987fc5373de9da27deda95526cfec2877eb7"
+    },
+    {
+      "path": "llama.cpp/lib/libllama-cli-impl.so",
+      "size": 280128,
+      "sha256": "65532e8bed1b60e1bba8f634cd0bd438165c35dcae1286ccaa1eb8d78272cd77"
+    },
+    {
+      "path": "llama.cpp/lib/libllama-common.so",
+      "size": 4040896,
+      "sha256": "0074fe5e84e5a4e2b4d548323d59349113b6fd04ea49406808bd5223f964aa9e"
+    },
+    {
+      "path": "llama.cpp/lib/libllama-server-impl.so",
+      "size": 6524608,
+      "sha256": "efc355ad04918f301dc16c236f61f2f24477fed066be332c93501c871fc1f542"
+    },
+    {
+      "path": "llama.cpp/lib/libllama.so",
+      "size": 3119136,
+      "sha256": "30cb3ba93848eb68cbd0054e9c3e6e948773b2b3ed60137f7f097ede33b04fb1"
+    },
+    {
+      "path": "llama.cpp/lib/libmtmd.so",
+      "size": 1010864,
+      "sha256": "5c2e5c0680dbfdafc045b1143b0bca048e984a4342c63705ff67cd65cfeeac5b"
+    }
+  ]
+}

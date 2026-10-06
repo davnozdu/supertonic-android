@@ -121,6 +121,10 @@ class ProbeActivity : Activity() {
         if (running?.isActive == true) return
         running = scope.launch(Dispatchers.IO) {
             try {
+                if (backend == "hexagon") {
+                    if (generate) runHexagon()
+                    return@launch
+                }
                 if (backend != "npu") {
                     if (generate) runLiteRt()
                     return@launch
@@ -295,6 +299,49 @@ class ProbeActivity : Activity() {
             runCatching { engine.close() }
             monitor?.cancel()
             record("after_unload", memory())
+        }
+    }
+
+    private suspend fun runHexagon() {
+        val file = File(getExternalFilesDir(null), "models/gemma4-e2b-w4.gguf")
+        check(file.length() == 2620370976L) { "Q4 Gemma file missing or incomplete" }
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(1024 * 1024)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val n = input.read(buf)
+                if (n < 0) break
+                digest.update(buf, 0, n)
+            }
+        }
+        check(digest.digest().joinToString("") { "%02x".format(it) } ==
+            "e531007218dfab990486a5de7676a6932d6ea8dea233d1f698d7c21cf8a16889") { "Q4 SHA256 mismatch" }
+        val before = memory()
+        record("before_load", before.put("uid", android.os.Process.myUid()))
+        check(before.getLong("memAvailableKiB") >= 2L * 1024 * 1024) { "Less than 2 GiB available" }
+        val stdout = File(getExternalFilesDir(null), "hexagon-bench.json")
+        val stderr = File(getExternalFilesDir(null), "hexagon-bench.log")
+        val args = arrayOf("llama-bench", "-m", file.path, "-dev", "HTP0", "-t", "2", "-p", "128",
+            "-n", "128", "-r", "2", "-b", "128", "-ub", "128", "-fa", "on", "--poll", "0", "-o", "json")
+        startMemoryMonitor()
+        val t0 = SystemClock.elapsedRealtime()
+        val cpu0 = android.os.Process.getElapsedCpuTime()
+        try {
+            val result = HexagonNative.benchmark(applicationInfo.nativeLibraryDir, args, stdout.path, stderr.path)
+            record("hexagon_benchmark", JSONObject().put("exitCode", result)
+                .put("wallMs", SystemClock.elapsedRealtime() - t0)
+                .put("cpuMs", android.os.Process.getElapsedCpuTime() - cpu0)
+                .put("stdout", stdout.readText()).put("stderr", stderr.readText()))
+            check(result == 0) { "Hexagon benchmark failed: $result" }
+            val rows = org.json.JSONArray(stdout.readText())
+            check(rows.length() == 2 && (0 until rows.length()).all {
+                rows.getJSONObject(it).getString("devices") == "HTP0" && rows.getJSONObject(it).getDouble("avg_ts") > 0
+            }) { "No confirmed HTP0 benchmark" }
+            record("complete", JSONObject().put("success", true))
+        } finally {
+            monitor?.cancel()
+            record("after_benchmark", memory())
         }
     }
 
