@@ -138,10 +138,24 @@ class ProbeActivity : Activity() {
                 val before = memory()
                 record("before_load", before)
                 check(before.getLong("memAvailableKiB") >= 2L * 1024 * 1024) { "Less than 2 GiB available before loading" }
+                val modelId = "gemma4-e2b-v81-probe"
+                val imported = RunAnywhere.importModel(ModelImportRequest(
+                    model = ModelInfo(id = modelId, name = "Gemma 4 E2B v81 offline probe",
+                        category = ModelCategory.MODEL_CATEGORY_LANGUAGE,
+                        format = ModelFormat.MODEL_FORMAT_FOLDER,
+                        framework = InferenceFramework.INFERENCE_FRAMEWORK_QHEXRT,
+                        preferred_framework = InferenceFramework.INFERENCE_FRAMEWORK_QHEXRT,
+                        source = ModelSource.MODEL_SOURCE_LOCAL,
+                        context_length = 512, local_path = modelDir.absolutePath),
+                    source_path = modelDir.absolutePath, copy_into_managed_storage = false,
+                    overwrite_existing = true, validate_before_register = true))
+                record("imported", JSONObject().put("registered", imported.registered)
+                    .put("path", imported.local_path).put("error", imported.error?.toString()))
+                check(imported.error == null && imported.registered) { "Local import failed: ${imported.error}" }
                 startMemoryMonitor()
                 val started = SystemClock.elapsedRealtime()
                 val loaded = RunAnywhere.loadModel(ModelLoadRequest(
-                    model_id = manifest.absolutePath,
+                    model_id = modelId,
                     category = ModelCategory.MODEL_CATEGORY_LANGUAGE,
                     framework = InferenceFramework.INFERENCE_FRAMEWORK_QHEXRT,
                     accelerator_policy = AcceleratorPolicy.ACCELERATOR_POLICY_NPU))

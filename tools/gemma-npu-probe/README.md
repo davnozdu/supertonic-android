@@ -19,7 +19,8 @@ python3 tools/gemma-npu-probe/download_model.py /tmp/mytts-gemma4-e2b-v81
 adb -s SERIAL install -r probe.apk
 adb -s SERIAL shell am start -n com.davnozdu.gemma4.npuprobe/.ProbeActivity
 # Capability check first; copy files only if the runtime supports this device:
-adb -s SERIAL push /tmp/mytts-gemma4-e2b-v81 /sdcard/Android/data/com.davnozdu.gemma4.npuprobe/files/models/
+adb -s SERIAL shell mkdir -p /sdcard/Android/data/com.davnozdu.gemma4.npuprobe/files/models
+adb -s SERIAL push /tmp/mytts-gemma4-e2b-v81 /sdcard/Android/data/com.davnozdu.gemma4.npuprobe/files/models/gemma4-e2b-v81
 adb -s SERIAL shell am force-stop com.davnozdu.gemma4.npuprobe
 adb -s SERIAL shell am start -n com.davnozdu.gemma4.npuprobe/.ProbeActivity --ez run true
 ```
