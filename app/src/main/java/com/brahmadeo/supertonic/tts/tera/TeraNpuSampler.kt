@@ -27,6 +27,7 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
     private val timeSize = 512
     private val time: FloatArray = ctx.assets.open("tera_npu/time.bin").use { it.readBytes() }.let { b ->
         FloatArray(b.size / 4).also { ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(it) } }
+    private val version = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).longVersionCode }.getOrDefault(0L).toString()
     private val cpu: OrtSession
     private val npu = HashMap<Long, OrtSession>()
     private val sessions = mutableListOf<OrtSession>()
@@ -36,7 +37,7 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
     init {
         require(File(models, manifest.getString("model")).length() == manifest.getLong("modelSize")) { "Tera NPU kit does not match the sampler" }
         require(time.size == steps * 4 * timeSize)
-        val step = install()
+        val step = install("step.onnx")
         try {
             cpu = OrtSession.SessionOptions().use { o ->
                 o.setIntraOpNumThreads(threads)
@@ -46,7 +47,8 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
             }.also { sessions += it }
             val keys = mutableListOf<Long>(); val graphs = mutableListOf<Pair<File, Map<String, Long>>>()
             for (n in frameBuckets) for (l in textBuckets) {
-                keys += key(n, l); graphs += step to mapOf("batch" to 1L, "generated_latent_length" to n.toLong(), "text_length" to l.toLong())
+                keys += key(n, l)
+                graphs += install("step_${n}x$l.onnx") to mapOf("batch" to 1L, "generated_latent_length" to n.toLong(), "text_length" to l.toLong())
             }
             Npu.sharedSessions(ctx, env, graphs, "tera-step").forEachIndexed { i, s -> npu[keys[i]] = s; sessions += s }
         } catch (t: Throwable) { close(); throw t }
@@ -54,14 +56,13 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
 
     private fun key(frames: Int, text: Int) = frames.toLong() shl 32 or text.toLong()
 
-    /** The step graph must sit next to the sampler: its external data points at it by relative name. */
-    private fun install(): File {
-        val target = File(models, "npukit-tera-step.onnx")
-        val version = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).longVersionCode }.getOrDefault(0L).toString()
-        val marker = File(models, "npukit-tera-step.version")
+    /** Kit graphs must sit next to the sampler: their external data points at it by relative name. */
+    private fun install(name: String): File {
+        val target = File(models, "npukit-tera-$name")
+        val marker = File(models, "npukit-tera-$name.version")
         if (target.isFile && runCatching { marker.readText() }.getOrNull() == version) return target
-        val tmp = File(models, "npukit-tera-step.onnx.tmp")
-        ctx.assets.open("tera_npu/step.onnx").use { input -> tmp.outputStream().use { input.copyTo(it) } }
+        val tmp = File(models, "npukit-tera-$name.tmp")
+        ctx.assets.open("tera_npu/$name").use { input -> tmp.outputStream().use { input.copyTo(it) } }
         check(tmp.renameTo(target)) { "Tera NPU kit install failed" }
         marker.writeText(version)
         return target
@@ -70,17 +71,17 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
     private fun tensor(data: FloatArray, vararg shape: Long) = OnnxTensor.createTensor(env, FloatBuffer.wrap(data), shape)
 
     private fun runStep(session: OrtSession, step: Int, x: FloatArray, n: Int, emb: FloatArray, l: Int, style: FloatArray,
-                        latentMask: FloatArray, textMask: FloatArray, lastSel: FloatArray): FloatArray {
+                        latentMask: FloatArray, textMask: FloatArray, lastSel: FloatArray, prefix: String = ""): FloatArray {
         val inputs = HashMap<String, OnnxTensor>()
         try {
-            inputs["noisy_latent"] = tensor(x, 1, 144, n.toLong())
-            inputs["text_emb"] = tensor(emb, 1, 256, l.toLong())
-            inputs["style_ttl"] = tensor(style, 1, 50, 256)
-            inputs["latent_mask"] = tensor(latentMask, 1, 1, n.toLong())
-            inputs["text_mask"] = tensor(textMask, 1, 1, l.toLong())
-            inputs["guidance"] = tensor(floatArrayOf(3f), 1)
-            inputs["last_sel"] = tensor(lastSel, 1, 1, n.toLong())
-            for (i in 0 until 4) inputs["t$i"] = tensor(time.copyOfRange((step * 4 + i) * timeSize, (step * 4 + i + 1) * timeSize), 1, timeSize.toLong(), 1)
+            inputs["${prefix}noisy_latent"] = tensor(x, 1, 144, n.toLong())
+            inputs["${prefix}text_emb"] = tensor(emb, 1, 256, l.toLong())
+            inputs["${prefix}style_ttl"] = tensor(style, 1, 50, 256)
+            inputs["${prefix}latent_mask"] = tensor(latentMask, 1, 1, n.toLong())
+            inputs["${prefix}text_mask"] = tensor(textMask, 1, 1, l.toLong())
+            inputs["${prefix}guidance"] = tensor(floatArrayOf(3f), 1)
+            inputs["${prefix}last_sel"] = tensor(lastSel, 1, 1, n.toLong())
+            for (i in 0 until 4) inputs["${prefix}t$i"] = tensor(time.copyOfRange((step * 4 + i) * timeSize, (step * 4 + i + 1) * timeSize), 1, timeSize.toLong(), 1)
             session.run(inputs).use { r ->
                 val t = r[0] as OnnxTensor
                 return FloatArray(144 * n).also { t.floatBuffer.get(it) }
@@ -106,7 +107,7 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
         val pe = FloatArray(256 * l).also { for (c in 0 until 256) System.arraycopy(emb, c * textLen, it, c * l, textLen) }
         for (s in npuFrom until steps) {
             val px = FloatArray(144 * n).also { for (c in 0 until 144) System.arraycopy(x, c * frames, it, c * n, frames) }
-            val y = runCatching { runStep(session, s, px, n, pe, l, style, pm, pt, ps) }.getOrNull()
+            val y = runCatching { runStep(session, s, px, n, pe, l, style, pm, pt, ps, "b${n}x${l}_") }.getOrNull()
             x = if (y != null && y.all { it.isFinite() }) {
                 npuSteps++
                 FloatArray(144 * frames).also { for (c in 0 until 144) System.arraycopy(y, c * n, it, c * frames, frames) }

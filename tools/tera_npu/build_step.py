@@ -128,6 +128,10 @@ def build(src):
     return step, np.concatenate([np.concatenate([t.ravel() for t in row]) for row in table]).astype(np.float32), shapes, steps, pads
 
 
+FRAME_BUCKETS = (32, 64, 128, 256)
+TEXT_BUCKETS = (64, 128, 256)
+
+
 def main(src, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     step, table, shapes, steps, pads = build(src)
@@ -145,9 +149,21 @@ def main(src, out_dir):
         for k, v in (("location", location), ("offset", str(off[0])), ("length", str(off[1]))):
             e = t.external_data.add(); e.key = k; e.value = v
     onnx.save(step, os.path.join(out_dir, "step.onnx"))
+    # One shared QNN context holds every bucket: tensor names must be unique per graph (QNN error 7003),
+    # weights keep their names so the context stores them once.
+    inits = {t.name for t in step.graph.initializer}
+    for n_frames in FRAME_BUCKETS:
+        for n_text in TEXT_BUCKETS:
+            p = f"b{n_frames}x{n_text}_"; b = onnx.ModelProto(); b.CopyFrom(step)
+            ren = lambda x: x if (not x or x in inits) else p + x
+            for i, n in enumerate(b.graph.node):
+                n.input[:] = [ren(x) for x in n.input]; n.output[:] = [ren(x) for x in n.output]; n.name = f"{p}{i}_{n.name}"
+            for v in list(b.graph.input) + list(b.graph.output): v.name = ren(v.name)
+            onnx.save(b, os.path.join(out_dir, f"step_{n_frames}x{n_text}.onnx"))
     table.tofile(os.path.join(out_dir, "time.bin"))
     json.dump({"version": 1, "model": location, "modelSize": os.path.getsize(src), "steps": steps, "timeShapes": shapes,
-               "edgePads": pads}, open(os.path.join(out_dir, "kit.json"), "w"), indent=1)
+               "edgePads": pads, "frameBuckets": list(FRAME_BUCKETS), "textBuckets": list(TEXT_BUCKETS), "npuFromStep": 4,
+               "bucketPrefix": "b{frames}x{text}_"}, open(os.path.join(out_dir, "kit.json"), "w"), indent=1)
     print("tera step kit", out_dir, "nodes", len(step.graph.node), "steps", steps, "time", shapes)
 
 

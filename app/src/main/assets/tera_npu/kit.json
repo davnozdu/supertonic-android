@@ -26,7 +26,6 @@
   ]
  ],
  "edgePads": 28,
- "modelSha256": "921a050f19794bf97234ca8ffc0298559eaca466d9f7f3b72ec41dfefb37acc6",
  "frameBuckets": [
   32,
   64,
@@ -38,5 +37,7 @@
   128,
   256
  ],
- "npuFromStep": 4
+ "npuFromStep": 4,
+ "bucketPrefix": "b{frames}x{text}_",
+ "modelSha256": "921a050f19794bf97234ca8ffc0298559eaca466d9f7f3b72ec41dfefb37acc6"
 }
