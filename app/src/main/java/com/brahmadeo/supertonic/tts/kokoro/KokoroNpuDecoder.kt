@@ -42,6 +42,9 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
     companion object {
         private const val TAG = "KokoroNpu"
         const val CHUNK_FRAMES = 32
+        /** Diagnostics: chunk length override (frames), e.g. to trade NPU scratch memory for more calls. */
+        fun chunkFrames(ctx: Context) = ctx.getSharedPreferences("SupertonicPrefs", 0).getString("npu_debug_kokoro_chunk", null)
+            ?.toIntOrNull()?.takeIf { it in 4..64 } ?: CHUNK_FRAMES
         private val PER_FRAME = intArrayOf(20, 120)
         private val CHANNELS = intArrayOf(256, 128)
         /** ~20 s; longer chunks would need several 50+ MB tensors per stage and stay on the CPU path. */
@@ -55,7 +58,8 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
     private val manifest = JSONObject(ctx.assets.open("kokoro_npu/$base/kit.json").bufferedReader().use { it.readText() })
     private val eps = manifest.getDouble("eps")
     private val halo = manifest.getInt("halo")
-    private val chunk = IntArray(2) { CHUNK_FRAMES * PER_FRAME[it] }
+    private val framesPerChunk = chunkFrames(ctx)
+    private val chunk = IntArray(2) { framesPerChunk * PER_FRAME[it] }
     private val stages = List(2) { s -> manifest.getJSONArray("stages").getJSONObject(s).getJSONArray("blocks").let { a -> List(a.length()) { a.getString(it) } } }
     private val sessions = mutableListOf<OrtSession>()
     private val pre: OrtSession; private val tail: OrtSession
@@ -80,7 +84,7 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
             }.also { sessions += it }
             pre = cpu("pre.onnx"); tail = cpu("tail.onnx")
             val glue = manifest.getJSONObject("glue")
-            val ops = listOf("nup0" to 2 * CHUNK_FRAMES, "nup1" to chunk[0], "npost" to chunk[1]).map { (name, core) ->
+            val ops = listOf("nup0" to 2 * framesPerChunk, "nup1" to chunk[0], "npost" to chunk[1]).map { (name, core) ->
                 val g = glue.getJSONObject(name); Triple(name, g, core) }
             val list = manifest.getJSONArray("segments")
             val graphs = mutableListOf<Pair<File, Map<String, Long>>>()
@@ -89,7 +93,7 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
                 val s = list.getJSONObject(i)
                 graphs += kitFile(s.getString("file")) to mapOf("w" to (chunk[s.getInt("stage")] + 2 * halo).toLong())
             }
-            val npuSessions = if (onNpu) Npu.sharedSessions(ctx, env, graphs, "kokoro-$base")
+            val npuSessions = if (onNpu) Npu.sharedSessions(ctx, env, graphs, if (framesPerChunk == CHUNK_FRAMES) "kokoro-$base" else "kokoro-$base-c$framesPerChunk")
                               else graphs.map { (file, dims) -> cpu(file.name.removePrefix("npukit-$base-"), dims) }
             if (onNpu) sessions += npuSessions
             val made = ops.mapIndexed { i, (_, g, core) -> Op(npuSessions[i], g.getInt("in"), g.getInt("out"), g.getInt("scale"), g.getInt("halo"), core) }

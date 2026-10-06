@@ -54,7 +54,8 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
         val key = modelKey(voice)
         npuDecoders[key]?.let { return it }
         // Compiled once: load now (~2 s) instead of keeping the 650 MB CPU model resident alongside.
-        if (!npuBuilding.contains(key) && com.brahmadeo.supertonic.tts.utils.Npu.sharedCacheReady(appContext, "kokoro-${KokoroNpuDecoder.kitName(key)}")) {
+        if (!npuBuilding.contains(key) && com.brahmadeo.supertonic.tts.utils.Npu.sharedCacheReady(appContext, "kokoro-${KokoroNpuDecoder.kitName(key)}" +
+                KokoroNpuDecoder.chunkFrames(appContext).let { if (it == KokoroNpuDecoder.CHUNK_FRAMES) "" else "-c$it" })) {
             val started = SystemClock.elapsedRealtime()
             return try {
                 KokoroNpuDecoder(appContext, root, key, threads).also { npuDecoders[key] = it
