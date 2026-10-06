@@ -5,10 +5,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-JNIEXPORT jint JNICALL Java_com_davnozdu_gemma4_npuprobe_HexagonNative_benchmark(
-        JNIEnv *env, jobject self, jstring directory, jobjectArray arguments,
+JNIEXPORT jint JNICALL Java_com_davnozdu_gemma4_npuprobe_HexagonNative_run(
+        JNIEnv *env, jobject self, jstring mode, jstring directory, jobjectArray arguments,
         jstring stdout_path, jstring stderr_path) {
     (void)self;
+    const char *kind = (*env)->GetStringUTFChars(env, mode, NULL);
     const char *libs = (*env)->GetStringUTFChars(env, directory, NULL);
     const char *out = (*env)->GetStringUTFChars(env, stdout_path, NULL);
     const char *err = (*env)->GetStringUTFChars(env, stderr_path, NULL);
@@ -22,10 +23,11 @@ JNIEXPORT jint JNICALL Java_com_davnozdu_gemma4_npuprobe_HexagonNative_benchmark
     dup2(err_fd, STDERR_FILENO);
     setenv("ADSP_LIBRARY_PATH", libs, 1);
     char path[4096];
-    snprintf(path, sizeof(path), "%s/libllama-bench-impl.so", libs);
+    int cli = kind[0] == 'c';
+    snprintf(path, sizeof(path), "%s/libllama-%s-impl.so", libs, cli ? "cli" : "bench");
     void *handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
     if (handle == NULL) { fprintf(stderr, "dlopen failed: %s\n", dlerror()); goto cleanup; }
-    int (*bench)(int, char **) = (int (*)(int, char **)) dlsym(handle, "_Z11llama_benchiPPc");
+    int (*bench)(int, char **) = (int (*)(int, char **)) dlsym(handle, cli ? "_Z9llama_cliiPPc" : "_Z11llama_benchiPPc");
     if (bench == NULL) { fprintf(stderr, "dlsym failed: %s\n", dlerror()); goto cleanup; }
     int argc = (*env)->GetArrayLength(env, arguments);
     char **argv = calloc((size_t)argc + 1, sizeof(char *));
@@ -50,6 +52,7 @@ cleanup:
     if (out_fd >= 0) close(out_fd);
     if (err_fd >= 0) close(err_fd);
     (*env)->ReleaseStringUTFChars(env, directory, libs);
+    (*env)->ReleaseStringUTFChars(env, mode, kind);
     (*env)->ReleaseStringUTFChars(env, stdout_path, out);
     (*env)->ReleaseStringUTFChars(env, stderr_path, err);
     return result;

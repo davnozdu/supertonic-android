@@ -322,22 +322,36 @@ class ProbeActivity : Activity() {
         check(before.getLong("memAvailableKiB") >= 2L * 1024 * 1024) { "Less than 2 GiB available" }
         val stdout = File(getExternalFilesDir(null), "hexagon-bench.json")
         val stderr = File(getExternalFilesDir(null), "hexagon-bench.log")
-        val args = arrayOf("llama-bench", "-m", file.path, "-dev", "HTP0", "-t", "2", "-p", "128",
+        val selection = intent.getStringExtra("hexDevice") ?: "HTP0"
+        check(selection in listOf("HTP0", "none", "GPUOpenCL", "all")) { "Unknown native device" }
+        val devices = if (selection == "all") "HTP0,none,GPUOpenCL" else selection
+        val mode = intent.getStringExtra("hexMode") ?: "bench"
+        check(mode in listOf("bench", "cli")) { "Unknown native mode" }
+        check(mode != "cli" || selection != "all") { "CLI needs one device" }
+        val args = if (mode == "bench") arrayOf("llama-bench", "-m", file.path, "-dev", devices, "-t", "2", "-p", "128",
             "-n", "128", "-r", "2", "-b", "128", "-ub", "128", "-fa", "on", "--poll", "0", "-o", "json")
+        else arrayOf("llama-cli", "-m", file.path, "-dev", devices, "-ngl", if (selection == "none") "0" else "999",
+            "-t", "2", "-c", "512", "-b", "128", "-ub", "128", "-fa", "on", "--poll", "0", "-n", "128",
+            "--temp", "0", "--top-k", "1", "--single-turn", "--simple-io", "--no-display-prompt", "--color", "off",
+            "--reasoning", "off", "--reasoning-budget", "0", "-p", ProbeCases.benchmark.first().prompt)
         startMemoryMonitor()
         val t0 = SystemClock.elapsedRealtime()
         val cpu0 = android.os.Process.getElapsedCpuTime()
         try {
-            val result = HexagonNative.benchmark(applicationInfo.nativeLibraryDir, args, stdout.path, stderr.path)
+            val result = HexagonNative.run(mode, applicationInfo.nativeLibraryDir, args, stdout.path, stderr.path)
             record("hexagon_benchmark", JSONObject().put("exitCode", result)
                 .put("wallMs", SystemClock.elapsedRealtime() - t0)
                 .put("cpuMs", android.os.Process.getElapsedCpuTime() - cpu0)
+                .put("mode", mode).put("devices", devices)
                 .put("stdout", stdout.readText()).put("stderr", stderr.readText()))
             check(result == 0) { "Hexagon benchmark failed: $result" }
-            val rows = org.json.JSONArray(stdout.readText())
-            check(rows.length() == 2 && (0 until rows.length()).all {
-                rows.getJSONObject(it).getString("devices") == "HTP0" && rows.getJSONObject(it).getDouble("avg_ts") > 0
-            }) { "No confirmed HTP0 benchmark" }
+            if (mode == "bench") {
+                val rows = org.json.JSONArray(stdout.readText())
+                val expected = devices.split(",").toSet()
+                check(rows.length() == expected.size * 2 && (0 until rows.length()).all {
+                    rows.getJSONObject(it).getString("devices") in expected && rows.getJSONObject(it).getDouble("avg_ts") > 0
+                }) { "No confirmed native benchmark" }
+            } else check(stdout.readText().contains("Generation:")) { "No native generation result" }
             record("complete", JSONObject().put("success", true))
         } finally {
             monitor?.cancel()
