@@ -96,9 +96,9 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
         var x = noise
         fun cpuStep(s: Int) = runStep(cpu, s, x, frames, emb, textLen, style, latentMask, textMask, lastSel)
         for (s in 0 until minOf(npuFrom, steps)) x = cpuStep(s)
-        val n = frameBuckets.firstOrNull { it >= frames }; val l = textBuckets.firstOrNull { it >= textLen }
+        val n: Int? = frameBuckets.firstOrNull { it >= frames }; val l: Int? = textBuckets.firstOrNull { it >= textLen }
         val session = if (n != null && l != null) npu[key(n, l)] else null
-        if (session == null) { for (s in npuFrom until steps) x = cpuStep(s); return x }
+        if (n == null || l == null || session == null) { for (s in npuFrom until steps) x = cpuStep(s); return x }
         // Padded inputs for the bucket: zeros beyond the phrase, masks select the valid part.
         val pm = FloatArray(n).also { java.util.Arrays.fill(it, 0, frames, 1f) }
         val pt = FloatArray(l).also { java.util.Arrays.fill(it, 0, textLen, 1f) }
