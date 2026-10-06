@@ -13,7 +13,9 @@ object ProbeCases {
         "В 8 часов Анна вышла из дома и купила 2 чашки кофе. " +
             "За окном шел дождь. Старый замок стоял у реки, а ключ открывал дверной замок. " +
             "Она все поняла и сказала: «Сегодня мы прочитаем еще 3 страницы».", 128)
-    val benchmark = listOf(story, speech)
+    // This bundle declares user/assistant markers but no system role. Put the
+    // instruction into the actual user turn on every backend for equal input.
+    val benchmark = listOf(story, speech).map { it.copy(system = "", prompt = it.system + "\n\n" + it.prompt) }
     val legacy = listOf(
         ProbeCase("math", "Отвечай кратко по-русски.", "Сколько будет два плюс два? Ответь одной короткой фразой.", 64),
         ProbeCase("capital", "Отвечай кратко по-русски.", "Назови столицу Чехии одним словом.", 64), story)

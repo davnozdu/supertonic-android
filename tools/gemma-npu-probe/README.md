@@ -64,7 +64,9 @@ adb -s SERIAL shell am start -n com.davnozdu.gemma4.npuprobe/.ProbeActivity \
 ```
 
 Benchmark runs `ProbeCases.story` and `ProbeCases.speech` twice, with fresh
-conversations and no retained chat history. Both use 512 context tokens,
+conversations and no retained chat history. Instructions are placed directly in
+the user turn on both engines: the NPU bundle declares no system-role markers,
+and the first speech trial ignored a separate system instruction. Both use 512 context tokens,
 128 output-token limits and greedy sampling. LiteRT thinking/speculation are
 explicitly disabled. QHexRT owns its bundle's chat template; its SDK wrapper does
 not expose a Gemma-specific thinking template override or public power-mode knob.

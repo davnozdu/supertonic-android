@@ -268,7 +268,7 @@ class ProbeActivity : Activity() {
                     // Include conversation creation/prefill in the wall/CPU measurement.
                     val started = SystemClock.elapsedRealtime()
                     val cpu0 = android.os.Process.getElapsedCpuTime()
-                    engine.createConversation(ConversationConfig(systemInstruction = Contents.of(trial.system),
+                    engine.createConversation(ConversationConfig(systemInstruction = trial.system.takeIf { it.isNotBlank() }?.let { Contents.of(it) },
                         samplerConfig = SamplerConfig(1, 0.95, 0.0),
                         thinkingConfig = ThinkingConfig(false, 0), maxOutputToken = trial.limit)).use { conversation ->
                         activeConversation = conversation
