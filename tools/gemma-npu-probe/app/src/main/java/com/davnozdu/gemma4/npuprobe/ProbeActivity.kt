@@ -328,12 +328,20 @@ class ProbeActivity : Activity() {
         val mode = intent.getStringExtra("hexMode") ?: "bench"
         check(mode in listOf("bench", "cli")) { "Unknown native mode" }
         check(mode != "cli" || selection != "all") { "CLI needs one device" }
+        val context = intent.getIntExtra("hexContext", 512)
+        check(context in listOf(512, 4096)) { "Unsupported diagnostic context" }
+        val longInput = intent.getBooleanExtra("hexLongInput", false)
+        check(!longInput || context == 4096) { "Long input requires context4096" }
+        val prompt = ProbeCases.benchmark.first().prompt + if (longInput) {
+            "\n\nМатериал для рассказа:\n" +
+                "Анна и её друг гуляли по Праге. Они смотрели на реку, мосты и старые дома. Вечером они зашли в тихое кафе и обсудили планы на следующий день.\n".repeat(20)
+        } else ""
         val args = if (mode == "bench") arrayOf("llama-bench", "-m", file.path, "-dev", devices, "-t", "2", "-p", "128",
             "-n", "128", "-r", "2", "-b", "128", "-ub", "128", "-fa", "on", "--poll", "0", "-o", "json")
         else arrayOf("llama-cli", "-m", file.path, "-dev", devices, "-ngl", if (selection == "none") "0" else "999",
-            "-t", "2", "-c", "512", "-b", "128", "-ub", "128", "-fa", "on", "--poll", "0", "-n", "128",
+            "-t", "2", "-c", context.toString(), "-b", "128", "-ub", "128", "-fa", "on", "--poll", "0", "-n", "128",
             "--temp", "0", "--top-k", "1", "--single-turn", "--simple-io", "--no-display-prompt", "--color", "off",
-            "--reasoning", "off", "--reasoning-budget", "0", "-p", ProbeCases.benchmark.first().prompt)
+            "--reasoning", "off", "--reasoning-budget", "0", "--perf", "-p", prompt)
         startMemoryMonitor()
         val t0 = SystemClock.elapsedRealtime()
         val cpu0 = android.os.Process.getElapsedCpuTime()
@@ -343,6 +351,9 @@ class ProbeActivity : Activity() {
                 .put("wallMs", SystemClock.elapsedRealtime() - t0)
                 .put("cpuMs", android.os.Process.getElapsedCpuTime() - cpu0)
                 .put("mode", mode).put("devices", devices)
+                .put("context", if (mode == "cli") context else JSONObject.NULL)
+                .put("inputCharacters", if (mode == "cli") prompt.length else JSONObject.NULL)
+                .put("longInput", mode == "cli" && longInput)
                 .put("stdout", stdout.readText()).put("stderr", stderr.readText()))
             check(result == 0) { "Hexagon benchmark failed: $result" }
             if (mode == "bench") {
