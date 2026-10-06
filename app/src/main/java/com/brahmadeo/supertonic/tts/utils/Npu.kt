@@ -96,7 +96,8 @@ object Npu {
                         if (i == models.lastIndex) o.addConfigEntry("ep.stop_share_ep_contexts", "1")
                     }
                     debug(ctx, "npu_debug_cfg").forEach { (k, v) -> o.addConfigEntry(k, v) }
-                    o.addQnn(options(ctx, performance) + debug(ctx, "npu_debug_qnn"))
+                    // Shared-memory I/O allocator: ~330 MB less dmabuf for the Kokoro kit, same speed (measured).
+                    o.addQnn(options(ctx, performance) + mapOf("enable_htp_shared_memory_allocator" to "1") + debug(ctx, "npu_debug_qnn"))
                     sessions += env.createSession(if (cached) ctxFile(i).path else model.path, o)
                 }
             }

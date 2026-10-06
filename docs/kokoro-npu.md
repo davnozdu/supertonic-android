@@ -35,3 +35,19 @@ at most two threads. Any NPU error
 switches Kokoro back to the CPU and is remembered for this app version (`npu_failed_version_kokoro`), without
 affecting Tera. Probe: `SpeechDiagnosticsActivity --ez kokoroNpuProbe true` (results also in
 `files/npu-models/probe-results.txt`).
+
+## Memory (SM8850, both voice models resident, 4.13.8–4.13.9 probes)
+
+| Variant | dmabuf | Notes |
+|---|---|---|
+| one QNN context per graph (4.13.6) | 1.58 GB | 96 sessions |
+| shared context, 32-frame chunks | 1.73 GB | 102 sessions; 34 × 32 MB HTP spill blocks (17 per model) |
+| + `enable_htp_shared_memory_allocator=1` (default now) | 1.40 GB | same speed/CPU |
+| 16-frame chunks | 1.57 GB | spill blocks unchanged, 2× calls |
+| `vtcm_mb=2` | 2.86 GB | spill doubles (68 blocks) |
+| `htp_graph_finalization_optimization_mode=1` | 2.09 GB | 45 blocks, faster compile |
+| `enable_vtcm_backup_buffer_sharing=1` | — | compile fails; load-only: 3× slower |
+
+Process PSS ~350 MB (CPU path ~1.2 GB). One voice model ≈ 0.35 GB PSS + 0.7 GB dmabuf. The spill blocks are
+per graph inside one context; ORT shares spill-fill buffers only across contexts. Diagnostic prefs:
+`npu_debug_qnn`, `npu_debug_cfg` ("k=v;k=v"), `npu_debug_kokoro_chunk` (frames).
