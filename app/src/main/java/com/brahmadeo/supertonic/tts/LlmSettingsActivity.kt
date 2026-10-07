@@ -69,6 +69,7 @@ class LlmSettingsActivity : ComponentActivity() {
                 var offlineStatus by remember { mutableStateOf("") }
                 var offlineStress by remember { mutableStateOf(pausePrefs.getBoolean("local_russian_stress",true)) }
                 var pcmCacheMb by remember { mutableIntStateOf(pausePrefs.getInt("reader_pcm_cache_mb",256)) }
+                var aheadMinutes by remember { mutableIntStateOf(pausePrefs.getInt(SupertonicTTS.AHEAD_MINUTES_KEY,5)) }
                 var readerAhead by remember { mutableStateOf(pausePrefs.getBoolean("reader_early_prepare",true)) }
                 val sileroPauses = remember { com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity) }
                 val pauseKey = if(sileroPauses) "silero_fixed_pauses" else "tera_punctuation_pauses"
@@ -248,6 +249,10 @@ class LlmSettingsActivity : ComponentActivity() {
                             Choice("Кэш готового аудио в RAM", "$pcmCacheMb МБ", listOf("64 МБ","128 МБ","256 МБ","512 МБ","1024 МБ")) {
                                 pcmCacheMb=it.substringBefore(' ').toInt();pausePrefs.edit().putInt("reader_pcm_cache_mb",pcmCacheMb).apply()
                             }
+                            Choice("Запас готового звука вперёд", "$aheadMinutes мин", listOf("2 мин","5 мин","10 мин","20 мин","60 мин")) {
+                                aheadMinutes=it.substringBefore(' ').toInt();pausePrefs.edit().putInt(SupertonicTTS.AHEAD_MINUTES_KEY,aheadMinutes).apply()
+                            }
+                            Text("Сколько звука заранее синтезировать сверх текущего места. Меньше — экономнее: при остановке или переходе по книге заготовленное не пропадает зря. 5 минут с запасом скрывают задержки LLM и синтеза.", style = MaterialTheme.typography.bodySmall)
                             val effectiveCacheMb = com.brahmadeo.supertonic.tts.utils.SpeechCacheBudget.limit(pcmCacheMb,Runtime.getRuntime().maxMemory())/(1024*1024)
                             if (effectiveCacheMb < pcmCacheMb) Text("На этом устройстве кэш ограничен до $effectiveCacheMb МБ, чтобы оставить память для синтеза и воспроизведения.", style = MaterialTheme.typography.bodySmall)
                             Text("Подготавливаются только фрагменты, уже поставленные читалкой в очередь. Пауза считается минимальной: тишина модели засчитывается.", style = MaterialTheme.typography.bodySmall)

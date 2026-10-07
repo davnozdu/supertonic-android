@@ -76,11 +76,21 @@ object SupertonicTTS {
     private fun cacheLimitBytes(): Long =
         com.brahmadeo.supertonic.tts.utils.SpeechCacheBudget.limit(
             appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt("reader_pcm_cache_mb",256) ?: 256, Runtime.getRuntime().maxMemory())
-    fun releaseAheadCache(owner: String) { audioCache.releaseAhead(owner) }
+    private val aheadRoom = Object()
+    fun releaseAheadCache(owner: String) { audioCache.releaseAhead(owner); synchronized(aheadRoom) { aheadRoom.notifyAll() } }
+    /** Ahead synthesis keeps at most N minutes of unplayed audio (default 5) besides the RAM limit: work done
+     * far ahead is lost when the listener stops or jumps, and long full-load bursts cost more energy per
+     * minute of audio than short refills (measured: Kokoro made 15–18 min ahead within 5 min of starting). */
     fun aheadCacheHasRoom(): Boolean {
         val limit = cacheLimitBytes()
-        return audioCache.status().aheadBytes < limit - minOf(16*1024L*1024L,limit/4)
+        val minutes = appContext?.getSharedPreferences("SupertonicPrefs",0)?.getInt(AHEAD_MINUTES_KEY, 5)?.coerceIn(1, 60) ?: 5
+        val horizon = minutes * 60L * getAudioSampleRate() * 2
+        val ahead = audioCache.status().aheadBytes
+        return ahead < limit - minOf(16*1024L*1024L,limit/4) && ahead < horizon
     }
+    /** Sleeps until played audio frees room (or a second passes, for cancellation checks): no 5 Hz polling. */
+    fun awaitAheadRoom() { synchronized(aheadRoom) { if (!aheadCacheHasRoom()) aheadRoom.wait(1000) } }
+    const val AHEAD_MINUTES_KEY = "reader_ahead_minutes"
     fun audioCacheStatus(): String {
         val status = audioCache.status()
         return "retainedBytes=${status.retainedBytes} aheadBytes=${status.aheadBytes} limitBytes=${cacheLimitBytes()} entries=${status.entries}"

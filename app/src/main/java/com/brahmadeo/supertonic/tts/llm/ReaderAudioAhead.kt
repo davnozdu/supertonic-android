@@ -72,7 +72,7 @@ object ReaderAudioAhead {
                 if (obsolete()) break@sentenceLoop
                 while (!SupertonicTTS.aheadCacheHasRoom()) {
                     if (obsolete()) return
-                    Thread.sleep(200)
+                    SupertonicTTS.awaitAheadRoom()
                 }
                 val normalized = normalizer.normalize(sentence, "ru", skipStress = prepared.llmProcessed)
                 if (obsolete()) break@sentenceLoop
