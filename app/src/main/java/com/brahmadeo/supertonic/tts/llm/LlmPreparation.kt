@@ -448,13 +448,17 @@ object LlmPreparation {
                     }
                     if (traceSynthetic) Log.i("SpeechCheck","SYNTHETIC PROPOSAL provider=$provider: $proposed")
                     if (validated != null) {
+                        // Names: learn from the cloud models (the small local one stresses them less reliably),
+                        // then give a known name the LLM left unmarked the stress this book already uses.
+                        if (c.stress && provider != "local") NameStress.learn(validated)
+                        val named = if (c.stress) NameStress.fill(validated) else validated
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
-                            val local=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,validated)
+                            val local=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,named)
                             val dictionary=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(local,"ru")
-                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(validated,dictionary,c.restoreYo)
-                            MissingSpeechMarks.merge(validated,safe,c.stress,c.restoreYo,ambiguousLocalYo)
-                        } else validated
-                        val supplemented=completed!=validated
+                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(named,dictionary,c.restoreYo)
+                            MissingSpeechMarks.merge(named,safe,c.stress,c.restoreYo,ambiguousLocalYo)
+                        } else named
+                        val supplemented=completed!=named
                         if(provider=="local") com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation","Local supplement chars=${validated.length} llmEdited=${validated!=source} llmStress=${validated.count { it=='\u0301' }} llmYoAdded=${validated.count { it in "ёЁ" }-source.count { it in "ёЁ" }} changed=$supplemented; explicit LLM stress/yo retained")
                         val result = Result(completed, if(supplemented) "local+offline" else provider, SystemClock.elapsedRealtime()-started, false)
                         results[index] = result; accepted++
@@ -465,7 +469,7 @@ object LlmPreparation {
                 if (provider == "local") {
                     LlmProviders.local(ctx,c,requestTexts,deadlineMs=if(c.multiVoice) 12000 else 45000,onOutput=::accept)
                 } else {
-                    LlmProviders.cloud(c,requestTexts,provider=="gemini").forEachIndexed { index,text -> accept(index,text) }
+                    LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) NameStress.hint(requestTexts) else emptyList()).forEachIndexed { index,text -> accept(index,text) }
                 }
                 if (expectedEpoch != epoch || cancelled()) break
                 val elapsed = SystemClock.elapsedRealtime()-started

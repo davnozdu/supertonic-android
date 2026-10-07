@@ -11,7 +11,7 @@ import java.net.URL
 
 object LlmProviders {
     private var local: Engine? = null
-    private var hexagon: GemmaHexagon.Model? = null
+    private var hexagon: GemmaNpuClient.Remote? = null
     private var localGpu: Boolean? = null
     // LiteRT-LM MTP speculative decoding (experimental). Greedy sampling (topK=1) means the
     // target model verifies every drafted token, so the text is unchanged, only faster.
@@ -37,7 +37,8 @@ object LlmProviders {
 Обычные целые числа уже раскрыты приложением в слова с сохранением значения. Внутри таких числительных согласуй род, падеж и порядковую форму с соседними словами, не меняя число слов: «сто одну книгу», «двадцать две кровати», «без пяти минут», «одни сутки». Значение числа сохраняй: каждое слово числительного остаётся формой того же числа, сто нельзя терять или добавлять.
 Даты и годы приложение уже записало порядковыми числительными в обычном падеже: «двадцатого августа тысяча девятьсот девяносто первого года», «в тысяча девятьсот пятом году», «к первому сентября», «на двадцатое августа». В составном порядковом числительном склоняется только последнее слово; «тысяча» и предыдущие слова не меняй. Если предложение требует другого падежа, исправь только окончание порядкового слова: «Сегодня двадцатое августа», «Двадцатое августа стало праздником», «перед двадцатым августа». День месяца всегда порядковый: «двадцатого августа», а не «двадцать августа».
 Не добавляй, не удаляй и не перемещай кавычки или скобки, даже в прямой речи.
-Расставляй словесные ударения символом U+0301 ПОСЛЕ ударной гласной. Разрешай омографы по контексту (светло́, пото́м, гото́в и т.д.). Уже указанные ударения сохраняй.
+Расставляй словесные ударения символом U+0301 ПОСЛЕ ударной гласной в КАЖДОМ русском слове из двух и более слогов, без пропусков. Каждое слово читай в составе всего предложения и соседних строк: по смыслу, роду, падежу и времени разрешай омографы (светло́, пото́м, гото́в, за́мок/замо́к и т.д.). Уже указанные ударения сохраняй.
+Особенно внимательно ставь ударения в именах, отчествах, фамилиях, прозвищах и географических названиях, во всех их падежных формах. Для известных литературных персонажей и исторических лиц используй устоявшееся произношение: «князь Мы́шкин», «Рого́жин», «Наста́сья Фили́пповна», «Раско́льников». Для незнакомой фамилии выбирай естественное русское произношение по образцу похожих фамилий и по ударению в других её формах в этом тексте. Одно и то же имя в книге всегда произноси одинаково. Если во входе есть массив names, это имена с ударениями, уже прозвучавшие в этой книге: в тех же словах ставь то же ударение; names — только справка, в ответ его не включай.
 В каждом слове допускается не более одного ударения, только после гласной. Если ударение уже есть, копируй его точно; не добавляй второе и не переноси. Например: «По-прежнему светло́», «В комнате светло́».
 Восстанавливай отсутствующие необходимые запятые, точки, двоеточия, тире, вопросительные и восклицательные знаки. Сохраняй корректную авторскую пунктуацию; не добавляй лишние знаки ради драматичности.
 Сохраняй границы слов и пробелы. Короткие предложения не склеивай: «Да. Нет. Это было не раз.» сохраняет все точки. Внутри грамматически цельной фразы не ставь запятые или тире ради пауз между короткими словами: «не раз было», «он бы не стал», «я не знаю» читаются связно. Паузу отмечай только там, где она обоснована синтаксисом и смыслом предложения.
@@ -118,10 +119,12 @@ object LlmProviders {
         }
         return result.distinct().sorted()
     }
-    fun cloud(c: LlmConfig, texts: List<String>, gemini: Boolean): List<String> {
+    fun cloud(c: LlmConfig, texts: List<String>, gemini: Boolean, names: List<String> = emptyList()): List<String> {
         // Output length (stress marks included) grows with input; a fixed 12 s cut off large batches.
         val deadline = (8000L + texts.sumOf { it.length } * 4L).coerceIn(12000L, 25000L)
-        return parse(cloudRequest(c, JSONObject().put("count", texts.size).put("texts", JSONArray(texts)).toString(), instruction(c), schema(), gemini, deadlineMs = deadline), texts.size)
+        val request = JSONObject().put("count", texts.size).put("texts", JSONArray(texts))
+        if (names.isNotEmpty()) request.put("names", JSONArray(names))
+        return parse(cloudRequest(c, request.toString(), instruction(c), schema(), gemini, deadlineMs = deadline), texts.size)
     }
     private fun cloudRequest(c: LlmConfig, prompt: String, system: String, responseSchema: JSONObject, gemini: Boolean, tokens: Int = 6000, deadlineMs: Long = 12000): String {
         val started = SystemClock.elapsedRealtime()
@@ -246,10 +249,11 @@ object LlmProviders {
     private fun localHexagon(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long, onOutput: (Int,String) -> Unit,
                              protocol: String, diagnosticInstruction: String?, outputTokenLimit: Int?, generation: Long): List<String> {
         if (local != null) closeLocal()
+        if (hexagon?.alive == false) hexagon = null // its process crashed; GemmaNpuClient paces the restart
         val model = hexagon ?: run {
             val started=SystemClock.elapsedRealtime()
-            GemmaHexagon.load(context, LocalModelDownload.modelFile(context, LocalModelDownload.HEXAGON)).also {
-                hexagon = it; Log.i("LlmPreparation", "Local Gemma loaded backend=NPU ms=${SystemClock.elapsedRealtime()-started}") }
+            GemmaNpuClient.load(context, LocalModelDownload.modelFile(context, LocalModelDownload.HEXAGON)).also {
+                hexagon = it; Log.i("LlmPreparation", "Local Gemma loaded backend=NPU (own process) ms=${SystemClock.elapsedRealtime()-started}") }
         }
         usedAt = SystemClock.elapsedRealtime()
         val system=diagnosticInstruction ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
@@ -274,7 +278,7 @@ object LlmProviders {
             onOutput(index,output); output
         }
     }
-    @Volatile private var hexagonActive: GemmaHexagon.Model? = null
+    @Volatile private var hexagonActive: GemmaNpuClient.Remote? = null
     /** Text fragments get time proportional to their length (≈25 ms/char, ~2× Gemma NPU decode); a fixed
      * 12 s cancelled ~950-char fragments near their end. Role requests keep the caller's deadline. */
     private fun fragmentDeadline(base: Long, text: String, protocol: String) =

@@ -35,8 +35,20 @@ object Npu {
     inline fun <T> exclusive(block: () -> T): T { lockHtp(); try { return block() } finally { unlockHtp() } }
     /** Backoff after consecutive NPU run errors: 30 s, 1, 2, 4 min, then 5 min; the NPU is never given up. */
     fun retryDelayMs(failures: Int): Long = minOf(30_000L shl (failures - 1).coerceIn(0, 4), 300_000L)
-    @JvmStatic fun lockHtp() = htp.lock()
-    @JvmStatic fun unlockHtp() = htp.unlock()
+    /** Set only inside the Gemma NPU process: its turns are taken from the main process, where QNN runs. */
+    @Volatile var remoteHtp: com.brahmadeo.supertonic.tts.llm.IHtpGate? = null
+    @JvmStatic fun lockHtp() { remoteHtp?.let { it.lock(); return }; htp.lock() }
+    @JvmStatic fun unlockHtp() { remoteHtp?.let { it.unlock(); return }; htp.unlock() }
+
+    /** The main-process side of [remoteHtp]. A ReentrantLock must be released by the thread that took it,
+     * while binder calls arrive on any pool thread, so one dedicated thread takes and releases every remote
+     * turn. [releaseRemote] frees a turn left behind by a crashed Gemma process; Kokoro never waits for it. */
+    private val remoteHolder = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "HTP-remote-turn").apply { isDaemon = true } }
+    private var remoteHeld = 0
+    private fun onRemoteHolder(block: () -> Unit) { remoteHolder.submit(Runnable { block() }).get() }
+    fun lockForRemote() = onRemoteHolder { htp.lock(); remoteHeld++ }
+    fun unlockForRemote() = onRemoteHolder { if (remoteHeld > 0) { remoteHeld--; htp.unlock() } }
+    fun releaseRemote() = onRemoteHolder { while (remoteHeld > 0) { remoteHeld--; htp.unlock() } }
 
     /** Scopes keep a Kokoro failure from switching off the Tera vocoder and vice versa. */
     const val KOKORO = "_kokoro"

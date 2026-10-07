@@ -20,6 +20,7 @@ internal object GemmaHexagon {
         loaded = true
     }
 
+    /** In-process llama.cpp model. Used only inside GemmaNpuService's own process (see [GemmaNpuClient]). */
     class Model internal constructor(private var handle: Long) : AutoCloseable {
         /** Greedy completion of an already templated prompt; throws on cancel, context overflow or NPU errors.
          * [slot]: KV sequence of this prompt kind (0 text, 1 roles), each keeps its own instruction prefix cached. */
