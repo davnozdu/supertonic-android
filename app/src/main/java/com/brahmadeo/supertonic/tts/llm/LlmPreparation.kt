@@ -150,6 +150,7 @@ object LlmPreparation {
             Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
+    private val verifyPool = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "LLM-stress-check").apply { isDaemon = true } }
     /** [StressCheck]: words where the cloud LLM and the offline Silero Stress disagree are asked again, in their
      * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
     private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean): List<String> = try {
@@ -159,7 +160,12 @@ object LlmPreparation {
         val offlineMs = SystemClock.elapsedRealtime() - started
         val disputes = StressCheck.disputes(outputs, offline)
         if (disputes.isEmpty()) outputs.also { Log.i("LlmPreparation", "Stress cross-check: no disputes, offlineMs=$offlineMs") }
-        else StressCheck.apply(outputs, disputes, LlmProviders.verifyStress(c, StressCheck.items(disputes), gemini)).also {
+        else {
+            val reversed = verifyPool.submit<List<Int>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), gemini) }
+            val direct = try { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), gemini) }
+                catch (e: Exception) { reversed.cancel(true); throw e }
+            StressCheck.apply(outputs, disputes, direct + reversed.get(30, TimeUnit.SECONDS))
+        }.also {
             Log.i("LlmPreparation", "Stress cross-check disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
         }
     } catch (e: Exception) {

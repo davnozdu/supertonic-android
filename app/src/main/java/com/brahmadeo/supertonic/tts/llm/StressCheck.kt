@@ -66,11 +66,13 @@ object StressCheck {
 
     /** Every dispute is asked twice, LLM option first and then offline option first. In a single binary ask the
      * model followed the option position about as often as the meaning (8 of 20 switches on «Идиот» ch. 1 were
-     * wrong: гла́за, сло́е, де́дов, пи́сьма…); a mark changes only when both asks pick the offline variant. */
-    fun items(disputes: List<Dispute>): List<Item> =
-        disputes.map { Item(it.sentence, bare(it.llm), listOf(it.llm, it.offline)) } +
-        disputes.map { Item(it.sentence, bare(it.llm), listOf(it.offline, it.llm)) }
+     * wrong: гла́за, сло́е, де́дов, пи́сьма…); a mark changes only when both asks pick the offline variant.
+     * The two orders go in two requests: duplicated items in one request came back merged. */
+    fun items(disputes: List<Dispute>, offlineFirst: Boolean): List<Item> = disputes.map {
+        Item(it.sentence, bare(it.llm), if (offlineFirst) listOf(it.offline, it.llm) else listOf(it.llm, it.offline))
+    }
 
+    /** [choices]: answers to the LLM-first request followed by answers to the offline-first request. */
     private fun offlineChosen(choices: List<Int>, i: Int, n: Int) = choices[i] == 1 && choices[i + n] == 0
 
     fun apply(fragments: List<String>, disputes: List<Dispute>, choices: List<Int>): List<String> {

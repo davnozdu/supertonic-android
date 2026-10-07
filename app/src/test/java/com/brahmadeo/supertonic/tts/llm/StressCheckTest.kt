@@ -16,10 +16,8 @@ class StressCheckTest {
 
     @Test fun eachDisputeIsAskedInBothOrdersAndSwitchesOnlyWhenConsistent() {
         val d = StressCheck.disputes(llm, offline)
-        val items = StressCheck.items(d)
-        assertEquals(6, items.size)
-        assertEquals(listOf("оттепе́ль", "о́ттепель"), items[0].options)
-        assertEquals(listOf("о́ттепель", "оттепе́ль"), items[3].options)
+        assertEquals(listOf("оттепе́ль", "о́ттепель"), StressCheck.items(d, offlineFirst = false)[0].options)
+        assertEquals(listOf("о́ттепель", "оттепе́ль"), StressCheck.items(d, offlineFirst = true)[0].options)
         // оттепель: offline both times -> switch; начал: offline then LLM -> keep; name: LLM both times -> keep.
         val fixed = StressCheck.apply(llm, d, listOf(1, 1, 0, 0, 1, 1))
         assertEquals("Это ещё о́ттепель, а он нача́л смея́ться. Мы́шкин молча́л.", fixed.single())
