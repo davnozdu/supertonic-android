@@ -28,19 +28,16 @@ import com.brahmadeo.supertonic.tts.utils.PlaybackPrefs
 import com.brahmadeo.supertonic.tts.utils.QueueItem
 import com.brahmadeo.supertonic.tts.utils.QueueManager
 import com.brahmadeo.supertonic.tts.utils.TextNormalizer
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -143,36 +140,22 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     private var activeReadingItem: ReadingItem? = null
 
     /**
-     * Streaming listener installed on SupertonicTTS for the duration of a
-     * synthesis job. Called from the Rust inference thread for each finished
-     * audio chunk; we push the bytes into [currentAudioChannel] using
-     * runBlocking so the Rust thread itself is blocked when the channel is
-     * full — that's our backpressure signal. A separate coroutine drains the
-     * channel into AudioTrack.
+     * Streaming listener for one synthesis job, bound to that job's channel so a
+     * late chunk can never reach the next text. Called on the inference thread
+     * for each finished audio chunk; the blocking send parks that thread while
+     * the channel is full — that's our backpressure signal. A separate coroutine
+     * drains the channel into AudioTrack. Stopping cancels the channel, which
+     * wakes a parked send (see [cancelSynthesis]).
      */
-    private val streamingListener = object : SupertonicTTS.ProgressListener {
+    private fun streamingListener(channel: Channel<AudioPacket>, preRoll: com.brahmadeo.supertonic.tts.utils.PreRollGate?) = object : SupertonicTTS.ProgressListener {
         override fun onProgress(sessionId: Long, current: Int, total: Int) {
             // chunk-level progress inside a single sentence — uninteresting at the UI level
         }
 
         override fun onAudioChunk(sessionId: Long, data: ByteArray) {
-            val ch = currentAudioChannel ?: return
             if (SupertonicTTS.isCancelled()) return
-            // Block the Rust JNI thread on send instead of busy-waiting with
-            // Thread.sleep(20) in a trySend loop. runBlocking parks this
-            // thread until the channel has space (consumer drained a chunk
-            // into AudioTrack) or the channel was closed (producer side
-            // ended synthesis). Either way it costs zero CPU while waiting,
-            // versus the old design that woke up 50 times per second to
-            // poll. ClosedSendChannelException is the normal cancellation
-            // path — caller invokes channel.close() in its finally block.
-            try {
-                runBlocking { ch.send(AudioPacket(data)) }
-            } catch (_: ClosedSendChannelException) {
-                // Producer closed the channel — synthesis cancelled, fine.
-            } catch (_: InterruptedException) {
-                // Rust side interrupted; let it return cleanly.
-            }
+            preRoll?.queued(data.size)
+            com.brahmadeo.supertonic.tts.utils.PlaybackBuffer.sendBlocking(channel, AudioPacket(data))
         }
     }
 
@@ -269,6 +252,15 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     private var synthesisJob: Job? = null
 
+    /** Stop the running synthesis job. Its callback may be parked in a blocking send on a full
+     * channel whose consumer has already stopped; only cancelling the channel wakes it, otherwise
+     * cancelAndJoin never returns and the engine monitor stays held. */
+    private suspend fun cancelSynthesis() {
+        SupertonicTTS.setCancelled(true)
+        currentAudioChannel?.cancel()
+        synthesisJob?.cancelAndJoin()
+    }
+
     fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int = 0) {
         SleepTimer.manualResume()
         ReadingControls.internalStarted()
@@ -276,10 +268,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             if (CallInterruption.active()) return@launch
             // Cancel any in-flight synthesis, but keep the AudioTrack alive so the
             // next sentence can stream straight in without a re-init delay.
-            if (synthesisJob?.isActive == true) {
-                SupertonicTTS.setCancelled(true)
-                synthesisJob?.cancelAndJoin()
-            }
+            if (synthesisJob?.isActive == true) cancelSynthesis()
             com.brahmadeo.supertonic.tts.llm.LlmPreparation.cancelApp()
 
             val rate = SupertonicTTS.getAudioSampleRate()
@@ -334,19 +323,19 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
                 // Keep up to 500 chunks of synthesized audio in RAM so the
                 // producer can prepare later sentences while AudioTrack plays
-                // earlier ones. Cancellation closes this channel immediately.
-                val preRollSentences = PlaybackPrefs.preRollSentences
-                val channelCapacity = 500
-                val channel = Channel<AudioPacket>(capacity = channelCapacity)
+                // earlier ones. Stopping cancels this channel (cancelSynthesis).
+                val channel = Channel<AudioPacket>(capacity = com.brahmadeo.supertonic.tts.utils.PlaybackBuffer.CAPACITY)
                 currentAudioChannel = channel
 
-                // When pre-roll is enabled, the consumer waits on this signal
-                // before starting AudioTrack. The producer below completes it
-                // once preRollSentences sentences have finished synthesis (or
-                // when the input is shorter than that target — see the
-                // edge-case complete() after the producer loop).
-                val preRollSignal: CompletableDeferred<Unit>? =
-                    if (preRollEnabled) CompletableDeferred() else null
+                // When pre-roll is enabled, the consumer waits on this gate
+                // before starting AudioTrack. It opens once preRollSentences
+                // sentences have finished synthesis, earlier when the queued
+                // audio would otherwise fill the channel, or when the producer
+                // ends (input shorter than the target, cancellation).
+                val preRoll = if (preRollEnabled) com.brahmadeo.supertonic.tts.utils.PreRollGate.forChannel(
+                    PlaybackPrefs.preRollSentences, rate) else null
+                val listener = streamingListener(channel, preRoll)
+                suspend fun queue(packet: AudioPacket) { preRoll?.queued(packet.bytes.size); channel.send(packet) }
 
                 var statePromotedToPlaying = false
                 var sawAnyAudio = false
@@ -374,8 +363,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     } catch (_: Throwable) {
                         // Some OEMs deny the priority change; harmless.
                     }
-                    if (preRollSignal != null) {
-                        preRollSignal.await()
+                    if (preRoll != null) {
+                        preRoll.await()
                         if (SupertonicTTS.isCancelled() || !isActive) return@launch
                         try {
                             if (audioTrack?.state == AudioTrack.STATE_INITIALIZED &&
@@ -457,7 +446,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             }
                             if (SupertonicTTS.isCancelled() || !isActive || !isSynthesizing) break@itemLoop
 
-                            channel.send(AudioPacket(ByteArray(0), index, readingItem))
+                            queue(AudioPacket(ByteArray(0), index, readingItem))
 
                             val preparation = com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this@PlaybackService, sentences[index], llmIds.remove(index))
                             val preparedSentence = preparation.text
@@ -473,7 +462,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                                 // Every voice streams into the same bounded playback channel.
                                 result = SupertonicTTS.generateAudio(
                                     normalizedText, curLang, partStyle, curSpeed, 0.0f, curSteps,
-                                    VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=llmProcessed
+                                    VOLUME_BOOST_FACTOR, listener, skipDictionary=llmProcessed
                                 )
                                 if (result == null) break
                             }
@@ -482,16 +471,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                                 sawAnyAudio = true
                                 producedSentences++
                                 // Pre-roll: release the consumer once enough
-                                // sentences are queued. Also release if input
-                                // turned out to be shorter than the target — we
-                                // don't want to wait forever for a 5th sentence
-                                // that doesn't exist.
-                                if (preRollSignal != null &&
-                                    !preRollSignal.isCompleted &&
-                                    producedSentences >= preRollSentences
-                                ) {
-                                    preRollSignal.complete(Unit)
-                                }
+                                // sentences are queued (shorter input is released
+                                // in the finally below).
+                                preRoll?.sentenceDone(producedSentences)
                                 if (!statePromotedToPlaying) {
                                     statePromotedToPlaying = true
                                     withContext(Dispatchers.Main) {
@@ -503,7 +485,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                                 // blocks the inference thread itself, just makes
                                 // the producer wait if the buffer is full.
                                 if (index < totalSentences - 1) {
-                                    try { channel.send(AudioPacket(silenceBytes(80))) } catch (_: Exception) { break@itemLoop }
+                                    try { queue(AudioPacket(silenceBytes(80))) } catch (_: Exception) { break@itemLoop }
                                 }
                             } else if (SupertonicTTS.isCancelled()) {
                                 break@itemLoop
@@ -521,7 +503,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         }
                         if (nextItem == null) break
                         SupertonicTTS.reset()
-                        try { channel.send(AudioPacket(silenceBytes(300))) } catch (_: Exception) { break }
+                        try { queue(AudioPacket(silenceBytes(300))) } catch (_: Exception) { break }
                         curText = nextItem.text
                         curLang = autoDetectRussian(nextItem.text, nextItem.lang)
                         curStyle = nextItem.stylePath
@@ -535,11 +517,9 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                     //     would await forever for chunks that never come
                     //   - cancelled mid-pre-roll → consumer should unblock
                     //     and exit cleanly via the channel.close() below
-                    if (preRollSignal != null && !preRollSignal.isCompleted) {
-                        preRollSignal.complete(Unit)
-                    }
+                    preRoll?.open()
                     channel.close()
-                    currentAudioChannel = null
+                    if (currentAudioChannel === channel) currentAudioChannel = null
                 }
 
                 // Consumer drains anything left in the buffer; then AudioTrack itself drains.
@@ -620,12 +600,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     /**
      * Push PCM into the shared AudioTrack from any thread.
      *
-     * Called from the Rust JNI thread inside [streamingListener]; that thread
-     * is blocked here until the AudioTrack has buffer space, which gives us
-     * backpressure for free: inference can never run faster than the speaker.
+     * Called from the playback consumer coroutine, which blocks here until the
+     * AudioTrack has buffer space; the bounded channel then holds back inference.
      *
      * Cancel + pause are polled at the chunk granularity. Pause uses
-     * Thread.sleep because this is invoked off the coroutine context.
+     * Thread.sleep to keep this a plain blocking call.
      */
     private fun writeToTrackBlocking(data: ByteArray): Boolean {
         val t = audioTrack ?: return false
@@ -833,7 +812,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         serviceScope.launch {
             SupertonicTTS.setCancelled(true)
             isSynthesizing = false
-            synthesisJob?.cancelAndJoin()
+            cancelSynthesis()
             stopPlayback()
         }
     }
@@ -1024,6 +1003,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         try {
             audioTrack?.release()
         } catch (_: Exception) {}
+        // Wake a synthesis callback parked on a full channel; the cancelled scope ends the job.
+        currentAudioChannel?.cancel()
         serviceScope.cancel()
         abandonAudioFocus()
     }

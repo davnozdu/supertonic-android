@@ -81,13 +81,18 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
                 // close them and reload from the cache written by the compile (~1.5 s).
                 KokoroNpuDecoder(appContext, root, key, threads).close()
                 val decoder = KokoroNpuDecoder(appContext, root, key, threads)
-                if (npuOff || closed) decoder.close() else npuDecoders[key] = decoder
+                // Compile outside, publish under the engine monitor: a phrase never sees its decoder closed
+                // mid-run, and close() never misses a decoder published right after it.
+                synchronized(this@KokoroEngine) { if (npuOff || closed) decoder.close() else npuDecoders[key] = decoder }
                 Log.i("KokoroTTS", "NPU decoder ready model=$key ms=${SystemClock.elapsedRealtime() - started}")
-            } catch (t: Throwable) { disableNpu("build ${t.javaClass.simpleName}: ${t.message?.take(160)}") }
-            finally { npuBuilding.remove(key) }
+            } catch (t: Throwable) {
+                // Closes every decoder, including the other voice's that a phrase may be running right now.
+                synchronized(this@KokoroEngine) { disableNpu("build ${t.javaClass.simpleName}: ${t.message?.take(160)}") }
+            } finally { npuBuilding.remove(key) }
         }
         return null
     }
+    /** Only under the engine monitor: it closes decoders that synthesize() may be using. */
     private fun disableNpu(reason: String) {
         npuOff = true
         Log.w("KokoroTTS", "NPU off, CPU continues: $reason")
