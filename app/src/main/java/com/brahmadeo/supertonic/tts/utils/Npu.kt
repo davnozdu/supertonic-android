@@ -42,7 +42,20 @@ object Npu {
     const val KOKORO = "_kokoro"
     const val TERA_SAMPLER = "_tera_sampler"
     fun failed(ctx: Context, scope: String = "") = prefs(ctx).getLong(FAILED + scope, -1L) == version(ctx)
-    fun enabled(ctx: Context, scope: String = "") = prefs(ctx).getBoolean(KEY, false) && supported(ctx) && !failed(ctx, scope)
+    fun enabled(ctx: Context, scope: String = ""): Boolean {
+        cleanStale(ctx)
+        return prefs(ctx).getBoolean(KEY, false) && supported(ctx) && !failed(ctx, scope)
+    }
+    @Volatile private var cleaned = false
+    /** Once per process: caches with the old app-version names ("-v<code>") and of the removed hybrid Tera
+     * sampler ("tera-step-", 1.5 GB) are never read again; current caches clean their own families. */
+    private fun cleanStale(ctx: Context) {
+        if (cleaned) return
+        cleaned = true
+        val stale = Regex("-v\\d+([-._]|$)")
+        File(ctx.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("tera-step-") || stale.containsMatchIn(it.name) }
+            ?.forEach { it.delete() }
+    }
     fun markFailed(ctx: Context, reason: String, scope: String = "") {
         Log.w(TAG, "NPU$scope disabled for this version: $reason")
         prefs(ctx).edit().putLong(FAILED + scope, version(ctx)).apply()
