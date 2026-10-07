@@ -462,10 +462,18 @@ object LlmPreparation {
                             val dictionary=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(local,"ru")
                             val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(named,dictionary,c.restoreYo)
                             MissingSpeechMarks.merge(named,safe,c.stress,c.restoreYo,ambiguousLocalYo)
+                        } else if (c.stress) {
+                            // A word the cloud LLM left unmarked used to reach the TTS model as a guess (eSpeak in
+                            // Kokoro). The offline Silero Stress reads the whole sentence (context BERT for homographs,
+                            // accentor for unknown words) and fills only those words; LLM marks and ё stay as they are.
+                            val offline=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
+                                com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,named),"ru")
+                            MissingSpeechMarks.merge(named,offline,stress=true,yo=false)
                         } else named
                         val supplemented=completed!=named
+                        if (supplemented && provider!="local") Log.i("LlmPreparation","Cloud stress completed fragment=$index provider=$provider llmMarks=${named.count { it=='́' }} offlineAdded=${completed.count { it=='́' }-named.count { it=='́' }}")
                         if(provider=="local") com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation","Local supplement chars=${validated.length} llmEdited=${validated!=source} llmStress=${validated.count { it=='\u0301' }} llmYoAdded=${validated.count { it in "ёЁ" }-source.count { it in "ёЁ" }} changed=$supplemented; explicit LLM stress/yo retained")
-                        val result = Result(completed, if(supplemented) "local+offline" else provider, SystemClock.elapsedRealtime()-started, false)
+                        val result = Result(completed, if(supplemented && provider=="local") "local+offline" else provider, SystemClock.elapsedRealtime()-started, false)
                         results[index] = result; accepted++
                         onPrepared(index, result)
                         if (provider == "local") preparedCache.put(c,texts,results.map { it?.text })
