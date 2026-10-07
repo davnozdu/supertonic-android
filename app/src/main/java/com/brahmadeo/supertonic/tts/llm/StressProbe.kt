@@ -34,8 +34,11 @@ internal object StressProbe {
         if (provider == "OFFLINE") return offline(ctx, paragraphs)
         val override = File(ctx.cacheDir, "gemma-instruction.txt").takeIf { it.isFile }?.readText()
         LlmProviders.instructionOverride = override
+        val cloudOverride = File(ctx.cacheDir, "cloud-instruction.txt").takeIf { it.isFile }?.readText()
+        LlmProviders.cloudInstructionOverride = cloudOverride
+        if (cloudOverride != null) Log.i("SpeechCheck", "STRESS PROBE cloud instruction override chars=${cloudOverride.length}")
         if (override != null) Log.i("SpeechCheck", "STRESS PROBE local instruction override chars=${override.length}")
-        try { prepare(ctx, provider, paragraphs) } finally { LlmProviders.instructionOverride = null }
+        try { prepare(ctx, provider, paragraphs) } finally { LlmProviders.instructionOverride = null; LlmProviders.cloudInstructionOverride = null }
     }
 
     /** The offline chain alone (Silero Stress + dictionary), as the dictionary fallback marks a paragraph. */

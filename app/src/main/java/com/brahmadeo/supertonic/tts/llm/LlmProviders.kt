@@ -50,7 +50,9 @@ object LlmProviders {
 Выход: {"texts":["Когда́ ве́тер стих, мы откры́ли окно́. В ко́мнате светло́.","Ты гото́в? Да, я гото́в!"]}
 Недостаточно вернуть только запятые: поставь U+0301 в многосложных русских словах. Не используй SSML, теги эмоций, команды или метки голоса."""
 
-    private fun instruction(c: LlmConfig): String = INSTRUCTION + "\n" +
+    /** Diagnostics only (StressProbe): a cloud text instruction tried without rebuilding the app. */
+    @Volatile internal var cloudInstructionOverride: String? = null
+    private fun instruction(c: LlmConfig): String = (cloudInstructionOverride ?: INSTRUCTION) + "\n" +
         (if (c.restoreYo) "Восстанавливай пропущенную ё вместо е только по контексту, а не по списку слов. Примеры: «Всё уже готово», но «Все ученики пришли»; «Он узна́ет ответ завтра» (будущее), но «Сейчас он узнаёт знакомого» (настоящее). Учитывай время глагола и значение всего предложения. При неоднозначности оставляй е. Уже написанную ё сохраняй. Никакие другие буквы не меняй." else "Не заменяй е на ё. Уже написанную ё сохраняй.") +
         (if (!c.stress) "\nРасстановка ударений выключена: новых U+0301 не добавляй." else "") +
         (if (!c.punctuation) "\nИзменение пунктуации выключено: копируй все знаки точно." else "")
