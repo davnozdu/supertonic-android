@@ -437,7 +437,11 @@ object LlmPreparation {
             }
         }
         var failure: String? = null
-        val numericInputs = texts.map { com.brahmadeo.supertonic.tts.foreign.ForeignText.prepareNumbers(it, russianNumbers) }
+        // The LLM sees the text as it will be read: units, times, percents, phones, ordinal suffixes, Roman numerals
+        // and abbreviations are spelled out first (they used to stay digits/letters and reach the voice unstressed:
+        // "пять км", "Пётр I" through the English engine). Dates stay for prepareNumbers, which marks their spans.
+        val numericInputs = texts.map { com.brahmadeo.supertonic.tts.foreign.ForeignText.prepareNumbers(
+            com.brahmadeo.supertonic.tts.utils.RussianBookNormalizer.normalize(it, expandNumbers = false, dates = false), russianNumbers) }
         val providerTexts = numericInputs.map { it.text }
         val providers = when (c.mode) {
             LlmMode.OFF -> emptyList()

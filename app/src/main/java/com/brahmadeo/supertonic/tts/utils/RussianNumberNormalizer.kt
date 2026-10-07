@@ -44,13 +44,29 @@ class RussianNumberNormalizer {
 
     data class LlmNumbers(val text: String, val ranges: List<IntRange>)
 
+    private val masculineInA = setOf("мужчина", "мужчины", "юноша", "юноши", "папа", "папы", "дядя", "дяди", "дедушка", "дедушки",
+        "судья", "судьи", "слуга", "слуги", "староста", "старосты", "воевода", "воеводы")
+    private val feminineSoft = setOf("ночь", "дверь", "жизнь", "смерть", "любовь", "мышь", "площадь", "тетрадь", "вещь", "память",
+        "новость", "кость", "часть", "мысль", "степень", "дочь", "мать", "сеть", "роль", "цель", "соль", "боль", "ель", "осень")
+
+    /** Gender (and accusative) of the last number word from the counted noun's form: after 1 the noun is in the
+     * nominative or accusative singular (книга, книгу, окно, день), after 2-4 in the genitive singular, where
+     * feminine nouns end in -ы/-и and masculine or neuter ones in -а/-я (две тетради, два стола, два окна). */
     private fun countedInteger(value: Long, following: String): String {
-        val noun = nextNoun.find(following)?.groupValues?.get(1)?.replace("+", "")?.replace("\u0301", "")?.lowercase()
+        val noun = nextNoun.find(following)?.groupValues?.get(1)?.replace("+", "")?.replace("\u0301", "")?.lowercase().orEmpty()
         val words = spellInteger(value)
+        val masculine = noun in masculineInA
         return when {
-            noun in feminineNouns && words.endsWith("один") -> words.removeSuffix("один") + "одна"
-            noun in feminineNouns && words.endsWith("два") -> words.removeSuffix("два") + "две"
-            noun in neuterNouns && words.endsWith("один") -> words.removeSuffix("один") + "одно"
+            noun.isEmpty() -> words
+            words.endsWith("один") && (noun in feminineNouns || noun in feminineSoft || !masculine && !noun.endsWith("мя") && (noun.endsWith("а") || noun.endsWith("я"))) ->
+                words.removeSuffix("один") + "одна"
+            words.endsWith("один") && !masculine && (noun.endsWith("у") || noun.endsWith("ю")) && !noun.endsWith("ую") ->
+                words.removeSuffix("один") + "одну"
+            words.endsWith("один") && (noun in neuterNouns || noun.endsWith("о") || noun.endsWith("е") || noun.endsWith("мя")) ->
+                words.removeSuffix("один") + "одно"
+            words.endsWith("два") && (noun in feminineNouns || !masculine && noun !in neuterNouns && !noun.endsWith("мени") &&
+                (noun.endsWith("ы") || noun.endsWith("и"))) ->
+                words.removeSuffix("два") + "две"
             else -> words
         }
     }

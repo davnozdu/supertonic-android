@@ -113,14 +113,120 @@ object RussianBookNormalizer {
             t=rx("(?<![\\p{L}])${Regex.escape(key)}(?![\\p{L}])",RegexOption.IGNORE_CASE).replace(t,value)
         return t
     }
-    fun normalize(text: String, expandNumbers: Boolean = true): String {
+    private val romanValues = mapOf('I' to 1, 'V' to 5, 'X' to 10, 'L' to 50, 'C' to 100, 'D' to 500, 'M' to 1000)
+    private fun roman(s: String): Int? {
+        var n = 0; var prev = 0
+        for (c in s.reversed()) { val v = romanValues[c] ?: return null; n += if (v < prev) -v else v; prev = maxOf(prev, v) }
+        return n.takeIf { it in 1..3999 && toRoman(it) == s }
+    }
+    private fun toRoman(n: Int): String {
+        val table = listOf(1000 to "M", 900 to "CM", 500 to "D", 400 to "CD", 100 to "C", 90 to "XC", 50 to "L", 40 to "XL", 10 to "X", 9 to "IX", 5 to "V", 4 to "IV", 1 to "I")
+        var rest = n; val out = StringBuilder()
+        for ((v, r) in table) while (rest >= v) { out.append(r); rest -= v }
+        return out.toString()
+    }
+    private val masculineCountStems = listOf("тысячелет", "раздел", "квартал", "созыв", "съезд", "класс", "век", "том")
+    private val feminineCountStems = listOf("глав", "част", "книг", "сери")
+    /** Ordinal ending agreeing with a counted noun form: "веке" -> "ом", "главы" -> "ой", "Том" -> "ый". */
+    private fun agreeing(noun: String): String {
+        val w = noun.lowercase()
+        feminineCountStems.firstOrNull { w.startsWith(it) }?.let { stem -> return when (w.removePrefix(stem)) {
+            "ы", "и", "е", "ой", "ью", "ей", "ии", "ах", "ям", "ам", "ами", "ями", "ях" -> "ой"
+            "у", "ю" -> "ую"
+            else -> "ая"
+        } }
+        val stem = masculineCountStems.firstOrNull { w.startsWith(it) } ?: return "ый"
+        return when (w.removePrefix(stem)) {
+            "ие" -> "ое"; "ия", "а" -> "ого"; "ию", "у" -> "ому"; "ием", "ом", "ем" -> "ым"; "ии", "е" -> "ом"
+            "ы", "и" -> "ый"; "ов", "ий" -> "ого"; "ах", "иях" -> "ом"; "ам", "иям" -> "ому"; "ами", "иями" -> "ым"
+            else -> "ый"
+        }
+    }
+    private val NUMERAL_STEMS = listOf("перв", "втор", "трет", "четвёрт", "пят", "шест", "седьм", "восьм", "девят", "десят",
+        "одиннадцат", "двенадцат", "тринадцат", "четырнадцат", "пятнадцат", "шестнадцат", "семнадцат", "восемнадцат",
+        "девятнадцат", "двадцат", "тридцат", "сороков", "пятидесят", "шестидесят", "семидесят", "восьмидесят", "девяност", "сот")
+    private fun thirdToHard(ending: String) = mapOf("ий" to "ый", "ья" to "ая", "ье" to "ое", "ьего" to "ого", "ьему" to "ому", "ьем" to "ом")[ending] ?: ending
+    private val femaleRulers = listOf("екатерин", "елизавет", "анн", "мари", "виктори", "изабелл", "елен", "ольг", "софи")
+    /** Ordinal ending after a ruler's name in any case: Пётр I, Петра I, при Петре I, Екатериной II. */
+    private fun afterName(name: String): String {
+        val w = name.lowercase()
+        if (femaleRulers.any { w.startsWith(it) }) return when {
+            w.endsWith("у") || w.endsWith("ю") -> "ую"
+            w.endsWith("ы") || w.endsWith("и") || w.endsWith("е") || w.endsWith("ой") || w.endsWith("ей") -> "ой"
+            else -> "ая"
+        }
+        return when {
+            w.endsWith("ом") || w.endsWith("ем") || w.endsWith("ём") -> "ым"
+            w.endsWith("а") || w.endsWith("я") -> "ого"
+            w.endsWith("у") || w.endsWith("ю") -> "ому"
+            w.endsWith("е") -> "ом"
+            else -> "ый"
+        }
+    }
+    private val romanNouns = "век|глав|том|част|раздел|съезд|созыв|тысячелет|класс|квартал|сери|книг"
+    /** Roman numerals never reach the foreign-language engine as Latin letters: "Пётр I" -> "Пётр Первый",
+     * "в XVIII веке" -> "в восемнадцатом веке", "глава II" -> "глава вторая", a line "IV." -> "Глава четвёртая." */
+    fun romanNumerals(text: String): String {
+        var t = rx("(?m)^(\\s*)([IVXLCDM]{1,8})\\.?(\\s*)$").replace(text) { m ->
+            val n = roman(m.groupValues[2]) ?: return@replace m.value
+            if (n > 99) m.value else m.groupValues[1] + "Глава " + ordinal(n, "ая") + "." + m.groupValues[3]
+        }
+        t = rx("(?<![\\p{L}\\d])([IVXLCDM]{1,8})(?=\\s+(?:$romanNouns))", RegexOption.IGNORE_CASE).replace(t) { m ->
+            if (m.value != m.value.uppercase()) return@replace m.value
+            val n = roman(m.value) ?: return@replace m.value
+            val noun = rx("[а-яёА-ЯЁ]+").find(t.substring(m.range.last + 1))?.value.orEmpty()
+            ordinal(n, agreeing(noun))
+        }
+        t = rx("(?<![\\p{L}])((?:$romanNouns)[а-яё]*)\\s+([IVXLCDM]{1,8})(?![\\p{L}\\d])", RegexOption.IGNORE_CASE).replace(t) { m ->
+            val n = roman(m.groupValues[2]) ?: return@replace m.value
+            m.groupValues[1] + " " + ordinal(n, agreeing(m.groupValues[1]))
+        }
+        t = rx("(?<![\\p{L}])([А-ЯЁ][а-яё]{1,15})\\s+([IVXLCDM]{1,6})(?![\\p{L}\\d])").replace(t) { m ->
+            val n = roman(m.groupValues[2]) ?: return@replace m.value
+            if (n > 40) m.value else m.groupValues[1] + " " + ordinal(n, afterName(m.groupValues[1])).replaceFirstChar(Char::uppercaseChar)
+        }
+        // A numeral listed after another one ("тома I и II", "XIX, XX века") takes the same ending; a lone one inside
+        // Russian text must not reach the foreign engine as Latin letters either.
+        t = rx("([а-яё]+)(\\s*(?:,|и|или|—|–|-)\\s*)([IVXLCDM]{1,8})(?![\\p{L}\\d])").replace(t) { m ->
+            val n = roman(m.groupValues[3]) ?: return@replace m.value
+            val previous = m.groupValues[1].lowercase()
+            val ending = listOf("ыми", "ого", "ому", "ый", "ой", "ая", "ую", "ое", "ые", "ых", "ым", "ом", "ий", "ья", "ье", "ьего", "ьему", "ьем")
+                .firstOrNull { previous.endsWith(it) && NUMERAL_STEMS.any { s -> previous.startsWith(s) } } ?: return@replace m.value
+            m.groupValues[1] + m.groupValues[2] + ordinal(n, thirdToHard(ending))
+        }
+        t = rx("(?<![\\p{L}\\d])([IVXLCDM]{1,8})(\\s*(?:,|и|или|—|–|-)\\s*)([а-яё]+)").replace(t) { m ->
+            val n = roman(m.groupValues[1]) ?: return@replace m.value
+            val next = m.groupValues[3].lowercase()
+            if (NUMERAL_STEMS.none { next.startsWith(it) }) return@replace m.value
+            val ending = listOf("ыми", "ого", "ому", "ый", "ой", "ая", "ую", "ое", "ые", "ых", "ым", "ом", "ий", "ья", "ье", "ьего", "ьему", "ьем")
+                .firstOrNull { next.endsWith(it) } ?: return@replace m.value
+            ordinal(n, thirdToHard(ending)) + m.groupValues[2] + m.groupValues[3]
+        }
+        return t
+    }
+    private val letterNames=mapOf('А' to "а",'Б' to "бэ",'В' to "вэ",'Г' to "гэ",'Д' to "дэ",'Е' to "е",'Ё' to "ё",'Ж' to "жэ",'З' to "зэ",'И' to "и",'Й' to "и краткое",'К' to "ка",'Л' to "эль",'М' to "эм",'Н' to "эн",'О' to "о",'П' to "пэ",'Р' to "эр",'С' to "эс",'Т' to "тэ",'У' to "у",'Ф' to "эф",'Х' to "ха",'Ц' to "цэ",'Ч' to "че",'Ш' to "ша",'Щ' to "ща",'Ъ' to "твёрдый знак",'Ы' to "ы",'Ь' to "мягкий знак",'Э' to "э",'Ю' to "ю",'Я' to "я")
+    /** Read as words: pronounceable abbreviations. */
+    private val wordAcronyms=setOf("ВУЗ","НАТО","СМИ","ООН","МИД","ГУЛАГ","ТАСС","МХАТ","ГОСТ","ЗАГС","МКАД","РАН","ГЭС","ТЭЦ","ОМОН","СИЗО","ВАК","НИИ","ЮНЕСКО","ОПЕК","НЭП","ВОХР","МОПР","ЦУМ","ГУМ","МХТ","ДОСААФ","ГОЭЛРО","ЖЭК","ТЮЗ")
+    /** Read by letters even though a vowel would allow a word. */
+    private val letterAcronyms=setOf("ГИБДД","ЕГЭ","ОГЭ","ОГПУ","ЕС","ИИ","ИП","ООО","ОАО","ЗАО","ПАО","АО","АЭС","ЕАЭС","ОРВИ","ЭВМ","ВОВ","ЕГРЮЛ","УФСИН","ОБЖ","СНГ","ВЧК","ЧК","США","МГУ","ЦРУ","ВДНХ","ОКБ","ИТ","ПО","УК","ИНН","ОВД","ЕРЦ","СИ","ГПУ","ВГУ","ЛГУ","МВТУ","ПТУ","РСФСР","ОТК","РЖД","МФЦ","ЖКУ")
+    private val vowelsUpper="АЕЁИОУЫЭЮЯ"
+    /** Russian capital abbreviations: by letters (СССР -> эс-эс-эс-эр, США -> эс-ша-а) or as a word (НАТО -> нато).
+     * Without a vowel or listed as spelled -> letters; anything else (shouted КТО, ВСЁ, ДА, headings) -> a word. */
+    fun acronyms(text: String): String = rx("(?<![\\p{L}])[А-ЯЁ]{2,8}(?![\\p{L}])").replace(text) { m ->
+        val a=m.value
+        val byLetters=a !in wordAcronyms && (a in letterAcronyms || a.none { it in vowelsUpper })
+        if (byLetters) a.map { letterNames.getValue(it) }.joinToString("-") else a.lowercase()
+    }
+    /** [dates] = false leaves calendar dates and years to the caller (the LLM path expands them with spans). */
+    fun normalize(text: String, expandNumbers: Boolean = true, dates: Boolean = true): String {
         var t=abbreviations(BookTextSpacing.normalize(text))
         t=rx("(?<=[а-яёА-ЯЁ])-\\s*\\r?\\n\\s*(?=[а-яёА-ЯЁ])").replace(t,"")
         t=rx("\\[\\d{1,5}]").replace(t,"")
         for ((key,value) in mapOf("т. е." to "то есть","т.е." to "то есть","т. д." to "так далее","т.д." to "так далее","т. п." to "тому подобное","т.п." to "тому подобное","т.к." to "так как","г-н" to "господин","г-жа" to "госпожа"))
             t=rx("(?<![\\p{L}])${Regex.escape(key)}",RegexOption.IGNORE_CASE).replace(t,value)
         t=rx("([\\$€₽])\\s*(\\d+(?:[,.]\\d+)?)").replace(t) { "${it.groupValues[2]} ${it.groupValues[1]}" }
-        t=RussianDates.expand(t).text
+        if (dates) t=RussianDates.expand(t).text
+        t=romanNumerals(t)
         t=rx("(?<!\\d)(\\d{1,2}):(\\d{2})(?::(\\d{2}))?(?!\\d)").replace(t) { m ->
             val h=m.groupValues[1].toLong();val min=m.groupValues[2].toLong();val sec=m.groupValues[3].toLongOrNull()
             if (h>23 || min>59 || (sec!=null && sec>59)) m.value else
@@ -138,28 +244,33 @@ object RussianBookNormalizer {
             val n=m.groupValues[1].toLong(); val den=m.groupValues[2].toInt()
             if (den !in 2..99) m.value else cardinal(n,feminine=true)+" "+ordinal(den,plural(n,"ая","ых","ых"))
         }
-        t=rx("\\b(\\d+)-(й|ый|я|ая|е|ое|го|ого|му|ому|м|ом)\\b").replace(t) { m ->
+        t=rx("\\b(\\d+)-(ыми|ого|ому|ый|ая|ое|ую|ой|ых|ым|ом|го|му|ми|й|я|е|ю|х|м)\\b").replace(t) { m ->
             val n=m.groupValues[1].toIntOrNull() ?: return@replace m.value
-            val ending=mapOf("й" to "ый","я" to "ая","е" to "ое","го" to "ого","му" to "ому","м" to "ом")[m.groupValues[2]] ?: m.groupValues[2]
+            val plural=rx("^\\s+год").containsMatchIn(t.substring(m.range.last+1))
+            val ending=if(plural && m.groupValues[2]=="е") "ые"
+                else mapOf("й" to "ый","я" to "ая","е" to "ое","ю" to "ую","го" to "ого","му" to "ому","м" to "ом","х" to "ых","ми" to "ыми")[m.groupValues[2]] ?: m.groupValues[2]
             ordinal(n,ending)
         }
-        t=rx("(?<![\\p{L}])([IVXLCDM]{1,12})(?=\\s+(?:век|глав|том|част|раздел))").replace(t) { m ->
-            val vals=mapOf('I' to 1,'V' to 5,'X' to 10,'L' to 50,'C' to 100,'D' to 500,'M' to 1000)
-            var n=0;var prev=0
-            for(c in m.value.reversed()){val v=vals.getValue(c);n+=if(v<prev)-v else v;prev=maxOf(prev,v)}
-            ordinal(n,if(t.substring(m.range.last+1).trimStart().startsWith("глава")) "ая" else "ый")
+        val rangeUnits=mapOf("км" to "километров","м" to "метров","см" to "сантиметров","мм" to "миллиметров","кг" to "килограммов","г" to "граммов","л" to "литров","руб." to "рублей","%" to "процентов","°" to "градусов")
+        // "10-15 человек" -> "от десяти до пятнадцати человек"; the second number must be larger (no ISO dates or codes).
+        t=rx("(?<![\\p{L}\\d.,:/-])(\\d{1,4})\\s*[-–—]\\s*(\\d{1,4})(?![\\d.,:/-]\\d|[\\p{L}\\d])(\\s*(?:км|мм|см|кг|руб\\.|м|г|л|%|°)(?![\\p{L}]))?").replace(t) { m ->
+            val a=m.groupValues[1].toLong(); val b=m.groupValues[2].toLong()
+            if (b <= a) return@replace m.value
+            val unit=m.groupValues[3].trim()
+            // Year spans ("1941–1945 гг.", "война 1941–1945") belong to RussianDates; only counted ones are read here.
+            val nextWord=rx("^\\s*([а-яё]+)").find(t.substring(m.range.last+1))?.groupValues?.get(1).orEmpty()
+            if (unit.isEmpty() && a in 1000..2100 && b in 1000..2100 && !RussianDates.looksCounted(nextWord)) return@replace m.value
+            "от ${cardinal(a,Case.GEN)} до ${cardinal(b,Case.GEN)}"+(if (unit.isEmpty()) "" else " "+rangeUnits.getValue(unit))
         }
         val units=mapOf("км" to listOf("километр","километра","километров"),"м" to listOf("метр","метра","метров"),"см" to listOf("сантиметр","сантиметра","сантиметров"),"мм" to listOf("миллиметр","миллиметра","миллиметров"),"кг" to listOf("килограмм","килограмма","килограммов"),"г" to listOf("грамм","грамма","граммов"),"л" to listOf("литр","литра","литров"),"руб." to listOf("рубль","рубля","рублей"),"₽" to listOf("рубль","рубля","рублей"),"$" to listOf("доллар","доллара","долларов"),"€" to listOf("евро","евро","евро"),"%" to listOf("процент","процента","процентов"),"°C" to listOf("градус Цельсия","градуса Цельсия","градусов Цельсия"),"°С" to listOf("градус Цельсия","градуса Цельсия","градусов Цельсия"),"°" to listOf("градус","градуса","градусов"))
         t=rx("(?<![\\p{L}\\d])(-?\\d+(?:[,.]\\d+)?)\\s*(${units.keys.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }})(?![\\p{L}])").replace(t) { m ->
             val raw=m.groupValues[1]; val unit=units.getValue(m.groupValues[2]); val n=raw.toLongOrNull()
             val case=inferredCase(t.take(m.range.first))
-            (if(n!=null) cardinal(n,case) else numbers.normalize(raw))+" "+if(n!=null) unitForm(n,unit,case) else unit[1]
+            val stop=m.groupValues[2].endsWith(".") && t.substring(m.range.last+1).trimStart(' ','\t').let { it.isEmpty() || it[0]=='\n' || it[0].isUpperCase() }
+            (if(n!=null) cardinal(n,case) else numbers.normalize(raw))+" "+(if(n!=null) unitForm(n,unit,case) else unit[1])+(if(stop) "." else "")
         }
         val letterNames=mapOf('А' to "а",'Б' to "бэ",'В' to "вэ",'Г' to "гэ",'Д' to "дэ",'Е' to "е",'Ё' to "ё",'Ж' to "жэ",'З' to "зэ",'И' to "и",'Й' to "и краткое",'К' to "ка",'Л' to "эль",'М' to "эм",'Н' to "эн",'О' to "о",'П' to "пэ",'Р' to "эр",'С' to "эс",'Т' to "тэ",'У' to "у",'Ф' to "эф",'Х' to "ха",'Ц' to "цэ",'Ч' to "че",'Ш' to "ша",'Щ' to "ща",'Ъ' to "твёрдый знак",'Ы' to "ы",'Ь' to "мягкий знак",'Э' to "э",'Ю' to "ю",'Я' to "я")
-        val wordAcronyms=mapOf("ВУЗ" to "вуз","НАТО" to "нато","СМИ" to "сми","ООН" to "оон")
-        t=rx("(?<![\\p{L}])[А-ЯЁ]{2,8}(?![\\p{L}])").replace(t) { m ->
-            wordAcronyms[m.value] ?: if(m.value in setOf("РФ","СССР","ФСБ","МВД","ДНК","РНК","ЖКХ","ГИБДД","МЧС","ТВ")) m.value.map { letterNames.getValue(it) }.joinToString(" ") else m.value
-        }
+        t=acronyms(t)
         if (!expandNumbers) return t
         t=rx("(?<![\\p{L}\\d])(\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+)(?![\\p{L}\\d])").replace(t) { it.value.filterNot(Char::isWhitespace) }
         // Case-aware ordinary numbers, after compound formats have been resolved.

@@ -33,7 +33,7 @@ class RussianBookNormalizerTest {
     }
     @Test fun abbreviationsFootnotesAndWraps() {
         assertEquals("сим-карта, пин-код, гиф, миди, вайфай, вай-фай, хай-фай.",RussianBookNormalizer.normalize("SIM-карта, PIN-код, GIF, MIDI, WIFI, Wi-Fi, hi-fi."))
-        assertEquals("то есть эф эс бэ",RussianBookNormalizer.normalize("т.е. ФСБ"))
+        assertEquals("то есть эф-эс-бэ",RussianBookNormalizer.normalize("т.е. ФСБ"))
         assertEquals("зелёный лес",RussianBookNormalizer.normalize("зелё-\nный лес [1]"))
     }
     @Test fun explicitStressAndValueArePreserved() {
