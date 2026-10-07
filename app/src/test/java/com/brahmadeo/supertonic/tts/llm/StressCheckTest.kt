@@ -24,6 +24,18 @@ class StressCheckTest {
         assertEquals(1, StressCheck.lastOfflineChosen)
     }
 
+    @Test fun anInconsistentJudgeLeavesTheDecisionToTheTieBreaker() {
+        val d = StressCheck.disputes(llm, offline)
+        // оттепель: judge said 0 and 0 (inconsistent) -> tie-breaker (dictionary) says offline;
+        // начал: 1 and 1 (inconsistent), tie-breaker refuses -> LLM stays; name: consistent LLM.
+        val fixed = StressCheck.apply(llm, d, listOf(0, 1, 0, 0, 1, 1)) { it.offline == "о́ттепель" }
+        assertEquals("Это ещё о́ттепель, а он нача́л смея́ться. Мы́шкин молча́л.", fixed.single())
+        assertEquals(0, StressCheck.lastOfflineChosen)
+        assertEquals(1, StressCheck.lastTieBreaks)
+        assertEquals(1, StressCheck.offlineOrdinal(d[0]))
+        assertEquals("оттепель", StressCheck.bareWord(d[0]))
+    }
+
     @Test fun localGemmaYieldsToOfflineExceptExplicitSourceMarks() {
         val gemma = "Ра́скольников жил в Вологде́, а за́мок был стар."
         val offline = "Раско́льников жил в Во́логде, а замо́к был стар."

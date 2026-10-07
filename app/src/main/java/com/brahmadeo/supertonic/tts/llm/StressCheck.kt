@@ -21,6 +21,7 @@ object StressCheck {
     /** Diagnostics: decisions since the previous call ("llm / offline -> chosen | sentence"). */
     @Synchronized fun takeDecisions(): List<String> = decisions.toList().also { decisions.clear() }
     @Volatile var lastOfflineChosen = 0; private set
+    @Volatile var lastTieBreaks = 0; private set
 
     private fun ordinal(w: String): Int? {
         val mark = w.indexOf(ACUTE)
@@ -90,18 +91,27 @@ object StressCheck {
     /** [choices]: answers to the LLM-first request followed by answers to the offline-first request. */
     private fun offlineChosen(choices: List<Int>, i: Int, n: Int) = choices[i] == 1 && choices[i + n] == 0
 
-    fun apply(fragments: List<String>, disputes: List<Dispute>, choices: List<Int>): List<String> {
+    /** Variant ordinal of a dispute's offline option, for the tie-breaker. */
+    fun offlineOrdinal(d: Dispute): Int? = ordinal(d.offline)
+    fun bareWord(d: Dispute): String = bare(d.llm)
+
+    /** [tieBreak]: decides disputes the judge answered differently in the two orders (true = offline variant);
+     * without it such words keep the LLM mark. */
+    fun apply(fragments: List<String>, disputes: List<Dispute>, choices: List<Int>,
+              tieBreak: (Dispute) -> Boolean = { false }): List<String> {
         val out = fragments.map { StringBuilder(it) }
         val log = mutableListOf<String>()
         // Right to left inside each fragment keeps the remaining ranges valid.
         for ((i, d) in disputes.withIndex().sortedByDescending { it.value.range.first }) {
-            val chosenOffline = offlineChosen(choices, i, disputes.size)
+            val consistent = choices[i] != choices[i + disputes.size]
+            val chosenOffline = if (consistent) offlineChosen(choices, i, disputes.size) else tieBreak(d)
             val chosen = if (chosenOffline) d.offline else d.llm
             log += "${d.llm} / ${d.offline} -> $chosen [${choices[i]}${choices[i + disputes.size]}] | ${d.sentence.take(120)}"
             if (chosenOffline) out[d.fragment].replace(d.range.first, d.range.last + 1, chosen)
         }
         synchronized(this) { decisions += log.reversed(); if (decisions.size > 500) decisions = decisions.takeLast(500).toMutableList() }
         lastOfflineChosen = disputes.indices.count { offlineChosen(choices, it, disputes.size) }
+        lastTieBreaks = disputes.indices.count { choices[it] == choices[it + disputes.size] && tieBreak(disputes[it]) }
         return out.map { it.toString() }
     }
 }

@@ -163,21 +163,27 @@ object LlmPreparation {
         val disputes = StressCheck.disputes(outputs, offline)
         if (disputes.isEmpty()) outputs.also { Log.i("LlmPreparation", "Stress cross-check: no disputes, offlineMs=$offlineMs") }
         else {
-            // A third, independent opinion decides: the other cloud provider when it is configured.
+            // The same provider judges by default: on «Идиот» ch. 1 it scored 34-36/42 key words against 33/42 for a
+            // Gemini judge (hard set 63/71 both), and it needs no second key or extra requests to another service.
             val hasGemini = c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()
             val hasOllama = c.ollamaModel.isNotBlank()
             val judgeGemini = when (LlmProviders.verifierOverride) {
                 "GEMINI" -> hasGemini
                 "OLLAMA" -> !hasOllama
                 "SAME" -> gemini
-                else -> if (gemini) !hasOllama else hasGemini
+                else -> gemini
             }
             val reversed = verifyPool.submit<List<Int>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini) }
             val direct = try { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini) }
                 catch (e: Exception) { reversed.cancel(true); throw e }
-            StressCheck.apply(outputs, disputes, direct + reversed.get(30, TimeUnit.SECONDS))
+            // The judge disagreeing with itself: the full dictionary decides non-homographs (when downloaded).
+            val dictionaryReady = StressJudgeDictionary.ensure(ctx)
+            StressCheck.apply(outputs, disputes, direct + reversed.get(30, TimeUnit.SECONDS)) { d ->
+                dictionaryReady && !com.brahmadeo.supertonic.tts.local.LocalRussianStress.isHomograph(ctx, StressCheck.bareWord(d)) &&
+                    StressJudgeDictionary.ordinal(StressCheck.bareWord(d)).let { it != null && it == StressCheck.offlineOrdinal(d) }
+            }
         }.also {
-            Log.i("LlmPreparation", "Stress cross-check judge=${if (disputes.isEmpty()) "-" else LlmProviders.lastVerifier} disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
+            Log.i("LlmPreparation", "Stress cross-check judge=${if (disputes.isEmpty()) "-" else LlmProviders.lastVerifier} disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
         }
     } catch (e: Exception) {
         Log.w("LlmPreparation", "Stress cross-check skipped: ${e.javaClass.simpleName}: ${e.message}")

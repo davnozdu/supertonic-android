@@ -74,6 +74,12 @@ object LocalRussianStress {
             if (c == '+') c else c.let { if (original.getOrNull(pos++)?.isUpperCase() == true) it.uppercaseChar() else it }
         }.joinToString("")
     }
+    /** Whether Silero Stress lists [word] as a homograph (its stress depends on the sentence). */
+    @Synchronized fun isHomograph(ctx: Context, word: String): Boolean = runCatching {
+        if (!LocalRussianAssets.ready(ctx)) return@runCatching true
+        load(ctx); lastUsed = android.os.SystemClock.elapsedRealtime()
+        data!!.getJSONObject("homodict").has(word.lowercase().replace("\u0301", "").replace("+", ""))
+    }.getOrDefault(true)
     @Synchronized fun apply(ctx: Context, text: String): String {
         if (!LocalRussianAssets.ready(ctx) || !ctx.getSharedPreferences("SupertonicPrefs",0).getBoolean("local_russian_stress",true)) return text
         cache[text]?.let { return it }
