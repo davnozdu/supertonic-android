@@ -14,15 +14,16 @@ class StressCheckTest {
         assertEquals("Мышкин молчал.", d[2].sentence)
     }
 
-    @Test fun optionsAlternateAndTheChoiceIsApplied() {
+    @Test fun eachDisputeIsAskedInBothOrdersAndSwitchesOnlyWhenConsistent() {
         val d = StressCheck.disputes(llm, offline)
         val items = StressCheck.items(d)
+        assertEquals(6, items.size)
         assertEquals(listOf("оттепе́ль", "о́ттепель"), items[0].options)
-        assertEquals(listOf("на́чал", "нача́л"), items[1].options)
-        // Offline for the first two (index 1 then index 0), the LLM for the name (index 0).
-        val fixed = StressCheck.apply(llm, d, listOf(1, 0, 0))
-        assertEquals("Это ещё о́ттепель, а он на́чал смея́ться. Мы́шкин молча́л.", fixed.single())
-        assertEquals(2, StressCheck.lastOfflineChosen)
+        assertEquals(listOf("о́ттепель", "оттепе́ль"), items[3].options)
+        // оттепель: offline both times -> switch; начал: offline then LLM -> keep; name: LLM both times -> keep.
+        val fixed = StressCheck.apply(llm, d, listOf(1, 1, 0, 0, 1, 1))
+        assertEquals("Это ещё о́ттепель, а он нача́л смея́ться. Мы́шкин молча́л.", fixed.single())
+        assertEquals(1, StressCheck.lastOfflineChosen)
     }
 
     @Test fun skipsYoMonosyllablesAndMisalignedFragments() {

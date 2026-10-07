@@ -137,7 +137,7 @@ object LlmProviders {
         val array = JSONArray()
         items.forEach { array.put(JSONObject().put("sentence", it.sentence).put("word", it.word).put("options", JSONArray(it.options))) }
         val answer = cloudRequest(c, JSONObject().put("items", array).toString(), STRESS_CHECK, stressCheckSchema(), gemini,
-            tokens = 64 + items.size * 8, deadlineMs = (4000L + items.size * 150L).coerceAtMost(10_000L))
+            tokens = 64 + items.size * 8, deadlineMs = (4000L + items.size * 100L).coerceAtMost(12_000L))
         val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "Проверка ударений: нет JSON" }
         val choices = JSONObject(answer.substring(start, end + 1)).getJSONArray("choices")

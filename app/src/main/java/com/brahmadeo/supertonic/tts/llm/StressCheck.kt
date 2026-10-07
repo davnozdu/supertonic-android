@@ -13,7 +13,7 @@ object StressCheck {
 
     private const val ACUTE = '́'
     private const val VOWELS = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
-    private const val MAX_ITEMS = 60
+    private const val MAX_ITEMS = 40
     private val word = Regex("[+А-Яа-яЁё́]+")
     private val plusVowel = Regex("\\+([аеёиоуыэюяАЕЁИОУЫЭЮЯ])")
 
@@ -64,24 +64,27 @@ object StressCheck {
         return out.take(MAX_ITEMS)
     }
 
-    /** Alternating option order keeps a position bias of the model from favouring either side. */
-    fun items(disputes: List<Dispute>): List<Item> = disputes.mapIndexed { i, d ->
-        Item(d.sentence, bare(d.llm), if (i % 2 == 0) listOf(d.llm, d.offline) else listOf(d.offline, d.llm))
-    }
+    /** Every dispute is asked twice, LLM option first and then offline option first. In a single binary ask the
+     * model followed the option position about as often as the meaning (8 of 20 switches on «Идиот» ch. 1 were
+     * wrong: гла́за, сло́е, де́дов, пи́сьма…); a mark changes only when both asks pick the offline variant. */
+    fun items(disputes: List<Dispute>): List<Item> =
+        disputes.map { Item(it.sentence, bare(it.llm), listOf(it.llm, it.offline)) } +
+        disputes.map { Item(it.sentence, bare(it.llm), listOf(it.offline, it.llm)) }
+
+    private fun offlineChosen(choices: List<Int>, i: Int, n: Int) = choices[i] == 1 && choices[i + n] == 0
 
     fun apply(fragments: List<String>, disputes: List<Dispute>, choices: List<Int>): List<String> {
         val out = fragments.map { StringBuilder(it) }
         val log = mutableListOf<String>()
         // Right to left inside each fragment keeps the remaining ranges valid.
         for ((i, d) in disputes.withIndex().sortedByDescending { it.value.range.first }) {
-            val offlineFirst = i % 2 == 1
-            val chosenOffline = (choices[i] == 0) == offlineFirst
+            val chosenOffline = offlineChosen(choices, i, disputes.size)
             val chosen = if (chosenOffline) d.offline else d.llm
-            log += "${d.llm} / ${d.offline} -> $chosen | ${d.sentence.take(120)}"
+            log += "${d.llm} / ${d.offline} -> $chosen [${choices[i]}${choices[i + disputes.size]}] | ${d.sentence.take(120)}"
             if (chosenOffline) out[d.fragment].replace(d.range.first, d.range.last + 1, chosen)
         }
         synchronized(this) { decisions += log.reversed(); if (decisions.size > 500) decisions = decisions.takeLast(500).toMutableList() }
-        lastOfflineChosen = disputes.indices.count { (choices[it] == 0) == (it % 2 == 1) }
+        lastOfflineChosen = disputes.indices.count { offlineChosen(choices, it, disputes.size) }
         return out.map { it.toString() }
     }
 }
