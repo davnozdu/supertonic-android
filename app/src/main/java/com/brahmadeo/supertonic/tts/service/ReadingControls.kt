@@ -34,6 +34,7 @@ object ReadingControls {
             audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
             audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
         } else listeners.values.toList().forEach { runCatching { it.play() } }
+        show(ctx)
     } }
     fun paragraph(ctx: Context, direction: Int) { main.post {
         if (externalReading) android.widget.Toast.makeText(ctx, "Переходы по абзацам доступны для статей внутри MyTTS.", android.widget.Toast.LENGTH_SHORT).show()
@@ -57,6 +58,7 @@ object ReadingControls {
         }
         listeners.values.toList().forEach { callbacks -> runCatching { if (stop) callbacks.stop() else callbacks.pause() } }
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.stopTts()
+        show(ctx)
         }
         if (Looper.myLooper() == Looper.getMainLooper()) action.run() else main.post(action)
     }
@@ -74,7 +76,9 @@ object ReadingControls {
             .setOngoing(true).setAutoCancel(false).setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(android.R.drawable.ic_menu_edit, "Вставить", panel(ctx, true))
-            .addAction(android.R.drawable.ic_media_pause, "Пауза", command("pause", 5413))
+            // After a pause the same slot resumes: Moon+ gets a media Play key, MyTTS's own reading resumes.
+            .apply { if (paused) addAction(android.R.drawable.ic_media_play, "Продолжить", command("play", 5415))
+                else addAction(android.R.drawable.ic_media_pause, "Пауза", command("pause", 5413)) }
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Стоп", command("stop", 5414)).build()) }
     }
 }
@@ -82,5 +86,6 @@ class ReadingControlReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == "stop") ReadingControls.stop(context)
         else if (intent.action == "pause") ReadingControls.pause(context)
+        else if (intent.action == "play") ReadingControls.play(context)
     }
 }
