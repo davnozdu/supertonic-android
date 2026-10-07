@@ -48,29 +48,45 @@ object StressJudgeDictionary {
         return false
     }
 
+    /** Up to three attempts; each resumes the partial file with an HTTP Range request (a first try on the
+     * phone stalled at 159 of 179 MB). The SHA-256 covers the whole file, so a bad resume is caught too. */
     private fun download(ctx: Context) {
         val target = file(ctx); target.parentFile?.mkdirs()
         val part = File(target.parentFile, target.name + ".part")
-        val connection = URL(URL_SACC).openConnection() as HttpURLConnection
-        connection.connectTimeout = 30_000; connection.readTimeout = 60_000
+        for (attempt in 1..3) {
+            try { fetch(part); break } catch (e: java.io.IOException) {
+                Log.w(TAG, "Attempt $attempt stopped at ${part.length()} bytes: ${e.javaClass.simpleName}")
+                if (attempt == 3) throw e
+            }
+        }
         val digest = MessageDigest.getInstance("SHA-256")
-        try {
-            require(connection.responseCode == 200) { "HTTP ${connection.responseCode}" }
-            connection.inputStream.use { input -> part.outputStream().use { output ->
-                val buffer = ByteArray(256 * 1024)
-                var total = 0L
-                while (true) {
-                    val n = input.read(buffer); if (n < 0) break
-                    total += n; require(total <= SIZE) { "too large" }
-                    digest.update(buffer, 0, n); output.write(buffer, 0, n)
-                }
-            } }
-        } finally { connection.disconnect() }
+        part.inputStream().use { input -> val buffer = ByteArray(256 * 1024); while (true) { val n = input.read(buffer); if (n < 0) break; digest.update(buffer, 0, n) } }
         val sha = digest.digest().joinToString("") { "%02x".format(it) }
         if (part.length() != SIZE || sha != SHA256) { part.delete(); error("size/sha mismatch") }
         check(part.renameTo(target)) { "rename failed" }
         verified(ctx).writeText(SHA256)
         Log.i(TAG, "Dictionary ready: ${target.length()} bytes")
+    }
+
+    private fun fetch(part: File) {
+        val have = if (part.length() in 1 until SIZE) part.length() else { part.delete(); 0L }
+        val connection = URL(URL_SACC).openConnection() as HttpURLConnection
+        connection.connectTimeout = 30_000; connection.readTimeout = 60_000
+        if (have > 0) connection.setRequestProperty("Range", "bytes=$have-")
+        try {
+            val code = connection.responseCode
+            val append = have > 0 && code == 206
+            require(code == 200 || append) { "HTTP $code" }
+            connection.inputStream.use { input -> java.io.FileOutputStream(part, append).use { output ->
+                val buffer = ByteArray(256 * 1024)
+                var total = if (append) have else 0L
+                while (true) {
+                    val n = input.read(buffer); if (n < 0) break
+                    total += n; require(total <= SIZE) { "too large" }
+                    output.write(buffer, 0, n)
+                }
+            } }
+        } finally { connection.disconnect() }
     }
 
     /** Stressed vowel ordinal of [word] in the dictionary, or null when unknown or not loaded. */
