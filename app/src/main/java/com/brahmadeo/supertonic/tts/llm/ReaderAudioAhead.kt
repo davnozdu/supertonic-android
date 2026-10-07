@@ -79,7 +79,7 @@ object ReaderAudioAhead {
                 val pcm = SupertonicTTS.generateAudio(normalized, "ru", style, snapshot.rate, 0f, snapshot.steps, 2.5f,
                     preparationGeneration = snapshot.cacheGeneration, skipDictionary = prepared.llmProcessed, aheadOwner = owner)
                 if (isDelivered(owner)) SupertonicTTS.releaseAheadCache(owner)
-                if (pcm != null) android.util.Log.i("ReaderAhead", "Prepared ahead PCM chars=${normalized.length} bytes=${pcm.size} ${SupertonicTTS.audioCacheStatus()}")
+                if (pcm != null) com.brahmadeo.supertonic.tts.utils.DiagLog.i("ReaderAhead", "Prepared ahead PCM chars=${normalized.length} bytes=${pcm.size} ${SupertonicTTS.audioCacheStatus()}")
             }
         } catch (t: Exception) { android.util.Log.w("ReaderAhead", "Role refresh synthesis failed error=${t.javaClass.simpleName}; foreground remains available") }
     }

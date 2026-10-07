@@ -249,7 +249,7 @@ class TeraEngine(private val root: File, context: Context,
                 .also { sessions.remove(sampler)?.close() } }
             catch (t: Throwable) { disableNpuSampler("run ${t.javaClass.simpleName}: ${t.message?.take(160)}"); null }
         }
-        if (hybrid != null) android.util.Log.i("TeraTTS", "Sampler hybrid frames=$frames text=${embeddingShape.last()} ms=${android.os.SystemClock.elapsedRealtime() - samplerStarted} npuSteps=${npuSampler?.npuSteps} fallback=${npuSampler?.fallbackSteps}")
+        if (hybrid != null) com.brahmadeo.supertonic.tts.utils.DiagLog.i("TeraTTS", "Sampler hybrid frames=$frames text=${embeddingShape.last()} ms=${android.os.SystemClock.elapsedRealtime() - samplerStarted} npuSteps=${npuSampler?.npuSteps} fallback=${npuSampler?.fallbackSteps}")
         val (latent, _) = if (hybrid != null) hybrid to longArrayOf(1, 144, frames.toLong()) else run(sampler, mapOf(
             "initial_latent" to floatTensor(noise, 1, 144, frames.toLong()),
             "text_emb" to floatTensor(embedding, *embeddingShape),

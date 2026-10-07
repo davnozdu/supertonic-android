@@ -59,7 +59,7 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
                     }
                 }
             }
-            Log.i("PocketTTS","Synthesized chars=${text.length} accents=${PocketText.prepare(text).count { it=='\u0301' }} ms=${android.os.SystemClock.elapsedRealtime()-start} audioMs=${output.size()*1000L/48000}")
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("PocketTTS","Synthesized chars=${text.length} accents=${PocketText.prepare(text).count { it=='\u0301' }} ms=${android.os.SystemClock.elapsedRealtime()-start} audioMs=${output.size()*1000L/48000}")
             return output.toByteArray()
         } finally { used=android.os.SystemClock.elapsedRealtime() }
     }

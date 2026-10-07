@@ -133,7 +133,7 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
                 val end = minOf(pos + 48000, bytes.size)
                 listener?.onAudioChunk(sid, bytes.copyOfRange(pos, end)); pos = end
             }
-            Log.i("SileroTTS", "Synthesized chars=${prepared.length} accents=${prepared.count { it == '+' }} endCorrection=${prepared != source} speaker=$speaker types=${types.toSet()} ms=${android.os.SystemClock.elapsedRealtime()-t} audioMs=${samples.size*1000L/48000}")
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("SileroTTS", "Synthesized chars=${prepared.length} accents=${prepared.count { it == '+' }} endCorrection=${prepared != source} speaker=$speaker types=${types.toSet()} ms=${android.os.SystemClock.elapsedRealtime()-t} audioMs=${samples.size*1000L/48000}")
             return if (SupertonicTTS.isCancelled()) ByteArray(0) else bytes
         } finally { lastUsed = android.os.SystemClock.elapsedRealtime() }
     }

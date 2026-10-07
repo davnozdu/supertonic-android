@@ -74,7 +74,7 @@ object LlmPreparation {
         if (reused != null) {
             // Keep role continuity for the next paragraph, as the worker would.
             roleContext.append(caller, listOf(if (reused.voicePlan.isEmpty()) reused.text else reused.voicePlan.joinToString("") { "[${it.role.name}]${it.text}" }))
-            Log.i("LlmPreparation", "Reused played preparation chars=${text.length} provider=${reused.provider} roles=${reused.rolesReady} source=${SpeechTextTrace.fingerprint(text)}")
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reused played preparation chars=${text.length} provider=${reused.provider} roles=${reused.rolesReady} source=${SpeechTextTrace.fingerprint(text)}")
             return id
         }
         timer.schedule({ startWorker() }, 120, TimeUnit.MILLISECONDS)
@@ -133,8 +133,8 @@ object LlmPreparation {
             val completed = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
             val result = entry.textReady ?: completed
             remember(entry.input, result)
-            Log.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
-            Log.i("LlmPreparation", "Text trace source=${SpeechTextTrace.fingerprint(text)} prepared=${SpeechTextTrace.fingerprint(result.text)} provider=${result.provider} fallback=${result.fallback}")
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Text trace source=${SpeechTextTrace.fingerprint(text)} prepared=${SpeechTextTrace.fingerprint(result.text)} provider=${result.provider} fallback=${result.fallback}")
             if (!retainForPlayback) release(entry)
             result
         } catch (_: Exception) {
@@ -447,7 +447,7 @@ object LlmPreparation {
                             MissingSpeechMarks.merge(validated,safe,c.stress,c.restoreYo,ambiguousLocalYo)
                         } else validated
                         val supplemented=completed!=validated
-                        if(provider=="local") Log.i("LlmPreparation","Local supplement chars=${validated.length} llmEdited=${validated!=source} llmStress=${validated.count { it=='\u0301' }} llmYoAdded=${validated.count { it in "ёЁ" }-source.count { it in "ёЁ" }} changed=$supplemented; explicit LLM stress/yo retained")
+                        if(provider=="local") com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation","Local supplement chars=${validated.length} llmEdited=${validated!=source} llmStress=${validated.count { it=='\u0301' }} llmYoAdded=${validated.count { it in "ёЁ" }-source.count { it in "ёЁ" }} changed=$supplemented; explicit LLM stress/yo retained")
                         val result = Result(completed, if(supplemented) "local+offline" else provider, SystemClock.elapsedRealtime()-started, false)
                         results[index] = result; accepted++
                         onPrepared(index, result)

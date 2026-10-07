@@ -154,7 +154,7 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
                     output.write(bytes); listener?.onAudioChunk(sid, bytes); position = end
                 }
             }
-            Log.i("KokoroTTS", "Synthesized chars=${text.length} phonemes=${ipa.length} voice=$voice full=$fullPrecision threads=$threads ms=${SystemClock.elapsedRealtime() - started} g2pMs=$g2pMs loadMs=$loadMs inferenceMs=$inferenceMs npuChunks=$npuChunks npuMs=$npuMs audioMs=${output.size() * 1000L / 48000}")
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("KokoroTTS", "Synthesized chars=${text.length} phonemes=${ipa.length} voice=$voice full=$fullPrecision threads=$threads ms=${SystemClock.elapsedRealtime() - started} g2pMs=$g2pMs loadMs=$loadMs inferenceMs=$inferenceMs npuChunks=$npuChunks npuMs=$npuMs audioMs=${output.size() * 1000L / 48000}")
             return output.toByteArray()
         } finally { used = SystemClock.elapsedRealtime() }
     }

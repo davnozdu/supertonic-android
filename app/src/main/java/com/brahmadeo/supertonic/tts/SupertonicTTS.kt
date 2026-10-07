@@ -109,6 +109,7 @@ object SupertonicTTS {
      */
     fun setApplicationContext(context: Context) {
         appContext = context.applicationContext
+        com.brahmadeo.supertonic.tts.utils.DiagLog.init(context)
         com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.initialize(context)
         com.brahmadeo.supertonic.tts.utils.TextNormalizer.context = context.applicationContext
         com.brahmadeo.supertonic.tts.utils.ReadingMemory.purgeLegacy(context.applicationContext)
@@ -350,7 +351,7 @@ object SupertonicTTS {
     private fun deliverCached(text: String, hit: com.brahmadeo.supertonic.tts.utils.SpeechAudioCache.Hit, listener: ProgressListener?): ByteArray? {
         val cached=hit.pcm
         val sid=sessionIdCounter.incrementAndGet()
-        Log.i("ReaderAhead","PCM cache hit chars=${text.length} bytes=${cached.size} entries=${hit.entries} retainedBytes=${hit.retainedBytes}")
+        com.brahmadeo.supertonic.tts.utils.DiagLog.i("ReaderAhead","PCM cache hit chars=${text.length} bytes=${cached.size} entries=${hit.entries} retainedBytes=${hit.retainedBytes}")
         var offset=0
         while(offset<cached.size && !isCancelled()) {
             val end=minOf(offset+48000,cached.size)

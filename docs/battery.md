@@ -13,3 +13,7 @@ PCM cache size at the end of each 10-minute window (OnePlus logd drops many MyTT
 Most energy went into the opening burst: 15–18 minutes of audio were prepared ahead within ~5 minutes, then
 playback ran near idle (~80–120 mA). 4.15 caps ahead synthesis by time ("Запас готового звука вперёд", default
 5 min) on top of the RAM limit, and the ahead worker sleeps until played audio frees room instead of polling at 5 Hz.
+
+Per-sentence logs (voice routing, text/synth traces, cache hits, ahead PCM, per-call synthesis timings) print only
+with the `verbose_logs` pref or while SpeechDiagnostics runs (`utils/DiagLog`); lifecycle, errors and LLM failures
+always log.

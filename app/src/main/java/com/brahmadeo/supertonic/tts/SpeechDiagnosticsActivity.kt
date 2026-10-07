@@ -34,6 +34,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        com.brahmadeo.supertonic.tts.utils.DiagLog.verbose = true
         if (!running.compareAndSet(false,true)) {
             Log.w("SpeechCheck","Diagnostic already running; duplicate ignored")
             finish()
