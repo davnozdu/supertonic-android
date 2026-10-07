@@ -1,7 +1,7 @@
 # Tera on the Snapdragon NPU (experimental, shared "Ускоритель NPU" switch)
 
 - Vocoder: fixed 16/84-frame windows on the HTP (since 4.13).
-- Sampler (hybrid, 4.13.12): `tools/tera_npu/build_step.py` turns ONE step of the 8-step ONNX Loop into a
+- Sampler (hybrid, opt-in since 4.14.1: "Шаги синтеза на NPU" 0/1/2/4, default 0): `tools/tera_npu/build_step.py` turns ONE step of the 8-step ONNX Loop into a
   graph that references the pinned `sampler_distilled_cfg3_8step.onnx` weights by byte offset (also inside
   the Loop body). Exact rewrites: step-time encoder precomputed in FP32 (`time.bin`, it overflows in FP16 on
   the HTP), edge Pads replicate the last valid frame (`last_sel`) so frame padding with `latent_mask` is exact,

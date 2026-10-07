@@ -281,7 +281,7 @@ internal object NpuProbe {
             val header = (styleFile[8].toInt() and 255) or ((styleFile[9].toInt() and 255) shl 8)
             val style = FloatArray(12800).also { ByteBuffer.wrap(styleFile, 10 + header, 12800 * 4).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(it) }
             val wall = SystemClock.elapsedRealtime(); val cpu0 = Process.getElapsedCpuTime()
-            val hybrid = TeraNpuSamplerProbe.create(ctx, models)
+            val variants = listOf(1, 2, 4).map { steps -> steps to TeraNpuSamplerProbe.create(ctx, models, steps) }
             log("tera-hybrid create ms=${SystemClock.elapsedRealtime() - wall} cpuMs=${Process.getElapsedCpuTime() - cpu0}")
             val encoder = cpu("text_encoder"); val loop = cpu("sampler_distilled_cfg3_8step"); val vocoder = cpu("vocoder")
             try {
@@ -304,13 +304,16 @@ internal object NpuProbe {
                         "text_mask" to OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(l) { 1f }), longArrayOf(1, 1, l.toLong())),
                         "guidance" to OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(3f)), longArrayOf(1))) }
                     val tl = measure(1) { val x = loopIn(); try { ref = output(loop, x) } finally { x.values.forEach { it.close() } } }
-                    val th = measure(1) { hyb = TeraNpuSamplerProbe.sample(hybrid, noise, frames, emb, l, style) }
                     fun wave(lat: FloatArray): FloatArray { val x = mapOf("latent" to OnnxTensor.createTensor(env, FloatBuffer.wrap(lat), longArrayOf(1, 144, frames.toLong())))
                         return try { output(vocoder, x) } finally { x.values.forEach { it.close() } } }
-                    log("tera-hybrid text=$l frames=$frames | loop wall=${"%.0f".format(tl.wallMs)} cpu=${"%.0f".format(tl.cpuMs)} | hybrid wall=${"%.0f".format(th.wallMs)} cpu=${"%.0f".format(th.cpuMs)}" +
-                        " | latent ${snr(ref, hyb)} | audio ${snr(wave(ref), wave(hyb))} | ${TeraNpuSamplerProbe.counters(hybrid)}")
+                    val refWave = wave(ref)
+                    log("tera-hybrid text=$l frames=$frames | loop wall=${"%.0f".format(tl.wallMs)} cpu=${"%.0f".format(tl.cpuMs)}")
+                    for ((steps, hybrid) in variants) {
+                        val th = measure(1) { hyb = TeraNpuSamplerProbe.sample(hybrid, noise, frames, emb, l, style) }
+                        log("tera-hybrid   npuSteps=$steps wall=${"%.0f".format(th.wallMs)} cpu=${"%.0f".format(th.cpuMs)} | latent ${snr(ref, hyb)} | audio ${snr(refWave, wave(hyb))} | ${TeraNpuSamplerProbe.counters(hybrid)}")
+                    }
                 }
-            } finally { encoder.close(); loop.close(); vocoder.close(); hybrid.close() }
+            } finally { encoder.close(); loop.close(); vocoder.close(); variants.forEach { it.second.close() } }
         } catch (t: Throwable) { log("tera-hybrid failed ${t.javaClass.simpleName}: ${t.message?.take(300)}") }
         log("done")
     }

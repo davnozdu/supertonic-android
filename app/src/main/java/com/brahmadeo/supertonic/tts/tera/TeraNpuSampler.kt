@@ -17,11 +17,13 @@ import java.nio.FloatBuffer
  * returns NaN there (a compiler defect; the same values are tiny on the CPU) — later steps run on the NPU in
  * fixed frame/text buckets. Padding is exact (latent_mask, last valid frame for the edge pads); a step that
  * comes back non-finite is redone on the CPU. */
-internal class TeraNpuSampler(private val ctx: Context, private val models: File, threads: Int) : AutoCloseable {
+internal class TeraNpuSampler(private val ctx: Context, private val models: File, threads: Int, npuSteps: Int) : AutoCloseable {
     private val env = OrtEnvironment.getEnvironment()
     private val manifest = JSONObject(ctx.assets.open("tera_npu/kit.json").bufferedReader().use { it.readText() })
     private val steps = manifest.getInt("steps")
-    private val npuFrom = manifest.getInt("npuFromStep")
+    /** Only the final steps go to the NPU: every FP16 step drifts the latent (≈30 dB per step on SM8850),
+     * and the NaN defect rules out steps before npuFromStep anyway. */
+    private val npuFrom = maxOf(manifest.getInt("npuFromStep"), steps - npuSteps.coerceIn(0, steps))
     private val frameBuckets = manifest.getJSONArray("frameBuckets").let { a -> IntArray(a.length()) { a.getInt(it) } }
     private val textBuckets = manifest.getJSONArray("textBuckets").let { a -> IntArray(a.length()) { a.getInt(it) } }
     private val timeSize = 512
@@ -124,7 +126,7 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
 
 /** Probe access from the diagnostics package (TeraNpuSampler is internal to the tera package's module). */
 object TeraNpuSamplerProbe {
-    fun create(ctx: Context, models: File): AutoCloseable = TeraNpuSampler(ctx, models, 2)
+    fun create(ctx: Context, models: File, npuSteps: Int = 4): AutoCloseable = TeraNpuSampler(ctx, models, 2, npuSteps)
     fun sample(s: AutoCloseable, noise: FloatArray, frames: Int, emb: FloatArray, textLen: Int, style: FloatArray) =
         (s as TeraNpuSampler).sample(noise, frames, emb, textLen, style)
     fun counters(s: AutoCloseable) = (s as TeraNpuSampler).let { "npuSteps=${it.npuSteps} fallbackSteps=${it.fallbackSteps}" }

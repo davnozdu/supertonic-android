@@ -67,7 +67,10 @@ class TeraEngine(private val root: File, context: Context,
     // Optional hybrid NPU sampler (TeraNpuSampler): compiled once in the background; until it is ready the
     // 8-step ONNX Loop runs on the CPU, afterwards that session is released.
     @Volatile private var npuSampler: TeraNpuSampler? = null
-    @Volatile private var npuSamplerOff = !npuRequested || !com.brahmadeo.supertonic.tts.utils.Npu.enabled(context, com.brahmadeo.supertonic.tts.utils.Npu.TERA_SAMPLER)
+    /** Final sampler steps on the NPU (0 = sampler on the CPU, exact sound; the vocoder NPU is independent). */
+    val npuSamplerSteps = context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getInt(NPU_SAMPLER_STEPS, 0).coerceIn(0, 4)
+    @Volatile private var npuSamplerOff = !npuRequested || npuSamplerSteps == 0 ||
+        !com.brahmadeo.supertonic.tts.utils.Npu.enabled(context, com.brahmadeo.supertonic.tts.utils.Npu.TERA_SAMPLER)
     @Volatile private var closed = false
     private val npuBuilder = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "TeraNpuBuild").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     private fun disableNpuSampler(reason: String) {
@@ -95,7 +98,7 @@ class TeraEngine(private val root: File, context: Context,
             if (sampler == TeraQuality.FAST && !npuSamplerOff) npuBuilder.execute {
                 val started = android.os.SystemClock.elapsedRealtime()
                 try {
-                    val built = TeraNpuSampler(appContext, File(root, "models"), threads)
+                    val built = TeraNpuSampler(appContext, File(root, "models"), threads, npuSamplerSteps)
                     if (closed || npuSamplerOff) built.close() else npuSampler = built
                     android.util.Log.i("TeraTTS", "NPU sampler ready ms=${android.os.SystemClock.elapsedRealtime() - started}")
                 } catch (t: Throwable) { disableNpuSampler("build ${t.javaClass.simpleName}: ${t.message?.take(160)}") }
@@ -297,6 +300,8 @@ class TeraEngine(private val root: File, context: Context,
         }
         return output.toByteArray()
     }
+
+    companion object { const val NPU_SAMPLER_STEPS = "tera_npu_sampler_steps" }
 
     override fun close() {
         closed = true; npuBuilder.shutdownNow()

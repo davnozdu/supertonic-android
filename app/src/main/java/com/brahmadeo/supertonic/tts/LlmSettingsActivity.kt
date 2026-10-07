@@ -178,6 +178,16 @@ class LlmSettingsActivity : ComponentActivity() {
                                     "NPU не запустился на этом телефоне; используется процессор."
                                     else "Вокодер Tera выполняется на нейропроцессоре Snapdragon (FP16). Первый запуск компилирует модель несколько секунд. При ошибке чтение продолжается на процессоре.",
                                     style=MaterialTheme.typography.bodySmall)
+                                if (npuEnabled) {
+                                    var samplerSteps by remember { mutableStateOf(pausePrefs.getInt(com.brahmadeo.supertonic.tts.tera.TeraEngine.NPU_SAMPLER_STEPS, 0)) }
+                                    val labels = listOf(0 to "0 — точный звук", 1 to "1 шаг", 2 to "2 шага", 4 to "4 шага — быстрее")
+                                    Choice("Шаги синтеза на NPU", labels.firstOrNull { it.first == samplerSteps }?.second ?: "0 — точный звук", labels.map { it.second }) { label ->
+                                        samplerSteps = labels.first { it.second == label }.first
+                                        pausePrefs.edit().putInt(com.brahmadeo.supertonic.tts.tera.TeraEngine.NPU_SAMPLER_STEPS, samplerSteps).apply()
+                                    }
+                                    Text("Последние шаги генерации (sampler) можно тоже считать на NPU: быстрее и меньше нагрузка на процессор, но FP16 немного меняет звук; чем больше шагов, тем заметнее. 0 — звук как без NPU, на нейропроцессоре только вокодер. Первый запуск готовит графы около полутора минут в фоне.",
+                                        style=MaterialTheme.typography.bodySmall)
+                                }
                             }
                         }
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
