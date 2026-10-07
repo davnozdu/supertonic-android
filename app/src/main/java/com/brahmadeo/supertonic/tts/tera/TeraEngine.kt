@@ -48,7 +48,7 @@ class TeraEngine(private val root: File, context: Context,
     val npuRequested = com.brahmadeo.supertonic.tts.utils.Npu.enabled(context)
     private var npuOff = !npuRequested
     private fun npuSession(frames: Int): OrtSession? {
-        if (npuOff) return null
+        if (npuOff || android.os.SystemClock.elapsedRealtime() < npuRetryAt) return null
         val size = if (frames <= TeraVocoderChunks.FIRST) TeraVocoderChunks.FIRST else TeraVocoderChunks.NEXT + TeraVocoderChunks.CONTEXT
         if (frames > size) return null
         return npuVocoder[size] ?: try {
@@ -63,6 +63,16 @@ class TeraEngine(private val root: File, context: Context,
         npuOff = true
         npuVocoder.values.forEach { runCatching { it.close() } }; npuVocoder.clear()
         com.brahmadeo.supertonic.tts.utils.Npu.markFailed(appContext, "Tera vocoder $reason")
+    }
+    // Run errors are transient (shared HTP) and never switch the NPU off: CPU meanwhile, retry with backoff.
+    @Volatile private var npuRetryAt = 0L
+    private var npuRunFailures = 0
+    private fun pauseNpu(reason: String) {
+        npuRunFailures++
+        npuVocoder.values.forEach { runCatching { it.close() } }; npuVocoder.clear()
+        val delay = com.brahmadeo.supertonic.tts.utils.Npu.retryDelayMs(npuRunFailures)
+        npuRetryAt = android.os.SystemClock.elapsedRealtime() + delay
+        android.util.Log.w("TeraTTS", "NPU vocoder run error $npuRunFailures, CPU for ${delay / 1000} s: $reason")
     }
     // Optional hybrid NPU sampler (TeraNpuSampler): compiled once in the background; until it is ready the
     // 8-step ONNX Loop runs on the CPU, afterwards that session is released.
@@ -278,15 +288,16 @@ class TeraEngine(private val root: File, context: Context,
                 for (channel in 0 until 144) System.arraycopy(slice, channel * count, padded, channel * size, count)
                 val input = floatTensor(padded, 1, 144, size.toLong())
                 val result = try {
-                    npu.run(mapOf("latent" to input)).use { result ->
+                    com.brahmadeo.supertonic.tts.utils.Npu.exclusive { npu.run(mapOf("latent" to input)) }.use { result ->
                         val tensor = result[0] as OnnxTensor
                         val wave = FloatArray(tensor.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { tensor.floatBuffer.get(it) }
                         require(wave.all { it.isFinite() }) { "non-finite NPU audio" }
+                        npuRunFailures = 0
                         wave to tensor.info.shape
                     }
                 } catch (t: Throwable) {
-                    // A failure during inference must not drop audio: disable the NPU, redo on CPU.
-                    disableNpu("run: ${t.javaClass.simpleName}")
+                    // A failure during inference must not drop audio: redo this window on CPU, retry the NPU later.
+                    pauseNpu("run: ${t.javaClass.simpleName}")
                     null
                 } finally { input.close() }
                 result ?: run("vocoder", mapOf("latent" to floatTensor(slice, 1, 144, count.toLong())))

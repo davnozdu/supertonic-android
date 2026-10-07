@@ -19,6 +19,15 @@ object Npu {
     private fun backend(ctx: Context) = File(ctx.applicationInfo.nativeLibraryDir, "libQnnHtp.so")
 
     fun supported(ctx: Context) = Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a" && backend(ctx).isFile
+    /** One HTP for QNN (Kokoro, Tera vocoder) and ggml-hexagon (Gemma): concurrent graphs failed with QNN 1002 and
+     * slowed each other 4×. Every NPU call takes this fair lock; Gemma takes it per llama_decode (from JNI). */
+    private val htp = java.util.concurrent.locks.ReentrantLock(true)
+    inline fun <T> exclusive(block: () -> T): T { lockHtp(); try { return block() } finally { unlockHtp() } }
+    /** Backoff after consecutive NPU run errors: 30 s, 1, 2, 4 min, then 5 min; the NPU is never given up. */
+    fun retryDelayMs(failures: Int): Long = minOf(30_000L shl (failures - 1).coerceIn(0, 4), 300_000L)
+    @JvmStatic fun lockHtp() = htp.lock()
+    @JvmStatic fun unlockHtp() = htp.unlock()
+
     /** Scopes keep a Kokoro failure from switching off the Tera vocoder and vice versa. */
     const val KOKORO = "_kokoro"
     const val TERA_SAMPLER = "_tera_sampler"

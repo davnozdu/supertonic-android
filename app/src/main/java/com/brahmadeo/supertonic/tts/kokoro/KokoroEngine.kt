@@ -49,8 +49,20 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
     }
     private fun modelKey(voice: String) = if(fullPrecision) { if(voice=="dima") "model_dima.onnx" else "model.onnx" }
                   else if (voice == "dima") "model_dima_quantized.onnx" else "model_quantized.onnx"
+    // A run error (e.g. QNN 1002 while another engine held the HTP) is transient and never switches the NPU off:
+    // the phrase finishes on the CPU and the NPU is retried after 30 s, 1, 2, 4 min, then every 5 min until it
+    // works again. Only build/load failures are remembered per version.
+    @Volatile private var npuRetryAt = 0L
+    private var npuRunFailures = 0
+    private fun pauseNpu(reason: String) {
+        npuRunFailures++
+        npuDecoders.values.forEach { runCatching { it.close() } }; npuDecoders.clear()
+        val delay = com.brahmadeo.supertonic.tts.utils.Npu.retryDelayMs(npuRunFailures)
+        npuRetryAt = SystemClock.elapsedRealtime() + delay
+        Log.w("KokoroTTS", "NPU run error $npuRunFailures, CPU for ${delay / 1000} s: $reason")
+    }
     private fun npuDecoder(voice: String): KokoroNpuDecoder? {
-        if (npuOff) return null
+        if (npuOff || SystemClock.elapsedRealtime() < npuRetryAt) return null
         val key = modelKey(voice)
         npuDecoders[key]?.let { return it }
         // Compiled once: load now (~2 s) instead of keeping the 650 MB CPU model resident alongside.
@@ -88,8 +100,9 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
             else decoder.generate(pre).also { wave ->
                 require(wave.size in 1..2_400_000 && wave.all { it.isFinite() }) { "invalid NPU audio size=${wave.size}" }
                 sessions.remove(modelKey(voice))?.close()
+                npuRunFailures = 0
             }
-        } catch (t: Throwable) { disableNpu("run ${t.javaClass.simpleName}: ${t.message?.take(160)}"); null }
+        } catch (t: Throwable) { pauseNpu("run ${t.javaClass.simpleName}: ${t.message?.take(160)}"); null }
     }
     private fun session(voice: String): OrtSession {
         val key = modelKey(voice)

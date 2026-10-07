@@ -21,11 +21,30 @@ struct Handle {
     llama_sampler *sampler = nullptr;
     const llama_vocab *vocab = nullptr;
     llama_token turnEnd = -1;  // <turn|>
+    std::vector<llama_token> previous;  // last prompt: its common prefix stays in the KV cache
     std::atomic<bool> cancel{false};
     std::string stats;
 };
 
 bool abortCallback(void *data) { return static_cast<Handle *>(data)->cancel.load(); }
+
+// One HTP serves QNN (Kokoro/Tera) and ggml-hexagon (Gemma); concurrent use failed with QNN 1002, so every
+// llama_decode holds the app-wide fair lock (utils.Npu.lockHtp/unlockHtp) and calls interleave.
+struct HtpTurn {
+    JNIEnv *env; jclass npu; jmethodID lock, unlock;
+    HtpTurn(JNIEnv *e) : env(e) {
+        npu = env->FindClass("com/brahmadeo/supertonic/tts/utils/Npu");
+        lock = npu ? env->GetStaticMethodID(npu, "lockHtp", "()V") : nullptr;
+        unlock = npu ? env->GetStaticMethodID(npu, "unlockHtp", "()V") : nullptr;
+        if (!lock || !unlock) { env->ExceptionClear(); lock = unlock = nullptr; }
+    }
+    int decode(llama_context *ctx, llama_batch batch) {
+        if (lock) env->CallStaticVoidMethod(npu, lock);
+        int r = llama_decode(ctx, batch);
+        if (unlock) env->CallStaticVoidMethod(npu, unlock);
+        return r;
+    }
+};
 
 void fail(JNIEnv *env, const std::string &message) {
     __android_log_print(ANDROID_LOG_WARN, TAG, "%s", message.c_str());
@@ -73,6 +92,7 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeLoad(JNIEnv *env, jobje
     cp.n_threads = threads;
     cp.n_threads_batch = threads;
     cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    cp.swa_full = true;  // the instruction prefix is reused across calls; partial removal needs the full SWA cache
     h->ctx = llama_init_from_model(h->model, cp);
     if (h->ctx == nullptr) { release(h); fail(env, "Gemma NPU context failed"); return 0; }
     llama_set_abort_callback(h->ctx, abortCallback, h);
@@ -95,9 +115,15 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
     const char *chars = env->GetStringUTFChars(jprompt, nullptr);
     std::string prompt(chars);
     env->ReleaseStringUTFChars(jprompt, chars);
-    llama_memory_clear(llama_get_memory(h->ctx), true);
     llama_sampler_reset(h->sampler);
     auto tokens = tokenize(h->vocab, prompt, true);
+    // Keep the shared instruction prefix of the previous prompt; decode only what differs (at least one token).
+    size_t keep = 0;
+    while (keep < h->previous.size() && keep < tokens.size() && h->previous[keep] == tokens[keep]) ++keep;
+    if (keep >= tokens.size()) keep = tokens.size() > 0 ? tokens.size() - 1 : 0;
+    llama_memory_t memory = llama_get_memory(h->ctx);
+    if (keep == 0 || !llama_memory_seq_rm(memory, 0, (llama_pos) keep, -1)) { llama_memory_clear(memory, true); keep = 0; }
+    h->previous.clear();
     const int nCtx = (int) llama_n_ctx(h->ctx);
     if (tokens.empty() || (int) tokens.size() + maxTokens > nCtx) {
         fail(env, "Gemma NPU context: prompt " + std::to_string(tokens.size()) + " + output " + std::to_string(maxTokens) +
@@ -106,9 +132,10 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
     }
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
-    for (size_t i = 0; i < tokens.size(); i += 128) {
+    HtpTurn htp(env);
+    for (size_t i = keep; i < tokens.size(); i += 128) {
         int n = (int) std::min<size_t>(128, tokens.size() - i);
-        if (llama_decode(h->ctx, llama_batch_get_one(tokens.data() + i, n)) != 0) {
+        if (htp.decode(h->ctx, llama_batch_get_one(tokens.data() + i, n)) != 0) {
             fail(env, h->cancel ? "Gemma NPU cancelled" : "Gemma NPU prompt decode failed");
             return nullptr;
         }
@@ -123,16 +150,17 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
         char piece[256];
         int m = llama_token_to_piece(h->vocab, id, piece, sizeof(piece), 0, false);
         if (m > 0) out.append(piece, (size_t) m);
-        if (llama_decode(h->ctx, llama_batch_get_one(&id, 1)) != 0) {
+        if (htp.decode(h->ctx, llama_batch_get_one(&id, 1)) != 0) {
             fail(env, h->cancel ? "Gemma NPU cancelled" : "Gemma NPU decode failed");
             return nullptr;
         }
     }
     auto t2 = clock::now();
+    h->previous = tokens;
     double prefillMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
     double decodeMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
     char stats[192];
-    snprintf(stats, sizeof(stats), "prompt=%zu prefillMs=%.0f generated=%d decodeMs=%.0f decodeTps=%.1f", tokens.size(), prefillMs,
+    snprintf(stats, sizeof(stats), "prompt=%zu reused=%zu prefillMs=%.0f generated=%d decodeMs=%.0f decodeTps=%.1f", tokens.size(), keep, prefillMs,
              generated, decodeMs, generated > 0 ? generated * 1000.0 / decodeMs : 0.0);
     h->stats = stats;
     jbyteArray result = env->NewByteArray((jsize) out.size());

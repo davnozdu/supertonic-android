@@ -177,7 +177,7 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
             while (start < len) {
                 val lo = start - op.halo; val s0 = maxOf(lo, 0); val s1 = minOf(lo + w, len)
                 fill(op.x, x, op.cin, len, w, s0 - lo, s1 - s0, s0)
-                op.session.run(inputs, outputs).close(); calls++
+                if (onNpu) Npu.exclusive { op.session.run(inputs, outputs).close() } else op.session.run(inputs, outputs).close(); calls++
                 val n = minOf(op.core, len - start) * op.scale
                 for (k in 0 until op.cout) { op.y.position(k * sw + op.scale * op.halo); op.y.get(out, k * outLen + shift + start * op.scale, n) }
                 op.y.clear()
@@ -248,7 +248,7 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
                     fill(b.x, x, c, len, w, s0 - lo, s1 - s0, s0); residual?.let { fill(b.r, it, c, len, w, s0 - lo, s1 - s0, s0) }
                     val full = s0 - lo == 0 && s1 - s0 == w
                     if (!full || !maskFull) { for (i in 0 until w) b.m.put(i, if (i >= s0 - lo && i < s1 - lo) 1f else 0f); maskFull = full }
-                    seg.session.run(inputs, outputs).close(); calls++
+                    if (onNpu) Npu.exclusive { seg.session.run(inputs, outputs).close() } else seg.session.run(inputs, outputs).close(); calls++
                     val n = minOf(ch, len - start)
                     for (k in 0 until c) {
                         val o = k * len + start

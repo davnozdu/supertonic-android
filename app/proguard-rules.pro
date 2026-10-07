@@ -51,3 +51,9 @@
 -dontwarn org.slf4j.impl.StaticLoggerBinder
 -dontwarn org.slf4j.impl.StaticMDCBinder
 -dontwarn org.slf4j.impl.StaticMarkerBinder
+
+# Gemma NPU bridge calls these from native code (HTP arbitration with QNN).
+-keep class com.brahmadeo.supertonic.tts.utils.Npu {
+    public static void lockHtp();
+    public static void unlockHtp();
+}
