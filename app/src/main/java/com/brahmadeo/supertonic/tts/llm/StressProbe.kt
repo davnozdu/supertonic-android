@@ -15,6 +15,27 @@ internal object StressProbe {
         val input = File(ctx.cacheDir, "stress-probe.txt")
         val paragraphs = input.readText().split(Regex("\n\\s*\n")).map { it.trim() }.filter { it.isNotEmpty() }
         require(paragraphs.size in 1..200) { "stress-probe.txt: 1..200 paragraphs" }
+        if (provider == "OFFLINE") return offline(ctx, paragraphs)
+        val override = File(ctx.cacheDir, "gemma-instruction.txt").takeIf { it.isFile }?.readText()
+        LlmProviders.instructionOverride = override
+        if (override != null) Log.i("SpeechCheck", "STRESS PROBE local instruction override chars=${override.length}")
+        try { prepare(ctx, provider, paragraphs) } finally { LlmProviders.instructionOverride = null }
+    }
+
+    /** The offline chain alone (Silero Stress + dictionary), as the dictionary fallback marks a paragraph. */
+    private fun offline(ctx: Context, paragraphs: List<String>) {
+        val out = JSONArray()
+        for (p in paragraphs) {
+            val marked = com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
+                com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx, p), "ru")
+                .replace(Regex("\\+([аеёиоуыэюяАЕЁИОУЫЭЮЯ])")) { it.groupValues[1] + "\u0301" }
+            out.put(JSONObject().put("source", p).put("text", marked).put("provider", "offline").put("fallback", false).put("ms", 0).put("reason", ""))
+        }
+        File(ctx.cacheDir, "stress-probe-out.json").writeText(out.toString(1))
+        Log.i("SpeechCheck", "STRESS PROBE DONE paragraphs=${paragraphs.size} mode=OFFLINE")
+    }
+
+    private fun prepare(ctx: Context, provider: String?, paragraphs: List<String>) {
         val saved = LlmSettings.load(ctx)
         val config = (provider?.let { saved.copy(mode = LlmMode.valueOf(it)) } ?: saved).copy(multiVoice = false)
         NameStress.clear()

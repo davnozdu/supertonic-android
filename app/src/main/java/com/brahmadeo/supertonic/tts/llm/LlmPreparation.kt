@@ -169,7 +169,8 @@ object LlmPreparation {
     /** Diagnostics: one reading batch through the production path (providers, validator, repair, names). */
     internal fun testBatch(ctx: Context, c: LlmConfig, texts: List<String>): List<Result> {
         initialize(ctx)
-        return executor.submit<List<Result>> { process(ctx, c, texts, ignoreCooldown = true) }.get(120, TimeUnit.SECONDS)
+        // A probe compares prompts and providers on the same text: never answer it from the cache.
+        return executor.submit<List<Result>> { preparedCache.clear(); process(ctx, c, texts, ignoreCooldown = true) }.get(180, TimeUnit.SECONDS)
     }
     fun test(ctx: Context, c: LlmConfig, text: String, traceSynthetic: Boolean = false): Result {
         initialize(ctx)

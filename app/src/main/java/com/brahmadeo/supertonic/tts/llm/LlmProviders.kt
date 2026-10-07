@@ -196,6 +196,8 @@ object LlmProviders {
         return VoiceRoleProtocol.parseValidated(cloudRequest(c, prompt, VoiceRoleProtocol.INSTRUCTION,
             VoiceRoleProtocol.schema(), provider == "gemini", 2400, deadlineMs), texts)
     }
+    /** Diagnostics only (StressProbe): a local text instruction tried without rebuilding the app. */
+    @Volatile internal var instructionOverride: String? = null
     @Synchronized fun local(context: Context, c: LlmConfig, texts: List<String>, deadlineMs: Long = 45000,
         onOutput: (Int,String) -> Unit = { _,_ -> }, protocol: String = "caps", diagnosticInstruction: String? = null,
         outputTokenLimit: Int? = null): List<String> {
@@ -224,7 +226,7 @@ object LlmProviders {
         }
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
-        val system=diagnosticInstruction ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
+        val system=diagnosticInstruction ?: instructionOverride?.takeIf { !protocol.startsWith("roles") } ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
         fun generate(engine: Engine, index: Int): String {
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             val text=texts[index]
@@ -274,7 +276,7 @@ object LlmProviders {
                 hexagon = it; Log.i("LlmPreparation", "Local Gemma loaded backend=NPU (own process) ms=${SystemClock.elapsedRealtime()-started}") }
         }
         usedAt = SystemClock.elapsedRealtime()
-        val system=diagnosticInstruction ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
+        val system=diagnosticInstruction ?: instructionOverride?.takeIf { !protocol.startsWith("roles") } ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
         return texts.indices.map { index ->
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             val text=texts[index]
