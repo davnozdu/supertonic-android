@@ -133,11 +133,16 @@ object LlmProviders {
     private fun stressCheckSchema() = JSONObject("""{"type":"object","properties":{"choices":{"type":"array","items":{"type":"integer"}}},"required":["choices"],"additionalProperties":false}""")
     /** Second look at words where the LLM and the offline Silero Stress disagree: the LLM chooses again with only
      * this sentence and these two options in front of it. Returns one option index per item. */
+    /** Diagnostics (StressProbe): null = production default, true/false = reasoning for the stress check. */
+    @Volatile internal var verifyThinkingOverride: Boolean? = null
     fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean): List<Int> {
         val array = JSONArray()
         items.forEach { array.put(JSONObject().put("sentence", it.sentence).put("word", it.word).put("options", JSONArray(it.options))) }
-        val answer = cloudRequest(c, JSONObject().put("items", array).toString(), STRESS_CHECK, stressCheckSchema(), gemini,
-            tokens = 64 + items.size * 8, deadlineMs = (4000L + items.size * 100L).coerceAtMost(12_000L))
+        val thinking = verifyThinkingOverride ?: false
+        val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking), JSONObject().put("items", array).toString(),
+            STRESS_CHECK, stressCheckSchema(), gemini,
+            tokens = 64 + items.size * 8 + (if (thinking) 4096 else 0),
+            deadlineMs = (4000L + items.size * 100L).coerceAtMost(12_000L) + (if (thinking) 15_000L else 0L))
         val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "Проверка ударений: нет JSON" }
         val choices = JSONObject(answer.substring(start, end + 1)).getJSONArray("choices")

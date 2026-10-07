@@ -11,7 +11,12 @@ import java.io.File
  * in the same ~2400-char batches; cache/stress-probe-out.json gets source, prepared text and provider per
  * paragraph. Reads the saved LLM settings, changes none of them; keys never leave the app's own requests. */
 internal object StressProbe {
-    fun run(ctx: Context, provider: String?) {
+    fun run(ctx: Context, provider: String?, verifyThinking: Boolean? = null) {
+        LlmProviders.verifyThinkingOverride = verifyThinking
+        try { runProbe(ctx, provider) } finally { LlmProviders.verifyThinkingOverride = null }
+    }
+
+    private fun runProbe(ctx: Context, provider: String?) {
         val input = File(ctx.cacheDir, "stress-probe.txt")
         val paragraphs = input.readText().split(Regex("\n\\s*\n")).map { it.trim() }.filter { it.isNotEmpty() }
         require(paragraphs.size in 1..200) { "stress-probe.txt: 1..200 paragraphs" }
