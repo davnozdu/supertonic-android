@@ -11,9 +11,10 @@ import java.io.File
  * in the same ~2400-char batches; cache/stress-probe-out.json gets source, prepared text and provider per
  * paragraph. Reads the saved LLM settings, changes none of them; keys never leave the app's own requests. */
 internal object StressProbe {
-    fun run(ctx: Context, provider: String?, verifyThinking: Boolean? = null) {
+    fun run(ctx: Context, provider: String?, verifyThinking: Boolean? = null, verifier: String? = null) {
         LlmProviders.verifyThinkingOverride = verifyThinking
-        try { runProbe(ctx, provider) } finally { LlmProviders.verifyThinkingOverride = null }
+        LlmProviders.verifierOverride = verifier
+        try { runProbe(ctx, provider) } finally { LlmProviders.verifyThinkingOverride = null; LlmProviders.verifierOverride = null }
     }
 
     private fun runProbe(ctx: Context, provider: String?) {

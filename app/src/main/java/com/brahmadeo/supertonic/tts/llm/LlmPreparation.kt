@@ -161,12 +161,21 @@ object LlmPreparation {
         val disputes = StressCheck.disputes(outputs, offline)
         if (disputes.isEmpty()) outputs.also { Log.i("LlmPreparation", "Stress cross-check: no disputes, offlineMs=$offlineMs") }
         else {
-            val reversed = verifyPool.submit<List<Int>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), gemini) }
-            val direct = try { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), gemini) }
+            // A third, independent opinion decides: the other cloud provider when it is configured.
+            val hasGemini = c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()
+            val hasOllama = c.ollamaModel.isNotBlank()
+            val judgeGemini = when (LlmProviders.verifierOverride) {
+                "GEMINI" -> hasGemini
+                "OLLAMA" -> !hasOllama
+                "SAME" -> gemini
+                else -> if (gemini) !hasOllama else hasGemini
+            }
+            val reversed = verifyPool.submit<List<Int>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini) }
+            val direct = try { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini) }
                 catch (e: Exception) { reversed.cancel(true); throw e }
             StressCheck.apply(outputs, disputes, direct + reversed.get(30, TimeUnit.SECONDS))
         }.also {
-            Log.i("LlmPreparation", "Stress cross-check disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
+            Log.i("LlmPreparation", "Stress cross-check judge=${if (disputes.isEmpty()) "-" else LlmProviders.lastVerifier} disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
         }
     } catch (e: Exception) {
         Log.w("LlmPreparation", "Stress cross-check skipped: ${e.javaClass.simpleName}: ${e.message}")

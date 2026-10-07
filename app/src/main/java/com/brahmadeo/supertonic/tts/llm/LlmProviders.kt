@@ -135,10 +135,14 @@ object LlmProviders {
      * this sentence and these two options in front of it. Returns one option index per item. */
     /** Diagnostics (StressProbe): null = production default, true/false = reasoning for the stress check. */
     @Volatile internal var verifyThinkingOverride: Boolean? = null
+    /** Diagnostics (StressProbe): null = production choice, "GEMINI" / "OLLAMA" / "SAME" = judge of stress disputes. */
+    @Volatile internal var verifierOverride: String? = null
+    @Volatile internal var lastVerifier = ""
     fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean): List<Int> {
         val array = JSONArray()
         items.forEach { array.put(JSONObject().put("sentence", it.sentence).put("word", it.word).put("options", JSONArray(it.options))) }
         val thinking = verifyThinkingOverride ?: false
+        lastVerifier = (if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
         val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking), JSONObject().put("items", array).toString(),
             STRESS_CHECK, stressCheckSchema(), gemini,
             tokens = 64 + items.size * 8 + (if (thinking) 4096 else 0),

@@ -53,7 +53,8 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 }
                 if (intent.getBooleanExtra("stressProbe", false)) {
                     try { com.brahmadeo.supertonic.tts.llm.StressProbe.run(this@SpeechDiagnosticsActivity, intent.getStringExtra("provider"),
-                        if (intent.hasExtra("verifyThinking")) intent.getBooleanExtra("verifyThinking", false) else null) }
+                        if (intent.hasExtra("verifyThinking")) intent.getBooleanExtra("verifyThinking", false) else null,
+                        intent.getStringExtra("verifier")) }
                     catch (e: Exception) { Log.e("SpeechCheck", "STRESS PROBE FAILED ${e.javaClass.simpleName}: ${e.message}") }
                     finally { running.set(false) }
                     return@withContext
