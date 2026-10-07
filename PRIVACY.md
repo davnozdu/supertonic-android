@@ -1,29 +1,60 @@
-# Privacy Policy
+# Политика конфиденциальности MyTTS
 
-**Last updated:** April 20, 2026
+**Последнее обновление:** 7 октября 2026 года
 
-Supertonic TTS is an open-source, on-device text-to-speech application. This service is provided by the developer at no cost and is intended for use as is.
+MyTTS — приложение синтеза речи с открытым исходным кодом. Речь синтезируется на самом телефоне. Приложение не собирает персональные данные и не содержит аналитики, рекламы или трекеров. Разработчик не получает ни ваш текст, ни сведения об использовании приложения.
 
-This page is used to inform users regarding the policies with the collection, use, and disclosure of Personal Information if anyone decides to use the Service.
+Куда может уходить ваш текст, зависит только от выбранной подготовки текста.
 
-## Information Collection and Use
+## Локальный режим: данные остаются на телефоне
 
-Supertonic TTS **does not collect, store, or transmit any personal data**.
+Текст книги или статьи **никуда не передаётся**, если:
 
-*   **Offline Processing:** All text-to-speech synthesis is performed locally on your device using ONNX Runtime and a native Rust core. Your text, generated audio, and pronunciation dictionaries never leave your device.
-*   **Permissions:** The app requests certain permissions strictly for core functionality:
-    *   **Internet:** Used for downloading additional models (if applicable) and standard Android library updates.
-    *   **Storage (READ_EXTERNAL_STORAGE):** Used to read ebook files or documents for text extraction.
-    *   **Foreground Service:** Used to allow continuous audio playback while the app is in the background or when the screen is off.
-    *   **Wake Lock:** Ensures the device doesn't sleep during synthesis or playback.
-*   **No Tracking:** We do not use any third-party analytics, tracking SDKs, or advertising libraries. No cookies, device identifiers, or user behavior data is collected.
+- подготовка текста LLM выключена (автономная обработка: словарь ударений, правила для ё и чисел);
+- выбрана **локальная Gemma 4** (движок GPU · LiteRT или NPU · Hexagon).
 
-## Changes to This Privacy Policy
+В этих режимах всё происходит на устройстве: синтез речи, расстановка ударений, обработка текста моделью, разметка голосов. Готовый звук и подготовленный текст хранятся в памяти телефона. Свои правила произношения и словари ударений тоже не покидают устройство.
 
-I may update our Privacy Policy from time to time. You are advised to review this page periodically for any changes. Any changes will be posted on this page and are effective immediately.
+## Облачная LLM: вы делитесь текстом с провайдером
 
-## Contact Us
+Если в настройках подготовки текста выбрана **облачная модель**, текст, который вы слушаете, отправляется выбранному провайдеру. Он отправляется фрагментами, по мере чтения, вместе с соседним контекстом:
 
-If you have any questions or suggestions about this Privacy Policy, please contact:
+- **Ollama** — облако ollama.com или указанный вами сервер Ollama;
+- **Google Gemini** — API Google (generativelanguage.googleapis.com).
 
-**Email:** dev.brahmadeo@gmail.com
+Провайдер получает этот текст, чтобы расставить ударения, восстановить ё и пунктуацию, раскрыть числа, а при включённом мультиголосе ещё и разметить реплики. Дальнейшую обработку и хранение текста определяют условия и политика конфиденциальности провайдера, а не MyTTS. Если вы не хотите делиться текстом, используйте локальную Gemma или выключите LLM.
+
+Ключи API, которые вы вводите для Ollama или Gemini, хранятся только в настройках приложения на телефоне. Они передаются лишь выбранному провайдеру при запросах к нему.
+
+## Другие сетевые обращения
+
+Эти обращения не передают ваш текст:
+
+- **Скачивание моделей, голосов, словарей и фоновой музыки** — с GitHub (github.com) и Hugging Face (huggingface.co). Происходит только когда вы выбираете или скачиваете соответствующий ресурс.
+- **Проверка обновлений** — анонимный запрос к API GitHub (api.github.com) о последней версии приложения.
+- **Список облачных моделей** — запрос к выбранному провайдеру Ollama или Gemini с вашим ключом.
+- **Статьи по ссылке.** Когда вы отправляете ссылку через «Поделиться» или «Вставить», приложение само загружает эту страницу с её сайта. Сайт видит обычный запрос страницы, как от браузера.
+
+## Иностранные фрагменты
+
+Английские и чешские вставки MyTTS может передавать другому установленному на телефоне движку синтеза речи Android, например Google TTS. Как этот движок обрабатывает текст, определяется его собственной политикой конфиденциальности.
+
+## Разрешения
+
+- **Интернет и состояние сети** — для скачивания моделей и музыки, проверки обновлений, загрузки статей и облачной LLM, если она выбрана.
+- **Работа в фоне (foreground service) и блокировка сна (wake lock)** — для непрерывного чтения при выключенном экране и для скачивания моделей.
+- **Уведомления** — панель управления чтением и прогресс скачивания.
+- **Установка пакетов** — для установки скачанного обновления MyTTS. Устанавливается только после вашего подтверждения.
+- **Чтение файлов** — чтобы открыть выбранный вами файл: свой MP3 для фоновой музыки, словарь ударений, текст.
+
+## Журналы
+
+Диагностические журналы пишутся в системный журнал Android и в файлы диагностики внутри приложения. Они остаются на телефоне и никуда не отправляются. Подробные журналы по фразам выключены и включаются только для диагностики.
+
+## Изменения
+
+Изменения этой политики публикуются в этом файле в репозитории проекта.
+
+## Контакты
+
+Вопросы и предложения: [Issues на GitHub](https://github.com/davnozdu/supertonic-android/issues).
