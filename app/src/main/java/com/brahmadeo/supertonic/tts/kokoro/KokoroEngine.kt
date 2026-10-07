@@ -76,6 +76,10 @@ class KokoroEngine(context: Context, val fullPrecision: Boolean = KokoroDownload
         if (npuBuilding.add(key)) npuBuilder.execute {
             val started = SystemClock.elapsedRealtime()
             try {
+                // The sessions that just compiled failed their first run with QNN 1002 when another voice set was
+                // already on the HTP (twice in a row, live), while the same set loaded from the cache works:
+                // close them and reload from the cache written by the compile (~1.5 s).
+                KokoroNpuDecoder(appContext, root, key, threads).close()
                 val decoder = KokoroNpuDecoder(appContext, root, key, threads)
                 if (npuOff || closed) decoder.close() else npuDecoders[key] = decoder
                 Log.i("KokoroTTS", "NPU decoder ready model=$key ms=${SystemClock.elapsedRealtime() - started}")
