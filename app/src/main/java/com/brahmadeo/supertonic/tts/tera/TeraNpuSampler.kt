@@ -23,7 +23,9 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
     private val steps = manifest.getInt("steps")
     /** Only the final steps go to the NPU: every FP16 step drifts the latent (≈30 dB per step on SM8850),
      * and the NaN defect rules out steps before npuFromStep anyway. */
-    private val npuFrom = maxOf(manifest.getInt("npuFromStep"), steps - npuSteps.coerceIn(0, steps))
+    private val firstNpuStep = manifest.getInt("npuFromStep")
+    var npuSteps: Int = npuSteps
+    private val npuFrom get() = maxOf(firstNpuStep, steps - npuSteps.coerceIn(0, steps))
     private val frameBuckets = manifest.getJSONArray("frameBuckets").let { a -> IntArray(a.length()) { a.getInt(it) } }
     private val textBuckets = manifest.getJSONArray("textBuckets").let { a -> IntArray(a.length()) { a.getInt(it) } }
     private val timeSize = 512
@@ -127,6 +129,7 @@ internal class TeraNpuSampler(private val ctx: Context, private val models: File
 /** Probe access from the diagnostics package (TeraNpuSampler is internal to the tera package's module). */
 object TeraNpuSamplerProbe {
     fun create(ctx: Context, models: File, npuSteps: Int = 4): AutoCloseable = TeraNpuSampler(ctx, models, 2, npuSteps)
+    fun setSteps(s: AutoCloseable, npuSteps: Int) { (s as TeraNpuSampler).npuSteps = npuSteps }
     fun sample(s: AutoCloseable, noise: FloatArray, frames: Int, emb: FloatArray, textLen: Int, style: FloatArray) =
         (s as TeraNpuSampler).sample(noise, frames, emb, textLen, style)
     fun counters(s: AutoCloseable) = (s as TeraNpuSampler).let { "npuSteps=${it.npuSteps} fallbackSteps=${it.fallbackSteps}" }
