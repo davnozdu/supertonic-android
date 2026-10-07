@@ -21,7 +21,10 @@ struct Handle {
     llama_sampler *sampler = nullptr;
     const llama_vocab *vocab = nullptr;
     llama_token turnEnd = -1;  // <turn|>
-    std::vector<llama_token> previous;  // last prompt: its common prefix stays in the KV cache
+    // One KV sequence per prompt kind (0 text, 1 roles): calls alternate between them, and each keeps its own
+    // instruction prefix in the cache (one shared sequence re-prefilled ~400-600 tokens on every switch).
+    static constexpr int SLOTS = 2;
+    std::vector<llama_token> previous[SLOTS];
     std::atomic<bool> cancel{false};
     std::string stats;
 };
@@ -38,7 +41,7 @@ struct HtpTurn {
         unlock = npu ? env->GetStaticMethodID(npu, "unlockHtp", "()V") : nullptr;
         if (!lock || !unlock) { env->ExceptionClear(); lock = unlock = nullptr; }
     }
-    int decode(llama_context *ctx, llama_batch batch) {
+    int decode(llama_context *ctx, const llama_batch &batch) {
         if (lock) env->CallStaticVoidMethod(npu, lock);
         int r = llama_decode(ctx, batch);
         if (unlock) env->CallStaticVoidMethod(npu, unlock);
@@ -93,6 +96,8 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeLoad(JNIEnv *env, jobje
     cp.n_threads_batch = threads;
     cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
     cp.swa_full = true;  // the instruction prefix is reused across calls; partial removal needs the full SWA cache
+    cp.n_seq_max = Handle::SLOTS;
+    cp.kv_unified = true;  // both slots share the n_ctx cells: a long text prompt may use most of them
     h->ctx = llama_init_from_model(h->model, cp);
     if (h->ctx == nullptr) { release(h); fail(env, "Gemma NPU context failed"); return 0; }
     llama_set_abort_callback(h->ctx, abortCallback, h);
@@ -108,7 +113,7 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeLoad(JNIEnv *env, jobje
 // Returns UTF-8 bytes: a token limit may cut a multi-byte character, which NewStringUTF must not see.
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, jobject, jlong handle, jstring jprompt,
-                                                                  jint maxTokens) {
+                                                                  jint maxTokens, jint jslot) {
     auto *h = reinterpret_cast<Handle *>(handle);
     if (h == nullptr) { fail(env, "Gemma NPU not loaded"); return nullptr; }
     h->cancel = false;
@@ -117,25 +122,43 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
     env->ReleaseStringUTFChars(jprompt, chars);
     llama_sampler_reset(h->sampler);
     auto tokens = tokenize(h->vocab, prompt, true);
-    // Keep the shared instruction prefix of the previous prompt; decode only what differs (at least one token).
-    size_t keep = 0;
-    while (keep < h->previous.size() && keep < tokens.size() && h->previous[keep] == tokens[keep]) ++keep;
-    if (keep >= tokens.size()) keep = tokens.size() > 0 ? tokens.size() - 1 : 0;
-    llama_memory_t memory = llama_get_memory(h->ctx);
-    if (keep == 0 || !llama_memory_seq_rm(memory, 0, (llama_pos) keep, -1)) { llama_memory_clear(memory, true); keep = 0; }
-    h->previous.clear();
+    const llama_seq_id slot = jslot >= 0 && jslot < Handle::SLOTS ? jslot : 0;
+    const llama_seq_id other = 1 - slot;
+    auto &previous = h->previous[slot];
     const int nCtx = (int) llama_n_ctx(h->ctx);
     if (tokens.empty() || (int) tokens.size() + maxTokens > nCtx) {
         fail(env, "Gemma NPU context: prompt " + std::to_string(tokens.size()) + " + output " + std::to_string(maxTokens) +
                   " > " + std::to_string(nCtx));
         return nullptr;
     }
+    llama_memory_t memory = llama_get_memory(h->ctx);
+    // The other slot gives its cells back when this call could not fit next to it.
+    if (llama_memory_seq_pos_max(memory, other) + 1 + (int) tokens.size() + maxTokens > nCtx) {
+        llama_memory_seq_rm(memory, other, -1, -1);
+        h->previous[other].clear();
+    }
+    // Keep this slot's shared instruction prefix; decode only what differs (at least one token).
+    size_t keep = 0;
+    while (keep < previous.size() && keep < tokens.size() && previous[keep] == tokens[keep]) ++keep;
+    if (keep >= tokens.size()) keep = tokens.size() > 0 ? tokens.size() - 1 : 0;
+    if (keep == 0 || !llama_memory_seq_rm(memory, slot, (llama_pos) keep, -1)) { llama_memory_seq_rm(memory, slot, -1, -1); keep = 0; }
+    previous.clear();
+    llama_batch batch = llama_batch_init(128, 0, 1);
+    struct BatchFree { llama_batch &b; ~BatchFree() { llama_batch_free(b); } } batchFree{batch};
+    auto fill = [&](const llama_token *ids, int n, llama_pos pos) {
+        batch.n_tokens = n;
+        for (int k = 0; k < n; ++k) {
+            batch.token[k] = ids[k]; batch.pos[k] = pos + k;
+            batch.n_seq_id[k] = 1; batch.seq_id[k][0] = slot; batch.logits[k] = k == n - 1;
+        }
+    };
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     HtpTurn htp(env);
     for (size_t i = keep; i < tokens.size(); i += 128) {
         int n = (int) std::min<size_t>(128, tokens.size() - i);
-        if (htp.decode(h->ctx, llama_batch_get_one(tokens.data() + i, n)) != 0) {
+        fill(tokens.data() + i, n, (llama_pos) i);
+        if (htp.decode(h->ctx, batch) != 0) {
             fail(env, h->cancel ? "Gemma NPU cancelled" : "Gemma NPU prompt decode failed");
             return nullptr;
         }
@@ -143,6 +166,7 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
     auto t1 = clock::now();
     std::string out;
     int generated = 0;
+    llama_pos pos = (llama_pos) tokens.size();
     for (; generated < maxTokens; ++generated) {
         if (h->cancel) { fail(env, "Gemma NPU cancelled"); return nullptr; }
         llama_token id = llama_sampler_sample(h->sampler, h->ctx, -1);
@@ -150,17 +174,18 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
         char piece[256];
         int m = llama_token_to_piece(h->vocab, id, piece, sizeof(piece), 0, false);
         if (m > 0) out.append(piece, (size_t) m);
-        if (htp.decode(h->ctx, llama_batch_get_one(&id, 1)) != 0) {
+        fill(&id, 1, pos++);
+        if (htp.decode(h->ctx, batch) != 0) {
             fail(env, h->cancel ? "Gemma NPU cancelled" : "Gemma NPU decode failed");
             return nullptr;
         }
     }
     auto t2 = clock::now();
-    h->previous = tokens;
+    previous = tokens;
     double prefillMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
     double decodeMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
     char stats[192];
-    snprintf(stats, sizeof(stats), "prompt=%zu reused=%zu prefillMs=%.0f generated=%d decodeMs=%.0f decodeTps=%.1f", tokens.size(), keep, prefillMs,
+    snprintf(stats, sizeof(stats), "slot=%d prompt=%zu reused=%zu prefillMs=%.0f generated=%d decodeMs=%.0f decodeTps=%.1f", slot, tokens.size(), keep, prefillMs,
              generated, decodeMs, generated > 0 ? generated * 1000.0 / decodeMs : 0.0);
     h->stats = stats;
     jbyteArray result = env->NewByteArray((jsize) out.size());

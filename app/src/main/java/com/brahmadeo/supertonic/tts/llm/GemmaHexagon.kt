@@ -21,9 +21,10 @@ internal object GemmaHexagon {
     }
 
     class Model internal constructor(private var handle: Long) : AutoCloseable {
-        /** Greedy completion of an already templated prompt; throws on cancel, context overflow or NPU errors. */
-        fun generate(prompt: String, maxTokens: Int): String =
-            String(nativeGenerate(handle, prompt, maxTokens) ?: ByteArray(0), Charsets.UTF_8)
+        /** Greedy completion of an already templated prompt; throws on cancel, context overflow or NPU errors.
+         * [slot]: KV sequence of this prompt kind (0 text, 1 roles), each keeps its own instruction prefix cached. */
+        fun generate(prompt: String, maxTokens: Int, slot: Int = 0): String =
+            String(nativeGenerate(handle, prompt, maxTokens, slot) ?: ByteArray(0), Charsets.UTF_8)
         fun cancel() { if (handle != 0L) nativeCancel(handle) }
         fun stats(): String = if (handle != 0L) nativeStats(handle) else ""
         override fun close() { if (handle != 0L) { nativeFree(handle); handle = 0L } }
@@ -38,7 +39,7 @@ internal object GemmaHexagon {
     fun prompt(system: String, user: String) = "<|turn>user\n$system\n\n$user<turn|>\n<|turn>model\n"
 
     @JvmStatic private external fun nativeLoad(model: String, contextTokens: Int, threads: Int, device: String): Long
-    @JvmStatic private external fun nativeGenerate(handle: Long, prompt: String, maxTokens: Int): ByteArray?
+    @JvmStatic private external fun nativeGenerate(handle: Long, prompt: String, maxTokens: Int, slot: Int): ByteArray?
     @JvmStatic private external fun nativeCancel(handle: Long)
     @JvmStatic private external fun nativeStats(handle: Long): String
     @JvmStatic private external fun nativeFree(handle: Long)

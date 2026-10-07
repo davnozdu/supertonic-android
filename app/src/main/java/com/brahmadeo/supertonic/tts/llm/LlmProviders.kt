@@ -263,7 +263,7 @@ object LlmProviders {
             val budget=fragmentDeadline(deadlineMs, text, protocol)
             val deadline=timer.schedule({ timedOut.set(true); model.cancel() },budget,java.util.concurrent.TimeUnit.MILLISECONDS)
             hexagonActive=model
-            val raw=try { model.generate(GemmaHexagon.prompt(system, prompt), limit) } catch(e: Exception) {
+            val raw=try { model.generate(GemmaHexagon.prompt(system, prompt), limit, if (protocol.startsWith("roles")) 1 else 0) } catch(e: Exception) {
                 if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${budget}мс")
                 throw e
             } finally { deadline.cancel(false); hexagonActive=null; usedAt=SystemClock.elapsedRealtime() }
