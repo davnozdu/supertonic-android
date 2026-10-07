@@ -51,8 +51,8 @@ class RussianDatesTest {
 
     @Test fun llmSpansCoverOnlyNumeralWords() {
         val prepared = llm("Из 1 101 записи 20 августа 1991 года было 5 глав.")
-        assertEquals("Из одна тысяча сто одна записи двадцатого августа тысяча девятьсот девяносто первого года было пять глав.", prepared.text)
-        assertEquals(listOf("одна тысяча сто одна", "двадцатого", "тысяча девятьсот девяносто первого", "пять"),
+        assertEquals("Из одной тысячи ста одной записи двадцатого августа тысяча девятьсот девяносто первого года было пять глав.", prepared.text)
+        assertEquals(listOf("одной тысячи ста одной", "двадцатого", "тысяча девятьсот девяносто первого", "пять"),
             prepared.ranges.map { prepared.text.substring(it) })
     }
 

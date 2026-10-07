@@ -93,7 +93,7 @@ object RussianBookNormalizer {
         }
         return form+tail
     }
-    private fun inferredCase(before: String, after: String = ""): Case {
+    internal fun inferredCase(before: String, after: String = ""): Case {
         val last = rx("[а-яё]+").findAll(before.lowercase()).lastOrNull()?.value
         val next=rx("[а-яё]+").find(after.lowercase())?.value.orEmpty()
         if(last in setOf("в","на") && (next.endsWith("ах") || next.endsWith("ях"))) return Case.PRE

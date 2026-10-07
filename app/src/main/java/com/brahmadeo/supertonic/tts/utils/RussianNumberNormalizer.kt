@@ -49,6 +49,20 @@ class RussianNumberNormalizer {
     private val feminineSoft = setOf("ночь", "дверь", "жизнь", "смерть", "любовь", "мышь", "площадь", "тетрадь", "вещь", "память",
         "новость", "кость", "часть", "мысль", "степень", "дочь", "мать", "сеть", "роль", "цель", "соль", "боль", "ель", "осень")
 
+    /** Feminine counted noun in an oblique case ("из одной записи", "к одной книге", "с одной тетрадью"). */
+    private fun feminineIn(following: String, case: RussianBookNormalizer.Case): Boolean {
+        val noun = nextNoun.find(following)?.groupValues?.get(1)?.replace("+", "")?.replace("\u0301", "")?.lowercase().orEmpty()
+        if (noun.isEmpty() || noun in masculineInA) return false
+        if (noun in feminineNouns || feminineSoft.any { noun.startsWith(it.dropLast(1)) && noun.length <= it.length + 2 }) return true
+        return when (case) {
+            RussianBookNormalizer.Case.GEN -> noun.endsWith("ы") || noun.endsWith("и")
+            RussianBookNormalizer.Case.DAT -> noun.endsWith("е")
+            RussianBookNormalizer.Case.INS -> noun.endsWith("ой") || noun.endsWith("ей") || noun.endsWith("ью")
+            RussianBookNormalizer.Case.PRE -> noun.endsWith("и")
+            else -> false
+        }
+    }
+
     /** Gender (and accusative) of the last number word from the counted noun's form: after 1 the noun is in the
      * nominative or accusative singular (книга, книгу, окно, день), after 2-4 in the genitive singular, where
      * feminine nouns end in -ы/-и and masculine or neuter ones in -а/-я (две тетради, два стола, два окна). */
@@ -98,7 +112,11 @@ class RussianNumberNormalizer {
             copyDatesBefore(match.range.first)
             out.append(source, start, match.range.first)
             val numberStart = out.length
-            out.append(countedInteger(value, after))
+            // A governing preposition decides the case, as on the offline path ("в одной тысяче пятистах метрах",
+            // "без пяти минут"); the LLM may still adjust the span. Otherwise gender comes from the counted noun.
+            val case = RussianBookNormalizer.inferredCase(source.substring(maxOf(0, match.range.first - 40), match.range.first), after)
+            out.append(if (case != RussianBookNormalizer.Case.NOM && value >= 0)
+                RussianBookNormalizer.cardinal(value, case, feminine = feminineIn(after, case)) else countedInteger(value, after))
             spans += numberStart until out.length
             start = match.range.last + 1
         }
