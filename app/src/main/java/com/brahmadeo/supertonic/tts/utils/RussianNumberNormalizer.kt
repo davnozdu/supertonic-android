@@ -55,27 +55,39 @@ class RussianNumberNormalizer {
         }
     }
 
-    /** Expand plain counted integers before LLM, retaining exact numeric spans.
-     * Compound formats (dates, times, decimals, degrees, ranges, ordinals)
-     * remain digits and go through their established downstream handlers.
+    /** Expand dates, years and plain counted integers before LLM, retaining exact numeric spans.
+     * Dates and years arrive already in their case ([RussianDates]); other compound formats
+     * (times, decimals, degrees, ranges, ordinals) remain digits for their downstream handlers.
      */
     fun prepareForLlm(text: String): LlmNumbers {
         val grouped = groupedIntegerRegex.replace(text) { m -> m.value.filterNot { it == ' ' || it == '\u00A0' || it == '\u202F' } }
+        val dates = RussianDates.expand(grouped)
+        val source = dates.text
         val out = StringBuilder()
         val spans = mutableListOf<IntRange>()
         var start = 0
-        for (match in integerRegex.findAll(grouped)) {
-            val before = grouped.getOrNull(match.range.first - 1)
-            val after = grouped.substring(match.range.last + 1)
+        var nextDate = 0
+        // Date words contain no digits; carry their spans over by the growth of earlier integers.
+        fun copyDatesBefore(end: Int) {
+            while (nextDate < dates.ranges.size && dates.ranges[nextDate].first < end) {
+                val r = dates.ranges[nextDate++]; val shift = out.length - start
+                spans += (r.first + shift)..(r.last + shift)
+            }
+        }
+        for (match in integerRegex.findAll(source)) {
+            val before = source.getOrNull(match.range.first - 1)
+            val after = source.substring(match.range.last + 1)
             if (before in listOf(':', '/', '-', '–', '—') || after.trimStart().firstOrNull() in listOf('%', '°', ':', '/', '-', '–', '—')) continue
             val value = match.value.toLongOrNull() ?: continue
-            out.append(grouped, start, match.range.first)
+            copyDatesBefore(match.range.first)
+            out.append(source, start, match.range.first)
             val numberStart = out.length
             out.append(countedInteger(value, after))
             spans += numberStart until out.length
             start = match.range.last + 1
         }
-        out.append(grouped, start, grouped.length)
+        copyDatesBefore(source.length)
+        out.append(source, start, source.length)
         return LlmNumbers(out.toString(), spans)
     }
 

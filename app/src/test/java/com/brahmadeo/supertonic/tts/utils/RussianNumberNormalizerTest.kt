@@ -38,7 +38,8 @@ class RussianNumberNormalizerTest {
     }
     @Test fun preparesNumbersWithoutLosingParagraphsOrCompoundFormats() {
         val prepared = normalizer.prepareForLlm("1001 имя\n1101 запись, 3.14 и 12.10.2026, 10:30, 15%, 5°C, 1-й, 10-15")
-        assertEquals("одна тысяча одно имя\nодна тысяча сто одна запись, 3.14 и 12.10.2026, 10:30, 15%, 5°C, 1-й, 10-15", prepared.text)
-        assertEquals(listOf("одна тысяча одно", "одна тысяча сто одна"), prepared.ranges.map { prepared.text.substring(it) })
+        // A calendar date is spelled in its case before the LLM; other compound formats stay digits.
+        assertEquals("одна тысяча одно имя\nодна тысяча сто одна запись, 3.14 и двенадцатого октября две тысячи двадцать шестого года, 10:30, 15%, 5°C, 1-й, 10-15", prepared.text)
+        assertEquals(listOf("одна тысяча одно", "одна тысяча сто одна", "двенадцатого", "две тысячи двадцать шестого"), prepared.ranges.map { prepared.text.substring(it) })
     }
 }

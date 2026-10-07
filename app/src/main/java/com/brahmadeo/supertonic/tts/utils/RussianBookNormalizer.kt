@@ -46,8 +46,9 @@ object RussianBookNormalizer {
         "миллиард|миллиарда|миллиарду|миллиард|миллиардом|миллиарде", "миллиарда|миллиардов|миллиардам|миллиарда|миллиардами|миллиардах",
         "миллиардов|миллиардов|миллиардам|миллиардов|миллиардами|миллиардах"
     ).map { it.split('|') }.associateBy { it[0] }
-    private val ordinalRoots = mapOf(1 to "перв",2 to "втор",3 to "треть",4 to "четвёрт",5 to "пят",6 to "шест",7 to "седьм",8 to "восьм",9 to "девят",10 to "десят",11 to "одиннадцат",12 to "двенадцат",13 to "тринадцат",14 to "четырнадцат",15 to "пятнадцат",16 to "шестнадцат",17 to "семнадцат",18 to "восемнадцат",19 to "девятнадцат",20 to "двадцат",30 to "тридцат",40 to "сороков",50 to "пятидесят",60 to "шестидесят",70 to "семидесят",80 to "восьмидесят",90 to "девяност",100 to "сот",200 to "двухсот",300 to "трёхсот",400 to "четырёхсот",500 to "пятисот",600 to "шестисот",700 to "семисот",800 to "восьмисот",900 to "девятисот",1000 to "тысяч",2000 to "двухтысяч")
-    private val months = listOf("января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря")
+    private val ordinalRoots = mapOf(1 to "перв",2 to "втор",3 to "треть",4 to "четвёрт",5 to "пят",6 to "шест",7 to "седьм",8 to "восьм",9 to "девят",10 to "десят",11 to "одиннадцат",12 to "двенадцат",13 to "тринадцат",14 to "четырнадцат",15 to "пятнадцат",16 to "шестнадцат",17 to "семнадцат",18 to "восемнадцат",19 to "девятнадцат",20 to "двадцат",30 to "тридцат",40 to "сороков",50 to "пятидесят",60 to "шестидесят",70 to "семидесят",80 to "восьмидесят",90 to "девяност",100 to "сот",200 to "двухсот",300 to "трёхсот",400 to "четырёхсот",500 to "пятисот",600 to "шестисот",700 to "семисот",800 to "восьмисот",900 to "девятисот",1000 to "тысячн",2000 to "двухтысячн",3000 to "трёхтысячн",4000 to "четырёхтысячн",5000 to "пятитысячн",6000 to "шеститысячн",7000 to "семитысячн",8000 to "восьмитысячн",9000 to "девятитысячн")
+    // Stressed ending: второй, шестой, седьмой, восьмой, сороковой (not -ый).
+    private val stressedOrdinals = setOf("втор","шест","седьм","восьм","сороков")
     fun cardinal(n: Long, case: Case = Case.NOM, feminine: Boolean = false): String {
         var base = numbers.spellInteger(n)
         if (feminine && base.endsWith("один")) base = base.removeSuffix("один")+"одна"
@@ -55,12 +56,21 @@ object RussianBookNormalizer {
         return base.split(' ').joinToString(" ") { forms[it]?.get(case.ordinal) ?: it }
     }
     fun ordinal(n: Int, ending: String): String {
-        ordinalRoots[n]?.let { return if(n==3) "трет" + thirdEnding(ending) else it+ending }
+        fun last(root: String) = when {
+            root == "треть" -> "трет" + thirdEnding(ending)
+            ending == "ый" && root in stressedOrdinals -> root + "ой"
+            else -> root + ending
+        }
+        ordinalRoots[n]?.let { return last(it) }
         val tail = if (n % 100 in 1..19) n%100 else if (n%10 != 0) n%10 else if (n%100 != 0) n%100 else n%1000
         val root = ordinalRoots[tail] ?: return cardinal(n.toLong())
-        return cardinal((n-tail).toLong()).takeIf { n != tail }.orEmpty().let { if (it.isEmpty()) "" else "$it " } + (if(tail==3) "трет"+thirdEnding(ending) else root+ending)
+        // Only the last word is ordinal; a leading thousand is read without "одна":
+        // "тысяча девятьсот девяносто первого", not "одна тысяча ...".
+        val head = cardinal((n-tail).toLong()).takeIf { n != tail }.orEmpty().let { if (it.startsWith("одна тысяча")) it.removePrefix("одна ") else it }
+        return (if (head.isEmpty()) "" else "$head ") + last(root)
     }
-    private fun thirdEnding(ending: String) = mapOf("ый" to "ий","ая" to "ья","ое" to "ье","ого" to "ьего","ому" to "ьему","ом" to "ьем","ых" to "ьих")[ending] ?: ending
+    private fun thirdEnding(ending: String) = mapOf("ый" to "ий","ая" to "ья","ое" to "ье","ого" to "ьего","ому" to "ьему","ом" to "ьем",
+        "ым" to "ьим","ую" to "ью","ой" to "ьей","ые" to "ьи","ых" to "ьих","ыми" to "ьими")[ending] ?: ending
     private fun plural(n: Long, one: String, few: String, many: String): String = when {
         kotlin.math.abs(n)%100 in 11..14 -> many
         kotlin.math.abs(n)%10==1L -> one
@@ -110,11 +120,7 @@ object RussianBookNormalizer {
         for ((key,value) in mapOf("т. е." to "то есть","т.е." to "то есть","т. д." to "так далее","т.д." to "так далее","т. п." to "тому подобное","т.п." to "тому подобное","т.к." to "так как","г-н" to "господин","г-жа" to "госпожа"))
             t=rx("(?<![\\p{L}])${Regex.escape(key)}",RegexOption.IGNORE_CASE).replace(t,value)
         t=rx("([\\$€₽])\\s*(\\d+(?:[,.]\\d+)?)").replace(t) { "${it.groupValues[2]} ${it.groupValues[1]}" }
-        t=rx("(?<!\\d)(\\d{1,2})[./](\\d{1,2})[./](\\d{4})(?!\\d)").replace(t) { m ->
-            val day=m.groupValues[1].toInt(); val month=m.groupValues[2].toInt(); val year=m.groupValues[3].toInt()
-            if (runCatching { java.time.LocalDate.of(year,month,day) }.isFailure) m.value
-            else "${ordinal(day,"ого")} ${months[month-1]} ${ordinal(year,"ого")} года"
-        }
+        t=RussianDates.expand(t).text
         t=rx("(?<!\\d)(\\d{1,2}):(\\d{2})(?::(\\d{2}))?(?!\\d)").replace(t) { m ->
             val h=m.groupValues[1].toLong();val min=m.groupValues[2].toLong();val sec=m.groupValues[3].toLongOrNull()
             if (h>23 || min>59 || (sec!=null && sec>59)) m.value else
@@ -131,13 +137,6 @@ object RussianBookNormalizer {
         t=rx("(?<!\\d)(\\d{1,2})/(\\d{1,2})(?!\\d)").replace(t) { m ->
             val n=m.groupValues[1].toLong(); val den=m.groupValues[2].toInt()
             if (den !in 2..99) m.value else cardinal(n,feminine=true)+" "+ordinal(den,plural(n,"ая","ых","ых"))
-        }
-        t=rx("(?<!\\d)(\\d{1,2})\\s+(${months.joinToString("|")})(?![а-яё])",RegexOption.IGNORE_CASE).replace(t) {
-            val day=it.groupValues[1].toInt();if(day in 1..31) ordinal(day,"ого")+" "+it.groupValues[2] else it.value
-        }
-        t=rx("(?<!\\d)(\\d{3,4})\\s*(году|года|год|г\\.)(?![а-яё])",RegexOption.IGNORE_CASE).replace(t) { m ->
-            val noun=m.groupValues[2].lowercase(); val ending=when(noun){"году"->"ом";"года"->"ого";else->"ый"}
-            ordinal(m.groupValues[1].toInt(),ending)+" "+if(noun=="г.") "год" else noun
         }
         t=rx("\\b(\\d+)-(й|ый|я|ая|е|ое|го|ого|му|ому|м|ом)\\b").replace(t) { m ->
             val n=m.groupValues[1].toIntOrNull() ?: return@replace m.value

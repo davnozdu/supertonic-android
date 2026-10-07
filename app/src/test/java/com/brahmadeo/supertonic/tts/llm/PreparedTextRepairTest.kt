@@ -40,7 +40,7 @@ class NumeralInflectionTest {
     @Test fun casesAndOrdinalsOfTheSameNumberAreAccepted() {
         assertEquals("Он прочитал сто одну книгу за две недели.", accept("Он прочитал 101 книгу за 2 недели.", "Он прочитал сто одну книгу за две недели."))
         assertEquals("Было без пяти минут двенадцать.", accept("Было без 5 минут 12.", "Было без пяти минут двенадцать."))
-        assertNotNull(accept("В 1905 году всё изменилось.", "В одна тысяча девятьсот пятом году всё изменилось."))
+        assertNotNull(accept("В 1905 году всё изменилось.", "В тысяча девятьсот пятом году всё изменилось."))
         assertNotNull(accept("Прошли 52 версты за 1 сутки.", "Прошли пятьдесят две версты за одни сутки."))
     }
     @Test fun aChangedValueIsStillRejected() {

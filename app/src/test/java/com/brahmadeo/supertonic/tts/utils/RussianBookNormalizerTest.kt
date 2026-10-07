@@ -10,7 +10,7 @@ class RussianBookNormalizerTest {
         assertEquals("к двумстам тридцати четырём",RussianBookNormalizer.normalize("к 234"))
     }
     @Test fun datesTimeYearsAndOrdinals() {
-        assertEquals("пятого мая две тысячи двадцать четвёртого года",RussianBookNormalizer.normalize("05.05.2024"))
+        assertEquals("Пятого мая две тысячи двадцать четвёртого года",RussianBookNormalizer.normalize("05.05.2024"))
         assertEquals("два часа одна минута",RussianBookNormalizer.normalize("02:01"))
         assertEquals("в две тысячи двадцать четвёртом году",RussianBookNormalizer.normalize("в 2024 году"))
         assertEquals("двадцать первая глава",RussianBookNormalizer.normalize("21-я глава"))
@@ -23,7 +23,7 @@ class RussianBookNormalizerTest {
         assertEquals("с пятью килограммами",RussianBookNormalizer.normalize("с 5 кг"))
         assertEquals("к двадцати метрам",RussianBookNormalizer.normalize("к 20 м"))
         assertEquals("сто долларов",RussianBookNormalizer.normalize("$100"))
-        assertEquals("третьего мая",RussianBookNormalizer.normalize("3 мая"))
+        assertEquals("Третьего мая",RussianBookNormalizer.normalize("3 мая"))
     }
     @Test fun unitsFractionsAndPhones() {
         assertEquals("два километра пять килограммов один процент",RussianBookNormalizer.normalize("2 км 5 кг 1%"))
