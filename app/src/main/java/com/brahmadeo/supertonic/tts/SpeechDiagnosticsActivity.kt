@@ -51,6 +51,12 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     try { com.brahmadeo.supertonic.tts.kokoro.NpuProbe.kokoroKit(this@SpeechDiagnosticsActivity, intent.getStringExtra("kokoroNpuModel") ?: "model.onnx") } finally { running.set(false) }
                     return@withContext
                 }
+                if (intent.getBooleanExtra("stressProbe", false)) {
+                    try { com.brahmadeo.supertonic.tts.llm.StressProbe.run(this@SpeechDiagnosticsActivity, intent.getStringExtra("provider")) }
+                    catch (e: Exception) { Log.e("SpeechCheck", "STRESS PROBE FAILED ${e.javaClass.simpleName}: ${e.message}") }
+                    finally { running.set(false) }
+                    return@withContext
+                }
                 if (intent.getBooleanExtra("npuProbe", false)) {
                     try { com.brahmadeo.supertonic.tts.kokoro.NpuProbe.run(this@SpeechDiagnosticsActivity) } finally { running.set(false) }
                     return@withContext

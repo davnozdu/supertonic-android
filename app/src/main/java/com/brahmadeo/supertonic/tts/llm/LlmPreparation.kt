@@ -150,6 +150,11 @@ object LlmPreparation {
             Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
+    /** Diagnostics: one reading batch through the production path (providers, validator, repair, names). */
+    internal fun testBatch(ctx: Context, c: LlmConfig, texts: List<String>): List<Result> {
+        initialize(ctx)
+        return executor.submit<List<Result>> { process(ctx, c, texts, ignoreCooldown = true) }.get(120, TimeUnit.SECONDS)
+    }
     fun test(ctx: Context, c: LlmConfig, text: String, traceSynthetic: Boolean = false): Result {
         initialize(ctx)
         // Use the same single worker as normal reading and idle unload.
