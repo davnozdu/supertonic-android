@@ -143,10 +143,13 @@ object LlmProviders {
         items.forEach { array.put(JSONObject().put("sentence", it.sentence).put("word", it.word).put("options", JSONArray(it.options))) }
         val thinking = verifyThinkingOverride ?: false
         lastVerifier = (if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
+        val judgeStarted = SystemClock.elapsedRealtime()
         val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking), JSONObject().put("items", array).toString(),
             STRESS_CHECK, stressCheckSchema(), gemini,
             tokens = 64 + items.size * 8 + (if (thinking) 4096 else 0),
-            deadlineMs = (4000L + items.size * 100L).coerceAtMost(12_000L) + (if (thinking) 15_000L else 0L))
+            // ~5 s cut Gemini judges off mid-answer (IOException: Canceled); the check runs ahead of playback.
+            deadlineMs = if (thinking) 60_000L else 15_000L)
+        Log.i("LlmPreparation", "Stress judge $lastVerifier items=${items.size} ms=${SystemClock.elapsedRealtime() - judgeStarted}")
         val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "Проверка ударений: нет JSON" }
         val choices = JSONObject(answer.substring(start, end + 1)).getJSONArray("choices")
