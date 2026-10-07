@@ -34,7 +34,9 @@ object LocalModelDownload {
     fun supported() = android.os.Build.SUPPORTED_ABIS.any { it == "arm64-v8a" || it == "x86_64" }
     fun modelFile(ctx: Context, spec: Spec = LITERT) = File(ctx.noBackupFilesDir, "llm/${spec.fileName}")
     fun ready(ctx: Context, spec: Spec = LITERT) = modelFile(ctx, spec).let { it.isFile && it.length() == spec.size && File(it.parentFile, "verified-${spec.sha256}").exists() }
-    fun npuSelected(ctx: Context) = ctx.getSharedPreferences("llm_settings", Context.MODE_PRIVATE).getString(ENGINE_KEY, "gpu") == "npu" && GemmaHexagon.supported(ctx)
+    /** Diagnostics only (StressProbe): "gpu" / "npu" for one probe run, without touching the saved choice. */
+    @Volatile internal var engineOverride: String? = null
+    fun npuSelected(ctx: Context) = (engineOverride ?: ctx.getSharedPreferences("llm_settings", Context.MODE_PRIVATE).getString(ENGINE_KEY, "gpu")) == "npu" && GemmaHexagon.supported(ctx)
     /** The model the selected local engine needs. */
     fun active(ctx: Context) = if (npuSelected(ctx)) HEXAGON else LITERT
     fun activeReady(ctx: Context) = ready(ctx, active(ctx))

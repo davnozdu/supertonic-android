@@ -150,6 +150,8 @@ object LlmPreparation {
             Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
+    /** Diagnostics (StressProbe): validated LLM text per source, before names, offline fill and arbitration. */
+    @Volatile internal var probeRaw: MutableMap<String, String>? = null
     private val verifyPool = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "LLM-stress-check").apply { isDaemon = true } }
     /** [StressCheck]: words where the cloud LLM and the offline Silero Stress disagree are asked again, in their
      * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
@@ -487,6 +489,7 @@ object LlmPreparation {
                     if (validated != null) {
                         // Names: learn from the cloud models (the small local one stresses them less reliably),
                         // then give a known name the LLM left unmarked the stress this book already uses.
+                        probeRaw?.put(source, validated)
                         if (c.stress && provider != "local") NameStress.learn(validated)
                         val named = if (c.stress) NameStress.fill(validated) else validated
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {

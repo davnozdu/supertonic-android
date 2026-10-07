@@ -11,11 +11,21 @@ import java.io.File
  * in the same ~2400-char batches; cache/stress-probe-out.json gets source, prepared text and provider per
  * paragraph. Reads the saved LLM settings, changes none of them; keys never leave the app's own requests. */
 internal object StressProbe {
-    fun run(ctx: Context, provider: String?, verifyThinking: Boolean? = null, verifier: String? = null) {
+    fun run(ctx: Context, provider: String?, verifyThinking: Boolean? = null, verifier: String? = null,
+            engine: String? = null, localThinking: Boolean? = null) {
         LlmProviders.verifyThinkingOverride = verifyThinking
         LlmProviders.verifierOverride = verifier
-        try { runProbe(ctx, provider) } finally { LlmProviders.verifyThinkingOverride = null; LlmProviders.verifierOverride = null }
+        LocalModelDownload.engineOverride = engine
+        thinkingOverride = localThinking
+        LlmPreparation.probeRaw = java.util.concurrent.ConcurrentHashMap()
+        if (engine != null) LlmProviders.unload() // the other engine may still hold its model
+        try { runProbe(ctx, provider) } finally {
+            LlmProviders.verifyThinkingOverride = null; LlmProviders.verifierOverride = null
+            LlmPreparation.probeRaw = null; thinkingOverride = null
+            if (engine != null) { LlmProviders.unload(); LocalModelDownload.engineOverride = null }
+        }
     }
+    private var thinkingOverride: Boolean? = null
 
     private fun runProbe(ctx: Context, provider: String?) {
         val input = File(ctx.cacheDir, "stress-probe.txt")
@@ -44,6 +54,7 @@ internal object StressProbe {
     private fun prepare(ctx: Context, provider: String?, paragraphs: List<String>) {
         val saved = LlmSettings.load(ctx)
         val config = (provider?.let { saved.copy(mode = LlmMode.valueOf(it)) } ?: saved).copy(multiVoice = false)
+            .let { c -> thinkingOverride?.let { c.copy(localThinking = it) } ?: c }
         NameStress.clear()
         val out = JSONArray()
         val decisions = JSONArray()
@@ -56,6 +67,7 @@ internal object StressProbe {
             Log.i("SpeechCheck", "STRESS PROBE batch paragraphs=${batch.size} chars=${batch.sumOf { it.length }} ms=${System.currentTimeMillis() - started} providers=${results.map { it.provider }}")
             results.forEachIndexed { i, r ->
                 out.put(JSONObject().put("source", batch[i]).put("text", r.text).put("provider", r.provider)
+                    .put("raw", LlmPreparation.probeRaw?.get(batch[i]) ?: "")
                     .put("fallback", r.fallback).put("ms", r.elapsedMs).put("reason", r.reason ?: ""))
             }
             StressCheck.takeDecisions().forEach { decisions.put(it) }
