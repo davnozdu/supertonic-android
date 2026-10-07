@@ -67,8 +67,9 @@ class TeraEngine(private val root: File, context: Context,
     // Optional hybrid NPU sampler (TeraNpuSampler): compiled once in the background; until it is ready the
     // 8-step ONNX Loop runs on the CPU, afterwards that session is released.
     @Volatile private var npuSampler: TeraNpuSampler? = null
-    /** Final sampler steps on the NPU (0 = sampler on the CPU, exact sound; the vocoder NPU is independent). */
-    val npuSamplerSteps = context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getInt(NPU_SAMPLER_STEPS, 0).coerceIn(0, 4)
+    /** The sampler stays on the CPU: on SM8850 even one FP16 NPU step audibly changes the sound (latent ≈20 dB, audio
+     * ≈12 dB vs the CPU) for almost no gain; four steps 12–16 dB. Kept for SpeechDiagnostics teraNpuProbe only. */
+    val npuSamplerSteps = 0
     @Volatile private var npuSamplerOff = !npuRequested || npuSamplerSteps == 0 ||
         !com.brahmadeo.supertonic.tts.utils.Npu.enabled(context, com.brahmadeo.supertonic.tts.utils.Npu.TERA_SAMPLER)
     @Volatile private var closed = false

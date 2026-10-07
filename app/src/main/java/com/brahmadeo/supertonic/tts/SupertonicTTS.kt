@@ -134,8 +134,7 @@ object SupertonicTTS {
         val sampler=com.brahmadeo.supertonic.tts.tera.TeraQuality.selected(ctx)
         teraEngine?.let {
             if(it.sampler==sampler && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx) &&
-                it.npuRequested==com.brahmadeo.supertonic.tts.utils.Npu.enabled(ctx) &&
-                it.npuSamplerSteps==ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getInt(TeraEngine.NPU_SAMPLER_STEPS, 0).coerceIn(0, 4)) return it
+                it.npuRequested==com.brahmadeo.supertonic.tts.utils.Npu.enabled(ctx)) return it
             it.close()
             teraEngine=null
         }

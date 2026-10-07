@@ -12,3 +12,9 @@
   graph on the CPU, steps 4–7 on the NPU in buckets (frames 32/64/128/256 × text 64/128/256), one shared
   QNN context with shared weights; a non-finite NPU step is redone on the CPU.
 - Probe: `SpeechDiagnosticsActivity --ez teraNpuProbe true` (latent/audio SNR vs the Loop, timings).
+
+## Decision (4.14.4)
+
+Measured on the phone (two phrases, vs the CPU Loop): 1 NPU step — latent 19–25 dB, audio 12 dB, ~0–15 % faster;
+2 steps — 15–21 / 4–10 dB; 4 steps — 12–16 / 4–6 dB, 1.8× faster. Even one step is audible, so the sampler always
+runs on the CPU; the NPU switch accelerates only the vocoder (37 dB). The hybrid stays for `teraNpuProbe`.
