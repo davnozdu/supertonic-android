@@ -48,10 +48,8 @@ object AssetManager {
 
     fun isPocket(context: Context): Boolean = getModelType(context) == POCKET_MODEL
     fun isKokoro(context: Context): Boolean = getModelType(context) == KOKORO_MODEL
-    /** Model-picker entry: Kokoro has an economical Q8 and a full-precision variant of one model. */
-    const val KOKORO_FULL_CHOICE = "kokoro_ru_v2:full"
-    fun modelChoice(context: Context): String =
-        if (isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)) KOKORO_FULL_CHOICE else getModelType(context)
+    /** Model-picker entry; Kokoro's Q8 / full-precision package is a setting of the one Kokoro model. */
+    fun modelChoice(context: Context): String = getModelType(context)
     fun russianVoices(context: Context): List<String> = when {
         isKokoro(context) -> com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voices
         isPocket(context) -> com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(context)

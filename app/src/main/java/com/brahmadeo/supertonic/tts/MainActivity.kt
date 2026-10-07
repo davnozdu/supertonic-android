@@ -315,19 +315,8 @@ class MainActivity : ComponentActivity() {
                                             onClick = { viewModel.selectedModel.value = AssetManager.KOKORO_MODEL }
                                         )
                                         Column {
-                                            Text("Kokoro-RU v2 · экономная (Q8)", style = MaterialTheme.typography.titleMedium)
-                                            Text("Русский · Света, Маша, Дима · ≈266 МБ · меньше RAM, медленнее синтез · 24 кГц.", style = MaterialTheme.typography.bodySmall)
-                                        }
-                                    }
-                                    androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        androidx.compose.material3.RadioButton(
-                                            selected = viewModel.selectedModel.value == AssetManager.KOKORO_FULL_CHOICE,
-                                            onClick = { viewModel.selectedModel.value = AssetManager.KOKORO_FULL_CHOICE }
-                                        )
-                                        Column {
-                                            Text("Kokoro-RU v2 · полная точность", style = MaterialTheme.typography.titleMedium)
-                                            Text("Те же голоса · оригинальные FP32-веса · ещё ≈620 МБ · быстрее синтез, больше RAM.", style = MaterialTheme.typography.bodySmall)
+                                            Text("Kokoro-RU v2", style = MaterialTheme.typography.titleMedium)
+                                            Text("Русский · Света, Маша, Дима · 24 кГц · ≈266 МБ, полная точность ещё ≈620 МБ. Компактный Q8 или полная точность — в настройках, раздел «Звук Kokoro».", style = MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }
@@ -372,11 +361,9 @@ class MainActivity : ComponentActivity() {
                         confirmButton = {
                             TextButton(onClick = {
                                 val choice = viewModel.selectedModel.value
-                                val model = if (choice == AssetManager.KOKORO_FULL_CHOICE) AssetManager.KOKORO_MODEL else choice
+                                // Kokoro's package (Q8 / full precision) is chosen only in the settings ("Звук Kokoro").
+                                val model = choice
                                 val modelChanged = model != AssetManager.getModelType(this@MainActivity)
-                                if (model == AssetManager.KOKORO_MODEL) getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).edit {
-                                    putBoolean("kokoro_full_precision", choice == AssetManager.KOKORO_FULL_CHOICE)
-                                }
                                 if (modelChanged) AssetManager.setModelType(this@MainActivity, model)
                                 // Re-confirming the same model keeps the chosen voice.
                                 if (AssetManager.isRussianModel(this@MainActivity) && !modelChanged) {
