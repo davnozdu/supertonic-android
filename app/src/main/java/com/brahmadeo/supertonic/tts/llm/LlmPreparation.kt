@@ -150,6 +150,22 @@ object LlmPreparation {
             Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
+    /** [StressCheck]: words where the cloud LLM and the offline Silero Stress disagree are asked again, in their
+     * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
+    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean): List<String> = try {
+        val started = SystemClock.elapsedRealtime()
+        val offline = outputs.map { com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
+            com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx, StressCheck.unmarked(it)), "ru") }
+        val offlineMs = SystemClock.elapsedRealtime() - started
+        val disputes = StressCheck.disputes(outputs, offline)
+        if (disputes.isEmpty()) outputs.also { Log.i("LlmPreparation", "Stress cross-check: no disputes, offlineMs=$offlineMs") }
+        else StressCheck.apply(outputs, disputes, LlmProviders.verifyStress(c, StressCheck.items(disputes), gemini)).also {
+            Log.i("LlmPreparation", "Stress cross-check disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
+        }
+    } catch (e: Exception) {
+        Log.w("LlmPreparation", "Stress cross-check skipped: ${e.javaClass.simpleName}: ${e.message}")
+        outputs
+    }
     /** Diagnostics: one reading batch through the production path (providers, validator, repair, names). */
     internal fun testBatch(ctx: Context, c: LlmConfig, texts: List<String>): List<Result> {
         initialize(ctx)
@@ -482,7 +498,8 @@ object LlmPreparation {
                 if (provider == "local") {
                     LlmProviders.local(ctx,c,requestTexts,deadlineMs=if(c.multiVoice) 12000 else 45000,onOutput=::accept)
                 } else {
-                    LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) NameStress.hint(requestTexts) else emptyList()).forEachIndexed { index,text -> accept(index,text) }
+                    val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) NameStress.hint(requestTexts) else emptyList())
+                    (if (c.stress) crossCheck(ctx,c,outputs,provider=="gemini") else outputs).forEachIndexed { index,text -> accept(index,text) }
                 }
                 if (expectedEpoch != epoch || cancelled()) break
                 val elapsed = SystemClock.elapsedRealtime()-started

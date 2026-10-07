@@ -19,6 +19,8 @@ internal object StressProbe {
         val config = (provider?.let { saved.copy(mode = LlmMode.valueOf(it)) } ?: saved).copy(multiVoice = false)
         NameStress.clear()
         val out = JSONArray()
+        val decisions = JSONArray()
+        StressCheck.takeDecisions()
         val batch = mutableListOf<String>()
         fun flush() {
             if (batch.isEmpty()) return
@@ -29,6 +31,7 @@ internal object StressProbe {
                 out.put(JSONObject().put("source", batch[i]).put("text", r.text).put("provider", r.provider)
                     .put("fallback", r.fallback).put("ms", r.elapsedMs).put("reason", r.reason ?: ""))
             }
+            StressCheck.takeDecisions().forEach { decisions.put(it) }
             batch.clear()
         }
         for (p in paragraphs) {
@@ -37,6 +40,7 @@ internal object StressProbe {
         }
         flush()
         File(ctx.cacheDir, "stress-probe-out.json").writeText(out.toString(1))
+        File(ctx.cacheDir, "stress-probe-decisions.json").writeText(decisions.toString(1))
         Log.i("SpeechCheck", "STRESS PROBE DONE paragraphs=${paragraphs.size} mode=${config.mode} names=${NameStress.hint(paragraphs).size}")
     }
 }
