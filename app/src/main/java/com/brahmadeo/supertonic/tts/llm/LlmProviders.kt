@@ -216,15 +216,16 @@ object LlmProviders {
                 maxOutputToken=outputTokenLimit ?: if (protocol == "roles-local") 64 else if (protocol.startsWith("roles")) 1600 else LocalSpeechText.outputTokens(text.length))).use { conversation ->
                 activeConversation=conversation
                 val started=SystemClock.elapsedRealtime()
-                val deadline=timer.schedule({ timedOut.set(true); runCatching { conversation.cancelProcess() } },deadlineMs,java.util.concurrent.TimeUnit.MILLISECONDS)
+                val budget=fragmentDeadline(deadlineMs, text, protocol)
+                val deadline=timer.schedule({ timedOut.set(true); runCatching { conversation.cancelProcess() } },budget,java.util.concurrent.TimeUnit.MILLISECONDS)
                 try {
                     val raw=conversation.sendMessage(prompt).toString()
-                    check(!timedOut.get()) { "LLM локальная: превышен лимит ${deadlineMs}мс" }
+                    check(!timedOut.get()) { "LLM локальная: превышен лимит ${budget}мс" }
                     check(generation==cancelGeneration.get()) { "Подготовка отменена" }
                     Log.i("LlmPreparation","Local Gemma fragment=$index chars=${text.length} outputChars=${raw.length} backend=${if(localGpu==true) "GPU" else "CPU"} ms=${SystemClock.elapsedRealtime()-started}")
                     if (protocol.startsWith("roles")) raw else LocalSpeechText.response(raw,text,protocol)
                 } catch(e: Exception) {
-                    if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${deadlineMs}мс")
+                    if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${budget}мс")
                     throw e
                 } finally { deadline.cancel(false); activeConversation=null; usedAt=SystemClock.elapsedRealtime() }
             }
@@ -259,10 +260,11 @@ object LlmProviders {
             val limit=outputTokenLimit ?: if (protocol == "roles-local") 64 else if (protocol.startsWith("roles")) 1600 else LocalSpeechText.outputTokens(text.length)
             val timedOut=java.util.concurrent.atomic.AtomicBoolean()
             val started=SystemClock.elapsedRealtime()
-            val deadline=timer.schedule({ timedOut.set(true); model.cancel() },deadlineMs,java.util.concurrent.TimeUnit.MILLISECONDS)
+            val budget=fragmentDeadline(deadlineMs, text, protocol)
+            val deadline=timer.schedule({ timedOut.set(true); model.cancel() },budget,java.util.concurrent.TimeUnit.MILLISECONDS)
             hexagonActive=model
             val raw=try { model.generate(GemmaHexagon.prompt(system, prompt), limit) } catch(e: Exception) {
-                if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${deadlineMs}мс")
+                if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${budget}мс")
                 throw e
             } finally { deadline.cancel(false); hexagonActive=null; usedAt=SystemClock.elapsedRealtime() }
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
@@ -272,6 +274,10 @@ object LlmProviders {
         }
     }
     @Volatile private var hexagonActive: GemmaHexagon.Model? = null
+    /** Text fragments get time proportional to their length (≈25 ms/char, ~2× Gemma NPU decode); a fixed
+     * 12 s cancelled ~950-char fragments near their end. Role requests keep the caller's deadline. */
+    private fun fragmentDeadline(base: Long, text: String, protocol: String) =
+        if (protocol.startsWith("roles")) base else maxOf(base, 4000L + text.length * 25L).coerceAtMost(maxOf(base, 45_000L))
     private fun parse(answer: String, count: Int): List<String> {
         val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "LLM не вернула JSON" }

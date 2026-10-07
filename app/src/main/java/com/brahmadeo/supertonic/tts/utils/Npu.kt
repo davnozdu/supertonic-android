@@ -17,6 +17,16 @@ object Npu {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
     private fun version(ctx: Context) = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).longVersionCode }.getOrDefault(0L)
     private fun backend(ctx: Context) = File(ctx.applicationInfo.nativeLibraryDir, "libQnnHtp.so")
+    /** Compiled HTP contexts depend on the ORT/QNN runtime and the graphs, not on the app version: an update that
+     * keeps both reuses the cache instead of recompiling ~30 s per Kokoro voice set. Callers put a graph hash
+     * into the cache name. */
+    private fun cacheVersion(ctx: Context): String {
+        val dir = ctx.applicationInfo.nativeLibraryDir
+        val libs = listOf("libQnnHtp.so", "libQnnHtpV81Skel.so", "libQnnHtpV79Skel.so", "libQnnHtpPrepare.so", "libonnxruntime.so")
+            .joinToString(",") { File(dir, it).length().toString() }
+        return "r" + Integer.toHexString((OrtEnvironment.getEnvironment().version + libs).hashCode())
+    }
+
 
     fun supported(ctx: Context) = Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a" && backend(ctx).isFile
     /** One HTP for QNN (Kokoro, Tera vocoder) and ggml-hexagon (Gemma): concurrent graphs failed with QNN 1002 and
@@ -51,10 +61,10 @@ object Npu {
      * app storage (one flash write); later loads skip the multi-second HTP compilation. */
     fun session(ctx: Context, env: OrtEnvironment, model: File, dims: Map<String, Long>, cacheName: String,
                 performance: String = "high_performance", allowCpuFallback: Boolean = false, logInfo: Boolean = false,
-                extra: Map<String, String> = emptyMap(), verbose: Boolean = false): OrtSession {
+                extra: Map<String, String> = emptyMap(), verbose: Boolean = false, family: String = cacheName): OrtSession {
         val cacheDir = File(ctx.filesDir, "npu-cache").apply { mkdirs() }
-        val cached = File(cacheDir, "$cacheName-v${version(ctx)}_ctx.onnx")
-        cacheDir.listFiles()?.filter { it.name.startsWith("$cacheName-") && it != cached }?.forEach { it.delete() }
+        val cached = File(cacheDir, "$cacheName-${cacheVersion(ctx)}_ctx.onnx")
+        cacheDir.listFiles()?.filter { it.name.startsWith("$family-") && it != cached }?.forEach { it.delete() }
         OrtSession.SessionOptions().use { options ->
             dims.forEach { (name, value) -> options.setSymbolicDimensionValue(name, value) }
             options.setIntraOpNumThreads(1)
@@ -74,17 +84,18 @@ object Npu {
     private fun debug(ctx: Context, key: String): Map<String, String> = prefs(ctx).getString(key, null).orEmpty()
         .split(';').mapNotNull { it.split('=', limit = 2).takeIf { p -> p.size == 2 && p[0].isNotBlank() }?.let { p -> p[0].trim() to p[1].trim() } }.toMap()
 
-    /** True when a shared context for [cacheName] is compiled for this app version (loading takes seconds). */
-    fun sharedCacheReady(ctx: Context, cacheName: String) = File(File(ctx.filesDir, "npu-cache"), "$cacheName-v${version(ctx)}.done").isFile
+    /** True when a shared context for [cacheName] is compiled for this runtime (loading takes seconds). */
+    fun sharedCacheReady(ctx: Context, cacheName: String) = File(File(ctx.filesDir, "npu-cache"), "$cacheName-${cacheVersion(ctx)}.done").isFile
 
     /** Many small graphs compiled into ONE QNN context (ORT ep.share_ep_contexts): one HTP context, one
      * context binary and shared HTP memory instead of a full context per graph. The binary is written when
      * the last graph compiles; a ".done" marker guards against a half-written cache. */
     fun sharedSessions(ctx: Context, env: OrtEnvironment, models: List<Pair<File, Map<String, Long>>>, cacheName: String,
-                       performance: String = "high_performance"): List<OrtSession> {
+                       performance: String = "high_performance", family: String = cacheName): List<OrtSession> {
         val cacheDir = File(ctx.filesDir, "npu-cache").apply { mkdirs() }
-        val tag = "$cacheName-v${version(ctx)}"
-        cacheDir.listFiles()?.filter { it.name.startsWith("$cacheName-") && !it.name.startsWith("$tag-") && !it.name.startsWith("$tag.") }?.forEach { it.delete() }
+        val tag = "$cacheName-${cacheVersion(ctx)}"
+        // [family]: every older cache of these graphs (other runtime, kit or app-version naming) is stale.
+        cacheDir.listFiles()?.filter { it.name.startsWith("$family-") && !it.name.startsWith("$tag-") && !it.name.startsWith("$tag.") }?.forEach { it.delete() }
         fun ctxFile(i: Int) = File(cacheDir, "$tag-${i}_ctx.onnx")
         val bin = File(cacheDir, "$tag-0_ctx_qnn.bin")
         val done = File(cacheDir, "$tag.done")

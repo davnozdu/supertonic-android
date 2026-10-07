@@ -52,8 +52,10 @@ class TeraEngine(private val root: File, context: Context,
         val size = if (frames <= TeraVocoderChunks.FIRST) TeraVocoderChunks.FIRST else TeraVocoderChunks.NEXT + TeraVocoderChunks.CONTEXT
         if (frames > size) return null
         return npuVocoder[size] ?: try {
-            com.brahmadeo.supertonic.tts.utils.Npu.session(appContext, env, File(root, "models/vocoder.onnx"),
-                mapOf("batch" to 1L, "generated_latent_length" to size.toLong()), "tera-vocoder-$size").also { npuVocoder[size] = it }
+            val vocoder = File(root, "models/vocoder.onnx")
+            com.brahmadeo.supertonic.tts.utils.Npu.session(appContext, env, vocoder,
+                mapOf("batch" to 1L, "generated_latent_length" to size.toLong()),
+                "tera-vocoder-$size-m${java.lang.Long.toHexString(vocoder.length())}", family = "tera-vocoder-$size").also { npuVocoder[size] = it }
         } catch (t: Throwable) {
             disableNpu("create: ${t.javaClass.simpleName}")
             null

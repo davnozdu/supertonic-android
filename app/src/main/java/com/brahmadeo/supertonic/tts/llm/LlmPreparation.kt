@@ -416,7 +416,15 @@ object LlmPreparation {
                 Log.i("LlmPreparation", "Skipping local retry for ${results.size - resolved} fragment(s) after cloud success")
                 continue
             }
-            if (!ignoreCooldown && SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) continue
+            if (!ignoreCooldown && SystemClock.elapsedRealtime() < (cooldown[provider] ?: 0L)) {
+                // The last provider pausing briefly must not flush the whole queue to the dictionary in seconds
+                // (15 s of Gemma cooldown once turned ~7000 chars into dictionary text): wait for it instead.
+                // Playback never waits on this: prepareResult() has its own timeout.
+                val until = cooldown[provider] ?: 0L
+                if (provider != providers.last() || until - SystemClock.elapsedRealtime() > 20_000) continue
+                while (SystemClock.elapsedRealtime() < until && expectedEpoch == epoch && !cancelled()) Thread.sleep(200)
+                if (expectedEpoch != epoch || cancelled()) break
+            }
             val requestIndices = LlmRetryContext.indices(providerTexts, results.indices.filter { results[it] == null }, if (provider == "local") 1600 else 8000)
             val requestTexts = requestIndices.map { providerTexts[it] }
             if (requestTexts.sumOf { it.length } > if (provider == "local") 1600 else 8000) {
@@ -476,7 +484,9 @@ object LlmPreparation {
                 failure = if (listOf("LLM ", "API HTTP", "Сначала ", "Выберите ", "Подготовка ").any { detail.startsWith(it) }) detail.take(180)
                     else e.javaClass.simpleName + (Regex("Status Code: \\d+").find(detail)?.value?.let { ": $it" } ?: "")
                 // Network blips and timeouts recover quickly; only auth/quota errors need a long pause.
-                cooldown[provider] = SystemClock.elapsedRealtime() + if (Regex("API HTTP (401|403|429)").containsMatchIn(failure.orEmpty())) 60_000 else 15_000
+                // A slow local fragment is not an outage: Gemma stays available for the next batch.
+                if (!(provider == "local" && failure.orEmpty().startsWith("LLM локальная: превышен лимит")))
+                    cooldown[provider] = SystemClock.elapsedRealtime() + if (Regex("API HTTP (401|403|429)").containsMatchIn(failure.orEmpty())) 60_000 else 15_000
                 Log.w("LlmPreparation", "Provider $provider failed: $failure; trying fallback")
             } catch (_: LinkageError) {
                 failure = "Локальная среда выполнения не поддерживается"

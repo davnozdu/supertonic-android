@@ -51,6 +51,17 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
         const val MAX_FRAMES = 800
         private fun direct(n: Int): FloatBuffer = ByteBuffer.allocateDirect(n * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         fun kitName(modelFile: String) = modelFile.removeSuffix(".onnx")
+        /** Shared-context cache name: kit + chunk size + hash of the kit's graphs (a changed kit recompiles). */
+        private val cacheNames = java.util.concurrent.ConcurrentHashMap<String, String>()
+        fun cacheName(ctx: Context, modelFile: String): String = cacheNames.getOrPut(modelFile + "/" + chunkFrames(ctx)) {
+            val base = kitName(modelFile)
+            val crc = java.util.zip.CRC32()
+            ctx.assets.list("kokoro_npu/$base").orEmpty().sorted().forEach { name ->
+                crc.update(name.toByteArray()); ctx.assets.open("kokoro_npu/$base/$name").use { crc.update(it.readBytes()) }
+            }
+            val chunk = chunkFrames(ctx)
+            "kokoro-$base" + (if (chunk == CHUNK_FRAMES) "" else "-c$chunk") + "-k" + crc.value.toString(16)
+        }
     }
 
     private val env = OrtEnvironment.getEnvironment()
@@ -93,7 +104,7 @@ internal class KokoroNpuDecoder(private val ctx: Context, private val root: File
                 val s = list.getJSONObject(i)
                 graphs += kitFile(s.getString("file")) to mapOf("w" to (chunk[s.getInt("stage")] + 2 * halo).toLong())
             }
-            val npuSessions = if (onNpu) Npu.sharedSessions(ctx, env, graphs, if (framesPerChunk == CHUNK_FRAMES) "kokoro-$base" else "kokoro-$base-c$framesPerChunk")
+            val npuSessions = if (onNpu) Npu.sharedSessions(ctx, env, graphs, cacheName(ctx, modelFile), family = "kokoro-$base")
                               else graphs.map { (file, dims) -> cpu(file.name.removePrefix("npukit-$base-"), dims) }
             if (onNpu) sessions += npuSessions
             val made = ops.mapIndexed { i, (_, g, core) -> Op(npuSessions[i], g.getInt("in"), g.getInt("out"), g.getInt("scale"), g.getInt("halo"), core) }
