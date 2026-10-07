@@ -1,76 +1,91 @@
-# MyTTS for Android
+# MyTTS для Android
 
-Fork of [DevGitPit/supertonic-android](https://github.com/DevGitPit/supertonic-android) upgraded from Supertonic 2 (5 languages) to **Supertonic 3 (31 languages + `na` fallback)** using the [supertonic-3 ONNX weights from Hugging Face](https://huggingface.co/Supertone/supertonic-3).
+Системный движок синтеза речи Android с русскими нейросетевыми голосами, который работает прямо на телефоне. Подходит для чтения книг в Moon+ Reader и других читалках, озвучки статей из браузера и любого текста. Может готовить текст с помощью LLM: ударения, ё, пунктуация, числа. Умеет читать в несколько голосов, играть фоновую музыку и использовать нейропроцессор Snapdragon.
 
-The on-device inference pipeline (Rust + ONNX Runtime + XNNPACK) is unchanged — Supertonic 3 reuses the same four-stage graph (`text_encoder` → `duration_predictor` → `vector_estimator` → `vocoder`) and the same tensor shapes as v2. The fork therefore replaces only the asset bundle, the language tagging, and the surrounding UI; all inference code paths are identical.
+*An on-device Android TTS engine focused on natural Russian speech: TeraTTSv2, Silero v5.5, Kokoro-RU and Shtorm PocketTTS voices, optional LLM text preparation (stress, ё, punctuation, numbers), multi-voice reading, article reading, background music and Snapdragon NPU acceleration.*
 
-## What changed vs. the upstream fork
+Форк [DevGitPit/supertonic-android](https://github.com/DevGitPit/supertonic-android). Многоязычная модель Supertonic 3 (31 язык) по-прежнему доступна в списке моделей.
 
-| Area | Upstream (v1 + v2) | This fork (v3) |
-|---|---|---|
-| Languages | 5 (en, ko, es, pt, fr) | 31 + `na` fallback |
-| Models | Two parallel dirs (`v1`, `v2`), bundled English + downloadable multilingual | Single Supertonic 3 download (~400 MB), one-time |
-| Language tagging | `<lang>` only for non-English | Always wrapped (the model has no separate lang embedding) |
-| Dash handling | Em-dash → comma only in English path | Em-dash → comma in every language (fixes Russian "Москва — столица" mis-reading) |
-| System TTS settings | Reachable only via Android Settings | Direct shortcut from the in-app menu |
-| Lexicon | Hand-edited rules (regex / whole word) | Same, plus **bulk accent dictionary import** for tens of thousands of stress-marked words |
+## Установка
 
-## Install
+Подписанные APK лежат на странице **[Releases](https://github.com/davnozdu/supertonic-android/releases)**. Для большинства телефонов нужен файл `arm64-v8a`, для остальных устройств есть `universal`.
 
-Grab the signed APK from the **[Releases](https://github.com/davnozdu/supertonic-android/releases)** page.
+1. На телефоне разрешите установку из неизвестных источников для файлового менеджера или браузера.
+2. Откройте APK. Если `adb install` возвращает `INSTALL_FAILED_VERIFICATION_FAILURE`, отключите **Проверять приложения при установке через USB** в параметрах разработчика.
+3. При первом запуске выберите модель: она скачается один раз, нужен Wi-Fi.
 
-1. On the phone: Settings → Apps → Special access → Install unknown apps → allow your file manager / browser.
-2. Tap the APK to install. If `adb install` returns `INSTALL_FAILED_VERIFICATION_FAILURE`, disable **Verify apps over USB** in Developer Options.
-3. First launch downloads ~400 MB of ONNX models from Hugging Face — needs Wi-Fi once.
+Все выпуски подписаны одним постоянным ключом и ставятся поверх предыдущих, настройки и модели сохраняются. Пакет: `com.davnozdu.supertonic.tts.fork`. Приложение само проверяет обновления на GitHub.
 
-Releases use the permanent keystore from repository secrets and install over the current fork without uninstalling. Application ID: `com.davnozdu.supertonic.tts.fork`.
+## Системный движок речи
 
-## Use as the system TTS engine
+1. Настройки Android → Специальные возможности → Синтез речи (или пункт меню MyTTS).
+2. **Предпочитаемый движок** → *MyTTS*.
 
-After installation:
+После этого MyTTS используют все приложения, работающие через речевой API Android: Moon+ Reader, Voice Aloud, TalkBack, навигаторы, Tasker и другие.
 
-1. Open Supertonic TTS → menu → **System TTS Settings** (or Android Settings → Accessibility → Text-to-speech output).
-2. Set **Preferred engine** to *Supertonic TTS*.
-3. Pick any of the 31 languages and test with *Listen to an example*.
+### Moon+ Reader
 
-Every app that uses Android's TTS API (Voice Aloud, TalkBack, reader apps, navigation, Tasker etc.) will now use Supertonic.
+MyTTS готовит звук заранее из текста, который читалка уже передала. Запас регулируется от 2 до 60 минут, по умолчанию 5. Текст, который читалка ещё не передала, подготовить нельзя, поэтому первый абзац новой страницы может прозвучать без обработки LLM. Звонки, Bluetooth-кнопки и уведомление управляют чтением, музыка останавливается вместе с голосом.
 
-## Background music
+## Модели
 
-Menu → **Фоновая музыка**. **Скачать музыку** installs seven AI-generated tracks from the project's `reading-music-v1` release (about 27 MB); after an update only the new tracks are downloaded. Choose an installed track, or import your own MP3; the app copies it into private storage. Each track can be removed from the phone and the ready catalog can be downloaded again.
+Модель выбирается на главном экране, каждый голос можно прослушать. Файлы скачиваются с GitHub проекта или Hugging Face с проверкой SHA-256 и докачкой после обрыва. В APK модели не входят.
 
-Music loops during actual reading, follows pause/stop and resumes at the saved position. Volume is independent of speech, 0–100%, default 10%. Speculative LLM preparation and synthesis to a file do not start music. The music decoder releases after two idle minutes. It creates no competing media session or audio-focus request.
+| Модель | Голоса | Скачивание | Характер |
+|---|---|---|---|
+| [TeraTTSv2](https://huggingface.co/TeraSpace/TeraTTSv2) | 10 стилей | модель + словарь ударений (3,2 млн слов) | естественная интонация, быстрый синтез |
+| [Silero v5.5](https://github.com/snakers4/silero-models) | основной пакет и CIS (29 голосов) | пакет CIS ≈82 МБ | самая экономная по процессору и памяти |
+| [Kokoro-RU v2](https://huggingface.co/zaakirio/kokoro-ru) | Света, Маша, Дима | Q8 ≈266 МБ, полная точность ещё ≈620 МБ | высокое качество, 24 кГц |
+| [Shtorm PocketTTS RU v2](https://huggingface.co/ArtShtorm/Shtorm_PocketTTS_RU) · эксперимент | 7 голосовых образцов | ≈439 МБ | быстрее реального времени |
+| [Supertonic 3](https://huggingface.co/Supertone/supertonic-3) | многоязычная | ≈400 МБ | 31 язык |
 
-## Shtorm PocketTTS RU v2 (experimental)
+- **Потоки CPU** задаются ползунком на главном экране, отдельно для каждой модели. По умолчанию 2 потока для Tera, Silero и Shtorm, 4 для Kokoro. Замеры — в `docs/cpu-threads.md`.
+- **Kokoro** выпускается в двух пакетах с одинаковыми голосами. Пакет выбирается в настройках, раздел «Звук Kokoro». Полная точность на ARM считает быстрее, но занимает больше памяти.
+- **Иностранные вставки** на английском и чешском читаются другим установленным движком Android.
+- **Громкость голосов выравнивается.** Паузы между предложениями включаются переключателями.
 
-The ARM64 picker includes [ArtShtorm/Shtorm_PocketTTS_RU](https://huggingface.co/ArtShtorm/Shtorm_PocketTTS_RU), fast v2. Its ONNX graphs are prepared once by GitHub Actions, numerically compared with the original PyTorch model, and stored in the `shtorm-pocket-v2` release. The phone downloads approximately 439 MB and checks pinned SHA-256 hashes. No conversion runs on the phone.
+## Подготовка текста с помощью LLM
 
-The native runtime adapts [PocketTTS-Android-Engine](https://github.com/The-unknown-Shadowman/PocketTTS-Android-Engine) and PocketTTS.cpp. Output is 24 kHz mono PCM16. Shtorm receives the shared LLM/local text preparation and combines acute stress marks; phrases are bounded to approximately 180 characters as recommended by the author. Sonic adjusts speed without pitch shift. The model unloads after two idle minutes. Starter voice: Alba MacKenna, CC BY 4.0; model and runtime attribution are in `vendor/pockettts` and the downloadable license.
+Необязательный этап перед синтезом. Языковая модель расставляет ударения в омографах и редких словах, восстанавливает ё, правит пунктуацию по смыслу и раскрывает числа с согласованием («21 книгу» → «двадцать одну книгу»). Пересказывать, добавлять, удалять или повторять слова ей запрещено, и каждый ответ сверяется с исходным текстом. Неверные ответы отбрасываются, почти верные исправляются точечно.
 
-Tera and Silero remain available. Obsolete INT8/FP32/FP16 presets are hidden from the model picker.
+- **Ollama.** Облако ollama.com или свой сервер. В наших тестах лучшая — DeepSeek v4.1 Flash.
+- **Gemini.** Нужен свой ключ API.
+- **Локальная Gemma 4 E2B** работает без интернета. Два движка на выбор: GPU через LiteRT (по умолчанию) или NPU через Hexagon (эксперимент, отдельная модель 2,44 ГБ).
+- **Автономный резерв** работает, когда LLM выключена, недоступна или не успевает: словарь ударений, правила для ё и чисел.
 
-## Pronunciation control
+Текст обрабатывается заранее, пакетами, в фоне. Готовые абзацы кэшируются. С облачной LLM текст книги отправляется выбранному провайдеру (Ollama или Google). С локальной Gemma или без LLM текст остаётся на телефоне. Ключи API хранятся только в настройках приложения. Документация: `docs/llm-preparation.md`.
 
-### TeraTTSv2 Russian preset
+## Несколько голосов · эксперимент
 
-The model picker recommends [TeraTTSv2](https://huggingface.co/TeraSpace/TeraTTSv2) for Russian. It downloads the pinned distilled ONNX sampler, encoder, duration predictor, vocoder, four Russian voice styles, and the RUAccent yo dictionary from Hugging Face. Its [ready-to-use binary stress index](https://github.com/davnozdu/supertonic-dictionaries/releases/download/russian-v1.1/tera_accents.sacc) comes from the project's dictionary repository. Model files are not included in the APK. `ru_f1` is the default voice.
+LLM размечает текст на автора, мужские и женские реплики, а каждая роль читается своим голосом. Голоса назначаются и прослушиваются вручную. Если LLM недоступна, чтение продолжается голосом автора, а разметка повторяется в фоне. Подробнее в `docs/MULTIVOICE.md`.
 
-The Android implementation uses TeraTTSv2's **dictionary** stress mode. Its 3,194,879-entry `.sacc` index is memory mapped and needs no on-device conversion. Existing installs with the older JSON asset can still convert it as a fallback. Known words receive a stress marker automatically. A manual `+` before the stressed vowel or a combining acute accent after it takes priority. Unknown words and ambiguous homographs may remain unmarked. The upstream model's full neural RUAccent mode requires additional large ONNX models and tokenizers and is not enabled in this preset.
+## Статьи, вставка текста, быстрая панель
 
-Tera preserves punctuation when splitting long text and inserts spaces after punctuation in the same way as the upstream runtime. Its only duration control scales the whole utterance; there is no model parameter for comma-only pause length. The optional punctuation switches in Lexicon remain available for listening comparisons.
+- **«Поделиться» из браузера** или кнопка «Вставить». Основной текст выделяется на телефоне, без рекламы, навигации и рекомендаций. Явные продолжения статьи подгружаются в фоне.
+- **Уведомление с быстрой панелью:** вставить и озвучить, плей, пауза, стоп, переход по абзацам и таймер сна.
 
-TeraTTSv2's sampler generates the latent for a sentence before its vocoder can stream the first PCM chunk. It may take longer to start than an optimized Supertonic preset; compare on your device before using it as the system engine for a reader.
+## Фоновая музыка
 
-### Reading in Moon+ Reader
+Меню → **Фоновая музыка**. Семь треков из релиза [`reading-music-v1`](https://github.com/davnozdu/supertonic-android/releases/tag/reading-music-v1), около 27 МБ, созданы нейросетью. Можно добавить и свой MP3. Трек играет по кругу, громкость регулируется от 0 до 100 %, по умолчанию 10 %. Первый скачанный трек выбирается автоматически. Музыка следует за паузой и стопом, не создаёт своей медиасессии и не перехватывает аудиофокус.
 
-The system TTS service streams PCM chunks as soon as they are available. A bounded in-memory queue holds already generated chunks while Android consumes earlier audio. The in-app player likewise synthesizes later sentences while earlier sentences play. Android calls `onSynthesizeText` serially, so the engine can pre-generate only text that Moon+ Reader has already submitted; it cannot fetch future paragraphs from the reader on its own.
+## Нейропроцессор Snapdragon · эксперимент
 
-Two layers of user rules, both applied before the text reaches the model:
+Включается переключателем «Ускоритель NPU». Поддерживаются Snapdragon 8 Elite и 8 Elite Gen 5, только arm64.
 
-1. **Lexicon** (menu → Lexicon) — small set of hand-edited rules with regex or whole-word matching. Highest priority.
-2. **Accent dictionary** (menu → Lexicon → Import accent dictionary…) — bulk JSON map for stress / pronunciation, e.g. open-source Russian stress dictionaries. Indexed by word, so a 50 000-entry dictionary still runs in milliseconds.
+- **Kokoro.** Генератор звука считается на NPU: на 8,7 с звука 2,8 с вместо 4,4 с, процессорное время в 7 раз меньше. Расход батареи на минуту звука на 45 % меньше (`docs/battery.md`).
+- **Tera.** На NPU работает только вокодер, звук не меняется.
+- **Gemma 4.** На NPU работает через llama.cpp ggml-hexagon.
+- **Общий нейропроцессор.** Kokoro, Tera и Gemma занимают его по очереди, озвучка в приоритете.
+- **Компиляция и ошибки.** Графы компилируются один раз, около 30 с на набор голосов, и кэш переживает обновления. Если NPU даст ошибку, фраза досчитается на процессоре, а NPU пробуется снова.
 
-Expected accent dictionary shape:
+Подробности: `docs/kokoro-npu.md`, `docs/tera-npu.md`, `docs/gemma-npu.md`.
+
+## Произношение: свои правила и словари
+
+Свои правила применяются до модели:
+
+1. **Лексикон** (меню → Лексикон): правила с регулярными выражениями или по целому слову, наивысший приоритет.
+2. **Словарь ударений** (меню → Лексикон → Импорт словаря ударений): JSON-словарь на десятки тысяч слов, поиск по индексу.
 
 ```json
 {
@@ -80,27 +95,35 @@ Expected accent dictionary shape:
 }
 ```
 
-Stress is marked with the combining acute accent **U+0301** placed *after* the stressed vowel. Whether the model actually pronounces the marked syllable as stressed depends on its training data — try a short test through Lexicon first before importing a large file.
+Ударение ставится знаком U+0301 *после* ударной гласной. Можно и знаком `+` перед ней. Явные ударения из текста, лексикона или LLM имеют приоритет над словарём. Готовые русские словари лежат в [`dictionaries/`](dictionaries/).
 
-Ready-to-import Russian dictionaries (962 K and 615 K entries) live under [`dictionaries/`](dictionaries/) — download the JSON from the release assets, import via the menu.
+## Память, батарея, флеш
 
-## Build
+- **Выгрузка из памяти.** Неактивные модели и Gemma выгружаются через 2 минуты простоя.
+- **Кэш звука** ограничен 256 МБ и доступной памятью.
+- **Флеш-память:** состояние чтения, очередь и история хранятся только в оперативной памяти.
+- **Подробные журналы** включаются только для диагностики.
 
-CI builds (`.github/workflows/ci.yml`) reproduce locally:
+## Сборка
+
+APK собираются и подписываются в GitHub Actions (`.github/workflows/release.yml`). Помимо Android SDK и NDK r29, JDK 17 и Rust с Android-таргетами, сборке нужны подготовительные шаги: runtime Silero, PocketTTS, фонемизатор Kokoro (eSpeak NG) и runtime Gemma NPU. Все шаги описаны в workflow.
 
 ```bash
-# Requirements: Android SDK + NDK r29, JDK 17, Rust stable with Android targets
-./gradlew assembleDebug          # debug APK
-./gradlew assembleRelease        # unsigned release APK; sign separately with apksigner
+./gradlew testReleaseUnitTest    # локальные JVM-тесты
+./gradlew assembleRelease        # после подготовительных шагов из workflow
 ```
 
-The Rust crate under `rust/` produces `libsupertonic_tts.so` for `aarch64`, `armv7`, `i686`, `x86_64`. ONNX Runtime is linked dynamically via `onnxruntime-android` from Maven.
+Rust-крейт `rust/` собирает `libsupertonic_tts.so`. ONNX Runtime 1.26 с QNN подключается из Maven.
 
-## Credits
+## Благодарности и лицензии
 
-- [Supertone](https://github.com/supertone-inc/supertonic) — Supertonic 3 model weights, training, and the reference Python pipeline.
-- [DevGitPit/supertonic-android](https://github.com/DevGitPit/supertonic-android) — upstream Android app with Compose UI, Rust JNI bridge, F-Droid metadata, and thermal management. This fork is a thin layer on top.
+- [Supertone](https://github.com/supertone-inc/supertonic): Supertonic 3, OpenRAIL-M.
+- [DevGitPit/supertonic-android](https://github.com/DevGitPit/supertonic-android): исходное Android-приложение.
+- [TeraSpace/TeraTTSv2](https://huggingface.co/TeraSpace/TeraTTSv2) и RUAccent: модель Tera и словарь ё.
+- [Silero](https://github.com/snakers4/silero-models): модели v5.5, CC BY-NC-SA 4.0, только некоммерческое использование. Пакет CIS — MIT.
+- [zaakirio/kokoro-ru](https://huggingface.co/zaakirio/kokoro-ru): Kokoro-RU v2. Веса OpenRAIL, G2P Apache-2.0, eSpeak NG GPL-3.0-or-later.
+- [ArtShtorm/Shtorm_PocketTTS_RU](https://huggingface.co/ArtShtorm/Shtorm_PocketTTS_RU): CC BY 4.0. Runtime [PocketTTS-Android-Engine](https://github.com/The-unknown-Shadowman/PocketTTS-Android-Engine) и PocketTTS.cpp. Голосовые образцы — [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices), CC BY 4.0. Подробности в `vendor/pockettts` и `docs/SHTORM_VOICES.md`.
+- [Google Gemma 4](https://ai.google.dev/gemma), [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM), [h2loop-ai/gemma-4-e2b-hexagon](https://huggingface.co/h2loop-ai/gemma-4-e2b-hexagon) и [llama.cpp](https://github.com/ggml-org/llama.cpp): локальная LLM.
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) с Qualcomm QNN: инференс на CPU и NPU.
 
-## License
-
-Same as upstream. The Supertonic model weights are released under [OpenRAIL-M](https://huggingface.co/Supertone/supertonic-3) and are downloaded at runtime; they are not bundled in the APK.
+Модели скачиваются во время работы и в APK не входят. Их лицензии действуют для самих моделей. Код приложения распространяется на условиях исходного проекта.
