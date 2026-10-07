@@ -24,6 +24,16 @@ class StressCheckTest {
         assertEquals(1, StressCheck.lastOfflineChosen)
     }
 
+    @Test fun localGemmaYieldsToOfflineExceptExplicitSourceMarks() {
+        val gemma = "Ра́скольников жил в Вологде́, а за́мок был стар."
+        val offline = "Раско́льников жил в Во́логде, а замо́к был стар."
+        assertEquals("Раско́льников жил в Во́логде, а замо́к был стар.",
+            StressCheck.preferOffline(gemma, offline, "Раскольников жил в Вологде, а замок был стар."))
+        // The book itself marked за́мок: that mark stays.
+        assertEquals("Раско́льников жил в Во́логде, а за́мок был стар.",
+            StressCheck.preferOffline(gemma, offline, "Раскольников жил в Вологде, а за+мок был стар."))
+    }
+
     @Test fun skipsYoMonosyllablesAndMisalignedFragments() {
         assertEquals(0, StressCheck.disputes(listOf("Всё ещё́ тут."), listOf("Всё е́щё тут.")).size)
         assertEquals(0, StressCheck.disputes(listOf("Оди́н два."), listOf("Оди́н.")).size)

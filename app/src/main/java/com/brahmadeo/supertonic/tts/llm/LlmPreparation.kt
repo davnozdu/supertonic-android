@@ -481,10 +481,14 @@ object LlmPreparation {
                         if (c.stress && provider != "local") NameStress.learn(validated)
                         val named = if (c.stress) NameStress.fill(validated) else validated
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
-                            val local=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,named)
+                            // Stress: the offline Silero Stress outscored Gemma, so it decides where both mark a word.
+                            val offlineOpinion=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
+                                com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,StressCheck.unmarked(named)),"ru")
+                            val arbitrated=if(c.stress) StressCheck.preferOffline(named,offlineOpinion,source) else named
+                            val local=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,arbitrated)
                             val dictionary=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(local,"ru")
-                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(named,dictionary,c.restoreYo)
-                            MissingSpeechMarks.merge(named,safe,c.stress,c.restoreYo,ambiguousLocalYo)
+                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(arbitrated,dictionary,c.restoreYo)
+                            MissingSpeechMarks.merge(arbitrated,safe,c.stress,c.restoreYo,ambiguousLocalYo)
                         } else if (c.stress) {
                             // A word the cloud LLM left unmarked used to reach the TTS model as a guess (eSpeak in
                             // Kokoro). The offline Silero Stress reads the whole sentence (context BERT for homographs,

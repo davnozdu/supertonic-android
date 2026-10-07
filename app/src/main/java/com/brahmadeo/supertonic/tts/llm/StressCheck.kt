@@ -72,6 +72,21 @@ object StressCheck {
         Item(it.sentence, bare(it.llm), if (offlineFirst) listOf(it.offline, it.llm) else listOf(it.llm, it.offline))
     }
 
+    /** Local Gemma: wherever it and the offline Silero Stress disagree, the offline mark wins. On the hard set the
+     * offline chain alone scored 60/71, Gemma 54/71 and Gemma with a few-shot prompt 51/71: Gemma's own marks were
+     * overriding correct ones (Раско́льников, Во́логде, о́ттепель). Words marked explicitly in [source] stay. */
+    fun preferOffline(fragment: String, offline: String, source: String): String {
+        val explicit = word.findAll(source).map { m -> m.value.any { it == '+' || it == ACUTE } }.toList()
+        val words = word.findAll(fragment).toList()
+        if (explicit.size != words.size) return fragment
+        val out = StringBuilder(fragment)
+        for (d in disputes(listOf(fragment), listOf(offline)).asReversed()) {
+            val index = words.indexOfFirst { it.range == d.range }
+            if (index >= 0 && !explicit[index]) out.replace(d.range.first, d.range.last + 1, d.offline)
+        }
+        return out.toString()
+    }
+
     /** [choices]: answers to the LLM-first request followed by answers to the offline-first request. */
     private fun offlineChosen(choices: List<Int>, i: Int, n: Int) = choices[i] == 1 && choices[i + n] == 0
 
