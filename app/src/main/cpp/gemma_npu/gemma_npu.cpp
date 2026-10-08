@@ -33,6 +33,9 @@ bool abortCallback(void *data) { return static_cast<Handle *>(data)->cancel.load
 
 // One HTP serves QNN (Kokoro/Tera) and ggml-hexagon (Gemma); concurrent use failed with QNN 1002, so every
 // llama_decode holds the app-wide fair lock (utils.Npu.lockHtp/unlockHtp) and calls interleave.
+// No turn, no decode: a missing gate or a failed lock (the main process's gate died) ends the call with
+// GATE_FAILED and a pending Java exception; no further JNI call is made while it is pending.
+constexpr int GATE_FAILED = -100;
 struct HtpTurn {
     JNIEnv *env; jclass npu; jmethodID lock, unlock;
     HtpTurn(JNIEnv *e) : env(e) {
@@ -42,9 +45,15 @@ struct HtpTurn {
         if (!lock || !unlock) { env->ExceptionClear(); lock = unlock = nullptr; }
     }
     int decode(llama_context *ctx, const llama_batch &batch) {
-        if (lock) env->CallStaticVoidMethod(npu, lock);
+        if (!lock) {
+            env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), "Gemma NPU: HTP gate unavailable");
+            return GATE_FAILED;
+        }
+        env->CallStaticVoidMethod(npu, lock);
+        if (env->ExceptionCheck()) return GATE_FAILED;
         int r = llama_decode(ctx, batch);
-        if (unlock) env->CallStaticVoidMethod(npu, unlock);
+        env->CallStaticVoidMethod(npu, unlock);
+        if (env->ExceptionCheck()) return GATE_FAILED;
         return r;
     }
 };
@@ -158,7 +167,9 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
     for (size_t i = keep; i < tokens.size(); i += 128) {
         int n = (int) std::min<size_t>(128, tokens.size() - i);
         fill(tokens.data() + i, n, (llama_pos) i);
-        if (htp.decode(h->ctx, batch) != 0) {
+        int r = htp.decode(h->ctx, batch);
+        if (r == GATE_FAILED) return nullptr;
+        if (r != 0) {
             fail(env, h->cancel ? "Gemma NPU cancelled" : "Gemma NPU prompt decode failed");
             return nullptr;
         }
@@ -175,7 +186,9 @@ Java_com_brahmadeo_supertonic_tts_llm_GemmaHexagon_nativeGenerate(JNIEnv *env, j
         int m = llama_token_to_piece(h->vocab, id, piece, sizeof(piece), 0, false);
         if (m > 0) out.append(piece, (size_t) m);
         fill(&id, 1, pos++);
-        if (htp.decode(h->ctx, batch) != 0) {
+        int r = htp.decode(h->ctx, batch);
+        if (r == GATE_FAILED) return nullptr;
+        if (r != 0) {
             fail(env, h->cancel ? "Gemma NPU cancelled" : "Gemma NPU decode failed");
             return nullptr;
         }

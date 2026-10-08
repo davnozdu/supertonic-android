@@ -82,9 +82,30 @@ internal object GemmaNpuClient {
             retryAt = SystemClock.elapsedRealtime() + Npu.retryDelayMs(failures)
             throw IllegalStateException("Gemma NPU: процесс модели упал при подключении", e)
         }
-        try { service.load(model.absolutePath, contextTokens, threads, gate) } catch (e: RemoteException) {
-            remote.crashed(); throw IllegalStateException("Gemma NPU: процесс модели упал при загрузке", e)
-        } catch (e: Exception) { remote.close(); throw e }
+        // A load that never returns (driver/DSP hang) would block the single LLM worker for good: it is bounded,
+        // and the stuck process is killed, which counts as a crash (backoff, then a fresh process).
+        val loading = java.util.concurrent.CompletableFuture<Unit>()
+        Thread({ try { service.load(model.absolutePath, contextTokens, threads, gate); loading.complete(Unit) }
+            catch (t: Throwable) { loading.completeExceptionally(t) } }, "Gemma-NPU-load").apply { isDaemon = true }.start()
+        try { loading.get(loadTimeoutMs, TimeUnit.MILLISECONDS) } catch (e: java.util.concurrent.TimeoutException) {
+            killProcess(app); remote.crashed()
+            throw IllegalStateException("Gemma NPU: загрузка не завершилась за ${loadTimeoutMs / 1000} с, процесс перезапускается")
+        } catch (e: java.util.concurrent.ExecutionException) {
+            when (val cause = e.cause) {
+                is RemoteException -> { remote.crashed(); throw IllegalStateException("Gemma NPU: процесс модели упал при загрузке", cause) }
+                is Exception -> { remote.close(); throw cause }
+                else -> { remote.close(); throw e }
+            }
+        }
         return remote
+    }
+
+    @Volatile internal var loadTimeoutMs = 90_000L // loads take 1-5 s from the cache; tests shorten it
+    private fun killProcess(context: Context) {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        am.runningAppProcesses?.firstOrNull { it.processName == context.packageName + ":gemma_npu" }?.let {
+            Log.w(TAG, "Gemma NPU load hung; killing pid ${it.pid}")
+            android.os.Process.killProcess(it.pid)
+        }
     }
 }

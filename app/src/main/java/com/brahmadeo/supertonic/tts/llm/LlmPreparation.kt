@@ -22,6 +22,7 @@ object LlmPreparation {
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "LLM-preparation").apply { isDaemon = true } }
     private val timer = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "LLM-idle").apply { isDaemon = true } }
     private val running = AtomicBoolean(false)
+    private val idleQueued = AtomicBoolean(false)
     private var nextId = 0L
     @Volatile private var context: Context? = null
     @Volatile private var epoch = 0L
@@ -42,7 +43,9 @@ object LlmPreparation {
         if (context != null) return
         context = ctx.applicationContext
         ambiguousLocalYo=runCatching { ctx.assets.open("tera_ambiguous_yo.txt").bufferedReader().use { it.readLines().toSet() } }.getOrDefault(ambiguousLocalYo)
-        timer.scheduleWithFixedDelay({ context?.let { executor.execute { LlmProviders.unloadIfIdle(it) } } }, 15, 15, TimeUnit.SECONDS)
+        // One idle check queued at a time: a worker stuck in a model call must not collect them every 15 s.
+        timer.scheduleWithFixedDelay({ context?.let { ctx -> if (idleQueued.compareAndSet(false, true))
+            executor.execute { idleQueued.set(false); LlmProviders.unloadIfIdle(ctx) } } }, 15, 15, TimeUnit.SECONDS)
     }
     fun enabled(ctx: Context) = LlmSettings.enabled(ctx)
     fun settingsChanged() {
