@@ -98,7 +98,7 @@ class MainViewModel : ViewModel() {
 
     // Mini Player State
     var showMiniPlayer = mutableStateOf(false)
-    var miniPlayerTitle = mutableStateOf("Now Playing")
+    var miniPlayerTitle = mutableStateOf("Сейчас звучит")
     var miniPlayerIsPlaying = mutableStateOf(false)
 
     // Asset Download State

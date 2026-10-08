@@ -172,7 +172,7 @@ fun LexiconScreen(
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Text(
-                                    text = "%,d entries · %.1f MB".format(
+                                    text = "%,d записей · %.1f МБ".format(
                                         accentDictBanner.entries,
                                         accentDictBanner.sizeBytes / 1_048_576.0
                                     ),
@@ -564,14 +564,14 @@ fun LexiconItemRow(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (item.isRegex) {
                         Text(
-                            text = "Regex",
+                            text = "Рег. выражение",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.tertiary
                         )
                     }
                     if (!item.ignoreCase) {
                         Text(
-                            text = "Case sensitive",
+                            text = "С учётом регистра",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -581,7 +581,7 @@ fun LexiconItemRow(
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = "Delete",
+                    contentDescription = "Удалить",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

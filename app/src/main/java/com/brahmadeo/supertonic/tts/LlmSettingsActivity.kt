@@ -147,7 +147,7 @@ class LlmSettingsActivity : ComponentActivity() {
                                     try {
                                         withContext(Dispatchers.IO) {
                                             com.brahmadeo.supertonic.tts.tera.TeraQuality.download(this@LlmSettingsActivity) {
-                                                teacherStatus="Tera teacher: $it %"
+                                                teacherStatus="Скачивание Tera teacher: $it %"
                                             }
                                         }
                                         teacherReady=true

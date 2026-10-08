@@ -189,11 +189,11 @@
     <string name="punct_force_space_title">Принудительный пробел перед знаком препинания</string>
     <string name="punct_force_space_desc">Вставлять пробел между словом и идущим за ним «.,;:!?». Подсказка для токенизатора модели (удивлён, → удивлён ,). Не трогает повторяющиеся знаки (..., ?!) и числа (3,14, 1.5). По умолчанию выключено.</string>
     <string name="chunk_size_title">Размер блока</string>
-    <string name="chunk_size_desc">Small (120) — быстрый старт для коротких сообщений. Default (300) — сбалансированный, текущее поведение. Large (500) — плавнее интонация, для книг. Huge (1000, экспериментально) — упаковывает короткие абзацы в один вызов синтеза.</string>
-    <string name="chunk_size_small">Small</string>
-    <string name="chunk_size_default">Default</string>
-    <string name="chunk_size_large">Large</string>
-    <string name="chunk_size_huge">Huge</string>
+    <string name="chunk_size_desc">Маленький (120) — быстрый старт для коротких сообщений. Обычный (300) — сбалансированный, текущее поведение. Большой (500) — плавнее интонация, для книг. Огромный (1000, экспериментально) — упаковывает короткие абзацы в один вызов синтеза.</string>
+    <string name="chunk_size_small">Маленький</string>
+    <string name="chunk_size_default">Обычный</string>
+    <string name="chunk_size_large">Большой</string>
+    <string name="chunk_size_huge">Огромный</string>
     <string name="preroll_title">Буфер предзагрузки</string>
     <string name="preroll_desc">Накопить несколько предложений в RAM (~1–3 МБ) перед началом воспроизведения. Сглаживает паузы между фразами на слабых устройствах. В обмен — чуть больше ожидания в самом начале.</string>
     <string name="preroll_sentences_fmt">Предложений в буфере: %1$d</string>
@@ -241,7 +241,7 @@
     <string name="fields_empty_msg">Поля не могут быть пустыми</string>
     <string name="connecting">Подключение…</string>
     <string name="russian_source_fmt">Русский — %1$s</string>
-    <string name="err_oom">Не хватило памяти на парсинг словаря. Выберите бинарный вариант того же размера (mmap, не съедает heap) или переключитесь на Standard (37 МБ / ~150 МБ heap) / Compact (22 МБ / ~85 МБ heap).</string>
+    <string name="err_oom">Не хватило памяти на парсинг словаря. Выберите бинарный вариант того же размера (mmap, не съедает heap) или переключитесь на «Стандартный» (37 МБ / ~150 МБ heap) или «Компактный» (22 МБ / ~85 МБ heap).</string>
     <string name="err_network">Сетевая ошибка. Проверьте подключение и попробуйте ещё раз.</string>
     <string name="err_too_large">Скачанный файл больше предельных 250 МБ и был отброшен.</string>
     <string name="err_parse">Не удалось прочитать словарь. Файл повреждён, обрезан или в неизвестном формате.</string>

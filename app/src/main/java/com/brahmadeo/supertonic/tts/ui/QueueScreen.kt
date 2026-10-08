@@ -78,7 +78,7 @@ fun QueueScreen(
                 },
                 actions = {
                     IconButton(onClick = onClearClick) {
-                        Icon(Icons.Default.Delete, contentDescription = "Clear All")
+                        Icon(Icons.Default.Delete, contentDescription = "Очистить всё")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -96,7 +96,7 @@ fun QueueScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Queue is empty",
+                    text = "Очередь пуста",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -167,7 +167,7 @@ fun QueueItemRow(
             ) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = "Delete",
+                    contentDescription = "Удалить",
                     modifier = Modifier.scale(scale),
                     tint = MaterialTheme.colorScheme.onErrorContainer
                 )
@@ -189,7 +189,7 @@ fun QueueItemRow(
                 ) {
                     Icon(
                         imageVector = Icons.Default.DragHandle,
-                        contentDescription = "Drag Handle",
+                        contentDescription = "Перетащить",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 

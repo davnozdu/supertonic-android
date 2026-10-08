@@ -272,7 +272,7 @@ object AssetManager {
                                     }
                                     coroutineContext.ensureActive()
                                     check(partFile.length() > 0 && partFile.renameTo(targetFile)) {
-                                        "Could not finish download of ${asset.remoteName}"
+                                        "Не удалось завершить загрузку ${asset.remoteName}"
                                     }
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Failed to download ${asset.remoteName}", e)

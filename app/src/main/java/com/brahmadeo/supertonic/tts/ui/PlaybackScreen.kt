@@ -106,7 +106,7 @@ fun PlaybackScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Progress",
+                                    text = "Прогресс",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -139,7 +139,7 @@ fun PlaybackScreen(
                                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Stop")
+                                Icon(Icons.Default.Close, contentDescription = "Стоп")
                             }
                         }
 
@@ -152,7 +152,7 @@ fun PlaybackScreen(
                         ) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                contentDescription = if (isPlaying) "Пауза" else "Воспроизвести",
                                 modifier = Modifier.size(32.dp)
                             )
                         }

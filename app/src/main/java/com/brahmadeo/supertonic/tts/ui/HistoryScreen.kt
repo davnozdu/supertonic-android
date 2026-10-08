@@ -76,10 +76,10 @@ fun HistoryScreen(
             val itemYear = calendar.get(Calendar.YEAR)
             
             when {
-                itemYear == year && itemDay == today -> "Today"
-                itemYear == year && itemDay == today - 1 -> "Yesterday"
+                itemYear == year && itemDay == today -> "Сегодня"
+                itemYear == year && itemDay == today - 1 -> "Вчера"
                 else -> {
-                    SimpleDateFormat("MMMM dd", Locale.getDefault()).format(Date(item.timestamp))
+                    SimpleDateFormat("d MMMM", Locale.forLanguageTag("ru")).format(Date(item.timestamp))
                 }
             }
         }
@@ -131,7 +131,7 @@ fun HistoryScreen(
                                 IconButton(onClick = { 
                                     if (searchQuery.isEmpty()) isSearchActive = false else searchQuery = "" 
                                 }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                    Icon(Icons.Default.Clear, contentDescription = "Очистить поиск")
                                 }
                             }
                         )
@@ -147,11 +147,11 @@ fun HistoryScreen(
                 actions = {
                     if (!isSearchActive) {
                         IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
+                            Icon(Icons.Default.Search, contentDescription = "Поиск")
                         }
                         if (historyItems.isNotEmpty()) {
                             IconButton(onClick = { showClearDialog = true }) {
-                                Icon(Icons.Default.DeleteSweep, contentDescription = "Clear All")
+                                Icon(Icons.Default.DeleteSweep, contentDescription = "Очистить всё")
                             }
                         }
                     }
@@ -237,7 +237,7 @@ fun SwipeToDeleteContainer(
             ) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = "Delete",
+                    contentDescription = "Удалить",
                     tint = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
@@ -320,13 +320,13 @@ fun EmptyHistoryState(isSearching: Boolean) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = if (isSearching) "No matches found" else "No history yet",
+            text = if (isSearching) "Ничего не найдено" else "История пока пуста",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = if (isSearching) "Try a different search term" else "Your synthesized texts will appear here",
+            text = if (isSearching) "Попробуйте другой запрос" else "Здесь появятся озвученные тексты",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center

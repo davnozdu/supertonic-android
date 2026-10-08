@@ -86,15 +86,15 @@
 
         <activity android:name=".HistoryActivity"
             android:parentActivityName=".MainActivity"
-            android:label="History" />
+            android:label="История" />
 
         <activity android:name=".QueueActivity"
             android:parentActivityName=".MainActivity"
-            android:label="Queue" />
+            android:label="Очередь" />
 
         <activity android:name=".LexiconActivity"
             android:parentActivityName=".MainActivity"
-            android:label="Pronunciation Dictionary" />
+            android:label="Словарь произношения" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

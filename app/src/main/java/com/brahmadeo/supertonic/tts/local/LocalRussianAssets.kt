@@ -36,7 +36,7 @@ object LocalRussianAssets {
                 while (true) {
                     coroutineContext.ensureActive()
                     val entry = zip.nextEntry ?: break
-                    val expected = sizes[entry.name] ?: error("Unexpected Silero archive entry")
+                    val expected = sizes[entry.name] ?: error("Неожиданный файл в архиве Silero")
                     check(seen.add(entry.name))
                     val target = File(stage, entry.name)
                     target.outputStream().use { output ->
@@ -55,7 +55,7 @@ object LocalRussianAssets {
             archive.delete()
             File(stage, "verified.sha256").writeText(SHA)
             coroutineContext.ensureActive()
-            dir.deleteRecursively(); check(stage.renameTo(dir)) { "Could not publish Silero files" }
+            dir.deleteRecursively(); check(stage.renameTo(dir)) { "Не удалось сохранить файлы Silero" }
             progress("Локальные ударения и ё готовы", 1f)
         } finally { stage.deleteRecursively() }
     }

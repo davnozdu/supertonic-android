@@ -77,27 +77,27 @@ object AccentDictionaryManager {
             // ------------- Binary (.sacc, mmap, recommended) -------------
             PrebuiltDict(
                 id = "ru-full-bin",
-                displayName = "Full (binary)",
+                displayName = "Полный (бинарный)",
                 format = DictFormat.BINARY,
-                subtitle = "171 MB · 3.26M entries · ~10-20 MB RAM · names, homographs, ё (yoficator-augmented)",
+                subtitle = "171 МБ · 3,26 млн слов · ~10–20 МБ ОЗУ · имена, омографы, ё",
                 sizeBytes = 171L * 1024 * 1024,
                 entries = 3_263_148,
                 url = "$DICT_BASE_URL/russian_accents_full.sacc"
             ),
             PrebuiltDict(
                 id = "ru-standard-bin",
-                displayName = "Standard (binary)",
+                displayName = "Стандартный (бинарный)",
                 format = DictFormat.BINARY,
-                subtitle = "39 MB · 983K entries · ~5-10 MB RAM · words ≤ 9 chars, no homographs, ё (yoficator-augmented)",
+                subtitle = "39 МБ · 983 тыс. слов · ~5–10 МБ ОЗУ · слова до 9 букв, без омографов, ё",
                 sizeBytes = 39L * 1024 * 1024,
                 entries = 982_598,
                 url = "$DICT_BASE_URL/russian_accents_max9.sacc"
             ),
             PrebuiltDict(
                 id = "ru-compact-bin",
-                displayName = "Compact (binary)",
+                displayName = "Компактный (бинарный)",
                 format = DictFormat.BINARY,
-                subtitle = "23 MB · 628K entries · ~3-7 MB RAM · words ≤ 8 chars, ё (yoficator-augmented)",
+                subtitle = "23 МБ · 628 тыс. слов · ~3–7 МБ ОЗУ · слова до 8 букв, ё",
                 sizeBytes = 23L * 1024 * 1024,
                 entries = 628_242,
                 url = "$DICT_BASE_URL/russian_accents_max8.sacc"
@@ -105,27 +105,27 @@ object AccentDictionaryManager {
             // ------------- Text (.json, HashMap, hand-editable) -------------
             PrebuiltDict(
                 id = "ru-full-txt",
-                displayName = "Full (text)",
+                displayName = "Полный (текстовый)",
                 format = DictFormat.TEXT,
-                subtitle = "165 MB · 3.26M entries · ~390 MB RAM · names, homographs, ё (yoficator-augmented)",
+                subtitle = "165 МБ · 3,26 млн слов · ~390 МБ ОЗУ · имена, омографы, ё",
                 sizeBytes = 165L * 1024 * 1024,
                 entries = 3_263_148,
                 url = "$DICT_BASE_URL/russian_accents_full.json"
             ),
             PrebuiltDict(
                 id = "ru-standard-txt",
-                displayName = "Standard (text)",
+                displayName = "Стандартный (текстовый)",
                 format = DictFormat.TEXT,
-                subtitle = "37 MB · 983K entries · ~150 MB RAM · words ≤ 9 chars, no homographs, ё (yoficator-augmented)",
+                subtitle = "37 МБ · 983 тыс. слов · ~150 МБ ОЗУ · слова до 9 букв, без омографов, ё",
                 sizeBytes = 37L * 1024 * 1024,
                 entries = 982_598,
                 url = "$DICT_BASE_URL/russian_accents_max9.json"
             ),
             PrebuiltDict(
                 id = "ru-compact-txt",
-                displayName = "Compact (text)",
+                displayName = "Компактный (текстовый)",
                 format = DictFormat.TEXT,
-                subtitle = "22 MB · 628K entries · ~85 MB RAM · words ≤ 8 chars, ё (yoficator-augmented)",
+                subtitle = "22 МБ · 628 тыс. слов · ~85 МБ ОЗУ · слова до 8 букв, ё",
                 sizeBytes = 22L * 1024 * 1024,
                 entries = 628_242,
                 url = "$DICT_BASE_URL/russian_accents_max8.json"
@@ -396,7 +396,7 @@ object AccentDictionaryManager {
                 tmp.delete()
                 return ERR_TOO_LARGE
             }
-            installFromTmpAuto(context, tmp, "Imported from file")
+            installFromTmpAuto(context, tmp, "Импорт из файла")
         } catch (oom: OutOfMemoryError) {
             Log.e(TAG, "Import OOM", oom)
             tmp.delete()
@@ -582,10 +582,10 @@ object AccentDictionaryManager {
             entries = parsed
             isLoaded = true
         }
-        val labelled = if (sourceName.contains("[text]") || sourceName.contains("(text)")) {
+        val labelled = if (listOf("[text]", "(text)", "[текст]", "(текстовый)").any { sourceName.contains(it) }) {
             sourceName
         } else {
-            "[text] $sourceName"
+            "[текст] $sourceName"
         }
         writeMetadata(context, labelled, parsed.size, size)
     }
@@ -629,10 +629,10 @@ object AccentDictionaryManager {
         // Prefix the displayed source with a [binary] tag so the banner shows
         // which backend is in use — important for users who import their own
         // file and otherwise only see "Imported from file" without format.
-        val labelled = if (sourceName.contains("[binary]") || sourceName.contains("(binary)")) {
+        val labelled = if (listOf("[binary]", "(binary)", "[бинарный]", "(бинарный)").any { sourceName.contains(it) }) {
             sourceName
         } else {
-            "[binary] $sourceName"
+            "[бинарный] $sourceName"
         }
         writeMetadata(context, labelled, count, size)
         return count

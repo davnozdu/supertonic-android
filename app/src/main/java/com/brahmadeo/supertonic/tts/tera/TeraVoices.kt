@@ -32,11 +32,11 @@ object TeraVoices {
             val target = File(root,"${style.voice}/${style.part}.npy")
             if (target.length() == style.size && sha(target.readBytes()) == style.sha) continue
             val bytes = context.assets.open("tera_styles/${style.voice}_${style.part}.npy").use { it.readBytes() }
-            check(bytes.size.toLong() == style.size && sha(bytes) == style.sha) { "Invalid bundled Tera style" }
+            check(bytes.size.toLong() == style.size && sha(bytes) == style.sha) { "Встроенный стиль Tera повреждён" }
             target.parentFile!!.mkdirs()
             val temporary = File(target.path + ".bundled")
             temporary.writeBytes(bytes)
-            check(temporary.renameTo(target)) { "Cannot install Tera style" }
+            check(temporary.renameTo(target)) { "Не удалось установить стиль Tera" }
         }
         checkedRoot = root.path
     }

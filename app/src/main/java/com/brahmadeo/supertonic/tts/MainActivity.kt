@@ -774,7 +774,7 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    viewModel.downloadError.value = e.message ?: "Unknown error"
+                    viewModel.downloadError.value = e.message ?: "Неизвестная ошибка"
                     Log.e("MainActivity", "Download failed", e)
                 }
             }
@@ -890,9 +890,9 @@ class MainActivity : ComponentActivity() {
             }
         }
         
-        val v1Name = viewModel.voiceFiles.entries.find { it.value == viewModel.selectedVoiceFile.value }?.key ?: "Voice 1"
-        val v2Name = viewModel.voiceFiles.entries.find { it.value == viewModel.selectedVoiceFile2.value }?.key ?: "Voice 2"
-        val voiceName = if (viewModel.isMixingEnabled.value) "Mixed: $v1Name + $v2Name" else v1Name
+        val v1Name = viewModel.voiceFiles.entries.find { it.value == viewModel.selectedVoiceFile.value }?.key ?: "Голос 1"
+        val v2Name = viewModel.voiceFiles.entries.find { it.value == viewModel.selectedVoiceFile2.value }?.key ?: "Голос 2"
+        val voiceName = if (viewModel.isMixingEnabled.value) "Смесь: $v1Name + $v2Name" else v1Name
 
         HistoryManager.saveItem(this, text, voiceName)
 

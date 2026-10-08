@@ -36,7 +36,7 @@ object SileroDownload {
             voices(context).all { File(dir, "$it.json").isFile }
     }
     suspend fun download(context: Context, progress: (String, Float) -> Unit) = com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) { withContext(Dispatchers.IO) {
-        check(supported()) { "Silero v5.5 requires the ARM64 APK and an ARM64 phone" }
+        check(supported()) { "Silero v5.5 работает только в версии ARM64 на телефоне ARM64" }
         if (ready(context)) { progress("${title(context)} готова", 1f); return@withContext }
         val sizes = sizes(context)
         val SHA = sha(context)
@@ -55,7 +55,7 @@ object SileroDownload {
                 while (true) {
                     coroutineContext.ensureActive()
                     val entry = zip.nextEntry ?: break
-                    val expected = sizes[entry.name] ?: error("Unexpected Silero archive entry")
+                    val expected = sizes[entry.name] ?: error("Неожиданный файл в архиве Silero")
                     check(seen.add(entry.name))
                     val target = File(stage, entry.name)
                     target.outputStream().use { output ->
@@ -78,7 +78,7 @@ object SileroDownload {
             }
             File(stage, "verified.sha256").writeText(SHA)
             coroutineContext.ensureActive()
-            dir.deleteRecursively(); check(stage.renameTo(dir)) { "Could not publish Silero files" }
+            dir.deleteRecursively(); check(stage.renameTo(dir)) { "Не удалось сохранить файлы Silero" }
             progress("${title(context)} готова", 1f)
         } finally { stage.deleteRecursively() }
     }

@@ -26,8 +26,8 @@ class QueueActivity : ComponentActivity() {
                 if (showClearDialog.value) {
                     AlertDialog(
                         onDismissRequest = { showClearDialog.value = false },
-                        title = { Text("Clear Queue") },
-                        text = { Text("Are you sure you want to remove all items from the queue?") },
+                        title = { Text("Очистить очередь") },
+                        text = { Text("Удалить из очереди все тексты?") },
                         confirmButton = {
                             TextButton(
                                 onClick = {
@@ -35,12 +35,12 @@ class QueueActivity : ComponentActivity() {
                                     showClearDialog.value = false
                                 }
                             ) {
-                                Text("Yes")
+                                Text("Да")
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showClearDialog.value = false }) {
-                                Text("No")
+                                Text("Нет")
                             }
                         }
                     )

@@ -113,10 +113,10 @@ fun MainScreen(
                 },
                 actions = {
                     IconButton(onClick = onHistoryClick) {
-                        Icon(Icons.Default.History, contentDescription = "History")
+                        Icon(Icons.Default.History, contentDescription = "История")
                     }
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                        Icon(Icons.Default.MoreVert, contentDescription = "Меню")
                     }
                     DropdownMenu(
                         expanded = showMenu,
@@ -274,7 +274,7 @@ fun MainScreen(
 
                     if (lineCount > 5) {
                         Text(
-                            text = if (isTextExpanded) "Show less" else "Show more (${lineCount - 5} more lines)",
+                            text = if (isTextExpanded) "Свернуть" else "Показать всё (ещё строк: ${lineCount - 5})",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
@@ -287,7 +287,7 @@ fun MainScreen(
 
                 // Configuration Groups
                 SettingsGroup(
-                    title = "Voice Configuration",
+                    title = "Настройки голоса",
                     icon = Icons.Default.Settings
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -300,7 +300,7 @@ fun MainScreen(
                         DropdownSelector(
                             label = stringResource(AppR.string.language_label),
                             options = languages.keys.toList(),
-                            selectedOption = languages.entries.find { it.value == currentLangCode }?.key ?: "English",
+                            selectedOption = languages.entries.find { it.value == currentLangCode }?.key ?: "Русский",
                             onOptionSelected = { name -> onLangChange(languages[name] ?: "en") }
                         )
 
@@ -382,7 +382,7 @@ fun MainScreen(
                             onValueChange = { onStepsChange(it.toInt()) },
                             valueRange = 1f..10f,
                             steps = 8,
-                            displayValue = "$steps steps"
+                            displayValue = "Шагов: $steps"
                         )
                         if (!isTeraModel) Text(
                             text = stringResource(AppR.string.quality_hint),
@@ -454,7 +454,7 @@ fun MainScreen(
                         IconButton(onClick = onMiniPlayerPlayPauseClick) {
                             Icon(
                                 imageVector = if (miniPlayerIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (miniPlayerIsPlaying) "Pause" else "Play",
+                                contentDescription = if (miniPlayerIsPlaying) "Пауза" else "Воспроизвести",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -591,7 +591,7 @@ fun MainScreenPreview() {
         MainScreen(
             inputText = "This is a sample text for previewing the MainScreen layout.",
             onInputTextChange = {},
-            placeholderText = "Enter text here...",
+            placeholderText = "Введите текст…",
             isInitializing = false,
             isSynthesizing = false,
             onSynthesizeClick = {},

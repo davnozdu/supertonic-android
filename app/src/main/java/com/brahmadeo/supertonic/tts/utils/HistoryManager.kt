@@ -21,7 +21,7 @@ object HistoryManager {
     @Synchronized fun saveItem(context: Context, text: String, voiceName: String) {
         items.removeAll { it.text == text }
         val timestamp = System.currentTimeMillis()
-        val dateString = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(timestamp))
+        val dateString = SimpleDateFormat("d MMM, HH:mm", Locale.forLanguageTag("ru")).format(Date(timestamp))
         items.add(0, HistoryItem(text, timestamp, dateString, voiceName))
         while (items.size > MAX_ITEMS) items.removeAt(items.lastIndex)
     }
