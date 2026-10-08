@@ -145,7 +145,11 @@ object RussianBookNormalizer {
     private val NUMERAL_STEMS = listOf("перв", "втор", "трет", "четвёрт", "пят", "шест", "седьм", "восьм", "девят", "десят",
         "одиннадцат", "двенадцат", "тринадцат", "четырнадцат", "пятнадцат", "шестнадцат", "семнадцат", "восемнадцат",
         "девятнадцат", "двадцат", "тридцат", "сороков", "пятидесят", "шестидесят", "семидесят", "восьмидесят", "девяност", "сот")
-    private fun thirdToHard(ending: String) = mapOf("ий" to "ый", "ья" to "ая", "ье" to "ое", "ьего" to "ого", "ьему" to "ому", "ьем" to "ом")[ending] ?: ending
+    private fun thirdToHard(ending: String) = mapOf("ий" to "ый", "ья" to "ая", "ье" to "ое", "ьего" to "ого", "ьему" to "ому", "ьем" to "ом",
+        "ьим" to "ым", "ью" to "ую", "ьей" to "ой", "ьих" to "ых", "ьими" to "ыми")[ending] ?: ending
+    /** Ordinal endings a listed numeral copies from the one before it, longest first. */
+    private val LIST_ENDINGS = listOf("ьими", "ьего", "ьему", "ыми", "ьей", "ьим", "ьих", "ьем", "ого", "ому",
+        "ый", "ой", "ая", "ую", "ое", "ые", "ых", "ым", "ом", "ий", "ья", "ье", "ью")
     private val femaleRulers = listOf("екатерин", "елизавет", "анн", "мари", "виктори", "изабелл", "елен", "ольг", "софи")
     /** Ordinal ending after a ruler's name in any case: Пётр I, Петра I, при Петре I, Екатериной II. */
     private fun afterName(name: String): String {
@@ -164,10 +168,52 @@ object RussianBookNormalizer {
         }
     }
     private val romanNouns = "век|глав|том|част|раздел|съезд|созыв|тысячелет|класс|квартал|сери|книг"
+    /** Nouns labelled by a number after them ("глава 3", "том 2"): the number is an ordinal like a Roman one. */
+    private const val LABEL_NOUNS = "глав|том|част|раздел|книг|сери"
+    private const val LIST_JOIN = "\\s*(?:,|и|или|—|–|-)\\s*"
+    private val prepositions = setOf("в", "во", "на", "о", "об", "обо", "при", "по", "к", "ко", "из", "изо", "от", "до", "у", "без",
+        "для", "с", "со", "за", "над", "под", "перед", "между", "после", "около", "про", "через")
+    /** Plural ending for numerals listed after an ambiguous noun form ("тома", "главы": genitive singular or
+     * nominative/accusative plural) when no preposition governs it: "Тома I и II лежали" -> "Тома первый и второй",
+     * "Читай главы III и IV" -> "главы третью и четвёртую". null = keep the singular-case reading. */
+    private fun listedPlural(noun: String, before: String): String? {
+        val w = noun.lowercase()
+        val feminine = feminineCountStems.firstOrNull { w.startsWith(it) }
+        val ambiguous = if (feminine != null) w.removePrefix(feminine) in setOf("ы", "и")
+            else masculineCountStems.firstOrNull { w.startsWith(it) }?.let { w.removePrefix(it) in setOf("а", "я") } == true
+        if (!ambiguous) return null
+        val words = rx("[а-яё]+|[^а-яё\\s]+").findAll(before.lowercase()).map { it.value }.toList()
+            .dropLastWhile { it in setOf("эти", "все", "те", "обе", "оба", "наши", "мои", "его", "её", "их", "свои", "же") }
+        val previous = words.lastOrNull()
+        if (previous in prepositions) return null
+        if (feminine == null) return "ый"
+        // Feminine nominative and accusative differ: an object of a verb (or "см.") takes -ую.
+        val verb = previous == "см" || words.size >= 2 && words[words.size - 2] == "см" && previous == "." ||
+            previous != null && previous.length > 2 && previous.first().isLetter() &&
+            listOf("ть", "ти", "л", "ла", "ли", "ло", "ешь", "ете", "ем", "ит", "ят", "ют", "ут", "ай", "йте", "ите").any { previous.endsWith(it) } &&
+            previous !in setOf("или", "были", "было", "был", "была", "будут", "стали", "стало")
+        return if (verb) "ую" else "ая"
+    }
     /** Roman numerals never reach the foreign-language engine as Latin letters: "Пётр I" -> "Пётр Первый",
      * "в XVIII веке" -> "в восемнадцатом веке", "глава II" -> "глава вторая", a line "IV." -> "Глава четвёртая." */
     fun romanNumerals(text: String): String {
-        var t = rx("(?m)^(\\s*)([IVXLCDM]{1,8})\\.?(\\s*)$").replace(text) { m ->
+        // Arabic labels after a label noun read like Roman ones: "главы 3 и 4" -> "главы III и IV", "с 3 по 5".
+        var t = rx("(?<![\\p{L}])((?:$LABEL_NOUNS)[а-яё]*)(\\s+(?:с\\s+)?)(\\d{1,3})((?:(?:$LIST_JOIN|\\s+по\\s+)\\d{1,3})*)(?![\\d\\p{L}]|[.,:]\\d)",
+            RegexOption.IGNORE_CASE).replace(text) { m ->
+            val next = rx("^\\s*([а-яё]+)", RegexOption.IGNORE_CASE).find(text.substring(m.range.last + 1))?.groupValues?.get(1).orEmpty()
+            if (RussianDates.looksCounted(next) || rx("\\d+").findAll(m.groupValues[3] + m.groupValues[4]).any { it.value.toInt() == 0 })
+                return@replace m.value
+            m.groupValues[1] + m.groupValues[2] + toRoman(m.groupValues[3].toInt()) +
+                rx("\\d{1,3}").replace(m.groupValues[4]) { toRoman(it.value.toInt()) }
+        }
+        // "главы с III по V" -> "главы с третьей по пятую", "тома с I по III" -> "тома с первого по третий".
+        t = rx("(?<![\\p{L}])((?:$romanNouns)[а-яё]*)(\\s+с\\s+)([IVXLCDM]{1,8})(\\s+по\\s+)([IVXLCDM]{1,8})(?![\\p{L}\\d])", RegexOption.IGNORE_CASE).replace(t) { m ->
+            val from = roman(m.groupValues[3]) ?: return@replace m.value
+            val to = roman(m.groupValues[5]) ?: return@replace m.value
+            val feminine = feminineCountStems.any { m.groupValues[1].lowercase().startsWith(it) }
+            m.groupValues[1] + m.groupValues[2] + ordinal(from, if (feminine) "ой" else "ого") + m.groupValues[4] + ordinal(to, if (feminine) "ую" else "ый")
+        }
+        t = rx("(?m)^(\\s*)([IVXLCDM]{1,8})\\.?(\\s*)$").replace(t) { m ->
             val n = roman(m.groupValues[2]) ?: return@replace m.value
             if (n > 99) m.value else m.groupValues[1] + "Глава " + ordinal(n, "ая") + "." + m.groupValues[3]
         }
@@ -179,7 +225,9 @@ object RussianBookNormalizer {
         }
         t = rx("(?<![\\p{L}])((?:$romanNouns)[а-яё]*)\\s+([IVXLCDM]{1,8})(?![\\p{L}\\d])", RegexOption.IGNORE_CASE).replace(t) { m ->
             val n = roman(m.groupValues[2]) ?: return@replace m.value
-            m.groupValues[1] + " " + ordinal(n, agreeing(m.groupValues[1]))
+            val listed = rx("^$LIST_JOIN[IVXLCDM]{1,8}(?![\\p{L}\\d])").containsMatchIn(t.substring(m.range.last + 1))
+            val plural = if (listed) listedPlural(m.groupValues[1], t.substring(0, m.range.first)) else null
+            m.groupValues[1] + " " + ordinal(n, plural ?: agreeing(m.groupValues[1]))
         }
         t = rx("(?<![\\p{L}])([А-ЯЁ][а-яё]{1,15})\\s+([IVXLCDM]{1,6})(?![\\p{L}\\d])").replace(t) { m ->
             val n = roman(m.groupValues[2]) ?: return@replace m.value
@@ -187,22 +235,31 @@ object RussianBookNormalizer {
         }
         // A numeral listed after another one ("тома I и II", "XIX, XX века") takes the same ending; a lone one inside
         // Russian text must not reach the foreign engine as Latin letters either.
-        t = rx("([а-яё]+)(\\s*(?:,|и|или|—|–|-)\\s*)([IVXLCDM]{1,8})(?![\\p{L}\\d])").replace(t) { m ->
-            val n = roman(m.groupValues[3]) ?: return@replace m.value
-            val previous = m.groupValues[1].lowercase()
-            val ending = listOf("ыми", "ого", "ому", "ый", "ой", "ая", "ую", "ое", "ые", "ых", "ым", "ом", "ий", "ья", "ье", "ьего", "ьему", "ьем")
-                .firstOrNull { previous.endsWith(it) && NUMERAL_STEMS.any { s -> previous.startsWith(s) } } ?: return@replace m.value
-            m.groupValues[1] + m.groupValues[2] + ordinal(n, thirdToHard(ending))
+        // Repeated until stable: matches cannot overlap, so "третьего, IV и V" needs one pass per numeral.
+        while (true) {
+            val before = t
+            t = rx("([а-яё]+)($LIST_JOIN)([IVXLCDM]{1,8})(?![\\p{L}\\d])").replace(t) { m ->
+                val n = roman(m.groupValues[3]) ?: return@replace m.value
+                val previous = m.groupValues[1].lowercase()
+                var ending = LIST_ENDINGS.firstOrNull { previous.endsWith(it) && NUMERAL_STEMS.any { s -> previous.startsWith(s) } }
+                    ?: return@replace m.value
+                // "второй" is masculine nominative after a masculine noun ("Том I, II, III"), not feminine -ой.
+                if (ending == "ой" && stressedOrdinals.any { previous == it + "ой" }) {
+                    val noun = rx("(?<![\\p{L}])(?:$romanNouns)[а-яё]*", RegexOption.IGNORE_CASE)
+                        .findAll(t.substring(maxOf(0, m.range.first - 80), m.range.first)).lastOrNull()?.value?.lowercase()
+                    if (noun != null && feminineCountStems.none { noun.startsWith(it) }) ending = "ый"
+                }
+                m.groupValues[1] + m.groupValues[2] + ordinal(n, thirdToHard(ending))
+            }
+            t = rx("(?<![\\p{L}\\d])([IVXLCDM]{1,8})($LIST_JOIN)([а-яё]+)").replace(t) { m ->
+                val n = roman(m.groupValues[1]) ?: return@replace m.value
+                val next = m.groupValues[3].lowercase()
+                if (NUMERAL_STEMS.none { next.startsWith(it) }) return@replace m.value
+                val ending = LIST_ENDINGS.firstOrNull { next.endsWith(it) } ?: return@replace m.value
+                ordinal(n, thirdToHard(ending)) + m.groupValues[2] + m.groupValues[3]
+            }
+            if (t == before) return t
         }
-        t = rx("(?<![\\p{L}\\d])([IVXLCDM]{1,8})(\\s*(?:,|и|или|—|–|-)\\s*)([а-яё]+)").replace(t) { m ->
-            val n = roman(m.groupValues[1]) ?: return@replace m.value
-            val next = m.groupValues[3].lowercase()
-            if (NUMERAL_STEMS.none { next.startsWith(it) }) return@replace m.value
-            val ending = listOf("ыми", "ого", "ому", "ый", "ой", "ая", "ую", "ое", "ые", "ых", "ым", "ом", "ий", "ья", "ье", "ьего", "ьему", "ьем")
-                .firstOrNull { next.endsWith(it) } ?: return@replace m.value
-            ordinal(n, thirdToHard(ending)) + m.groupValues[2] + m.groupValues[3]
-        }
-        return t
     }
     private val letterNames=mapOf('А' to "а",'Б' to "бэ",'В' to "вэ",'Г' to "гэ",'Д' to "дэ",'Е' to "е",'Ё' to "ё",'Ж' to "жэ",'З' to "зэ",'И' to "и",'Й' to "и краткое",'К' to "ка",'Л' to "эль",'М' to "эм",'Н' to "эн",'О' to "о",'П' to "пэ",'Р' to "эр",'С' to "эс",'Т' to "тэ",'У' to "у",'Ф' to "эф",'Х' to "ха",'Ц' to "цэ",'Ч' to "че",'Ш' to "ша",'Щ' to "ща",'Ъ' to "твёрдый знак",'Ы' to "ы",'Ь' to "мягкий знак",'Э' to "э",'Ю' to "ю",'Я' to "я")
     /** Read as words: pronounceable abbreviations. */
