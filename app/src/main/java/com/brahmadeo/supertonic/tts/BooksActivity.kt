@@ -21,6 +21,8 @@ import com.brahmadeo.supertonic.tts.books.BookLibrary
 import com.brahmadeo.supertonic.tts.books.BookMatcher
 import com.brahmadeo.supertonic.tts.books.BookPackage
 import com.brahmadeo.supertonic.tts.books.BookVoices
+import com.brahmadeo.supertonic.tts.books.BookVoiceRef
+import com.brahmadeo.supertonic.tts.books.BookVoiceCatalog
 import com.brahmadeo.supertonic.tts.books.prepare.BookPreparation
 import com.brahmadeo.supertonic.tts.llm.VoicePreview
 import com.brahmadeo.supertonic.tts.llm.VoiceRole
@@ -193,7 +195,88 @@ class BooksActivity : ComponentActivity() {
      * here overrides it for this book. */
     @Composable private fun CharacterVoices(book: Long, revision: Int, preview: VoicePreview.State, changed: () -> Unit) {
         val pkg = remember(book) { runCatching { BookLibrary.get(this, book) }.getOrNull() } ?: return
-        val voices = remember { AssetManager.russianVoices(this) }
+        val scope = rememberCoroutineScope()
+        var saving by remember(book) { mutableStateOf(false) }
+        var status by remember(book) { mutableStateOf("") }
+        val models = remember(book, revision) { BookVoices.models(this, book) }
+        val voices = remember(book, revision) { BookVoices.available(this, book) }
+        Text("Модели для этой книги", style = MaterialTheme.typography.titleMedium)
+        Text("Включите одну или несколько моделей. Выбор действует только для этой книги. " +
+            "Голоса разных моделей можно назначать автору и персонажам.", style = MaterialTheme.typography.bodySmall)
+        for ((model, title) in BookVoiceRef.models) {
+            val ready = remember(model, revision) { BookVoiceCatalog.ready(this, model) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text(title)
+                    Text(if (ready) "${AssetManager.russianVoices(com.brahmadeo.supertonic.tts.utils.ModelContext(this@BooksActivity, model)).size} голосов" else "Модель не скачана",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (!ready) TextButton(enabled = !saving, onClick = {
+                    saving = true; voicePreview.stop()
+                    scope.launch {
+                        try {
+                            AssetManager.download(com.brahmadeo.supertonic.tts.utils.ModelContext(this@BooksActivity, model)) { text, _ -> status = text }
+                            status = "$title готова"; changed()
+                        } catch (_: Exception) { status = "Не удалось скачать $title. Попробуйте ещё раз." }
+                        finally { saving = false }
+                    }
+                }) { Text("Скачать") }
+                Switch(checked = model in models, enabled = ready && !saving && (model !in models || models.size > 1), onCheckedChange = { on ->
+                    saving = true; voicePreview.stop()
+                    scope.launch {
+                        try { withContext(Dispatchers.IO) {
+                            BookVoices.setModels(this@BooksActivity, book,
+                                (if (on) models + model else models - model).filter { BookVoiceCatalog.ready(this@BooksActivity, it) })
+                        }; changed(); status = "Модели выбраны. Нажмите «Расставить голоса», чтобы распределить их заново." }
+                        catch (_: Exception) { status = "Не удалось выбрать модели. Оставьте хотя бы одну скачанную модель." }
+                        finally { saving = false }
+                    }
+                })
+            }
+        }
+        var showGenders by remember(book) { mutableStateOf(false) }
+        OutlinedButton(onClick = { showGenders = !showGenders }) { Text(if (showGenders) "Скрыть пол голосов" else "Пол голосов — задать вручную") }
+        if (showGenders) {
+            Text("Можно указать пол каждого голоса во всех скачанных моделях. Этот выбор общий для книг. " +
+                "«Не определён» исключает голос из автоматического распределения. После изменения нажмите «Расставить голоса».", style = MaterialTheme.typography.bodySmall)
+            for ((model, title) in BookVoiceRef.models) if (BookVoiceCatalog.ready(this, model)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                for (name in AssetManager.russianVoices(com.brahmadeo.supertonic.tts.utils.ModelContext(this, model))) {
+                    val ref = BookVoiceRef(model, name).key
+                    var open by remember(book, ref) { mutableStateOf(false) }
+                    Row(Modifier.fillMaxWidth()) {
+                        Column(Modifier.weight(1f)) {
+                            Text(BookVoiceCatalog.label(this@BooksActivity, ref), style = MaterialTheme.typography.bodySmall)
+                            Box {
+                                TextButton(enabled = !saving, onClick = { open = true }) { Text("Указать пол") }
+                                DropdownMenu(open, { open = false }) {
+                                    for ((value, caption) in listOf("m" to "Мужской", "f" to "Женский", "?" to "Не определён", "" to "Вернуть исходный")) {
+                                        DropdownMenuItem(text = { Text(caption) }, onClick = {
+                                            open = false; voicePreview.stop()
+                                            com.brahmadeo.supertonic.tts.books.VoiceGenderSettings.save(this@BooksActivity, ref, value.ifEmpty { null }); changed()
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                        TextButton(onClick = { voicePreview.toggle(ref) }) { Text(if (preview.activeVoice == ref) "Остановить" else "Прослушать") }
+                    }
+                }
+            }
+        }
+        Text(BookVoiceRef.memoryCaption(models, com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(this)), style = MaterialTheme.typography.bodySmall)
+        Button(enabled = !saving && voices.isNotEmpty(), onClick = {
+            saving = true; voicePreview.stop()
+            scope.launch {
+                try { withContext(Dispatchers.IO) { BookVoices.redistribute(this@BooksActivity, book) }; changed(); status = "Голоса расставлены из выбранных моделей." }
+                catch (_: Exception) { status = "Не удалось расставить голоса. Проверьте, что выбранные модели скачаны." }
+                finally { saving = false }
+            }
+        }) { Text("Расставить голоса") }
+        Text("Распределяет голоса персонажей заново, заменяя ручной выбор. Голос автора и выбранные голоса прочих сохраняются. " +
+            "Повторная обработка книги через LLM не нужна.", style = MaterialTheme.typography.bodySmall)
+        if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
+        HorizontalDivider()
         val assignments = remember(book, revision) { pkg.casts.mapIndexed { i, cast -> BookVoices.assignment(this, book, i, cast) } }
         val first = assignments.firstOrNull()
         val author = remember(book, revision) { BookVoices.author(this, book) }
@@ -207,7 +290,7 @@ class BooksActivity : ComponentActivity() {
         BookToggle("Голос автора — выбрать для этой книги", ownAuthor) { on ->
             voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.AUTHOR, if (on) author else null); changed()
         }
-        VoiceRoleChoice(if (ownAuthor) "Голос автора в этой книге" else "Голос автора (автоматически)", author, voices, preview, voicePreview::toggle) {
+        VoiceRoleChoice(if (ownAuthor) "Голос автора в этой книге" else "Голос автора (автоматически)", author, voices, preview, voicePreview::toggle, model = AssetManager.getModelType(this)) {
             voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.AUTHOR, it); changed()
         }
         BookToggle("Голоса прочих — выбрать для этой книги", ownOthers) { on ->
@@ -217,10 +300,10 @@ class BooksActivity : ComponentActivity() {
         }
         val auto = if (ownOthers) "" else " (автоматически)"
         if (pkg.casts.size <= 1 || ownOthers) {
-            VoiceRoleChoice("Прочие мужчины$auto", male, voices, preview, voicePreview::toggle) {
+            VoiceRoleChoice("Прочие мужчины$auto", male, voices, preview, voicePreview::toggle, model = AssetManager.getModelType(this)) {
                 voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.MALE, it); changed()
             }
-            VoiceRoleChoice("Прочие женщины$auto", female, voices, preview, voicePreview::toggle) {
+            VoiceRoleChoice("Прочие женщины$auto", female, voices, preview, voicePreview::toggle, model = AssetManager.getModelType(this)) {
                 voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.FEMALE, it); changed()
             }
         } else Text("Голоса прочих подбираются в каждом рассказе из оставшихся; включите переключатель, чтобы задать " +
@@ -241,7 +324,7 @@ class BooksActivity : ComponentActivity() {
                     "f" -> BookVoices.roleVoice(this, book, VoiceRole.FEMALE, assignment)
                     else -> author
                 }
-                VoiceRoleChoice("${ch.name} · $gender · реплик ${ch.speaker}$note", own ?: fallback, voices, preview, voicePreview::toggle) { voice ->
+                VoiceRoleChoice("${ch.name} · $gender · реплик ${ch.speaker}$note", own ?: fallback, voices, preview, voicePreview::toggle, model = AssetManager.getModelType(this)) { voice ->
                     voicePreview.stop(); BookVoices.choose(this, book, ch.id, voice); changed()
                 }
                 if (manual) TextButton(onClick = { voicePreview.stop(); BookVoices.choose(this, book, ch.id, null); changed() }) {

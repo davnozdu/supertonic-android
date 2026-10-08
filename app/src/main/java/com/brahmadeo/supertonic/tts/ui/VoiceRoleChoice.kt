@@ -24,9 +24,14 @@ import com.brahmadeo.supertonic.tts.llm.VoicePreview
 
 /** Voice picker with «Прослушать» next to the choice and in the list (multi-voice roles, book characters). */
 @Composable fun VoiceRoleChoice(label: String, selected: String, options: List<String>,
-    preview: VoicePreview.State, listen: (String) -> Unit, change: (String) -> Unit) {
+    preview: VoicePreview.State, listen: (String) -> Unit, model: String? = null, change: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    fun voiceLabel(voice: String) = com.brahmadeo.supertonic.tts.tera.TeraVoices.label(voice)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun voiceLabel(voice: String): String {
+        val value = if (model != null && com.brahmadeo.supertonic.tts.books.BookVoiceRef.parse(voice) == null)
+            com.brahmadeo.supertonic.tts.books.BookVoiceRef(model, voice).key else voice
+        return com.brahmadeo.supertonic.tts.books.BookVoiceCatalog.label(context, value)
+    }
     fun caption(voice: String) = if (preview.activeVoice == voice) "Остановить" else "Прослушать"
     Column {
         Text(label, style = MaterialTheme.typography.labelLarge)
@@ -44,4 +49,3 @@ import com.brahmadeo.supertonic.tts.llm.VoicePreview
         }
     }
 }
-

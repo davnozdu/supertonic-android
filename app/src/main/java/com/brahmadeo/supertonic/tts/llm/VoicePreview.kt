@@ -44,12 +44,14 @@ class VoicePreview(context: Context) {
         if (mutableState.value.activeVoice == name) { stop(); return }
         val replacingOwn = currentId != null
         stop()
-        if (name !in AssetManager.russianVoices(app) || !AssetManager.voiceFile(app, name).isFile) {
+        val mixed = com.brahmadeo.supertonic.tts.books.BookVoiceRef.parse(name)
+        if (if (mixed != null) com.brahmadeo.supertonic.tts.books.BookVoiceCatalog.file(app, name) == null
+            else name !in AssetManager.russianVoices(app) || !AssetManager.voiceFile(app, name).isFile) {
             mutableState.value = State(message = "Голос не установлен. Сначала скачайте его.")
             return
         }
         pending = name to replacingOwn
-        mutableState.value = State(name, true, "Подготовка голоса $name…")
+        mutableState.value = State(name, true, "Подготовка голоса ${com.brahmadeo.supertonic.tts.books.BookVoiceCatalog.label(name)}…")
         handler.postDelayed(timeout, 30_000)
         if (client == null) {
             client = TextToSpeech(app, { status -> handler.post {
@@ -77,7 +79,8 @@ class VoicePreview(context: Context) {
             mutableState.value = State(message = "Остановите чтение книги перед прослушиванием голоса.")
             return
         }
-        if (tts.setVoice(voice(name)) != TextToSpeech.SUCCESS) {
+        val mixed = com.brahmadeo.supertonic.tts.books.BookVoiceRef.parse(name)
+        if (mixed == null && tts.setVoice(voice(name)) != TextToSpeech.SUCCESS) {
             stop()
             mutableState.value = State(message = "Этот голос недоступен. Проверьте его установку.")
             return
@@ -85,7 +88,8 @@ class VoicePreview(context: Context) {
         tts.setSpeechRate(1f)
         val id = "voice-preview-${++nextId}"
         currentId = id
-        if (tts.speak(SAMPLE, TextToSpeech.QUEUE_FLUSH, params(app), id) != TextToSpeech.SUCCESS) {
+        val parameters = params(app).apply { if (mixed != null) putString(app.packageName + ".book_voice", name) }
+        if (tts.speak(SAMPLE, TextToSpeech.QUEUE_FLUSH, parameters, id) != TextToSpeech.SUCCESS) {
             stop()
             mutableState.value = State(message = "Не удалось запустить пробу голоса.")
         }

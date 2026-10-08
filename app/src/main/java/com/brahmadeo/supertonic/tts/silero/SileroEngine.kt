@@ -35,9 +35,10 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
         } }, 15, 15, TimeUnit.SECONDS)
     }
     private fun load() {
+        // PyTorch's pool is process-wide: RU and CIS may have different per-model settings.
+        LitePyTorchAndroid.setNumThreads(threads)
         if (mel != null) return
         try {
-            LitePyTorchAndroid.setNumThreads(threads)
             mel = LiteModuleLoader.load(File(root, "tts_mel.ptl").absolutePath)
             head = LiteModuleLoader.load(File(root, "head.ptl").absolutePath)
             backbone = org.pytorch.executorch.Module.load(File(root, "backbone.pte").absolutePath,

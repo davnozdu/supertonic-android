@@ -5,7 +5,10 @@ package com.brahmadeo.supertonic.tts.books
 object BookVoiceAssign {
     private const val MIN_SPEAKER = 2
     private const val MIN_MENTIONS = 30
-    private val silero = mapOf(
+    private val knownGenders = mapOf(
+        // All ten Tera reference styles, including English references speaking Russian.
+        "ru_m1" to "m", "ru_m5" to "m", "eng_m2_whisper" to "m", "eng_m3" to "m", "eng_m4" to "m",
+        "ru_f1" to "f", "ru_f2" to "f", "eng_f3" to "f", "eng_f4_whisper" to "f", "eng_f5" to "f",
         "aidar" to "m", "eugene" to "m", "kseniya" to "f", "baya" to "f", "xenia" to "f",
         "ru_alexandr" to "m", "ru_bogdan" to "m", "ru_dmitriy" to "m", "ru_gamat" to "m", "ru_igor" to "m",
         "ru_marat" to "m", "ru_roman" to "m", "ru_safarhuja" to "m", "ru_eduard" to "m", "ru_miyau" to "m",
@@ -20,10 +23,13 @@ object BookVoiceAssign {
     )
 
     /** "m", "f" or null when unknown (such a voice is never given to a character). */
-    fun gender(voice: String): String? = silero[voice] ?: when {
-        Regex("(^|_)m\\d").containsMatchIn(voice) -> "m"   // Tera: ru_m5
-        Regex("(^|_)f\\d").containsMatchIn(voice) -> "f"
+    fun gender(voice: String): String? {
+        val name = BookVoiceRef.parse(voice)?.voice ?: voice
+        return knownGenders[name] ?: when {
+        Regex("(^|_)m\\d").containsMatchIn(name) -> "m"   // Tera: ru_m5
+        Regex("(^|_)f\\d").containsMatchIn(name) -> "f"
         else -> null
+        }
     }
 
     /** Voices of one set of characters: [characters] by id, [male]/[female] for the «прочие» (null — none left,
@@ -35,35 +41,36 @@ object BookVoiceAssign {
      * «прочие» take what is left — one voice of each gender is kept for them (unless [ownMale]/[ownFemale] are set),
      * so they never sound like a main character. */
     fun assign(cast: BookPackage.Cast, available: List<String>, author: String, manual: Map<String, String> = emptyMap(),
-               ownMale: String? = null, ownFemale: String? = null): Assignment {
-        val pool = available.filter { it != author && it != ownMale && it != ownFemale && gender(it) != null }
+               ownMale: String? = null, ownFemale: String? = null, genders: Map<String, String?> = emptyMap()): Assignment {
+        fun sex(voice: String): String? = if (genders.containsKey(voice)) genders[voice] else gender(voice)
+        val pool = available.filter { it != author && it != ownMale && it != ownFemale && sex(it) != null }
         val spare = mapOf("m" to if (ownMale == null) 1 else 0, "f" to if (ownFemale == null) 1 else 0)
-        val limit = listOf("m", "f").associateWith { g -> pool.count { gender(it) == g } - spare.getValue(g) }
+        val limit = listOf("m", "f").associateWith { g -> pool.count { sex(it) == g } - spare.getValue(g) }
         val used = mapOf("m" to linkedSetOf<String>(), "f" to linkedSetOf())
         val out = linkedMapOf<String, String>()
         fun fits(voice: String, g: String) = voice in used.getValue(g) || used.getValue(g).size < limit.getValue(g)
         for (ch in cast.characters) manual[ch.id]?.takeIf { it in available }?.let { voice ->
             out[ch.id] = voice
-            gender(voice)?.let { used.getValue(it) += voice }
+            sex(voice)?.let { used.getValue(it) += voice }
         }
         val main = cast.characters.filter { it.id !in out && it.gender in listOf("m", "f") && (it.speaker >= MIN_SPEAKER || it.mentions >= MIN_MENTIONS) }
             .sortedWith(compareBy({ -it.speaker }, { -it.mentions }, { it.id }))
         // Hints first: a hint may be shared on purpose (characters who never meet in the text). Free voices
         // are given only afterwards, so they never take a voice another character's hint points to.
         for (ch in main) {
-            val hint = ch.voiceHint?.takeIf { it in pool && gender(it) == ch.gender && fits(it, ch.gender) } ?: continue
+            val hint = ch.voiceHint?.takeIf { it in pool && sex(it) == ch.gender && fits(it, ch.gender) } ?: continue
             out[ch.id] = hint
             used.getValue(ch.gender) += hint
         }
         for (ch in main) {
             if (ch.id in out) continue
             val taken = used.values.flatten().toSet()
-            val voice = pool.firstOrNull { it !in taken && gender(it) == ch.gender && fits(it, ch.gender) } ?: continue
+            val voice = pool.firstOrNull { it !in taken && sex(it) == ch.gender && fits(it, ch.gender) } ?: continue
             out[ch.id] = voice
             used.getValue(ch.gender) += voice
         }
         val taken = used.values.flatten().toSet()
-        return Assignment(out, ownMale ?: pool.firstOrNull { gender(it) == "m" && it !in taken },
-            ownFemale ?: pool.firstOrNull { gender(it) == "f" && it !in taken })
+        return Assignment(out, ownMale ?: pool.firstOrNull { sex(it) == "m" && it !in taken },
+            ownFemale ?: pool.firstOrNull { sex(it) == "f" && it !in taken })
     }
 }

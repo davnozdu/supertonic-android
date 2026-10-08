@@ -313,10 +313,16 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
         val voiceStyleDir = File(filesDir, "${AssetManager.MODEL_VERSION}/voice_styles")
         var stylePath = AssetManager.voiceFile(this, voiceFile).absolutePath
+        val previewVoice = if (voicePreview) request.params?.getString(packageName + ".book_voice") else null
+        if (previewVoice != null) {
+            val file = com.brahmadeo.supertonic.tts.books.BookVoiceCatalog.file(this, previewVoice)
+            if (file == null) { callback.error(); return }
+            stylePath = file.absolutePath
+        }
         if (voicePreview) Log.i("VoicePreview", "Synthesis voice=${voiceFile.removeSuffix(".json")} model=${AssetManager.getModelType(this)}")
 
         // Ensure stylePath is within the intended directory
-        if (!AssetManager.isRussianModel(this) && !File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
+        if (previewVoice == null && !AssetManager.isRussianModel(this) && !File(stylePath).canonicalPath.startsWith(voiceStyleDir.canonicalPath)) {
             stylePath = AssetManager.voiceFile(this, "F3.json").absolutePath
         }
 
