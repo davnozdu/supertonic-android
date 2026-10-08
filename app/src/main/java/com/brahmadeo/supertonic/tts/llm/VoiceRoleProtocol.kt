@@ -12,10 +12,19 @@ role=author для повествования и авторских вставо
 Начальное тире относится к реплике, а не к отдельному голосу автора. Слова «сказал», «спросила», «говорит», «ответил», «рассуждает» и имя после них относятся к авторской вставке, НЕ к голосу названного персонажа. Голос этого персонажа получает реплика ПЕРЕД вставкой.
 Образец, не включать в ответ: units="0:- | 1:Ты | 2:готов? | 3:- | 4:спросила | 5:Анна."; count=6. Диапазоны: start=0,end=3,role=female; start=3,end=6,role=author. Анна произносит «Ты готов?», а «спросила Анна» читает автор.
 Определяй говорящего по глаголам речи, обращению и контексту. Не считай упомянутое имя автоматически говорящим. Не назначай голоса только по чередованию реплик. Не выдумывай персонажей. Если пол или говорящий неясен, role=author, confidence=uncertain. Авторский текст: confidence=clear. Не маркируй внутренние мысли прямой речью без указания в тексте.
-Никаких слов книги, имён персонажей, эмоций, SSML, пояснений или рассуждений в ответе: только диапазоны, role и confidence."""
+Никаких слов книги, имён персонажей, эмоций, SSML, пояснений или рассуждений в ответе: только диапазоны, role и confidence.
+Если во входе есть characters — это персонажи текущего раздела книги (id, имя, пол, формы имени). Для сегмента прямой речи с confidence=clear укажи speaker = id персонажа, только если несомненно, что говорит именно он: назван в ремарке к этой реплике, к нему обращаются в ответной реплике, или это продолжение его реплики. Иначе speaker не указывай: реплика прозвучит общим мужским или женским голосом. role должен совпадать с полом персонажа. Для role=author speaker не указывай."""
 
-    fun prompt(texts: List<String>, preceding: String): String = JSONObject()
+    fun prompt(texts: List<String>, preceding: String, book: com.brahmadeo.supertonic.tts.books.BookContext? = null): String = JSONObject()
         .put("context_before", preceding)
+        .apply {
+            if (book != null) put("characters", JSONArray().apply {
+                book.cast.characters.forEach { ch ->
+                    put(JSONObject().put("id", ch.id).put("name", ch.name).put("gender", ch.gender)
+                        .put("forms", JSONArray(ch.forms.take(8))))
+                }
+            })
+        }
         .put("paragraphs", JSONArray().apply {
             texts.forEachIndexed { index, text ->
                 val units = VoiceRolePlan.units(text)
@@ -25,13 +34,22 @@ role=author для повествования и авторских вставо
             }
         }).toString()
 
-    fun schema() = JSONObject("""{"type":"object","properties":{"paragraphs":{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"segments":{"type":"array","items":{"type":"object","properties":{"start":{"type":"integer"},"end":{"type":"integer"},"role":{"type":"string","enum":["author","male","female"]},"confidence":{"type":"string","enum":["clear","uncertain"]}},"required":["start","end","role","confidence"],"additionalProperties":false}}},"required":["id","segments"],"additionalProperties":false}}},"required":["paragraphs"],"additionalProperties":false}""")
+    fun schema() = JSONObject("""{"type":"object","properties":{"paragraphs":{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"segments":{"type":"array","items":{"type":"object","properties":{"start":{"type":"integer"},"end":{"type":"integer"},"role":{"type":"string","enum":["author","male","female"]},"confidence":{"type":"string","enum":["clear","uncertain"]},"speaker":{"type":"string"}},"required":["start","end","role","confidence"],"additionalProperties":false}}},"required":["id","segments"],"additionalProperties":false}}},"required":["paragraphs"],"additionalProperties":false}""")
 
     fun parse(answer: String, texts: List<String>): List<List<VoiceRoleText>> =
         parseValidated(answer, texts).mapIndexed { i, plan -> plan ?: listOf(VoiceRoleText(texts[i], VoiceRole.AUTHOR)) }
 
+    /** A named speaker counts only when it is a character of this section and of the role's gender; the voice
+     * is then that character's (if one was assigned). Anything else keeps the plain role. */
+    private fun speaker(raw: String?, role: VoiceRole, book: com.brahmadeo.supertonic.tts.books.BookContext?): String? {
+        if (book == null || raw.isNullOrBlank() || role == VoiceRole.AUTHOR) return null
+        val ch = book.cast.characters.firstOrNull { it.id == raw } ?: return null
+        val gender = if (role == VoiceRole.MALE) "m" else "f"
+        return ch.id.takeIf { ch.gender == gender || ch.gender == "?" }
+    }
+
     // An invalid response is NOT a successful author classification. The caller retries it.
-    fun parseValidated(answer: String, texts: List<String>): List<List<VoiceRoleText>?> {
+    fun parseValidated(answer: String, texts: List<String>, book: com.brahmadeo.supertonic.tts.books.BookContext? = null): List<List<VoiceRoleText>?> {
         val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "Некорректная разметка голосов" }
         val paragraphs = JSONObject(answer.substring(start, end + 1)).getJSONArray("paragraphs")
@@ -51,9 +69,12 @@ role=author для повествования и авторских вставо
                         "male" -> VoiceRole.MALE; "female" -> VoiceRole.FEMALE; "author" -> VoiceRole.AUTHOR
                         else -> error("Неизвестная роль")
                     }
-                    VoiceRoleRange(integer(s, "start"), integer(s, "end"), role, confidence == "clear")
+                    VoiceRoleRange(integer(s, "start"), integer(s, "end"), role, confidence == "clear",
+                        speaker(s.optString("speaker").ifBlank { null }, role, book))
                 }
-                requireNotNull(VoiceRolePlan.render(text, ranges))
+                requireNotNull(VoiceRolePlan.render(text, ranges)).map { part ->
+                    if (part.character == null) part else part.copy(voice = book?.voices?.get(part.character))
+                }
             }.getOrNull()
         }
     }

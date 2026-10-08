@@ -221,7 +221,8 @@ object LlmProviders {
             http(c.ollamaEndpoint.trimEnd('/') + "/api/chat", c.ollamaKey, body, deadlineMs=remaining()).getJSONObject("message").getString("content")
         }
     }
-    fun voiceRoles(context: Context, c: LlmConfig, texts: List<String>, preceding: String, provider: String, deadlineMs: Long = 8000): List<List<VoiceRoleText>?> {
+    fun voiceRoles(context: Context, c: LlmConfig, texts: List<String>, preceding: String, provider: String, deadlineMs: Long = 8000,
+                   book: com.brahmadeo.supertonic.tts.books.BookContext? = null): List<List<VoiceRoleText>?> {
         if (provider == "local") {
             val (prompt,pieces) = LocalVoiceRoleProtocol.prompt(texts,preceding)
             val answer = local(context,c,listOf(prompt),deadlineMs=deadlineMs,protocol="roles-local",
@@ -229,9 +230,10 @@ object LlmProviders {
                 outputTokenLimit=(pieces.sumOf { it.size }*8+16).coerceIn(64,272)).single()
             return LocalVoiceRoleProtocol.parse(answer,pieces)
         }
-        val prompt = VoiceRoleProtocol.prompt(texts, preceding)
+        // Local Gemma keeps the plain three roles: the character list is for the cloud request only.
+        val prompt = VoiceRoleProtocol.prompt(texts, preceding, book)
         return VoiceRoleProtocol.parseValidated(cloudRequest(c, prompt, VoiceRoleProtocol.INSTRUCTION,
-            VoiceRoleProtocol.schema(), provider == "gemini", 2400, deadlineMs), texts)
+            VoiceRoleProtocol.schema(), provider == "gemini", 2400, deadlineMs), texts, book)
     }
     /** Diagnostics only (StressProbe): a local text instruction tried without rebuilding the app. */
     @Volatile internal var instructionOverride: String? = null

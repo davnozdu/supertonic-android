@@ -16,6 +16,7 @@ private typealias RoleRequest = (String, List<String>, String) -> List<List<Voic
 object LlmPreparation {
     data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null, val voicePlan: List<VoiceRoleText> = emptyList(), val rolesReady: Boolean = false, val roleProvider: String? = null)
     private data class Entry(val id: Long, val caller: Any, val text: String, val input: String, val epoch: Long,
+        val book: com.brahmadeo.supertonic.tts.books.BookMatcher.Position? = null,
         val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false, @Volatile var cancelled: Boolean = false, @Volatile var textReady: Result? = null)
     private val lock = Any()
     private val entries = linkedMapOf<Long, Entry>()
@@ -32,7 +33,7 @@ object LlmPreparation {
     private val preparedCache = LlmTextCache<LlmConfig>()
     private val playedResults = LlmResultCache<Result> { input, result -> input.length + result.text.length }
     private val roleContext = VoiceRoleContext()
-    private data class RoleKey(val config: LlmConfig, val preceding: String, val texts: List<String>)
+    private data class RoleKey(val config: LlmConfig, val preceding: String, val texts: List<String>, val book: String? = null)
     private data class RoleCached(val routing: VoiceRoleRouting.Result, val time: Long)
     private val roleCache = linkedMapOf<RoleKey, RoleCached>()
     private val roleCooldown = mutableMapOf<String, Long>()
@@ -70,6 +71,8 @@ object LlmPreparation {
         if (text.length > 6000 || !enabled(ctx) || text.isBlank() || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
         val input = com.brahmadeo.supertonic.tts.utils.LexiconManager.apply(text)
         newReader(caller)
+        // Prepared book and section of THIS text (readers queue ahead): its characters go into the role request.
+        val book = if (LlmSettings.multiVoiceEnabled(ctx)) com.brahmadeo.supertonic.tts.books.BookMatcher.feed(ctx, caller, text) else null
         val seenEpoch = epoch
         val reused = playedResults.get(input)
         val id = synchronized(lock) {
@@ -78,7 +81,7 @@ object LlmPreparation {
                 val victim = entries.values.firstOrNull { it.future.isDone || (!it.claimed && !it.processing) } ?: return null
                 entries.remove(victim.id); victim.future.cancel(false)
             }
-            val entry = Entry(++nextId, caller, text, input, epoch)
+            val entry = Entry(++nextId, caller, text, input, epoch, book)
             // Settings changed between the cache read and here: the reused result is of the old configuration.
             if (reused != null && seenEpoch == epoch) { entry.textReady = reused; entry.future.complete(reused) }
             entries[entry.id] = entry
@@ -295,14 +298,16 @@ object LlmPreparation {
                     val batch = synchronized(lock) {
                         val first = entries.values.firstOrNull { !it.processing && !it.future.isDone } ?: return@execute
                         var count = 0
-                        entries.values.filter { it.caller == first.caller && !it.processing && !it.future.isDone }
+                        // One batch = one book section: its characters go into the role request.
+                        entries.values.filter { it.caller == first.caller && it.book == first.book && !it.processing && !it.future.isDone }
                             .takeWhile { count += it.text.length; count <= batchLimit || count == it.text.length }
                             .onEach { it.processing = true }
                     }
                     activeBatch = batch
                     val preceding = roleContext.get(batch.first().caller)
+                    val book = if (config.multiVoice) com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, batch.first().book) else null
                     val results = try { process(ctx, config, batch.map { it.input }, batchEpoch,
-                        preceding = preceding,
+                        preceding = preceding, book = book,
                         onTextPrepared = { index, result -> if (batchEpoch == epoch) batch[index].textReady = result },
                         cancelled = { batch.all { it.cancelled } },
                         onPrepared = { index, result -> if (batchEpoch == epoch && !batch[index].cancelled) {
@@ -347,7 +352,8 @@ object LlmPreparation {
     private fun process(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
                         ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, preceding: String = "",
                         cancelled: () -> Boolean = { false }, onPrepared: (Int, Result) -> Unit = { _, _ -> },
-                        onTextPrepared: (Int, Result) -> Unit = { _, _ -> }, roleRequest: RoleRequest? = null): List<Result> {
+                        onTextPrepared: (Int, Result) -> Unit = { _, _ -> }, roleRequest: RoleRequest? = null,
+                        book: com.brahmadeo.supertonic.tts.books.BookContext? = null): List<Result> {
         val start = SystemClock.elapsedRealtime()
         val multi = c.multiVoice && c.mode != LlmMode.OFF && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)
         val earlyRoles = mutableMapOf<Int, Result>()
@@ -358,7 +364,7 @@ object LlmPreparation {
             val indices = partial.indices.filter { partial[it] != null && earlyRoles[it] == null }
             if (indices.isEmpty()) return
             val before = (preceding + "\n" + texts.take(indices.first()).joinToString("\n")).takeLast(1800)
-            val routed = routeRoles(ctx,c,indices.map { partial[it]!! },before,expectedEpoch,ignoreCooldown,cancelled,
+            val routed = routeRoles(ctx,c,indices.map { partial[it]!! },before,expectedEpoch,ignoreCooldown,cancelled,book = book,
                 resolved = { i, result -> if (result.rolesReady) { earlyRoles[indices[i]] = result; onPrepared(indices[i],result) } }, roleRequest = roleRequest)
             routed.forEachIndexed { i, result -> if (result.rolesReady) { earlyRoles[indices[i]] = result; onPrepared(indices[i],result) } }
         }
@@ -366,7 +372,7 @@ object LlmPreparation {
             if (multi) onTextPrepared else onPrepared, beforeRetry = ::routeAcceptedBeforeRetry)
             .mapIndexed { i, result -> earlyRoles[i]?.takeIf { it.text == result.text } ?: result }
         if (!multi || expectedEpoch != epoch || cancelled()) return prepared
-        val results = routeRoles(ctx, c, prepared, preceding, expectedEpoch, ignoreCooldown, cancelled, resolved = onPrepared, roleRequest = roleRequest)
+        val results = routeRoles(ctx, c, prepared, preceding, expectedEpoch, ignoreCooldown, cancelled, resolved = onPrepared, roleRequest = roleRequest, book = book)
             .map { it.copy(elapsedMs = SystemClock.elapsedRealtime() - start) }
         results.forEachIndexed { index, result -> onPrepared(index, result) }
         return results
@@ -385,9 +391,10 @@ object LlmPreparation {
     private fun routeRoles(ctx: Context, c: LlmConfig, prepared: List<Result>, preceding: String,
                            expectedEpoch: Long, ignoreCooldown: Boolean, cancelled: () -> Boolean,
                            recovering: Boolean = false,
-                           resolved: (Int, Result) -> Unit = { _, _ -> }, roleRequest: RoleRequest? = null): List<Result> {
+                           resolved: (Int, Result) -> Unit = { _, _ -> }, roleRequest: RoleRequest? = null,
+                           book: com.brahmadeo.supertonic.tts.books.BookContext? = null): List<Result> {
         val texts = prepared.map { it.text }
-        val key = RoleKey(c, preceding, texts)
+        val key = RoleKey(c, preceding, texts, book?.key)
         val now = SystemClock.elapsedRealtime()
         val deadline = now + 18_000
         val cloudDeadline = now + 9_000
@@ -410,7 +417,7 @@ object LlmPreparation {
             }, request = { provider, parts, before ->
                 check(expectedEpoch == epoch && !cancelled())
                 roleRequest?.invoke(provider, parts, before) ?: LlmProviders.voiceRoles(ctx, c, parts, before, provider,
-                    minOf(8000L, (if(provider=="local") deadline else cloudDeadline) - SystemClock.elapsedRealtime()).coerceAtLeast(1))
+                    minOf(8000L, (if(provider=="local") deadline else cloudDeadline) - SystemClock.elapsedRealtime()).coerceAtLeast(1), book)
             }, failed = { provider, error ->
                 val pause = if (Regex("API HTTP (401|403|429)").containsMatchIn(error.message.orEmpty())) 60_000 else 10_000
                 roleCooldown[provider] = SystemClock.elapsedRealtime() + pause
@@ -436,7 +443,8 @@ object LlmPreparation {
             // A failed retry must never erase an existing validated voice plan.
             if (plan == null) result else result.copy(voicePlan = plan, rolesReady = true, roleProvider = routing.providers[i])
         }
-        Log.i("MultiVoice", "Prepared routing providers=${results.map { it.roleProvider }.distinct()} ready=${results.count { it.rolesReady }}/${results.size} cache=${cached != null} recovery=$recovering roles=${results.flatMap { it.voicePlan }.groupingBy { it.role }.eachCount()}")
+        Log.i("MultiVoice", "Prepared routing providers=${results.map { it.roleProvider }.distinct()} ready=${results.count { it.rolesReady }}/${results.size} cache=${cached != null} recovery=$recovering roles=${results.flatMap { it.voicePlan }.groupingBy { it.role }.eachCount()}" +
+            (if (book != null) " book=${book.book}/${book.section} characters=${results.flatMap { it.voicePlan }.mapNotNull { it.character }.groupingBy { it }.eachCount()}" else ""))
         return results
     }
     private fun scheduleRoleRecovery(ctx: Context, c: LlmConfig, batch: List<Entry>, preceding: String,
@@ -449,6 +457,7 @@ object LlmPreparation {
             val results = pending.map { it.textReady!! }
             val recovered = if (!connected(ctx) && results.all { it.rolesReady }) results else
                 routeRoles(ctx, c, results, before.takeLast(1800), expectedEpoch, false,
+                    book = com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, pending.first().book),
                     cancelled = { expectedEpoch != epoch || pending.all { it.cancelled } }, recovering = true, roleRequest = roleRequest)
             pending.zip(recovered).forEach { (entry, result) ->
                 val accepted = synchronized(lock) {

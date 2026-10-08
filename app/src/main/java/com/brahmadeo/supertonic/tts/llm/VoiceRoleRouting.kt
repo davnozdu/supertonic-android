@@ -79,7 +79,7 @@ internal object VoiceRoleRouting {
                     if (i !in invalid && plans[i] == null) {
                         val merged = mutableListOf<VoiceRoleText>()
                         segments.forEach { part ->
-                            if (merged.lastOrNull()?.role == part.role) {
+                            if (merged.lastOrNull()?.sameVoice(part) == true) {
                                 val old = merged.removeAt(merged.lastIndex)
                                 merged += old.copy(text = old.text + part.text)
                             } else merged += part

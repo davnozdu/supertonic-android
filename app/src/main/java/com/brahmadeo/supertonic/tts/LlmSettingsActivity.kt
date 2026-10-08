@@ -124,6 +124,9 @@ class LlmSettingsActivity : ComponentActivity() {
                                         voicePreview.stop(); selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it); roleRevision++
                                     }
                                 }
+                                OutlinedButton(onClick = { startActivity(android.content.Intent(this@LlmSettingsActivity, BooksActivity::class.java)) }) {
+                                    Text("Книги с голосами персонажей")
+                                }
                                 if (VoiceRole.entries.map { MultiVoiceSettings.selected(this@LlmSettingsActivity, it) }.distinct().size < 3)
                                     Text("Для нескольких ролей выбран одинаковый голос. Чтобы слышать переключение, выберите три разных голоса.", style = MaterialTheme.typography.bodySmall)
                                 Text("При обрыве облака используется установленная Gemma 4. Повторные запросы идут в фоне; готовая разметка заменяет резервную в ещё не проигранных фрагментах.", style = MaterialTheme.typography.bodySmall)

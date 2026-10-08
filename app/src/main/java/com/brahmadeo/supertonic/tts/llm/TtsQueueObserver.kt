@@ -23,6 +23,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
         if(!removed) return
         if (readingOwners.remove(owner)) ReaderAudioAhead.cancel()
         LlmPreparation.cancel(owner)
+        com.brahmadeo.supertonic.tts.books.BookMatcher.forget(owner)
         for(code in listOf(FIRST_CALL_TRANSACTION+5,FIRST_CALL_TRANSACTION+11)) {
             val data=Parcel.obtain();val reply=Parcel.obtain()
             try {

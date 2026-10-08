@@ -23,8 +23,10 @@ object MultiVoiceSettings {
     fun parts(ctx: Context, text: String, plan: List<VoiceRoleText>, fallbackStyle: String): List<Pair<String, String>> {
         if (!AssetManager.isRussianModel(ctx) || !LlmSettings.multiVoiceEnabled(ctx)) return listOf(text to fallbackStyle)
         return VoiceRolePlan.safe(text, plan).map { part ->
-            val file = AssetManager.voiceFile(ctx, selected(ctx, part.role))
-            com.brahmadeo.supertonic.tts.utils.DiagLog.i("MultiVoice", "Route role=${part.role} voice=${file.parentFile?.name}/${file.name} source=${SpeechTextTrace.fingerprint(part.text)}")
+            // A recognised character of a prepared book has its own voice; otherwise the role's voice («прочие»).
+            val voice = part.voice?.takeIf { it in AssetManager.russianVoices(ctx) } ?: selected(ctx, part.role)
+            val file = AssetManager.voiceFile(ctx, voice)
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("MultiVoice", "Route role=${part.role} character=${part.character} voice=${file.parentFile?.name}/${file.name} source=${SpeechTextTrace.fingerprint(part.text)}")
             part.text to if (file.isFile) file.absolutePath else fallbackStyle
         }
     }

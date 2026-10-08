@@ -1,8 +1,12 @@
 package com.brahmadeo.supertonic.tts.llm
 
 enum class VoiceRole { AUTHOR, MALE, FEMALE }
-data class VoiceRoleRange(val start: Int, val end: Int, val role: VoiceRole, val certain: Boolean = true)
-data class VoiceRoleText(val text: String, val role: VoiceRole)
+data class VoiceRoleRange(val start: Int, val end: Int, val role: VoiceRole, val certain: Boolean = true, val speaker: String? = null)
+/** [character]: a character of a prepared book (books/BookPackage) when the LLM named the speaker; [voice]
+ * is that character's voice. Without them the role's voice is used, as before. */
+data class VoiceRoleText(val text: String, val role: VoiceRole, val character: String? = null, val voice: String? = null) {
+    fun sameVoice(other: VoiceRoleText) = role == other.role && character == other.character && voice == other.voice
+}
 
 /** Indices refer to original whitespace units. Model text is never used for voice routing. */
 object VoiceRolePlan {
@@ -19,11 +23,13 @@ object VoiceRolePlan {
         for (range in ranges) {
             if (range.start != cursor || range.end <= cursor || range.end > units.size) return null
             val role = if (range.certain) range.role else VoiceRole.AUTHOR
+            val speaker = if (range.certain && role != VoiceRole.AUTHOR) range.speaker else null
             val part = units.subList(cursor, range.end).joinToString("")
-            if (result.lastOrNull()?.role == role) {
-                val old = result.removeAt(result.lastIndex)
-                result += VoiceRoleText(old.text + part, role)
-            } else result += VoiceRoleText(part, role)
+            val last = result.lastOrNull()
+            if (last != null && last.role == role && last.character == speaker) {
+                result.removeAt(result.lastIndex)
+                result += last.copy(text = last.text + part)
+            } else result += VoiceRoleText(part, role, speaker)
             cursor = range.end
         }
         if (cursor != units.size || result.joinToString("") { p -> p.text } != text) return null
@@ -37,7 +43,7 @@ object VoiceRolePlan {
         }
         val merged = mutableListOf<VoiceRoleText>()
         result.forEach { part ->
-            if (merged.lastOrNull()?.role == part.role) {
+            if (merged.lastOrNull()?.sameVoice(part) == true) {
                 val old = merged.removeAt(merged.lastIndex)
                 merged += old.copy(text = old.text + part.text)
             } else merged += part

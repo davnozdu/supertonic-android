@@ -63,6 +63,7 @@ CASES = ("nomn", "gent", "datv", "accs", "ablt", "loct", "voct", "gen2", "acc2",
 @dataclass
 class Book:
     title: str
+    author: str
     sections: list            # [{"id": "s1", "title": "Старшая сестра"}]
     paragraphs: list          # [(номер раздела, текст)]
 
@@ -75,6 +76,7 @@ def read_epub(path: str) -> Book:
         opf = ET.fromstring(z.read(opf_path))
         base = PurePosixPath(opf_path).parent
         title = next((e.text for e in opf.iter() if e.tag.endswith("}title") and e.text), PurePosixPath(path).stem)
+        author = next((e.text for e in opf.iter() if e.tag.endswith("}creator") and e.text), "")
         items = {e.get("id"): e for e in opf.iter() if e.tag.endswith("}item")}
         spine = [items[e.get("idref")].get("href") for e in opf.iter() if e.tag.endswith("}itemref") and e.get("idref") in items]
         toc = top_level_toc(z, base, items, opf)
@@ -108,7 +110,7 @@ def read_epub(path: str) -> Book:
     used = sorted({s for s, _ in paragraphs})
     renumber = {old: new for new, old in enumerate(used)}
     sections = [dict(sections[old], id=f"s{renumber[old] + 1}") for old in used]
-    return Book(title, sections, [(renumber[s], t) for s, t in paragraphs])
+    return Book(title, clean(author), sections, [(renumber[s], t) for s, t in paragraphs])
 
 
 def top_level_toc(z, base, items, opf) -> list[tuple[str, str]]:
@@ -154,6 +156,31 @@ def normalize_href(href: str) -> str:
 
 def clean(text: str) -> str:
     return re.sub(r"\s+", " ", text.replace("\xa0", " ").replace(ACUTE, "")).strip()
+
+
+# ---------------------------------------------------------------- отпечатки (формат .mytts-book v1)
+# Одинаково в приложении (Kotlin, books/BookFingerprint.kt): предложения по SENTENCES, буквы и цифры в нижнем
+# регистре (ё → е, без ударений), первые 48; меньше 24 — не используется; FNV-1a 64 по кодам символов.
+
+SENTENCES = re.compile(r"(?<=[.!?…])\s+")
+FNV_OFFSET, FNV_PRIME, MASK64 = 0xcbf29ce484222325, 0x100000001b3, (1 << 64) - 1
+
+
+def letters(text: str) -> str:
+    return "".join(c for c in text.lower().replace("ё", "е").replace(ACUTE, "") if "а" <= c <= "я" or "a" <= c <= "z" or "0" <= c <= "9")
+
+
+def sentence_fingerprints(text: str) -> list[str]:
+    out = []
+    for sentence in SENTENCES.split(text):
+        key = letters(sentence)[:48]
+        if len(key) < 24:
+            continue
+        h = FNV_OFFSET
+        for c in key:
+            h = ((h ^ ord(c)) * FNV_PRIME) & MASK64
+        out.append(f"{h:016x}")
+    return out
 
 
 def fingerprint(text: str) -> str | None:
@@ -561,18 +588,23 @@ def extract(args) -> None:
                          "candidates": [ids[(scope, c.key)] for c in ranked], "prompt": prompt})
         with open(os.path.join(args.out, f"llm_prompt_{name}.txt"), "w", encoding="utf-8") as f:
             f.write(prompt)
+    # Отпечатки предложений → раздел. Повтор в разных разделах раздела не указывает — такие убираются.
     index: dict[str, str | None] = {}
     for section, text in book.paragraphs:
-        fp = fingerprint(text)
-        if fp:
-            sid = book.sections[section]["id"]
-            index[fp] = sid if index.get(fp, sid) == sid else None  # повтор в разных разделах — не указывает раздел
+        sid = book.sections[section]["id"]
+        for fp in sentence_fingerprints(text):
+            index[fp] = sid if index.get(fp, sid) == sid else None
+    with open(args.book, "rb") as f:
+        file_sha = hashlib.sha256(f.read()).hexdigest()
+    content_sha = hashlib.sha256("\n".join(letters(t) for _, t in book.paragraphs).encode()).hexdigest()
+    identity = {"title": book.title, "author": book.author, "file_sha256": file_sha, "content_sha256": content_sha}
     save(args.out, "candidates.json", {"book": book.title, "scope": "section" if collection else "book",
                                        "sections": book.sections, "candidates": records})
     save(args.out, "llm_request.json", {"book": book.title, "scope": "section" if collection else "book",
                                         "response_schema": SCHEMA, "requests": requests})
-    save(args.out, "book_index.json", {"book": book.title, "sections": book.sections,
-                                       "paragraphs": {k: v for k, v in index.items() if v}})
+    save(args.out, "book_index.json", {"book": identity, "sections": book.sections,
+                                       "fingerprint": {"algorithm": "fnv1a64-48", "min_letters": 24},
+                                       "sentences": {k: v for k, v in index.items() if v}})
     sizes = [len(r["prompt"]) for r in requests]
     print(f"«{book.title}»: разделов {len(book.sections)}, абзацев {len(book.paragraphs)}, "
           f"{'сборник — персонажи по разделам' if collection else 'роман — персонажи на всю книгу'}, "
@@ -868,6 +900,61 @@ def voices(args) -> None:
             print(f"     {ch['voice']:<14} {ch['role']:<6} {ch['name']:<32} {ch['gender']} реплик={ch['speaker']:<3} упоминаний={ch['mentions']}")
 
 
+# ---------------------------------------------------------------- обмен
+
+def export(args) -> None:
+    """cast.json + отпечатки → .mytts-book: без текста книги и примеров, можно передавать другим."""
+    cast = json.load(open(os.path.join(args.dir, "cast.json"), encoding="utf-8"))
+    index = json.load(open(os.path.join(args.dir, "book_index.json"), encoding="utf-8"))
+    if "sentences" not in index:
+        sys.exit("book_index.json старого формата: повторите extract")
+    by_section: dict[str, list] = collections.defaultdict(list)
+    for fp, sid in sorted(index["sentences"].items()):
+        by_section[sid].append(fp)
+    casts = []
+    for group in cast["casts"]:
+        characters = []
+        for ch in group["characters"]:
+            if ch.get("role") == "other" and not args.keep_other:
+                continue
+            item = {"id": ch["id"], "name": ch["name"], "gender": ch["gender"], "speaker": ch["speaker"],
+                    "mentions": ch["mentions"], "forms": ch["forms"][: args.max_forms]}
+            if ch.get("voice") and ch.get("role") in ("own", "shared"):
+                item["voice_hint"] = ch["voice"]
+            characters.append(item)
+        other = [o["display"] for o in group["other"]] + [ch["name"] for ch in group["characters"]
+                                                          if ch.get("role") == "other" and not args.keep_other]
+        casts.append({"sections": group["sections"], "characters": characters, "other": other})
+    data = {
+        "format": "mytts-book", "version": 1, "book": index["book"], "scope": cast["scope"],
+        "voice_model": cast.get("voice_model", ""),
+        "sections": [{"id": s["id"], "title": s["title"], "cast": s.get("cast")} for s in cast["sections"]],
+        "casts": casts, "fingerprint": index["fingerprint"], "fingerprints": dict(by_section),
+    }
+    target = args.output or os.path.join(args.dir, re.sub(r"[^\w.-]+", "_", index["book"]["title"]) + ".mytts-book")
+    with open(target, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+    total = sum(len(v) for v in by_section.values())
+    print(f"{target}: персонажей {sum(len(c['characters']) for c in casts)}, разделов {len(data['sections'])}, "
+          f"отпечатков {total}, {os.path.getsize(target) / 1024:.0f} КБ")
+
+
+def vectors(args) -> None:
+    """Тест-векторы отпечатков для Kotlin (books/BookFingerprint.kt)."""
+    samples = [
+        "— Да, князь, — сказал Рогожин. Он помолчал и прибавил: «Ёлки-палки, вот так встреча!»",
+        "Князь Лев Николаевич Мы́шкин вошёл в гостиную; Настасья Филипповна обернулась к нему.",
+        "Коротко. Совсем коротко! Но вот это предложение уже достаточно длинное для отпечатка?..",
+        "В 1867 году в Петербурге было сыро и мокро… Поезд подходил к Варшавскому вокзалу.",
+        "Mixed text with Latin words, digits 42 and русские слова\u00a0вместе — проверка нормализации.",
+        "Неразрывный пробел после точки тоже граница.\u00a0Второе предложение начинается сразу после него!",
+    ]
+    data = [{"text": t, "letters": [letters(x)[:48] for x in SENTENCES.split(t)], "fingerprints": sentence_fingerprints(t)} for t in samples]
+    with open(args.output, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    print(f"{args.output}: {sum(len(d['fingerprints']) for d in data)} отпечатков")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -905,6 +992,15 @@ def main() -> None:
     v.add_argument("--show", type=int, default=40)
     v.add_argument("--show-casts", type=int, default=6)
     v.set_defaults(func=voices)
+    x = sub.add_parser("export", help="cast.json + отпечатки → файл .mytts-book для MyTTS и обмена")
+    x.add_argument("dir")
+    x.add_argument("-o", "--output")
+    x.add_argument("--max-forms", type=int, default=24)
+    x.add_argument("--keep-other", action="store_true", help="оставить персонажей с ролью «прочие» в списке")
+    x.set_defaults(func=export)
+    t = sub.add_parser("vectors", help="тест-векторы отпечатков для приложения")
+    t.add_argument("-o", "--output", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "fingerprint_vectors.json"))
+    t.set_defaults(func=vectors)
     args = parser.parse_args()
     args.func(args)
 

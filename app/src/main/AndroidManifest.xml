@@ -36,6 +36,7 @@
         <activity android:name=".LlmSettingsActivity" android:exported="false" android:label="Подготовка текста LLM" />
         <activity android:name=".BackgroundMusicActivity" android:exported="false" android:label="Фоновая музыка" />
         <activity android:name=".SleepTimerActivity" android:exported="false" android:label="Таймер сна" />
+        <activity android:name=".BooksActivity" android:exported="false" android:label="Книги с голосами персонажей" />
         <activity android:name=".QuickReadActivity" android:exported="false" android:theme="@style/Theme.MyTTS.QuickRead" />
         <receiver android:name=".service.SleepTimerReceiver" android:exported="false" />
         <receiver android:name=".service.ReadingControlReceiver" android:exported="false" />
