@@ -179,7 +179,7 @@ object LlmPreparation {
                 "SAME" -> gemini
                 else -> gemini
             }
-            val reversed = verifyPool.submit<List<Int>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini) }
+            val reversed = verifyPool.submit<List<Int?>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini) }
             val direct = try { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini) }
                 catch (e: Exception) { reversed.cancel(true); throw e }
             // The judge disagreeing with itself: the full dictionary decides non-homographs (when downloaded).

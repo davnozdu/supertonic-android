@@ -139,8 +139,9 @@ object LlmProviders {
 Для каждого элемента сначала определи для выделенного слова в этом предложении: часть речи, начальную форму, падеж, число, род или время, и смысл. Только после этого выбери вариант, правильный по словарной норме (орфоэпический словарь, Зализняк) именно для этой формы и этого смысла. Не выбирай вариант по привычному звучанию или по тому, какой из них стоит первым.
 Примеры: за́мок — здание, замо́к — запор; доро́га — путь, до́рога — краткое «дорогая»; ви́на — множественное от «вино», вина́ — проступок; на́чал — глагол, нача́л — родительный множественного от «начало»; хло́пок — растение, хлопо́к — звук.
 Для имён, фамилий, отчеств и названий выбирай устоявшееся русское произношение; одно и то же имя в тексте произносится одинаково.
-Верни только JSON {"choices":[...]} — для каждого элемента по порядку номер выбранного варианта: 0 или 1. Рассуждения в ответ не включай."""
-    private fun stressCheckSchema() = JSONObject("""{"type":"object","properties":{"choices":{"type":"array","items":{"type":"integer"}}},"required":["choices"],"additionalProperties":false}""")
+У каждого элемента есть номер id. Верни только JSON {"choices":[{"id":номер элемента,"choice":0 или 1},...]} — по одному объекту на каждый элемент, choice — номер выбранного варианта в options. Рассуждения в ответ не включай."""
+    private fun stressCheckSchema() = JSONObject("""{"type":"object","properties":{"choices":{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"choice":{"type":"integer"}},"required":["id","choice"]}}},"required":["choices"],"additionalProperties":false}""")
+    private const val STRESS_CHECK_CHUNK = 12
     /** Second look at words where the LLM and the offline Silero Stress disagree: the LLM chooses again with only
      * this sentence and these two options in front of it. Returns one option index per item. */
     /** Diagnostics (StressProbe): null = production default, true/false = reasoning for the stress check. */
@@ -148,23 +149,35 @@ object LlmProviders {
     /** Diagnostics (StressProbe): null = production choice, "GEMINI" / "OLLAMA" / "SAME" = judge of stress disputes. */
     @Volatile internal var verifierOverride: String? = null
     @Volatile internal var lastVerifier = ""
-    fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean): List<Int> {
-        val array = JSONArray()
-        items.forEach { array.put(JSONObject().put("sentence", it.sentence).put("context", it.context).put("word", it.word).put("options", JSONArray(it.options))) }
+    /** One choice per item, null where the judge gave none. Items go in chunks of [STRESS_CHECK_CHUNK] with ids: with
+     * up to 40 items in one list DeepSeek miscounted ("изменено число ответов") and a whole batch lost its check. */
+    fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean): List<Int?> {
         val thinking = verifyThinkingOverride ?: false
         lastVerifier = (if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
-        val judgeStarted = SystemClock.elapsedRealtime()
-        val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking), JSONObject().put("items", array).toString(),
-            STRESS_CHECK, stressCheckSchema(), gemini,
-            tokens = 64 + items.size * 8 + (if (thinking) 4096 else 0),
-            // ~5 s cut Gemini judges off mid-answer (IOException: Canceled); the check runs ahead of playback.
-            deadlineMs = if (thinking) 60_000L else 15_000L)
-        Log.i("LlmPreparation", "Stress judge $lastVerifier items=${items.size} ms=${SystemClock.elapsedRealtime() - judgeStarted}")
-        val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
-        require(start >= 0 && end > start) { "Проверка ударений: нет JSON" }
-        val choices = JSONObject(answer.substring(start, end + 1)).getJSONArray("choices")
-        require(choices.length() == items.size) { "Проверка ударений: изменено число ответов" }
-        return (0 until choices.length()).map { choices.getInt(it).also { v -> require(v == 0 || v == 1) } }
+        val out = arrayOfNulls<Int>(items.size)
+        for (from in items.indices step STRESS_CHECK_CHUNK) {
+            val chunk = items.subList(from, minOf(items.size, from + STRESS_CHECK_CHUNK))
+            val array = JSONArray()
+            chunk.forEachIndexed { i, it -> array.put(JSONObject().put("id", i).put("sentence", it.sentence).put("context", it.context)
+                .put("word", it.word).put("options", JSONArray(it.options))) }
+            val judgeStarted = SystemClock.elapsedRealtime()
+            val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking), JSONObject().put("items", array).toString(),
+                STRESS_CHECK, stressCheckSchema(), gemini,
+                tokens = 64 + chunk.size * 16 + (if (thinking) 4096 else 0),
+                // ~5 s cut Gemini judges off mid-answer (IOException: Canceled); the check runs ahead of playback.
+                deadlineMs = if (thinking) 60_000L else 15_000L)
+            val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
+            require(start >= 0 && end > start) { "Проверка ударений: нет JSON" }
+            val choices = JSONObject(answer.substring(start, end + 1)).getJSONArray("choices")
+            var answered = 0
+            for (k in 0 until choices.length()) {
+                val o = choices.optJSONObject(k) ?: continue
+                val id = o.optInt("id", -1); val v = o.optInt("choice", -1)
+                if (id in chunk.indices && (v == 0 || v == 1) && out[from + id] == null) { out[from + id] = v; answered++ }
+            }
+            Log.i("LlmPreparation", "Stress judge $lastVerifier items=${chunk.size} answered=$answered ms=${SystemClock.elapsedRealtime() - judgeStarted}")
+        }
+        return out.toList()
     }
     private fun cloudRequest(c: LlmConfig, prompt: String, system: String, responseSchema: JSONObject, gemini: Boolean, tokens: Int = 6000, deadlineMs: Long = 12000): String {
         val started = SystemClock.elapsedRealtime()

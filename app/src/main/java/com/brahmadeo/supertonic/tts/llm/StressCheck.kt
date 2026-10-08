@@ -121,8 +121,9 @@ object StressCheck {
         return out.toString()
     }
 
-    /** [choices]: answers to the LLM-first request followed by answers to the offline-first request. */
-    private fun offlineChosen(choices: List<Int>, i: Int, n: Int) = choices[i] == 1 && choices[i + n] == 0
+    /** [choices]: answers to the LLM-first request followed by answers to the offline-first request (null = none). */
+    private fun offlineChosen(choices: List<Int?>, i: Int, n: Int) = choices[i] == 1 && choices[i + n] == 0
+    private fun answered(choices: List<Int?>, i: Int, n: Int) = choices[i] != null && choices[i + n] != null
 
     /** Variant ordinal of a dispute's offline option, for the tie-breaker. */
     fun offlineOrdinal(d: Dispute): Int? = ordinal(d.offline)
@@ -130,21 +131,27 @@ object StressCheck {
 
     /** [tieBreak]: decides disputes the judge answered differently in the two orders (true = offline variant);
      * without it such words keep the LLM mark. */
-    fun apply(fragments: List<String>, disputes: List<Dispute>, choices: List<Int>,
+    fun apply(fragments: List<String>, disputes: List<Dispute>, choices: List<Int?>,
               tieBreak: (Dispute) -> Boolean = { false }): List<String> {
         val out = fragments.map { StringBuilder(it) }
         val log = mutableListOf<String>()
         // Right to left inside each fragment keeps the remaining ranges valid.
         for ((i, d) in disputes.withIndex().sortedByDescending { it.value.range.first }) {
-            val consistent = choices[i] != choices[i + disputes.size]
-            val chosenOffline = if (consistent) offlineChosen(choices, i, disputes.size) else !d.homograph && tieBreak(d)
+            // An unanswered item keeps the LLM mark; answered both times the same way = the judge contradicts itself.
+            val known = answered(choices, i, disputes.size)
+            val consistent = known && choices[i] != choices[i + disputes.size]
+            val chosenOffline = when {
+                !known -> false
+                consistent -> offlineChosen(choices, i, disputes.size)
+                else -> !d.homograph && tieBreak(d)
+            }
             val chosen = if (chosenOffline) d.offline else d.llm
             log += "${if (d.homograph) "H " else ""}${d.llm} / ${d.offline} -> $chosen [${choices[i]}${choices[i + disputes.size]}] | ${d.sentence.take(120)}"
             if (chosenOffline) out[d.fragment].replace(d.range.first, d.range.last + 1, chosen)
         }
         synchronized(this) { decisions += log.reversed(); if (decisions.size > 500) decisions = decisions.takeLast(500).toMutableList() }
         lastOfflineChosen = disputes.indices.count { offlineChosen(choices, it, disputes.size) }
-        lastTieBreaks = disputes.indices.count { choices[it] == choices[it + disputes.size] && !disputes[it].homograph && tieBreak(disputes[it]) }
+        lastTieBreaks = disputes.indices.count { answered(choices, it, disputes.size) && choices[it] == choices[it + disputes.size] && !disputes[it].homograph && tieBreak(disputes[it]) }
         return out.map { it.toString() }
     }
 }
