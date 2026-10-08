@@ -270,6 +270,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             // next sentence can stream straight in without a re-init delay.
             if (synthesisJob?.isActive == true) cancelSynthesis()
             com.brahmadeo.supertonic.tts.llm.LlmPreparation.cancelApp()
+            if (startIndex == 0) com.brahmadeo.supertonic.tts.llm.LlmPreparation.newAppText()
 
             val rate = SupertonicTTS.getAudioSampleRate()
             ensureAudioTrack(rate)

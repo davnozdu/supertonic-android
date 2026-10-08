@@ -9,6 +9,14 @@ class RussianBookNormalizerTest {
         assertEquals("без двадцати пяти записей",RussianBookNormalizer.normalize("без 25 записей"))
         assertEquals("к двумстам тридцати четырём",RussianBookNormalizer.normalize("к 234"))
     }
+    @Test fun groupedNumbersBeforeUnitsAndHugeValues() {
+        assertEquals("Я прошёл одна тысяча пятьсот километров.",RussianBookNormalizer.normalize("Я прошёл 1 500 км."))
+        assertEquals("Нужно две тысячи килограммов.",RussianBookNormalizer.normalize("Нужно 2 000 кг."))
+        assertEquals("Я прошёл одна тысяча пятьсот километров.",RussianBookNormalizer.normalize("Я прошёл 1 500 км.",expandNumbers=false,dates=false))
+        assertEquals("тысяча пятисотый раз",RussianBookNormalizer.normalize("1 500-й раз"))
+        // Beyond what the speller reads: no crash, the digits stay.
+        assertTrue(RussianBookNormalizer.normalize("Цена 1234567890123 руб.").contains("1234567890123"))
+    }
     @Test fun datesTimeYearsAndOrdinals() {
         assertEquals("Пятого мая две тысячи двадцать четвёртого года",RussianBookNormalizer.normalize("05.05.2024"))
         assertEquals("два часа одна минута",RussianBookNormalizer.normalize("02:01"))

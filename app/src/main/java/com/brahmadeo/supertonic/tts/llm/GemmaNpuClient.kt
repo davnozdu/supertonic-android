@@ -75,7 +75,13 @@ internal object GemmaNpuClient {
         }
         val service = if (ready.await(15, TimeUnit.SECONDS)) bound else null
         if (service == null) { runCatching { app.unbindService(connection) }; throw IllegalStateException("Gemma NPU: процесс не запустился") }
-        val remote = Remote(app, connection, service)
+        // linkToDeath() throws when the process already died: the binding made above must not leak.
+        val remote = try { Remote(app, connection, service) } catch (e: Exception) {
+            runCatching { app.unbindService(connection) }
+            failures++
+            retryAt = SystemClock.elapsedRealtime() + Npu.retryDelayMs(failures)
+            throw IllegalStateException("Gemma NPU: процесс модели упал при подключении", e)
+        }
         try { service.load(model.absolutePath, contextTokens, threads, gate) } catch (e: RemoteException) {
             remote.crashed(); throw IllegalStateException("Gemma NPU: процесс модели упал при загрузке", e)
         } catch (e: Exception) { remote.close(); throw e }

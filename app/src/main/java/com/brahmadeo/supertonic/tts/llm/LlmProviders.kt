@@ -151,11 +151,13 @@ object LlmProviders {
     @Volatile internal var lastVerifier = ""
     /** One choice per item, null where the judge gave none. Items go in chunks of [STRESS_CHECK_CHUNK] with ids: with
      * up to 40 items in one list DeepSeek miscounted ("изменено число ответов") and a whole batch lost its check. */
-    fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean): List<Int?> {
+    fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean, stopped: () -> Boolean = { false }): List<Int?> {
         val thinking = verifyThinkingOverride ?: false
         lastVerifier = (if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
         val out = arrayOfNulls<Int>(items.size)
         for (from in items.indices step STRESS_CHECK_CHUNK) {
+            // A cancelled batch or changed settings: no further judge requests.
+            if (stopped()) throw java.util.concurrent.CancellationException("Проверка ударений отменена")
             val chunk = items.subList(from, minOf(items.size, from + STRESS_CHECK_CHUNK))
             val array = JSONArray()
             chunk.forEachIndexed { i, it -> array.put(JSONObject().put("id", i).put("sentence", it.sentence).put("context", it.context)

@@ -27,6 +27,21 @@ class NamesAndYoTest {
         assertEquals("Семёна баба Катя растила.", RussianNames.restore(null, "Семена баба Катя растила."))
     }
 
+    @Test fun switchesLimitWhatNamesAdd() {
+        RussianNames.initForTests(names)
+        // Stress off: ё only. ё off: stress only (the ё vowel stressed as е).
+        assertEquals("Позвали Петра. Пришёл Семён.", RussianNames.restore(null, "Позвали Петра. Пришёл Семен.", stress = false, yo = true))
+        assertEquals("Позвали Петра́. Пришёл Семе́н.", RussianNames.restore(null, "Позвали Петра. Пришёл Семен.", stress = true, yo = false))
+        assertEquals("Позвали Петра. Пришёл Семен.", RussianNames.restore(null, "Позвали Петра. Пришёл Семен.", stress = false, yo = false))
+    }
+
+    @Test fun forgetEndsTheBook() {
+        RussianNames.initForTests(names)
+        RussianNames.restore(null, "Позвали Семена.")
+        RussianNames.forget()
+        assertEquals("Семена взошли весной.", RussianNames.restore(null, "Семена взошли весной."))
+    }
+
     @Test fun overlayAndHintUseTheDictionary() {
         RussianNames.initForTests(names)
         assertEquals("Вошёл Мы́шкин", RussianNames.overlay(null, "Вошёл Мышки́н"))

@@ -46,6 +46,14 @@ class StressCheckTest {
             StressCheck.preferOffline(gemma, offline, "Раскольников жил в Вологде, а за+мок был стар."))
     }
 
+    @Test fun preferOfflineIsNotLimitedByTheJudgeBudget() {
+        val n = 45
+        val gemma = List(n) { "оттепе́ль" }.joinToString(" ") + "."
+        val offline = List(n) { "о́ттепель" }.joinToString(" ") + "."
+        assertEquals(offline, StressCheck.preferOffline(gemma, offline, List(n) { "оттепель" }.joinToString(" ") + "."))
+        assertEquals(40, StressCheck.disputes(listOf(gemma), listOf(offline)).size)
+    }
+
     @Test fun skipsYoMonosyllablesAndMisalignedFragments() {
         assertEquals(0, StressCheck.disputes(listOf("Всё ещё́ тут."), listOf("Всё е́щё тут.")).size)
         assertEquals(0, StressCheck.disputes(listOf("Оди́н два."), listOf("Оди́н.")).size)

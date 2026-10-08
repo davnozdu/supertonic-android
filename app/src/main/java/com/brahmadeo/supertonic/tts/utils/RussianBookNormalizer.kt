@@ -297,6 +297,8 @@ object RussianBookNormalizer {
                 if (g.startsWith('0')) g.map { numbers.spellInteger((it-'0').toLong()) }.joinToString(" ") else cardinal(g.toLong())
             }
         }
+        // "1 500 км" is one number: join digit groups before ordinals, ranges and units read "500 км" alone ("один пятьсот").
+        t=rx("(?<![\\p{L}\\d])(\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+)(?![\\p{L}\\d])").replace(t) { it.value.filterNot(Char::isWhitespace) }
         t=rx("(?<!\\d)(\\d{1,2})/(\\d{1,2})(?!\\d)").replace(t) { m ->
             val n=m.groupValues[1].toLong(); val den=m.groupValues[2].toInt()
             if (den !in 2..99) m.value else cardinal(n,feminine=true)+" "+ordinal(den,plural(n,"ая","ых","ых"))
@@ -320,7 +322,7 @@ object RussianBookNormalizer {
             "от ${cardinal(a,Case.GEN)} до ${cardinal(b,Case.GEN)}"+(if (unit.isEmpty()) "" else " "+rangeUnits.getValue(unit))
         }
         val units=mapOf("км" to listOf("километр","километра","километров"),"м" to listOf("метр","метра","метров"),"см" to listOf("сантиметр","сантиметра","сантиметров"),"мм" to listOf("миллиметр","миллиметра","миллиметров"),"кг" to listOf("килограмм","килограмма","килограммов"),"г" to listOf("грамм","грамма","граммов"),"л" to listOf("литр","литра","литров"),"руб." to listOf("рубль","рубля","рублей"),"₽" to listOf("рубль","рубля","рублей"),"$" to listOf("доллар","доллара","долларов"),"€" to listOf("евро","евро","евро"),"%" to listOf("процент","процента","процентов"),"°C" to listOf("градус Цельсия","градуса Цельсия","градусов Цельсия"),"°С" to listOf("градус Цельсия","градуса Цельсия","градусов Цельсия"),"°" to listOf("градус","градуса","градусов"))
-        t=rx("(?<![\\p{L}\\d])(-?\\d+(?:[,.]\\d+)?)\\s*(${units.keys.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }})(?![\\p{L}])").replace(t) { m ->
+        t=rx("(?<![\\p{L}\\d])(-?\\d{1,12}(?:[,.]\\d+)?)\\s*(${units.keys.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }})(?![\\p{L}])").replace(t) { m ->
             val raw=m.groupValues[1]; val unit=units.getValue(m.groupValues[2]); val n=raw.toLongOrNull()
             val case=inferredCase(t.take(m.range.first))
             val stop=m.groupValues[2].endsWith(".") && t.substring(m.range.last+1).trimStart(' ','\t').let { it.isEmpty() || it[0]=='\n' || it[0].isUpperCase() }
@@ -329,7 +331,6 @@ object RussianBookNormalizer {
         val letterNames=mapOf('А' to "а",'Б' to "бэ",'В' to "вэ",'Г' to "гэ",'Д' to "дэ",'Е' to "е",'Ё' to "ё",'Ж' to "жэ",'З' to "зэ",'И' to "и",'Й' to "и краткое",'К' to "ка",'Л' to "эль",'М' to "эм",'Н' to "эн",'О' to "о",'П' to "пэ",'Р' to "эр",'С' to "эс",'Т' to "тэ",'У' to "у",'Ф' to "эф",'Х' to "ха",'Ц' to "цэ",'Ч' to "че",'Ш' to "ша",'Щ' to "ща",'Ъ' to "твёрдый знак",'Ы' to "ы",'Ь' to "мягкий знак",'Э' to "э",'Ю' to "ю",'Я' to "я")
         t=acronyms(t)
         if (!expandNumbers) return t
-        t=rx("(?<![\\p{L}\\d])(\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+)(?![\\p{L}\\d])").replace(t) { it.value.filterNot(Char::isWhitespace) }
         // Case-aware ordinary numbers, after compound formats have been resolved.
         t=rx("(?<![\\p{L}\\d.,])(-?\\d{1,12})(?![\\p{L}\\d]|[.,]\\d)").replace(t) { m ->
             val case=inferredCase(t.take(m.range.first),t.substring(m.range.last+1))

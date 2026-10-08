@@ -21,6 +21,8 @@ object RussianNames {
         return sentenceStart(text, index) && family !in seen
     }
     private fun remember(key: String) { if (seen.size > 2000) seen.clear(); seen += key; seen += key.dropLast(1) }
+    /** A new reading (another client, new app text, changed settings): names of the previous book no longer count. */
+    fun forget() = seen.clear()
 
     /** For tests: the dictionary from the asset text. */
     fun load(lines: Sequence<String>): Map<String, String> = lines.filter { it.isNotBlank() && !it.startsWith("#") }
@@ -64,16 +66,27 @@ object RussianNames {
         return if (mark > 0) out.insert(mark, ACUTE).toString() else out.toString()
     }
 
+    /** The dictionary form limited to what the settings allow: without [yo] the ё is read as stressed е (or plain е
+     * without [stress]); without [stress] no mark is added. */
+    private fun allowed(form: String, stress: Boolean, yo: Boolean): String {
+        var f = form
+        if (!yo && 'ё' in f) f = if (stress && ACUTE !in f) f.replaceFirst("ё", "е$ACUTE").replace('ё', 'е') else f.replace('ё', 'е')
+        if (!stress) f = f.replace(ACUTE.toString(), "")
+        return f
+    }
+
     /** Capitalised names get the dictionary's ё always and its stress when the word has no mark yet. A mark the
-     * LLM placed stays (the stress check compares it with this dictionary); ё makes any other mark redundant. */
-    fun restore(ctx: Context?, text: String): String {
+     * LLM placed stays (the stress check compares it with this dictionary); ё makes any other mark redundant.
+     * [stress] and [yo] are the user's switches: each adds only its own kind of mark. */
+    fun restore(ctx: Context?, text: String, stress: Boolean = true, yo: Boolean = true): String {
+        if (!stress && !yo) return text
         if (forms == null && ctx != null) init(ctx)
         val map = forms ?: return text
         if (map.isEmpty()) return text
         return word.replace(text) { m ->
             val w = m.value
             if (!capitalised(w) || '+' in w) return@replace w
-            val f = map[key(w)] ?: return@replace w
+            val f = map[key(w)]?.let { allowed(it, stress, yo) } ?: return@replace w
             if (ambiguousHere(text, m.range.first, key(w))) return@replace w
             if (!sentenceStart(text, m.range.first)) remember(key(w))
             val hasYo = 'ё' in f

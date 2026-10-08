@@ -61,7 +61,7 @@ object StressCheck {
     fun unmarked(text: String) = text.replace(ACUTE.toString(), "")
 
     /** Words both sides stressed differently. [offline] is the offline-marked [unmarked] text of each fragment. */
-    fun disputes(fragments: List<String>, offline: List<String>): List<Dispute> {
+    fun disputes(fragments: List<String>, offline: List<String>, limit: Int = MAX_ITEMS): List<Dispute> {
         val out = mutableListOf<Dispute>()
         for (f in fragments.indices) {
             val a = word.findAll(fragments[f]).toList()
@@ -77,7 +77,7 @@ object StressCheck {
                     previousSentence(fragments[f], a[i].range))
             }
         }
-        return out.take(MAX_ITEMS)
+        return out.take(limit)
     }
 
     /** Homographs both models stressed the same way ("звучал о́рган… больной о́рган" — both wrong): the judge sees the
@@ -114,7 +114,8 @@ object StressCheck {
         val words = word.findAll(fragment).toList()
         if (explicit.size != words.size) return fragment
         val out = StringBuilder(fragment)
-        for (d in disputes(listOf(fragment), listOf(offline)).asReversed()) {
+        // No cloud budget here: every disagreement takes the offline mark, not only the first MAX_ITEMS.
+        for (d in disputes(listOf(fragment), listOf(offline), Int.MAX_VALUE).asReversed()) {
             val index = words.indexOfFirst { it.range == d.range }
             if (index >= 0 && !explicit[index]) out.replace(d.range.first, d.range.last + 1, d.offline)
         }

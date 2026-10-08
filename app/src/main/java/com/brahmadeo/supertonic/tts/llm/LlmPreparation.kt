@@ -15,7 +15,7 @@ private typealias RoleRequest = (String, List<String>, String) -> List<List<Voic
 /** Background preparation of text already submitted by any Android TTS client. */
 object LlmPreparation {
     data class Result(val text: String, val provider: String, val elapsedMs: Long, val fallback: Boolean, val reason: String? = null, val voicePlan: List<VoiceRoleText> = emptyList(), val rolesReady: Boolean = false, val roleProvider: String? = null)
-    private data class Entry(val id: Long, val caller: Any, val text: String, val input: String,
+    private data class Entry(val id: Long, val caller: Any, val text: String, val input: String, val epoch: Long,
         val future: CompletableFuture<Result> = CompletableFuture(), var processing: Boolean = false, var claimed: Boolean = false, @Volatile var cancelled: Boolean = false, @Volatile var textReady: Result? = null)
     private val lock = Any()
     private val entries = linkedMapOf<Long, Entry>()
@@ -50,15 +50,24 @@ object LlmPreparation {
         preparedCache.clear()
         playedResults.clear()
         roleContext.clear()
+        forgetNames()
         synchronized(roleCache) { roleCache.clear(); roleCacheChars = 0 }
         LlmProviders.cancelActive()
         executor.execute { cooldown.clear(); roleCooldown.clear(); LlmProviders.unload() }
     }
+    /** Names met in one book must not decide another ("Семёна взошли"). Android TTS gives no book id, so the
+     * boundary is the client: another reader connection, or new text started in the app ([newAppText]). */
+    @Volatile private var lastCaller: Any? = null
+    private fun forgetNames() { com.brahmadeo.supertonic.tts.utils.RussianNames.forget(); NameStress.clear() }
+    private fun newReader(caller: Any) { if (caller != appCaller && lastCaller != caller) { lastCaller = caller; forgetNames() } }
+    fun newAppText() { lastCaller = appCaller; forgetNames() }
     fun submit(ctx: Context, caller: Any, text: String, flush: Boolean = false): Long? {
         if (flush) cancel(caller)
         initialize(ctx)
         if (text.length > 6000 || !enabled(ctx) || text.isBlank() || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
         val input = com.brahmadeo.supertonic.tts.utils.LexiconManager.apply(text)
+        newReader(caller)
+        val seenEpoch = epoch
         val reused = playedResults.get(input)
         val id = synchronized(lock) {
             // Bound copied text, even if a reader submits an entire book.
@@ -66,12 +75,13 @@ object LlmPreparation {
                 val victim = entries.values.firstOrNull { it.future.isDone || (!it.claimed && !it.processing) } ?: return null
                 entries.remove(victim.id); victim.future.cancel(false)
             }
-            val entry = Entry(++nextId, caller, text, input)
-            if (reused != null) { entry.textReady = reused; entry.future.complete(reused) }
+            val entry = Entry(++nextId, caller, text, input, epoch)
+            // Settings changed between the cache read and here: the reused result is of the old configuration.
+            if (reused != null && seenEpoch == epoch) { entry.textReady = reused; entry.future.complete(reused) }
             entries[entry.id] = entry
             entry.id
         }
-        if (reused != null) {
+        if (reused != null && seenEpoch == epoch) {
             // Keep role continuity for the next paragraph, as the worker would.
             roleContext.append(caller, listOf(if (reused.voicePlan.isEmpty()) reused.text else reused.voicePlan.joinToString("") { "[${it.role.name}]${it.text}" }))
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reused played preparation chars=${text.length} provider=${reused.provider} roles=${reused.rolesReady} source=${SpeechTextTrace.fingerprint(text)}")
@@ -86,13 +96,16 @@ object LlmPreparation {
         val latest = entry.textReady ?: return@synchronized null
         if (!entry.future.isDone && !latest.rolesReady) return@synchronized null
         entries.remove(entry.id)
-        remember(entry.input, latest)
+        remember(entry, latest)
         latest
     }
     /** Only complete LLM results: a dictionary fallback or pending roles must be retried later. */
-    private fun remember(input: String, result: Result) {
+    private fun remember(entry: Entry, result: Result) {
         val ctx = context ?: return
-        if (!result.fallback && (result.rolesReady || !LlmSettings.multiVoiceEnabled(ctx))) playedResults.put(input, result)
+        if (result.fallback || !(result.rolesReady || !LlmSettings.multiVoiceEnabled(ctx))) return
+        // Under the lock: settingsChanged() bumps the epoch under it before clearing, so a result of the old
+        // settings is either cleared afterwards or not stored at all.
+        synchronized(lock) { if (entry.epoch == epoch && !entry.cancelled) playedResults.put(entry.input, result) }
     }
     fun consumed(text: String) { synchronized(lock) {
         entries.values.firstOrNull { it.text == text }?.let {
@@ -132,7 +145,7 @@ object LlmPreparation {
         return try {
             val completed = entry.future.get(timeoutMs, TimeUnit.MILLISECONDS)
             val result = entry.textReady ?: completed
-            remember(entry.input, result)
+            remember(entry, result)
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Delivered chars=${text.length}, provider=${result.provider}, fallback=${result.fallback}, preparationMs=${result.elapsedMs}")
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Text trace source=${SpeechTextTrace.fingerprint(text)} prepared=${SpeechTextTrace.fingerprint(result.text)} provider=${result.provider} fallback=${result.fallback}")
             if (!retainForPlayback) release(entry)
@@ -157,7 +170,7 @@ object LlmPreparation {
      * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
     /** Returns the checked texts and the offline opinions it computed (reused to fill unmarked words, so Silero runs
      * once per batch instead of twice). */
-    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean): Pair<List<String>, List<String>?> = try {
+    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean, stopped: () -> Boolean): Pair<List<String>, List<String>?> = try {
         val started = SystemClock.elapsedRealtime()
         val offline = outputs.map { com.brahmadeo.supertonic.tts.utils.RussianNames.overlay(ctx,
             com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
@@ -179,12 +192,13 @@ object LlmPreparation {
                 "SAME" -> gemini
                 else -> gemini
             }
-            val reversed = verifyPool.submit<List<Int?>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini) }
-            val direct = try { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini) }
-                catch (e: Exception) { reversed.cancel(true); throw e }
+            val reversed = verifyPool.submit<List<Int?>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini, stopped) }
+            val choices = try {
+                LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini, stopped) + reversed.get(30, TimeUnit.SECONDS)
+            } finally { reversed.cancel(true) }
             // The judge disagreeing with itself: the full dictionary decides non-homographs (when downloaded).
             val dictionaryReady = StressJudgeDictionary.ensure(ctx)
-            StressCheck.apply(outputs, disputes, direct + reversed.get(30, TimeUnit.SECONDS)) { d ->
+            StressCheck.apply(outputs, disputes, choices) { d ->
                 val bare = StressCheck.bareWord(d)
                 val nameOrdinal = if (bare.first().isUpperCase()) com.brahmadeo.supertonic.tts.utils.RussianNames.ordinal(bare) else null
                 if (nameOrdinal != null) nameOrdinal == StressCheck.offlineOrdinal(d)
@@ -230,7 +244,7 @@ object LlmPreparation {
         initialize(ctx)
         val probeEpoch = epoch
         val entry = synchronized(lock) {
-            Entry(++nextId, Any(), text, text, processing = true).also { entries[it.id] = it }
+            Entry(++nextId, Any(), text, text, probeEpoch, processing = true).also { entries[it.id] = it }
         }
         val outages = roleProviders(c).filter { it != "local" }.toMutableSet()
         var localCalls = 0
@@ -527,7 +541,7 @@ object LlmPreparation {
                         val learned = if (c.stress) NameStress.fill(validated) else validated
                         // Names (Семён, Пётр, Фёдор) from Wiktionary; ordinary words from Silero's safe ё table. Books
                         // typed without ё ("Семен", "черный") otherwise depended on the LLM noticing every one.
-                        val withNames = if (c.stress || c.restoreYo) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned) else learned
+                        val withNames = if (c.stress || c.restoreYo) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned, c.stress, c.restoreYo) else learned
                         val named = if (c.restoreYo && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo) {
                             com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) } else withNames
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
@@ -557,7 +571,8 @@ object LlmPreparation {
                 } else {
                     val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (NameStress.hint(requestTexts) +
                         com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList())
-                    val (checked, opinions) = if (c.stress) crossCheck(ctx,c,outputs,provider=="gemini") else outputs to null
+                    if (expectedEpoch != epoch || cancelled()) break // No judge requests for a cancelled batch.
+                    val (checked, opinions) = if (c.stress) crossCheck(ctx,c,outputs,provider=="gemini") { expectedEpoch != epoch || cancelled() } else outputs to null
                     batchOpinions = opinions
                     try { checked.forEachIndexed { index,text -> accept(index,text) } } finally { batchOpinions = null }
                 }
