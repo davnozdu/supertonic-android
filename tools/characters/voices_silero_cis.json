@@ -1,0 +1,125 @@
+{
+ "model": "Silero CIS (silero-cis_ru, 29 голосов)",
+ "note": "Пол по имени голоса; ru_kejilgan — женский по README huggingface.co/Dimitrius174/silero-v5-tts-ru; ru_miyau, ru_onaoy, ru_sibday — мужские (проверено на слух пользователем).",
+ "narrator": "ru_dmitriy",
+ "other_m": "ru_eduard",
+ "other_f": "ru_zinaida",
+ "voices": [
+  {
+   "id": "ru_aigul",
+   "gender": "f"
+  },
+  {
+   "id": "ru_albina",
+   "gender": "f"
+  },
+  {
+   "id": "ru_alexandr",
+   "gender": "m"
+  },
+  {
+   "id": "ru_alfia",
+   "gender": "f"
+  },
+  {
+   "id": "ru_alfia2",
+   "gender": "f"
+  },
+  {
+   "id": "ru_bogdan",
+   "gender": "m"
+  },
+  {
+   "id": "ru_dmitriy",
+   "gender": "m"
+  },
+  {
+   "id": "ru_ekaterina",
+   "gender": "f"
+  },
+  {
+   "id": "ru_vika",
+   "gender": "f"
+  },
+  {
+   "id": "ru_gamat",
+   "gender": "m"
+  },
+  {
+   "id": "ru_igor",
+   "gender": "m"
+  },
+  {
+   "id": "ru_karina",
+   "gender": "f"
+  },
+  {
+   "id": "ru_kejilgan",
+   "gender": "f"
+  },
+  {
+   "id": "ru_kermen",
+   "gender": "f"
+  },
+  {
+   "id": "ru_marat",
+   "gender": "m"
+  },
+  {
+   "id": "ru_miyau",
+   "gender": "m"
+  },
+  {
+   "id": "ru_nurgul",
+   "gender": "f"
+  },
+  {
+   "id": "ru_oksana",
+   "gender": "f"
+  },
+  {
+   "id": "ru_onaoy",
+   "gender": "m"
+  },
+  {
+   "id": "ru_ramilia",
+   "gender": "f"
+  },
+  {
+   "id": "ru_roman",
+   "gender": "m"
+  },
+  {
+   "id": "ru_safarhuja",
+   "gender": "m"
+  },
+  {
+   "id": "ru_saida",
+   "gender": "f"
+  },
+  {
+   "id": "ru_sibday",
+   "gender": "m"
+  },
+  {
+   "id": "ru_zara",
+   "gender": "f"
+  },
+  {
+   "id": "ru_zhadyra",
+   "gender": "f"
+  },
+  {
+   "id": "ru_zhazira",
+   "gender": "f"
+  },
+  {
+   "id": "ru_zinaida",
+   "gender": "f"
+  },
+  {
+   "id": "ru_eduard",
+   "gender": "m"
+  }
+ ]
+}
