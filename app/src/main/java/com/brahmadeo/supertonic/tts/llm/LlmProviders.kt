@@ -64,13 +64,26 @@ object LlmProviders {
         (if (!c.punctuation) "\nИзменение пунктуации выключено: копируй все знаки точно." else "")
 
     private fun schema() = JSONObject("""{"type":"object","properties":{"texts":{"type":"array","items":{"type":"string"}}},"required":["texts"],"additionalProperties":false}""")
-    private fun http(url: String, key: String, body: JSONObject? = null, gemini: Boolean = false, deadlineMs: Long = 12000): JSONObject {
+    /** A separate cancellation scope for book preparation: stopping reading must not cancel it,
+     * and its «Остановить» must not interrupt the reader's stress/role requests. */
+    internal class CloudCancellation {
+        private val connections = java.util.concurrent.ConcurrentHashMap.newKeySet<HttpURLConnection>()
+        @Volatile private var cancelled = false
+        fun check() { if (cancelled) throw kotlinx.coroutines.CancellationException("Подготовка остановлена") }
+        fun attach(connection: HttpURLConnection) { connections.add(connection); if (cancelled) { connection.disconnect(); check() } }
+        fun detach(connection: HttpURLConnection) { connections.remove(connection) }
+        fun cancel() { cancelled = true; connections.forEach { runCatching { it.disconnect() } } }
+    }
+    private fun http(url: String, key: String, body: JSONObject? = null, gemini: Boolean = false, deadlineMs: Long = 12000,
+                     cancellation: CloudCancellation? = null): JSONObject {
+        cancellation?.check()
         require(URL(url).protocol == "https") { "Нужен HTTPS адрес" }
         val connection = URL(url).openConnection() as HttpURLConnection
-        if (body != null) activeHttp.add(connection)
+        if (cancellation == null && body != null) activeHttp.add(connection)
         val expired = java.util.concurrent.atomic.AtomicBoolean()
         val watchdog = timer.schedule({ expired.set(true); runCatching { connection.disconnect() } },deadlineMs,java.util.concurrent.TimeUnit.MILLISECONDS)
         try {
+            cancellation?.attach(connection)
             connection.connectTimeout = minOf(6000L,deadlineMs).coerceAtLeast(1).toInt()
             // A non-streaming reply arrives only when generation ends: let the request deadline rule.
             connection.readTimeout = (if (body == null) minOf(10000L, deadlineMs) else deadlineMs).coerceAtLeast(1).toInt()
@@ -92,9 +105,10 @@ object LlmProviders {
                 else -> "API HTTP $code"
             } }
             val bytes = connection.inputStream.use { it.readNBytesCompat(512 * 1024) }
+            cancellation?.check()
             check(!expired.get()) { "LLM превышен лимит запроса" }
             return JSONObject(String(bytes, Charsets.UTF_8))
-        } finally { watchdog.cancel(false); activeHttp.remove(connection); connection.disconnect() }
+        } finally { watchdog.cancel(false); activeHttp.remove(connection); cancellation?.detach(connection); connection.disconnect() }
     }
     private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
         val out = java.io.ByteArrayOutputStream()
@@ -181,7 +195,9 @@ object LlmProviders {
         }
         return out.toList()
     }
-    private fun cloudRequest(c: LlmConfig, prompt: String, system: String, responseSchema: JSONObject, gemini: Boolean, tokens: Int = 6000, deadlineMs: Long = 12000): String {
+    internal fun cloudRequest(c: LlmConfig, prompt: String, system: String, responseSchema: JSONObject, gemini: Boolean,
+                              tokens: Int = 6000, deadlineMs: Long = 12000, cancellation: CloudCancellation? = null): String {
+        cancellation?.check()
         val started = SystemClock.elapsedRealtime()
         fun remaining() = (deadlineMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)
         return if (gemini) {
@@ -195,8 +211,10 @@ object LlmProviders {
             val body = JSONObject().put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
                 .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
                 .put("generationConfig", generationConfig)
-            val response = http("https://generativelanguage.googleapis.com/v1beta/models/${c.geminiModel}:generateContent", c.geminiKey, body, true, remaining())
-            val parts = response.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts")
+            val response = http("https://generativelanguage.googleapis.com/v1beta/models/${c.geminiModel}:generateContent", c.geminiKey, body, true, remaining(), cancellation)
+            val candidate = response.getJSONArray("candidates").getJSONObject(0)
+            if (cancellation != null && candidate.optString("finishReason") == "MAX_TOKENS") throw CloudOutputLimitException()
+            val parts = candidate.getJSONObject("content").getJSONArray("parts")
             (0 until parts.length()).filter { !parts.getJSONObject(it).optBoolean("thought") }.joinToString("") { parts.getJSONObject(it).optString("text") }
         } else {
             require(c.ollamaModel.isNotBlank()) { "Выберите модель Ollama" }
@@ -204,7 +222,7 @@ object LlmProviders {
             val controls = thinkingControls[controlKey] ?: run {
                 val values = runCatching {
                     val array = http(c.ollamaEndpoint.trimEnd('/') + "/api/show", c.ollamaKey,
-                        JSONObject().put("model", c.ollamaModel), deadlineMs=minOf(3000L,remaining())).optJSONObject("thinking")?.optJSONArray("values")
+                        JSONObject().put("model", c.ollamaModel), deadlineMs=minOf(3000L,remaining()), cancellation=cancellation).optJSONObject("thinking")?.optJSONArray("values")
                     if (array == null) emptyList() else (0 until array.length()).map { array.get(it) }
                 }.getOrDefault(emptyList())
                 thinkingControls[controlKey] = values
@@ -218,9 +236,13 @@ object LlmProviders {
             // Ollama Cloud does not support the format/schema parameter.
             // JSON is requested in the instruction and validated after receipt.
             if (!URL(c.ollamaEndpoint).host.equals("ollama.com", true)) body.put("format", responseSchema)
-            http(c.ollamaEndpoint.trimEnd('/') + "/api/chat", c.ollamaKey, body, deadlineMs=remaining()).getJSONObject("message").getString("content")
+            cancellation?.check()
+            val response = http(c.ollamaEndpoint.trimEnd('/') + "/api/chat", c.ollamaKey, body, deadlineMs=remaining(), cancellation=cancellation)
+            if (cancellation != null && response.optString("done_reason") == "length") throw CloudOutputLimitException()
+            response.getJSONObject("message").getString("content")
         }
     }
+    internal class CloudOutputLimitException : IllegalStateException("LLM исчерпала лимит ответа")
     fun voiceRoles(context: Context, c: LlmConfig, texts: List<String>, preceding: String, provider: String, deadlineMs: Long = 8000,
                    book: com.brahmadeo.supertonic.tts.books.BookContext? = null): List<List<VoiceRoleText>?> {
         if (provider == "local") {

@@ -43,6 +43,7 @@
         <activity android:name=".MusicDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <activity android:name=".SpeechDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <service android:name=".utils.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".books.prepare.BookPreparationService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <service android:name=".llm.LocalModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <activity
             android:name=".MainActivity"

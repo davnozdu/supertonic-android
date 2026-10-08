@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -20,6 +21,7 @@ import com.brahmadeo.supertonic.tts.books.BookLibrary
 import com.brahmadeo.supertonic.tts.books.BookMatcher
 import com.brahmadeo.supertonic.tts.books.BookPackage
 import com.brahmadeo.supertonic.tts.books.BookVoices
+import com.brahmadeo.supertonic.tts.books.prepare.BookPreparation
 import com.brahmadeo.supertonic.tts.llm.VoicePreview
 import com.brahmadeo.supertonic.tts.llm.VoiceRole
 import com.brahmadeo.supertonic.tts.ui.VoiceRoleChoice
@@ -48,8 +50,48 @@ class BooksActivity : ComponentActivity() {
                 var message by remember { mutableStateOf("") }
                 val position by BookMatcher.recognised.collectAsState()
                 val scope = rememberCoroutineScope()
+                val preparation by BookPreparation.state.collectAsState()
+                var elapsedSeconds by remember { mutableLongStateOf(0L) }
+                LaunchedEffect(preparation.running, preparation.startedAt) {
+                    while (preparation.running) {
+                        elapsedSeconds = ((System.currentTimeMillis() - preparation.startedAt) / 1000).coerceAtLeast(0)
+                        kotlinx.coroutines.delay(1000)
+                    }
+                }
+                val prepPrefs = remember { getSharedPreferences("book_preparation", MODE_PRIVATE) }
+                var thinking by remember { mutableStateOf(prepPrefs.getBoolean("thinking", true)) }
+                var sourceLabel by remember { mutableStateOf("") }
+                var pendingUri by remember { mutableStateOf<Uri?>(null) }
+                var pendingSource by remember { mutableStateOf<BookPreparation.Source?>(null) }
                 suspend fun reload() { books = withContext(Dispatchers.IO) { BookLibrary.list(this@BooksActivity) } }
-                LaunchedEffect(Unit) { reload() }
+                LaunchedEffect(preparation.bookId) { reload() }
+                LaunchedEffect(Unit) {
+                    sourceLabel = withContext(Dispatchers.IO) { runCatching { BookPreparation.source(this@BooksActivity).label }
+                        .getOrDefault("Облако не настроено — откройте настройки LLM") }
+                }
+                val epubPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    if (uri != null) scope.launch {
+                        try {
+                            pendingSource = withContext(Dispatchers.IO) { BookPreparation.source(this@BooksActivity).withThinking(thinking) }
+                            sourceLabel = pendingSource!!.label
+                            pendingUri = uri
+                        } catch (_: Exception) { message = "Для подготовки книги настройте облачную модель и ключ в настройках LLM." }
+                    }
+                }
+                if (pendingUri != null && pendingSource != null) AlertDialog(
+                    onDismissRequest = { pendingUri = null; pendingSource = null },
+                    title = { Text("Подготовить книгу") },
+                    text = { Text("${pendingSource!!.label}\n\nВ облако уйдёт список кандидатов с короткими примерами, а не вся книга. " +
+                        "Режим размышления ${if (pendingSource!!.thinking) "включён" else "выключен"}. " +
+                        "Подготовка может занять 10–15 минут и продолжится при выключенном экране.") },
+                    confirmButton = { TextButton(onClick = {
+                        val uri = pendingUri!!; val source = pendingSource!!
+                        pendingUri = null; pendingSource = null
+                        try { if (!BookPreparation.start(this@BooksActivity, uri, source)) message = "Подготовка другой книги уже идёт." }
+                        catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите EPUB снова." }
+                    }) { Text("Подготовить") } },
+                    dismissButton = { TextButton(onClick = { pendingUri = null; pendingSource = null }) { Text("Отмена") } }
+                )
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if (uri != null) {
                         busy = true; message = "Загрузка книги…"
@@ -67,6 +109,40 @@ class BooksActivity : ComponentActivity() {
                     Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text("Книги с голосами персонажей", style = MaterialTheme.typography.headlineMedium)
+                        ElevatedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Подготовить книгу", style = MaterialTheme.typography.titleLarge)
+                                Text("Выберите EPUB — MyTTS найдёт персонажей и подготовит файл голосов для чтения.")
+                                if (sourceLabel.isNotBlank()) Text(sourceLabel, style = MaterialTheme.typography.bodySmall)
+                                TextButton(enabled = !preparation.running, onClick = { startActivity(Intent(this@BooksActivity, LlmSettingsActivity::class.java)) }) {
+                                    Text("Настройки LLM")
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("Режим размышления")
+                                        Text("Даёт более точный результат, но работает медленнее.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked = thinking, enabled = !preparation.running, onCheckedChange = {
+                                        thinking = it; prepPrefs.edit().putBoolean("thinking", it).apply()
+                                    })
+                                }
+                                Text("Обработка может занять 10–15 минут. Продолжается в фоне и при выключенном экране. " +
+                                    "Запросы к LLM выполняются строго по одному.", style = MaterialTheme.typography.bodySmall)
+                                if (preparation.running) {
+                                    Text(preparation.stage)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Text("Прошло: ${elapsedSeconds / 60} мин ${elapsedSeconds % 60} с", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (preparation.total > 0) {
+                                        LinearProgressIndicator(progress = { preparation.done.toFloat() / preparation.total }, modifier = Modifier.fillMaxWidth())
+                                        Text("Готово разделов: ${preparation.done}/${preparation.total}", style = MaterialTheme.typography.bodySmall)
+                                    } else LinearProgressIndicator(Modifier.fillMaxWidth())
+                                    OutlinedButton(onClick = BookPreparation::stop) { Text("Остановить") }
+                                } else Button(enabled = !busy, onClick = { epubPicker.launch(arrayOf("application/epub+zip", "*/*")) }) { Text("Выбрать EPUB") }
+                                if (preparation.message.isNotBlank()) Text(preparation.message)
+                            }
+                        }
                         Text("Файл подготовленной книги (.mytts-book) содержит персонажей, их имена и пол по разделам и " +
                             "отпечатки предложений — без текста книги. Им можно делиться. Во время чтения в любой читалке " +
                             "MyTTS узнаёт книгу и раздел по тексту и включает набор персонажей.")
@@ -81,23 +157,29 @@ class BooksActivity : ComponentActivity() {
                         HorizontalDivider()
                         if (books.isEmpty()) Text("Подготовленных книг пока нет.")
                         for (book in books) {
-                            Text(book.title, style = MaterialTheme.typography.titleMedium)
-                            Text(listOf(book.author, "персонажей ${book.characters}", "разделов ${book.sections}").filter { it.isNotBlank() }.joinToString(" · "),
-                                style = MaterialTheme.typography.bodySmall)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(enabled = !busy, onClick = { share(book) }) { Text("Поделиться") }
-                                OutlinedButton(enabled = !busy, onClick = {
-                                    scope.launch {
-                                        withContext(Dispatchers.IO) { BookLibrary.remove(this@BooksActivity, book.id) }
-                                        changed()
-                                        reload(); message = "Книга «${book.title}» удалена"
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Column(Modifier.fillMaxWidth().clickable {
+                                        voicePreview.stop(); openBook = if (openBook == book.id) null else book.id
+                                    }.padding(vertical = 6.dp)) {
+                                        Text((if (openBook == book.id) "▾ " else "▸ ") + book.title, style = MaterialTheme.typography.titleMedium)
+                                        Text(listOf(book.author, "персонажей ${book.characters}", "разделов ${book.sections}")
+                                            .filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                                     }
-                                }) { Text("Удалить") }
+                                    if (openBook == book.id) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(enabled = !busy, onClick = { share(book) }) { Text("Поделиться") }
+                                            OutlinedButton(enabled = !busy, onClick = {
+                                                scope.launch {
+                                                    withContext(Dispatchers.IO) { BookLibrary.remove(this@BooksActivity, book.id) }
+                                                    changed(); reload(); message = "Книга «${book.title}» удалена"
+                                                }
+                                            }) { Text("Удалить") }
+                                        }
+                                        CharacterVoices(book.id, voiceRevision, previewState) { voiceRevision++ }
+                                    }
+                                }
                             }
-                            OutlinedButton(enabled = !busy, onClick = { voicePreview.stop(); openBook = if (openBook == book.id) null else book.id }) {
-                                Text(if (openBook == book.id) "Скрыть персонажей" else "Персонажи и голоса")
-                            }
-                            if (openBook == book.id) CharacterVoices(book.id, voiceRevision, previewState) { voiceRevision++ }
                         }
                     }
                 }
