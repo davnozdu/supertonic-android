@@ -10,8 +10,8 @@ class StressCheckTest {
     @Test fun findsOnlyDisagreements() {
         val d = StressCheck.disputes(llm, offline)
         assertEquals(listOf("оттепе́ль/о́ттепель", "нача́л/на́чал", "Мы́шкин/Мышки́н"), d.map { "${it.llm}/${it.offline}" })
-        assertEquals("Это ещё оттепель, а он начал смеяться.", d[0].sentence)
-        assertEquals("Мышкин молчал.", d[2].sentence)
+        assertEquals("Это ещё ⟨оттепель⟩, а он начал смеяться.", d[0].sentence)
+        assertEquals("⟨Мышкин⟩ молчал.", d[2].sentence)
     }
 
     @Test fun eachDisputeIsAskedInBothOrdersAndSwitchesOnlyWhenConsistent() {

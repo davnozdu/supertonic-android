@@ -1,0 +1,9 @@
+names_ru.tsv — stress and ё of Russian proper names (given names, surnames, place names) in all forms.
+
+Derived from Wiktionary (https://en.wiktionary.org) via the kaikki.org machine-readable extraction
+(https://kaikki.org/dictionary/Russian/), Russian proper nouns, retrieved October 2026.
+Wiktionary content is available under the Creative Commons Attribution-ShareAlike 4.0 License
+(https://creativecommons.org/licenses/by-sa/4.0/). This derived table is distributed under the same license.
+
+Built by tools/names/build_names.py: monosyllables unmarked, keys with two different stress positions dropped,
+ё forms preferred over е forms, pre-reform spellings skipped.

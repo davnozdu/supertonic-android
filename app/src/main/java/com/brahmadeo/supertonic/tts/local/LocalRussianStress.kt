@@ -74,6 +74,20 @@ object LocalRussianStress {
             if (c == '+') c else c.let { if (original.getOrNull(pos++)?.isUpperCase() == true) it.uppercaseChar() else it }
         }.joinToString("")
     }
+    private fun plusToAcute(v: String) = Regex("\\+([аеёиоуыэюяАЕЁИОУЫЭЮЯ])").replace(v) { it.groupValues[1] + "\u0301" }
+    /** Safe ё form of a word from the verified ё table ("черный" -> "чёрный"), or null. Lowercase lookup. */
+    @Synchronized fun yoForm(ctx: Context, word: String): String? = runCatching {
+        if (!LocalRussianAssets.ready(ctx)) return@runCatching null
+        load(ctx); lastUsed = android.os.SystemClock.elapsedRealtime()
+        yoDictionary?.lookup(word.lowercase().toByteArray(Charsets.UTF_8))?.let(::plusToAcute)
+    }.getOrNull()
+    /** The two stressed variants of a Silero homograph ("уж\u0301е", "у\u0301же"), or null. */
+    @Synchronized fun homographVariants(ctx: Context, word: String): List<String>? = runCatching {
+        if (!LocalRussianAssets.ready(ctx)) return@runCatching null
+        load(ctx); lastUsed = android.os.SystemClock.elapsedRealtime()
+        val array = data!!.getJSONObject("homodict").optJSONArray(word.lowercase().replace("\u0301", "").replace("+", ""))
+        if (array == null || array.length() != 2) null else (0..1).map { plusToAcute(array.getString(it)) }
+    }.getOrNull()
     /** Whether Silero Stress lists [word] as a homograph (its stress depends on the sentence). */
     @Synchronized fun isHomograph(ctx: Context, word: String): Boolean = runCatching {
         if (!LocalRussianAssets.ready(ctx)) return@runCatching true

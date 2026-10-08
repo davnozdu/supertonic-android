@@ -157,10 +157,14 @@ object LlmPreparation {
      * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
     private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean): List<String> = try {
         val started = SystemClock.elapsedRealtime()
-        val offline = outputs.map { com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
-            com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx, StressCheck.unmarked(it)), "ru") }
+        val offline = outputs.map { com.brahmadeo.supertonic.tts.utils.RussianNames.overlay(ctx,
+            com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
+            com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx, StressCheck.unmarked(it)), "ru")) }
         val offlineMs = SystemClock.elapsedRealtime() - started
-        val disputes = StressCheck.disputes(outputs, offline)
+        val conflicts = StressCheck.disputes(outputs, offline)
+        // Homographs both sides stressed alike are asked too: agreement is no proof there (о́рган/орга́н).
+        val disputes = (conflicts + StressCheck.homographs(outputs, conflicts) {
+            com.brahmadeo.supertonic.tts.local.LocalRussianStress.homographVariants(ctx, it) }).take(40)
         if (disputes.isEmpty()) outputs.also { Log.i("LlmPreparation", "Stress cross-check: no disputes, offlineMs=$offlineMs") }
         else {
             // The same provider judges by default: on «Идиот» ch. 1 it scored 34-36/42 key words against 33/42 for a
@@ -179,8 +183,11 @@ object LlmPreparation {
             // The judge disagreeing with itself: the full dictionary decides non-homographs (when downloaded).
             val dictionaryReady = StressJudgeDictionary.ensure(ctx)
             StressCheck.apply(outputs, disputes, direct + reversed.get(30, TimeUnit.SECONDS)) { d ->
-                dictionaryReady && !com.brahmadeo.supertonic.tts.local.LocalRussianStress.isHomograph(ctx, StressCheck.bareWord(d)) &&
-                    StressJudgeDictionary.ordinal(StressCheck.bareWord(d)).let { it != null && it == StressCheck.offlineOrdinal(d) }
+                val bare = StressCheck.bareWord(d)
+                val nameOrdinal = if (bare.first().isUpperCase()) com.brahmadeo.supertonic.tts.utils.RussianNames.ordinal(bare) else null
+                if (nameOrdinal != null) nameOrdinal == StressCheck.offlineOrdinal(d)
+                else dictionaryReady && !com.brahmadeo.supertonic.tts.local.LocalRussianStress.isHomograph(ctx, bare) &&
+                    StressJudgeDictionary.ordinal(bare).let { it != null && it == StressCheck.offlineOrdinal(d) }
             }
         }.also {
             Log.i("LlmPreparation", "Stress cross-check judge=${if (disputes.isEmpty()) "-" else LlmProviders.lastVerifier} disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
@@ -501,7 +508,12 @@ object LlmPreparation {
                         // then give a known name the LLM left unmarked the stress this book already uses.
                         probeRaw?.put(source, validated)
                         if (c.stress && provider != "local") NameStress.learn(validated)
-                        val named = if (c.stress) NameStress.fill(validated) else validated
+                        val learned = if (c.stress) NameStress.fill(validated) else validated
+                        // Names (Семён, Пётр, Фёдор) from Wiktionary; ordinary words from Silero's safe ё table. Books
+                        // typed without ё ("Семен", "черный") otherwise depended on the LLM noticing every one.
+                        val withNames = if (c.stress || c.restoreYo) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned) else learned
+                        val named = if (c.restoreYo && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo) {
+                            com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) } else withNames
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
                             // Stress: the offline Silero Stress outscored Gemma, so it decides where both mark a word.
                             val offlineOpinion=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
@@ -531,7 +543,8 @@ object LlmPreparation {
                 if (provider == "local") {
                     LlmProviders.local(ctx,c,requestTexts,deadlineMs=if(c.multiVoice) 12000 else 45000,onOutput=::accept)
                 } else {
-                    val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) NameStress.hint(requestTexts) else emptyList())
+                    val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (NameStress.hint(requestTexts) +
+                        com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList())
                     (if (c.stress) crossCheck(ctx,c,outputs,provider=="gemini") else outputs).forEachIndexed { index,text -> accept(index,text) }
                 }
                 if (expectedEpoch != epoch || cancelled()) break

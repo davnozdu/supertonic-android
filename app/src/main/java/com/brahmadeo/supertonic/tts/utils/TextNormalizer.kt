@@ -341,6 +341,7 @@ class TextNormalizer {
                 t = RussianBookNormalizer.normalize(t)
                 val original = t
                 if (!skipStress) {
+                    t = RussianNames.restore(context, t)
                     context?.let { t = com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(it, t) }
                     t = AccentDictionaryManager.apply(t, lowerLang)
                     t = RussianYoPolicy.apply(original, t, context?.getSharedPreferences("llm_settings",0)?.getBoolean("restore_yo",true) ?: true)
