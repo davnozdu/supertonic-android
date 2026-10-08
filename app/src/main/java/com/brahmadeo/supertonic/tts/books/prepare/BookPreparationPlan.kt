@@ -30,8 +30,8 @@ data class BookPreparationPlan(val title: String, val author: String, val fileSh
     companion object {
         fun hash(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         fun create(file: File, names: Set<String>, stage: (String) -> Unit = {}, check: () -> Unit = {}): BookPreparationPlan {
-            stage("Чтение EPUB")
-            val book = EpubBook.read(file, check)
+            stage("Чтение книги")
+            val book = BookInput.read(file, check)
             stage("Поиск кандидатов")
             val extraction = NameCandidates(names, check).extract(book)
             val requests = extraction.candidates.filter { it.count >= 2 || it.speaker > 0 }.groupBy { it.scope }.toSortedMap().map { (scope, group) ->

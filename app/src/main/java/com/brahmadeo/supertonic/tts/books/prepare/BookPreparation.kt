@@ -55,7 +55,7 @@ object BookPreparation {
         val ctx = context.applicationContext
         ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         pendingSource = source
-        mutable.value = State(running = true, stage = "Копирование EPUB", startedAt = System.currentTimeMillis())
+        mutable.value = State(running = true, stage = "Копирование книги", startedAt = System.currentTimeMillis())
         try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, BookPreparationService::class.java)
                 .setData(uri).putExtra("thinking", source.thinking))
@@ -71,27 +71,29 @@ object BookPreparation {
         if (job != null) return
         val ctx = context.applicationContext
         val source = pendingSource ?: try { source(ctx).withThinking(thinking) } catch (_: Exception) {
-            mutable.value = State(message = "Проверьте настройки LLM и выберите EPUB снова.")
+            mutable.value = State(message = "Проверьте настройки LLM и выберите книгу снова.")
             ctx.stopService(Intent(ctx, BookPreparationService::class.java)); return
         }
         pendingSource = null
         val cancel = cancellation ?: LlmProviders.CloudCancellation()
         cancellation = cancel
         val startedAt = System.currentTimeMillis()
-        mutable.value = State(running = true, stage = "Копирование EPUB", startedAt = startedAt)
+        mutable.value = State(running = true, stage = "Копирование книги", startedAt = startedAt)
         job = scope.launch(start = CoroutineStart.LAZY) {
             var temp: File? = null
             try {
                 run {
-                    temp = File.createTempFile("book-prep-", ".epub", ctx.cacheDir)
+                    // A previous process may have died before its finally block.
+                    ctx.cacheDir.listFiles()?.filter { it.isFile && it.name.startsWith("book-prep-") }?.forEach { it.delete() }
+                    temp = File.createTempFile("book-prep-", ".book", ctx.cacheDir)
                     val epub = temp!!
                     ctx.contentResolver.openInputStream(uri)?.use { input -> epub.outputStream().use { output ->
                         val buf = ByteArray(8192); var size = 0L
                         while (true) {
                             cancel.check(); val n = input.read(buf); if (n < 0) break
-                            size += n; require(size <= EpubBook.MAX_BYTES) { "EPUB больше 50 МБ" }; output.write(buf, 0, n)
+                            size += n; require(size <= EpubBook.MAX_BYTES) { "Файл книги больше 50 МБ" }; output.write(buf, 0, n)
                         }
-                    } } ?: error("Не удалось открыть EPUB")
+                    } } ?: error("Не удалось открыть книгу")
                     val names = ctx.assets.open("names_ru.tsv").bufferedReader().useLines { RussianNames.load(it).keys }
                     val plan = BookPreparationPlan.create(epub, names, { stage -> mutable.value = mutable.value.copy(stage = stage) }, cancel::check)
                     // Cache identity includes the actual prompts and provider/model. No credentials in it.
@@ -129,9 +131,9 @@ object BookPreparation {
                     }
                 }
             } catch (_: CancellationException) {
-                mutable.value = State(message = "Подготовка остановлена. Уже полученные ответы сохранены; можно выбрать EPUB снова.")
+                mutable.value = State(message = "Подготовка остановлена. Уже полученные ответы сохранены; можно выбрать книгу снова.")
             } catch (t: Exception) {
-                mutable.value = State(message = if (runCatching { cancel.check() }.isFailure) "Подготовка остановлена. Можно выбрать EPUB снова." else safeError(t))
+                mutable.value = State(message = if (runCatching { cancel.check() }.isFailure) "Подготовка остановлена. Можно выбрать книгу снова." else safeError(t))
             } finally {
                 temp?.delete()
                 runCatching { ctx.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -177,12 +179,12 @@ object BookPreparation {
     /** Never show arbitrary provider/network messages: URLs or credentials may be embedded in them. */
     private fun safeError(t: Exception): String {
         val message = t.message.orEmpty()
-        val known = listOf("EPUB", "В книге", "В ответе LLM", "LLM не вернула", "LLM вернула", "LLM исчерпала", "Слишком большой ответ", "Файл подготовленной", "Не удалось открыть EPUB")
+        val known = listOf("EPUB", "FB2", "В FB2", "В ZIP", "Это не книга", "Текст FB2", "Файл книги", "В книге", "В ответе LLM", "LLM не вернула", "LLM вернула", "LLM исчерпала", "Слишком большой ответ", "Файл подготовленной", "Не удалось открыть книгу")
         val detail = when {
             message.startsWith("API HTTP") -> message
             t is java.net.SocketTimeoutException -> "Облако не ответило вовремя; повторите подготовку"
             known.any { message.startsWith(it) } -> message
-            else -> "Не удалось подготовить книгу. Проверьте EPUB, сеть и настройки LLM; затем повторите."
+            else -> "Не удалось подготовить книгу. Проверьте файл книги, сеть и настройки LLM; затем повторите."
         }
         return "Ошибка: $detail"
     }

@@ -88,7 +88,7 @@ class BooksActivity : ComponentActivity() {
                         val uri = pendingUri!!; val source = pendingSource!!
                         pendingUri = null; pendingSource = null
                         try { if (!BookPreparation.start(this@BooksActivity, uri, source)) message = "Подготовка другой книги уже идёт." }
-                        catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите EPUB снова." }
+                        catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите книгу снова." }
                     }) { Text("Подготовить") } },
                     dismissButton = { TextButton(onClick = { pendingUri = null; pendingSource = null }) { Text("Отмена") } }
                 )
@@ -112,7 +112,8 @@ class BooksActivity : ComponentActivity() {
                         ElevatedCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Подготовить книгу", style = MaterialTheme.typography.titleLarge)
-                                Text("Выберите EPUB — MyTTS найдёт персонажей и подготовит файл голосов для чтения.")
+                                Text("EPUB · FB2 · FB2.ZIP", style = MaterialTheme.typography.bodySmall)
+                                Text("Выберите EPUB или FB2 — MyTTS найдёт персонажей и подготовит файл голосов для чтения.")
                                 if (sourceLabel.isNotBlank()) Text(sourceLabel, style = MaterialTheme.typography.bodySmall)
                                 TextButton(enabled = !preparation.running, onClick = { startActivity(Intent(this@BooksActivity, LlmSettingsActivity::class.java)) }) {
                                     Text("Настройки LLM")
@@ -139,7 +140,7 @@ class BooksActivity : ComponentActivity() {
                                         Text("Готово разделов: ${preparation.done}/${preparation.total}", style = MaterialTheme.typography.bodySmall)
                                     } else LinearProgressIndicator(Modifier.fillMaxWidth())
                                     OutlinedButton(onClick = BookPreparation::stop) { Text("Остановить") }
-                                } else Button(enabled = !busy, onClick = { epubPicker.launch(arrayOf("application/epub+zip", "*/*")) }) { Text("Выбрать EPUB") }
+                                } else Button(enabled = !busy, onClick = { epubPicker.launch(arrayOf("application/epub+zip", "application/x-fictionbook+xml", "application/xml", "text/xml", "application/zip", "*/*")) }) { Text("Выбрать книгу") }
                                 if (preparation.message.isNotBlank()) Text(preparation.message)
                             }
                         }
