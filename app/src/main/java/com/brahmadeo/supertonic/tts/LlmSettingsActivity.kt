@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.llm.*
+import com.brahmadeo.supertonic.tts.ui.VoiceRoleChoice
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -426,28 +427,6 @@ class LlmSettingsActivity : ComponentActivity() {
     }
     private fun saveModels(gemini: Boolean, models: List<String>) {
         getSharedPreferences("llm_models", MODE_PRIVATE).edit().putString(if (gemini) "gemini" else "ollama", org.json.JSONArray(models).toString()).apply()
-    }
-}
-
-@Composable private fun VoiceRoleChoice(label: String, selected: String, options: List<String>,
-    preview: VoicePreview.State, listen: (String) -> Unit, change: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    fun voiceLabel(voice: String) = com.brahmadeo.supertonic.tts.tera.TeraVoices.label(voice)
-    fun caption(voice: String) = if (preview.activeVoice == voice) "Остановить" else "Прослушать"
-    Column {
-        Text(label, style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { expanded = true }, enabled = options.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(voiceLabel(selected)) }
-            OutlinedButton(onClick = { listen(selected) }, enabled = selected in options) { Text(caption(selected)) }
-        }
-        DropdownMenu(expanded, { expanded = false }, modifier = Modifier.heightIn(max = 420.dp)) {
-            options.forEach { voice -> DropdownMenuItem(
-                text = { Text(voiceLabel(voice)) },
-                trailingIcon = { TextButton(onClick = { listen(voice) }) { Text(caption(voice)) } },
-                modifier = if (voice == selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer) else Modifier,
-                onClick = { expanded = false; change(voice) }) }
-        }
     }
 }
 

@@ -18,7 +18,7 @@ role=author для повествования и авторских вставо
     fun prompt(texts: List<String>, preceding: String, book: com.brahmadeo.supertonic.tts.books.BookContext? = null): String = JSONObject()
         .put("context_before", preceding)
         .apply {
-            if (book != null) put("characters", JSONArray().apply {
+            if (book != null && book.cast.characters.isNotEmpty()) put("characters", JSONArray().apply {
                 book.cast.characters.forEach { ch ->
                     put(JSONObject().put("id", ch.id).put("name", ch.name).put("gender", ch.gender)
                         .put("forms", JSONArray(ch.forms.take(8))))
@@ -72,9 +72,7 @@ role=author для повествования и авторских вставо
                     VoiceRoleRange(integer(s, "start"), integer(s, "end"), role, confidence == "clear",
                         speaker(s.optString("speaker").ifBlank { null }, role, book))
                 }
-                requireNotNull(VoiceRolePlan.render(text, ranges)).map { part ->
-                    if (part.character == null) part else part.copy(voice = book?.voices?.get(part.character))
-                }
+                requireNotNull(VoiceRolePlan.render(text, ranges)).map { part -> part.copy(voice = book?.voiceOf(part.role, part.character)) }
             }.getOrNull()
         }
     }

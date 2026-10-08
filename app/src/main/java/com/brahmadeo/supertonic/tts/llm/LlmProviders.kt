@@ -228,7 +228,8 @@ object LlmProviders {
             val answer = local(context,c,listOf(prompt),deadlineMs=deadlineMs,protocol="roles-local",
                 diagnosticInstruction=LocalVoiceRoleProtocol.INSTRUCTION,
                 outputTokenLimit=(pieces.sumOf { it.size }*8+16).coerceIn(64,272)).single()
-            return LocalVoiceRoleProtocol.parse(answer,pieces)
+            // Local Gemma names no characters, but the book's own narrator / «прочие» voices still apply.
+            return LocalVoiceRoleProtocol.parse(answer,pieces).map { plan -> plan?.map { it.copy(voice = book?.voiceOf(it.role, null)) } }
         }
         // Local Gemma keeps the plain three roles: the character list is for the cloud request only.
         val prompt = VoiceRoleProtocol.prompt(texts, preceding, book)
