@@ -155,7 +155,9 @@ object LlmPreparation {
     private val verifyPool = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "LLM-stress-check").apply { isDaemon = true } }
     /** [StressCheck]: words where the cloud LLM and the offline Silero Stress disagree are asked again, in their
      * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
-    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean): List<String> = try {
+    /** Returns the checked texts and the offline opinions it computed (reused to fill unmarked words, so Silero runs
+     * once per batch instead of twice). */
+    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean): Pair<List<String>, List<String>?> = try {
         val started = SystemClock.elapsedRealtime()
         val offline = outputs.map { com.brahmadeo.supertonic.tts.utils.RussianNames.overlay(ctx,
             com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
@@ -165,7 +167,7 @@ object LlmPreparation {
         // Homographs both sides stressed alike are asked too: agreement is no proof there (о́рган/орга́н).
         val disputes = (conflicts + StressCheck.homographs(outputs, conflicts) {
             com.brahmadeo.supertonic.tts.local.LocalRussianStress.homographVariants(ctx, it) }).take(40)
-        if (disputes.isEmpty()) outputs.also { Log.i("LlmPreparation", "Stress cross-check: no disputes, offlineMs=$offlineMs") }
+        val checked = if (disputes.isEmpty()) outputs
         else {
             // The same provider judges by default: on «Идиот» ch. 1 it scored 34-36/42 key words against 33/42 for a
             // Gemini judge (hard set 63/71 both), and it needs no second key or extra requests to another service.
@@ -189,13 +191,27 @@ object LlmPreparation {
                 else dictionaryReady && !com.brahmadeo.supertonic.tts.local.LocalRussianStress.isHomograph(ctx, bare) &&
                     StressJudgeDictionary.ordinal(bare).let { it != null && it == StressCheck.offlineOrdinal(d) }
             }
-        }.also {
-            Log.i("LlmPreparation", "Stress cross-check judge=${if (disputes.isEmpty()) "-" else LlmProviders.lastVerifier} disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
         }
+        Log.i("LlmPreparation", "Stress cross-check judge=${if (disputes.isEmpty()) "-" else LlmProviders.lastVerifier} disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
+        checked to offline
     } catch (e: Exception) {
         Log.w("LlmPreparation", "Stress cross-check skipped: ${e.javaClass.simpleName}: ${e.message}")
-        outputs
+        outputs to null
     }
+    private val wordPattern = Regex("[+А-Яа-яЁё\u0301]+")
+    /** Offline marks for [text]: the opinion already computed for this fragment when its words still line up with
+     * the validated text, otherwise one fresh Silero pass. */
+    private fun offlineMarks(ctx: Context, text: String, opinion: String?): String {
+        if (opinion != null) {
+            val a = wordPattern.findAll(text).map { it.value.replace("\u0301", "").replace("+", "").lowercase().replace('ё', 'е') }.toList()
+            val b = wordPattern.findAll(opinion).map { it.value.replace("\u0301", "").replace("+", "").lowercase().replace('ё', 'е') }.toList()
+            if (a == b) return opinion
+        }
+        return com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
+            com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx, StressCheck.unmarked(text)), "ru")
+    }
+    /** Opinions of the batch being accepted (cloud path), by request index. */
+    @Volatile private var batchOpinions: List<String>? = null
     /** Diagnostics: one reading batch through the production path (providers, validator, repair, names). */
     internal fun testBatch(ctx: Context, c: LlmConfig, texts: List<String>): List<Result> {
         initialize(ctx)
@@ -516,20 +532,16 @@ object LlmPreparation {
                             com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) } else withNames
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
                             // Stress: the offline Silero Stress outscored Gemma, so it decides where both mark a word.
-                            val offlineOpinion=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
-                                com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,StressCheck.unmarked(named)),"ru")
+                            // One Silero pass serves both the arbitration and the fill of words Gemma left unmarked.
+                            val offlineOpinion=offlineMarks(ctx,named,null)
                             val arbitrated=if(c.stress) StressCheck.preferOffline(named,offlineOpinion,source) else named
-                            val local=com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,arbitrated)
-                            val dictionary=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(local,"ru")
-                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(arbitrated,dictionary,c.restoreYo)
+                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(arbitrated,offlineOpinion,c.restoreYo)
                             MissingSpeechMarks.merge(arbitrated,safe,c.stress,c.restoreYo,ambiguousLocalYo)
                         } else if (c.stress) {
                             // A word the cloud LLM left unmarked used to reach the TTS model as a guess (eSpeak in
                             // Kokoro). The offline Silero Stress reads the whole sentence (context BERT for homographs,
                             // accentor for unknown words) and fills only those words; LLM marks and ё stay as they are.
-                            val offline=com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
-                                com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx,named),"ru")
-                            MissingSpeechMarks.merge(named,offline,stress=true,yo=false)
+                            MissingSpeechMarks.merge(named,offlineMarks(ctx,named,batchOpinions?.getOrNull(requestIndex)),stress=true,yo=false)
                         } else named
                         val supplemented=completed!=named
                         if (supplemented && provider!="local") Log.i("LlmPreparation","Cloud stress completed fragment=$index provider=$provider llmMarks=${named.count { it=='́' }} offlineAdded=${completed.count { it=='́' }-named.count { it=='́' }}")
@@ -545,7 +557,9 @@ object LlmPreparation {
                 } else {
                     val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (NameStress.hint(requestTexts) +
                         com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList())
-                    (if (c.stress) crossCheck(ctx,c,outputs,provider=="gemini") else outputs).forEachIndexed { index,text -> accept(index,text) }
+                    val (checked, opinions) = if (c.stress) crossCheck(ctx,c,outputs,provider=="gemini") else outputs to null
+                    batchOpinions = opinions
+                    try { checked.forEachIndexed { index,text -> accept(index,text) } } finally { batchOpinions = null }
                 }
                 if (expectedEpoch != epoch || cancelled()) break
                 val elapsed = SystemClock.elapsedRealtime()-started
