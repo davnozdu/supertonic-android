@@ -23,6 +23,15 @@
 - Книга узнаётся не по названию, а по контрольным суммам: SHA-256 файла (уже готовилась ли) и отпечатки
   предложений (узнавание при чтении, Moon+ передаёт только текст). Файлы подготовки — импорт/экспорт.
 
+## Скрипт для пользователей: отдельный репозиторий
+
+**https://github.com/davnozdu/mytts-books** (приватный) — `mytts_book.py process book.epub` → `.mytts-book`:
+провайдеры Ollama Cloud (`OLLAMA_API_KEY`, deepseek-v4.1-flash) и API DeepSeek (`DEEPSEEK_API_KEY`,
+deepseek-flash, `thinking: disabled|enabled`), ключи из `.env`, README на русском. Это основная версия
+скрипта; `tools/characters/` здесь — копия этапа разработки (тест-векторы, samples).
+Проверено: «Ночной взгляд» целиком 31 с через Ollama; DeepSeek — путь запроса до HTTP 401 на тестовом ключе
+(настоящим ключом DeepSeek не проверялся).
+
 ## Сделано (этап 0): скрипт `tools/characters/book_characters.py`
 
 Подробно — `tools/characters/README.md`. Команды:
