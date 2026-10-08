@@ -15,10 +15,16 @@ class NamesAndYoTest {
             RussianNames.restore(null, "Пришёл Семен, за ним Петр и Федор, у Петра — Мышкин из Твери."))
         // An LLM mark stays on a known name without ё; a name with ё takes the dictionary spelling.
         assertEquals("у Пе́тра и Семён", RussianNames.restore(null, "у Пе́тра и Семе́н"))
-        // "Семена" opening a sentence may be seeds; inside a sentence it is the name.
-        assertEquals("Семена взошли. Позвали Семёна.", RussianNames.restore(null, "Семена взошли. Позвали Семена."))
         // Lowercase words are not names.
         assertEquals("алена", RussianNames.restore(null, "алена"))
+    }
+
+    @Test fun sentenceInitialSemenaDependsOnTheBook() {
+        RussianNames.initForTests(names)
+        // Before any Семён: "Семена" opening a sentence may be seeds; inside a sentence it is the name.
+        assertEquals("Семена взошли. Позвали Семёна.", RussianNames.restore(null, "Семена взошли. Позвали Семена."))
+        // The book now has a Семён: a sentence-initial "Семена" is the name as well.
+        assertEquals("Семёна баба Катя растила.", RussianNames.restore(null, "Семена баба Катя растила."))
     }
 
     @Test fun overlayAndHintUseTheDictionary() {

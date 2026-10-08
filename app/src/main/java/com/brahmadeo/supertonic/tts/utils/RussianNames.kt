@@ -12,7 +12,15 @@ object RussianNames {
     private const val VOWELS = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
     @Volatile private var forms: Map<String, String>? = null
     private val word = Regex("[А-Яа-яЁё́]+")
-    private val ambiguousAtSentenceStart = setOf("семена")
+    /** Name forms that open a sentence equally well as common words ("Семена взошли"), with the name's family. */
+    private val ambiguousAtSentenceStart = mapOf("семена" to "семен")
+    /** Name families met inside sentences in this reading (RAM): then a sentence-initial "Семена" is the name too. */
+    private val seen = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+    private fun ambiguousHere(text: String, index: Int, key: String): Boolean {
+        val family = ambiguousAtSentenceStart[key] ?: return false
+        return sentenceStart(text, index) && family !in seen
+    }
+    private fun remember(key: String) { if (seen.size > 2000) seen.clear(); seen += key; seen += key.dropLast(1) }
 
     /** For tests: the dictionary from the asset text. */
     fun load(lines: Sequence<String>): Map<String, String> = lines.filter { it.isNotBlank() && !it.startsWith("#") }
@@ -22,7 +30,7 @@ object RussianNames {
         if (forms != null) return
         forms = runCatching { ctx.assets.open("names_ru.tsv").bufferedReader().useLines { load(it) } }.getOrDefault(emptyMap())
     }
-    internal fun initForTests(map: Map<String, String>) { forms = map }
+    internal fun initForTests(map: Map<String, String>) { forms = map; seen.clear() }
 
     private fun key(w: String) = w.replace(ACUTE.toString(), "").replace("+", "").lowercase().replace('ё', 'е')
     private fun capitalised(w: String) = w.first().isUpperCase() && w.drop(1).any { it.isLowerCase() }
@@ -66,7 +74,8 @@ object RussianNames {
             val w = m.value
             if (!capitalised(w) || '+' in w) return@replace w
             val f = map[key(w)] ?: return@replace w
-            if (key(w) in ambiguousAtSentenceStart && sentenceStart(text, m.range.first)) return@replace w
+            if (ambiguousHere(text, m.range.first, key(w))) return@replace w
+            if (!sentenceStart(text, m.range.first)) remember(key(w))
             val hasYo = 'ё' in f
             when {
                 ACUTE !in w && 'ё' !in w && 'Ё' !in w -> respell(w, f)
@@ -86,7 +95,7 @@ object RussianNames {
             val w = m.value
             if (!capitalised(w) || '+' in w) return@replace w
             val f = map[key(w)] ?: return@replace w
-            if (ACUTE !in f || (key(w) in ambiguousAtSentenceStart && sentenceStart(text, m.range.first))) w else respell(w, f)
+            if (ACUTE !in f || ambiguousHere(text, m.range.first, key(w))) w else respell(w, f)
         }
     }
 
