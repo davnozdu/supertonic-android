@@ -18,6 +18,8 @@ object LocalRussianStress {
     private var yoDictionary: com.brahmadeo.supertonic.tts.utils.BinaryAccentDictionary? = null
     private var accentor: Module? = null
     private var homo: Module? = null
+    /** Silero 1.5 phrase rules (assets/silero_phrases.tsv.gz) + its context cleaning; null when not loaded. */
+    private var homoContext: SileroHomoContext? = null
     private var lastUsed = 0L
     private val words = Regex("[+А-Яа-яЁё\\u0301]+")
     private const val vowels = "аеёиоуыэюя"
@@ -29,7 +31,7 @@ object LocalRussianStress {
         Executors.newSingleThreadScheduledExecutor { Thread(it, "LocalStressIdle").apply { isDaemon = true } }
             .scheduleWithFixedDelay({ synchronized(this) {
                 if (accentor != null && android.os.SystemClock.elapsedRealtime() - lastUsed > 120000) {
-                    accentor?.destroy(); homo?.destroy(); accentor = null; homo = null; data = null; yoDictionary?.close(); yoDictionary = null
+                    accentor?.destroy(); homo?.destroy(); accentor = null; homo = null; data = null; yoDictionary?.close(); yoDictionary = null; homoContext = null
                     Log.i("LocalRussian", "Stress models unloaded after idle")
                 }
             } }, 15, 15, TimeUnit.SECONDS)
@@ -43,6 +45,11 @@ object LocalRussianStress {
             homo = LiteModuleLoader.load(File(root,"homo.ptl").path)
             yoDictionary = com.brahmadeo.supertonic.tts.utils.BinaryAccentDictionary.open(File(root,"yo.sacc"))
             data = json
+            homoContext = runCatching {
+                val table = ctx.assets.open("silero_phrases.tsv.gz").use { raw ->
+                    java.util.zip.GZIPInputStream(raw).bufferedReader().useLines { SileroHomoContext.load(it) } }
+                SileroHomoContext { table[it] }
+            }.getOrElse { SileroHomoContext { null } }
         } catch (t: Throwable) { accentor?.destroy(); homo?.destroy(); accentor = null; homo = null; throw t }
     }
     // Standard greedy WordPiece, with the homograph markers kept as special tokens.
@@ -130,19 +137,22 @@ object LocalRussianStress {
                 yoDictionary?.lookup(original.toByteArray(Charsets.UTF_8))?.let { return@replace it }
                 if (lower == "письма" && Regex("текст\\s+$",RegexOption.IGNORE_CASE).containsMatchIn(text.take(m.range.first)))
                     return@replace restoreCase(original,"письм+а")
+                // Silero 1.5 order: phrase rules first, then the BERT classifier, both on its cleaned ±150-char context.
                 val variants = homodict.optJSONArray(lower)
-                if (variants != null && variants.length() == 2) {
-                    val left = text.substring(maxOf(0,m.range.first-150),m.range.first).replace("+", "").replace("\u0301", "")
-                    val right = text.substring(m.range.last+1,minOf(text.length,m.range.last+151)).replace("+", "").replace("\u0301", "")
-                    val marked = "${left.takeIf { it.isNotBlank() }?.let { it[0].uppercase()+it.substring(1).lowercase() } ?: ""} [HOMO] $lower [/HOMO] ${right.lowercase()}"
-                    val ids = encode(marked,bert)
-                    val start = ids.indexOf(bert.getLong("homo_start")); val end = ids.indexOf(bert.getLong("homo_end"))
-                    if (start >= 0 && end > start && ids.size <= 512) {
-                        val score = homo!!.forward(IValue.from(Tensor.fromBlob(ids,longArrayOf(1,ids.size.toLong()))),
-                            IValue.from(Tensor.fromBlob(longArrayOf(start.toLong()),longArrayOf(1))),
-                            IValue.from(Tensor.fromBlob(longArrayOf(end.toLong()),longArrayOf(1)))).toTensor().dataAsFloatArray[0]
-                        val choices = (0..1).map { variants.getString(it) }.sorted()
-                        return@replace restoreCase(original, choices[if (score > 0f) 1 else 0])
+                val context = homoContext
+                if (context != null && (context.hasPhrases(lower) || (variants != null && variants.length() == 2))) {
+                    val marked = context.marked(text, m.range.first, m.range.last + 1, lower)
+                    context.phrase(lower, marked)?.let { return@replace restoreCase(original, it) }
+                    if (variants != null && variants.length() == 2) {
+                        val ids = encode(marked,bert)
+                        val start = ids.indexOf(bert.getLong("homo_start")); val end = ids.indexOf(bert.getLong("homo_end"))
+                        if (start >= 0 && end > start && ids.size <= 512) {
+                            val score = homo!!.forward(IValue.from(Tensor.fromBlob(ids,longArrayOf(1,ids.size.toLong()))),
+                                IValue.from(Tensor.fromBlob(longArrayOf(start.toLong()),longArrayOf(1))),
+                                IValue.from(Tensor.fromBlob(longArrayOf(end.toLong()),longArrayOf(1)))).toTensor().dataAsFloatArray[0]
+                            val choices = (0..1).map { variants.getString(it) }.sorted()
+                            return@replace restoreCase(original, choices[if (score > 0f) 1 else 0])
+                        }
                     }
                 }
                 val positions = lower.indices.filter { lower[it] in vowels }

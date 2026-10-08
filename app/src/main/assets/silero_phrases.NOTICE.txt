@@ -1,0 +1,3 @@
+silero_phrases.tsv.gz — homograph phrase rules of Silero Stress v1.5 (homosolver "phrases"), extracted from the
+silero-stress 1.5 package (https://github.com/snakers4/silero-stress), MIT License, Copyright (c) Silero Team.
+Format: one line per word: word<TAB>[["variantWithCapitalStressedVowel", ["phrase with [HOMO] word [/HOMO]", ...]], ...]
