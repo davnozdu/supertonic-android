@@ -28,7 +28,12 @@ Validation on 2026-10-08:
   content excluding reasoning, truncated response rejection. Real LlmProviders
   compiled locally with Android/LiteRT adapters.
 - Existing 121 JVM regression tests passed.
-- Android release and CI validation: pending GitHub build.
+- Real BookPreparation with JVM Android adapters: DeepSeek manual/auto selection,
+  existing Ollama priority, missing-key rejection, independent thinking; 40 main/
+  verification calls sequential, cache reuse and cancellation without partial import.
+- Android Release 37805242698 and CI 37805233357 succeeded; published prerelease
+  https://github.com/davnozdu/supertonic-android/releases/tag/v5.0.4-beta7
+  (versionCode 182, commit 191b4f64).
 - Phone installation and UI validation postponed at the user's request.
 
 Official API documentation:
