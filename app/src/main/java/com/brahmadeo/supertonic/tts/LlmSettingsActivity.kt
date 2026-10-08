@@ -38,6 +38,13 @@ class LlmSettingsActivity : ComponentActivity() {
                 var busy by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("") }
                 var ollamaStatus by remember { mutableStateOf("") }
+                var deepseekStatus by remember { mutableStateOf("") }
+                var deepseekRevision by remember { mutableIntStateOf(0) }
+                var deepseekBusy by remember { mutableStateOf(false) }
+                var deepseekModels by remember { mutableStateOf(runCatching {
+                    val a = org.json.JSONArray(getSharedPreferences("llm_models", MODE_PRIVATE).getString("deepseek", "[]"))
+                    (0 until a.length()).map { a.getString(it) }
+                }.getOrDefault(emptyList())) }
                 var geminiStatus by remember { mutableStateOf("") }
                 var ollamaRevision by remember { mutableIntStateOf(0) }
                 var geminiRevision by remember { mutableIntStateOf(0) }
@@ -330,6 +337,32 @@ class LlmSettingsActivity : ComponentActivity() {
                         Toggle("Размышление в Ollama (медленнее)", config.ollamaThinking) { config = config.copy(ollamaThinking = it); save() }
                         Text("По умолчанию выключено. Если модель разрешает только уровни размышления, при выключении выбирается минимальный доступный уровень.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
+                        Text("DeepSeek", style = MaterialTheme.typography.titleLarge)
+                        OutlinedTextField(config.deepseekKey, { config = config.copy(deepseekKey = it) }, label = { Text("Ключ DeepSeek API") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = {
+                            val snapshot = config
+                            busy = true; deepseekBusy = true; deepseekStatus = "Получение актуальных моделей…"
+                            scope.launch {
+                                try {
+                                    LlmSettings.save(this@LlmSettingsActivity, snapshot)
+                                    val models = withContext(Dispatchers.IO) { LlmProviders.models(snapshot, false, "deepseek") }
+                                    deepseekModels = models; deepseekRevision++
+                                    getSharedPreferences("llm_models", MODE_PRIVATE).edit().putString("deepseek", org.json.JSONArray(models).toString()).apply()
+                                    deepseekStatus = if (models.isEmpty()) "API не вернул доступных моделей" else "Получено моделей: ${models.size}. Выберите модель ниже."
+                                } catch (e: Exception) { deepseekStatus = "Не удалось получить модели: ${e.message?.take(160)}" }
+                                finally { busy = false; deepseekBusy = false }
+                            }
+                        }, enabled = !busy) { Text("Считать актуальные модели DeepSeek") }
+                        if (deepseekBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (deepseekStatus.isNotEmpty()) Text(deepseekStatus)
+                        Choice("Модель DeepSeek", config.deepseekModel, deepseekModels, deepseekRevision,
+                            format = { if (it == DeepSeekApi.DEFAULT_MODEL) "DeepSeek 4.1 Flash · $it" else it }) {
+                            config = config.copy(deepseekModel = it); save()
+                        }
+                        Toggle("Размышление в DeepSeek (медленнее)", config.deepseekThinking) { config = config.copy(deepseekThinking = it); save() }
+                        Text("По умолчанию DeepSeek 4.1 Flash, размышление выключено. Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("В авторежиме сначала DeepSeek", config.preferDeepseek) { config = config.copy(preferDeepseek = it, preferGemini = if (it) false else config.preferGemini); save() }
+                        HorizontalDivider()
                         Text("Gemini", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.geminiKey, { config = config.copy(geminiKey = it) }, label = { Text("Ключ Gemini API") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
                         Button(onClick = { refresh(true) }, enabled = !busy) { Text("Считать актуальные модели Gemini") }
@@ -345,7 +378,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             Text("Для этой модели API не предоставляет известной настройки размышления; тумблер к ней не применяется.", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("API может вернуть также модели звука и изображений. Для подготовки текста выберите текстовую LLM.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it); save() }
+                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it, preferDeepseek = if (it) false else config.preferDeepseek); save() }
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Локальная Gemma 4 E2B", style = MaterialTheme.typography.titleLarge)

@@ -12,7 +12,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 enum class LlmMode(val title: String) {
     OFF("Выключено"), AUTO("Авто: облако → Gemma 4"), OLLAMA("Ollama Cloud"),
-    GEMINI("Gemini"), LOCAL("Автономно: Gemma 4")
+    GEMINI("Gemini"), DEEPSEEK("DeepSeek"), LOCAL("Автономно: Gemma 4")
 }
 
 data class LlmConfig(
@@ -23,6 +23,10 @@ data class LlmConfig(
     val ollamaKey: String = "",
     val geminiKey: String = "",
     val preferGemini: Boolean = false,
+    val deepseekModel: String = DeepSeekApi.DEFAULT_MODEL,
+    val deepseekKey: String = "",
+    val deepseekThinking: Boolean = false,
+    val preferDeepseek: Boolean = false,
     val ollamaThinking: Boolean = false,
     val geminiThinking: Boolean = false,
     val localThinking: Boolean = false,
@@ -83,6 +87,10 @@ object LlmSettings {
             ollamaEndpoint = p.getString("ollama_endpoint", "https://ollama.com")!!,
             ollamaModel = p.getString("ollama_model", "")!!, geminiModel = p.getString("gemini_model", "")!!,
             ollamaKey = decrypt(p.getString("ollama_key", "")!!), geminiKey = decrypt(p.getString("gemini_key", "")!!),
+            deepseekModel = p.getString("deepseek_model", DeepSeekApi.DEFAULT_MODEL)!!,
+            deepseekKey = decrypt(p.getString("deepseek_key", "")!!),
+            deepseekThinking = p.getBoolean("deepseek_thinking", false),
+            preferDeepseek = p.getBoolean("prefer_deepseek", false),
             preferGemini = p.getBoolean("prefer_gemini", false), gpu = p.getBoolean("gpu", true),
             ollamaThinking = p.getBoolean("ollama_thinking", false),
             geminiThinking = p.getBoolean("gemini_thinking", false),
@@ -99,6 +107,8 @@ object LlmSettings {
             .putString("mode", c.mode.name).putString("ollama_endpoint", c.ollamaEndpoint.trim().trimEnd('/'))
             .putString("ollama_model", c.ollamaModel.trim()).putString("gemini_model", c.geminiModel.trim().removePrefix("models/"))
             .putString("ollama_key", encrypt(c.ollamaKey.trim())).putString("gemini_key", encrypt(c.geminiKey.trim()))
+            .putString("deepseek_model", c.deepseekModel.trim()).putString("deepseek_key", encrypt(c.deepseekKey.trim()))
+            .putBoolean("deepseek_thinking", c.deepseekThinking).putBoolean("prefer_deepseek", c.preferDeepseek)
             .putBoolean("prefer_gemini", c.preferGemini).putBoolean("gpu", c.gpu)
             .putBoolean("ollama_thinking", c.ollamaThinking)
             .putBoolean("gemini_thinking", c.geminiThinking)

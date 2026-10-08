@@ -176,7 +176,7 @@ object LlmPreparation {
      * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
     /** Returns the checked texts and the offline opinions it computed (reused to fill unmarked words, so Silero runs
      * once per batch instead of twice). */
-    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, gemini: Boolean, stopped: () -> Boolean): Pair<List<String>, List<String>?> = try {
+    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, provider: String, stopped: () -> Boolean): Pair<List<String>, List<String>?> = try {
         val started = SystemClock.elapsedRealtime()
         val offline = outputs.map { com.brahmadeo.supertonic.tts.utils.RussianNames.overlay(ctx,
             com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
@@ -192,15 +192,17 @@ object LlmPreparation {
             // Gemini judge (hard set 63/71 both), and it needs no second key or extra requests to another service.
             val hasGemini = c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()
             val hasOllama = c.ollamaModel.isNotBlank()
+            val gemini = provider == "gemini"
             val judgeGemini = when (LlmProviders.verifierOverride) {
                 "GEMINI" -> hasGemini
                 "OLLAMA" -> !hasOllama
                 "SAME" -> gemini
                 else -> gemini
             }
-            val reversed = verifyPool.submit<List<Int?>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini, stopped) }
+            val judgeProvider = if (LlmProviders.verifierOverride in listOf("GEMINI", "OLLAMA")) { if (judgeGemini) "gemini" else "ollama" } else provider
+            val reversed = verifyPool.submit<List<Int?>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini, stopped, judgeProvider) }
             val choices = try {
-                LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini, stopped) + reversed.get(30, TimeUnit.SECONDS)
+                LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini, stopped, judgeProvider) + reversed.get(30, TimeUnit.SECONDS)
             } finally { reversed.cancel(true) }
             // The judge disagreeing with itself: the full dictionary decides non-homographs (when downloaded).
             val dictionaryReady = StressJudgeDictionary.ensure(ctx)
@@ -382,7 +384,8 @@ object LlmPreparation {
         LlmMode.LOCAL -> listOf("local")
         LlmMode.OLLAMA -> listOf("ollama", "local")
         LlmMode.GEMINI -> listOf("gemini", "local")
-        LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
+        LlmMode.DEEPSEEK -> listOf("deepseek", "local")
+        LlmMode.AUTO -> (if (c.preferDeepseek) listOf("deepseek", "ollama", "gemini") else if (c.preferGemini) listOf("gemini", "ollama", "deepseek") else listOf("ollama", "gemini", "deepseek")) + "local"
     }
     private fun needsRoleRecovery(c: LlmConfig, results: List<Result>): Boolean =
         c.multiVoice && c.mode !in listOf(LlmMode.OFF, LlmMode.LOCAL) && results.any {
@@ -411,6 +414,7 @@ object LlmPreparation {
                     (ignoreCooldown || now >= (roleCooldown[provider] ?: 0L)) &&
                     when (provider) {
                         "local" -> LocalModelDownload.activeReady(ctx)
+                        "deepseek" -> connected(ctx) && c.deepseekModel.isNotBlank() && c.deepseekKey.isNotBlank()
                         "gemini" -> connected(ctx) && c.geminiModel.isNotBlank() && c.geminiKey.isNotBlank()
                         else -> connected(ctx) && c.ollamaModel.isNotBlank()
                     }
@@ -497,12 +501,14 @@ object LlmPreparation {
             LlmMode.LOCAL -> listOf("local")
             LlmMode.OLLAMA -> listOf("ollama", "local")
             LlmMode.GEMINI -> listOf("gemini", "local")
-            LlmMode.AUTO -> (if (c.preferGemini) listOf("gemini", "ollama") else listOf("ollama", "gemini")) + "local"
+            LlmMode.DEEPSEEK -> listOf("deepseek", "local")
+            LlmMode.AUTO -> (if (c.preferDeepseek) listOf("deepseek", "ollama", "gemini") else if (c.preferGemini) listOf("gemini", "ollama", "deepseek") else listOf("ollama", "gemini", "deepseek")) + "local"
         }
         for (provider in providers) {
             if (results.any { it != null } && results.any { it == null }) beforeRetry(results.toList())
             if (expectedEpoch != epoch || cancelled()) break
             if (provider != "local" && !connected(ctx)) continue
+            if (provider == "deepseek" && (c.deepseekKey.isBlank() || c.deepseekModel.isBlank())) continue
             if (provider == "ollama" && c.ollamaModel.isBlank()) continue
             if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
             if (provider == "local" && !LocalModelDownload.activeReady(ctx)) continue
@@ -582,9 +588,9 @@ object LlmPreparation {
                     LlmProviders.local(ctx,c,requestTexts,deadlineMs=if(c.multiVoice) 12000 else 45000,onOutput=::accept)
                 } else {
                     val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (NameStress.hint(requestTexts) +
-                        com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList())
+                        com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList(), provider = provider)
                     if (expectedEpoch != epoch || cancelled()) break // No judge requests for a cancelled batch.
-                    val (checked, opinions) = if (c.stress) crossCheck(ctx,c,outputs,provider=="gemini") { expectedEpoch != epoch || cancelled() } else outputs to null
+                    val (checked, opinions) = if (c.stress) crossCheck(ctx,c,outputs,provider) { expectedEpoch != epoch || cancelled() } else outputs to null
                     batchOpinions = opinions
                     try { checked.forEachIndexed { index,text -> accept(index,text) } } finally { batchOpinions = null }
                 }
