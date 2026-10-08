@@ -13,26 +13,38 @@ class BookSpeakersTest {
         "ru_ekaterina", "ru_vika", "ru_gamat", "ru_igor", "ru_karina", "ru_kejilgan", "ru_kermen", "ru_marat", "ru_miyau",
         "ru_nurgul", "ru_oksana", "ru_onaoy", "ru_ramilia", "ru_roman", "ru_safarhuja", "ru_saida", "ru_sibday", "ru_zara",
         "ru_zhadyra", "ru_zhazira", "ru_zinaida", "ru_eduard")
-    private val reserved = setOf("ru_dmitriy", "ru_eduard", "ru_zinaida")
 
     private fun character(id: String, gender: String, speaker: Int, hint: String? = null, mentions: Int = 10) =
         BookPackage.Character(id, id, gender, speaker, mentions, listOf(id), hint)
 
-    @Test fun hintsFirstThenFreeVoicesOfTheGender() {
+    @Test fun narratorFirstThenCharactersThenOthersFromTheRest() {
         val cast = BookPackage.Cast(listOf("s1"), listOf(
             character("a", "m", 50, hint = "ru_igor"),
-            character("b", "m", 40),                      // no hint: must not take ru_igor or ru_roman
+            character("b", "m", 40),                       // no hint: must not take ru_igor or ru_roman
             character("c", "m", 30, hint = "ru_roman"),
-            character("d", "f", 20, hint = "ru_eduard"),  // wrong gender and reserved: ignored, free female voice
-            character("e", "m", 0, mentions = 3),         // minor: «прочие»
-            character("f", "?", 90),                      // unknown gender: «прочие»
+            character("d", "f", 20, hint = "ru_dmitriy"),  // the narrator's voice (and male): ignored
+            character("e", "m", 0, mentions = 3),          // minor: «прочие»
+            character("f", "?", 90),                       // unknown gender: «прочие»
+            character("g", "f", 1, mentions = 40),         // chosen by hand
         ), emptyList())
-        val voices = BookVoiceAssign.assign(cast, cis, reserved)
-        assertEquals("ru_igor", voices["a"]); assertEquals("ru_roman", voices["c"])
+        val result = BookVoiceAssign.assign(cast, cis, author = "ru_dmitriy", manual = mapOf("g" to "ru_zinaida"))
+        val voices = result.characters
+        assertEquals("ru_igor", voices["a"]); assertEquals("ru_roman", voices["c"]); assertEquals("ru_zinaida", voices["g"])
         assertTrue(voices["b"] !in setOf("ru_igor", "ru_roman") && BookVoiceAssign.gender(voices["b"]!!) == "m")
         assertEquals("f", BookVoiceAssign.gender(voices["d"]!!))
         assertNull(voices["e"]); assertNull(voices["f"])
-        assertTrue(voices.values.none { it in reserved })
+        assertTrue("ru_dmitriy" !in voices.values)
+        // «прочие» take what is left: their own gender, not the narrator, not any character's voice.
+        assertEquals("m", BookVoiceAssign.gender(result.male!!)); assertEquals("f", BookVoiceAssign.gender(result.female!!))
+        assertTrue(result.male !in voices.values && result.female !in voices.values && result.male != "ru_dmitriy")
+    }
+
+    @Test fun othersKeepOneVoiceEvenWhenCharactersWantAll() {
+        val men = (1..20).map { character("m$it", "m", 100 - it) }
+        val result = BookVoiceAssign.assign(BookPackage.Cast(listOf("s1"), men, emptyList()), cis, author = "ru_dmitriy")
+        val male = cis.count { BookVoiceAssign.gender(it) == "m" } - 1  // without the narrator
+        assertEquals(male - 1, result.characters.size)                    // one left for the «прочие»
+        assertTrue(result.male != null && result.male !in result.characters.values)
     }
 
     @Test fun teraAndUnknownVoiceGenders() {

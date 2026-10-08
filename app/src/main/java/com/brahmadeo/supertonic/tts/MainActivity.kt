@@ -607,6 +607,7 @@ class MainActivity : ComponentActivity() {
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
                         onLlmSettingsClick = { startActivity(Intent(this, LlmSettingsActivity::class.java)) },
                         onBackgroundMusicClick = { startActivity(Intent(this, BackgroundMusicActivity::class.java)) },
+                        onBooksClick = { startActivity(Intent(this, BooksActivity::class.java)) },
                         onArticleLinkClick = { viewModel.articleError.value = null; viewModel.showLinkDialog.value = true },
                         onSleepTimerClick = { startActivity(Intent(this, SleepTimerActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },

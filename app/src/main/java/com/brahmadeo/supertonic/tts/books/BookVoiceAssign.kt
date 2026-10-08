@@ -1,9 +1,7 @@
 package com.brahmadeo.supertonic.tts.books
 
-/** Voice genders of the bundled models and the character → voice assignment (pure, unit-tested). Main
- * characters (speak in remarks or are often mentioned) get the voice hinted in the file when it exists in
- * the installed model, otherwise a free voice of their gender; when voices run out — none (the role voice,
- * that is the «прочие»). Voices reserved for the narrator and the «прочие» are never given out. */
+/** Voice genders of the bundled models and the voices of a book: narrator, main characters, «прочие» (pure,
+ * unit-tested; see [assign]). */
 object BookVoiceAssign {
     private const val MIN_SPEAKER = 2
     private const val MIN_MENTIONS = 30
@@ -28,25 +26,44 @@ object BookVoiceAssign {
         else -> null
     }
 
-    fun assign(cast: BookPackage.Cast, available: List<String>, reserved: Set<String>): Map<String, String> {
-        val pool = available.filter { it !in reserved && gender(it) != null }
-        val taken = mutableSetOf<String>()
+    /** Voices of one set of characters: [characters] by id, [male]/[female] for the «прочие» (null — none left,
+     * the global multi-voice voice is used). */
+    data class Assignment(val characters: Map<String, String>, val male: String?, val female: String?)
+
+    /** The narrator reads most of the text, so [author] (the user's narrator voice) is taken first and never given
+     * to a character. Then main characters by gender: [manual] choices, hints from the file, free voices. The
+     * «прочие» take what is left — one voice of each gender is kept for them (unless [ownMale]/[ownFemale] are set),
+     * so they never sound like a main character. */
+    fun assign(cast: BookPackage.Cast, available: List<String>, author: String, manual: Map<String, String> = emptyMap(),
+               ownMale: String? = null, ownFemale: String? = null): Assignment {
+        val pool = available.filter { it != author && it != ownMale && it != ownFemale && gender(it) != null }
+        val spare = mapOf("m" to if (ownMale == null) 1 else 0, "f" to if (ownFemale == null) 1 else 0)
+        val limit = listOf("m", "f").associateWith { g -> pool.count { gender(it) == g } - spare.getValue(g) }
+        val used = mapOf("m" to linkedSetOf<String>(), "f" to linkedSetOf())
         val out = linkedMapOf<String, String>()
-        val main = cast.characters.filter { it.gender in listOf("m", "f") && (it.speaker >= MIN_SPEAKER || it.mentions >= MIN_MENTIONS) }
+        fun fits(voice: String, g: String) = voice in used.getValue(g) || used.getValue(g).size < limit.getValue(g)
+        for (ch in cast.characters) manual[ch.id]?.takeIf { it in available }?.let { voice ->
+            out[ch.id] = voice
+            gender(voice)?.let { used.getValue(it) += voice }
+        }
+        val main = cast.characters.filter { it.id !in out && it.gender in listOf("m", "f") && (it.speaker >= MIN_SPEAKER || it.mentions >= MIN_MENTIONS) }
             .sortedWith(compareBy({ -it.speaker }, { -it.mentions }, { it.id }))
         // Hints first: a hint may be shared on purpose (characters who never meet in the text). Free voices
         // are given only afterwards, so they never take a voice another character's hint points to.
         for (ch in main) {
-            val hint = ch.voiceHint?.takeIf { it in pool && gender(it) == ch.gender } ?: continue
+            val hint = ch.voiceHint?.takeIf { it in pool && gender(it) == ch.gender && fits(it, ch.gender) } ?: continue
             out[ch.id] = hint
-            taken += hint
+            used.getValue(ch.gender) += hint
         }
         for (ch in main) {
             if (ch.id in out) continue
-            val voice = pool.firstOrNull { it !in taken && gender(it) == ch.gender } ?: continue
+            val taken = used.values.flatten().toSet()
+            val voice = pool.firstOrNull { it !in taken && gender(it) == ch.gender && fits(it, ch.gender) } ?: continue
             out[ch.id] = voice
-            taken += voice
+            used.getValue(ch.gender) += voice
         }
-        return out
+        val taken = used.values.flatten().toSet()
+        return Assignment(out, ownMale ?: pool.firstOrNull { gender(it) == "m" && it !in taken },
+            ownFemale ?: pool.firstOrNull { gender(it) == "f" && it !in taken })
     }
 }

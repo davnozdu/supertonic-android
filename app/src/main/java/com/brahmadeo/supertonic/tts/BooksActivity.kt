@@ -20,7 +20,6 @@ import com.brahmadeo.supertonic.tts.books.BookLibrary
 import com.brahmadeo.supertonic.tts.books.BookMatcher
 import com.brahmadeo.supertonic.tts.books.BookPackage
 import com.brahmadeo.supertonic.tts.books.BookVoices
-import com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings
 import com.brahmadeo.supertonic.tts.llm.VoicePreview
 import com.brahmadeo.supertonic.tts.llm.VoiceRole
 import com.brahmadeo.supertonic.tts.ui.VoiceRoleChoice
@@ -106,50 +105,60 @@ class BooksActivity : ComponentActivity() {
         }
     }
 
-    /** Every character with its voice: the same picker and «Прослушать» as the multi-voice role voices. */
+    /** Narrator, «прочие» and every character with its voice: the same picker and «Прослушать» as the multi-voice
+     * role voices. Everything is automatic (narrator first, then characters, «прочие» from the rest); a voice chosen
+     * here overrides it for this book. */
     @Composable private fun CharacterVoices(book: Long, revision: Int, preview: VoicePreview.State, changed: () -> Unit) {
         val pkg = remember(book) { runCatching { BookLibrary.get(this, book) }.getOrNull() } ?: return
         val voices = remember { AssetManager.russianVoices(this) }
-        val male = remember(book, revision) { BookVoices.roleVoice(this, book, VoiceRole.MALE) }
-        val female = remember(book, revision) { BookVoices.roleVoice(this, book, VoiceRole.FEMALE) }
-        val author = remember(book, revision) { BookVoices.roleVoice(this, book, VoiceRole.AUTHOR) }
+        val assignments = remember(book, revision) { pkg.casts.mapIndexed { i, cast -> BookVoices.assignment(this, book, i, cast) } }
+        val first = assignments.firstOrNull()
+        val author = remember(book, revision) { BookVoices.author(this, book) }
         val ownAuthor = remember(book, revision) { BookVoices.ownRole(this, book, VoiceRole.AUTHOR) != null }
         val ownOthers = remember(book, revision) { listOf(VoiceRole.MALE, VoiceRole.FEMALE).any { BookVoices.ownRole(this, book, it) != null } }
-        Text("Голоса из установленной модели. Голоса автора и «прочих» персонажам не раздаются; персонаж без своего голоса " +
-            "читается голосом «прочих» своего пола.", style = MaterialTheme.typography.bodySmall)
-        // Narrator and «прочие» once per book (a collection of stories has one narrator), or the global ones.
-        BookToggle("Голос автора — свой для этой книги", ownAuthor) { on ->
+        val male = BookVoices.roleVoice(this, book, VoiceRole.MALE, first)
+        val female = BookVoices.roleVoice(this, book, VoiceRole.FEMALE, first)
+        Text("Голоса раздаются автоматически: сначала автор (он читает больше всего текста — голос автора из настроек " +
+            "мультиголоса), затем главные персонажи по полу, «прочие» получают оставшиеся голоса. Любой голос можно " +
+            "сменить и прослушать.", style = MaterialTheme.typography.bodySmall)
+        BookToggle("Голос автора — выбрать для этой книги", ownAuthor) { on ->
             voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.AUTHOR, if (on) author else null); changed()
         }
-        if (ownAuthor) VoiceRoleChoice("Голос автора в этой книге", author, voices, preview, voicePreview::toggle) {
+        VoiceRoleChoice(if (ownAuthor) "Голос автора в этой книге" else "Голос автора (автоматически)", author, voices, preview, voicePreview::toggle) {
             voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.AUTHOR, it); changed()
-        } else Text("Голос автора: общий из настроек мультиголоса", style = MaterialTheme.typography.bodySmall)
-        BookToggle("Голоса прочих — свои для этой книги", ownOthers) { on ->
+        }
+        BookToggle("Голоса прочих — выбрать для этой книги", ownOthers) { on ->
             voicePreview.stop()
             BookVoices.chooseRole(this, book, VoiceRole.MALE, if (on) male else null)
             BookVoices.chooseRole(this, book, VoiceRole.FEMALE, if (on) female else null); changed()
         }
-        if (ownOthers) {
-            VoiceRoleChoice("Прочие мужчины в этой книге", male, voices, preview, voicePreview::toggle) {
+        val auto = if (ownOthers) "" else " (автоматически)"
+        if (pkg.casts.size <= 1 || ownOthers) {
+            VoiceRoleChoice("Прочие мужчины$auto", male, voices, preview, voicePreview::toggle) {
                 voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.MALE, it); changed()
             }
-            VoiceRoleChoice("Прочие женщины в этой книге", female, voices, preview, voicePreview::toggle) {
+            VoiceRoleChoice("Прочие женщины$auto", female, voices, preview, voicePreview::toggle) {
                 voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.FEMALE, it); changed()
             }
-        } else Text("Голоса прочих: общие из настроек мультиголоса", style = MaterialTheme.typography.bodySmall)
+        } else Text("Голоса прочих подбираются в каждом рассказе из оставшихся; включите переключатель, чтобы задать " +
+            "одни на всю книгу.", style = MaterialTheme.typography.bodySmall)
         HorizontalDivider()
         pkg.casts.forEachIndexed { index, cast ->
             if (cast.characters.isEmpty()) return@forEachIndexed
+            val assignment = assignments[index]
             if (pkg.casts.size > 1) Text(cast.sections.mapNotNull { id -> pkg.sections.firstOrNull { it.id == id }?.title }.joinToString(", "),
                 style = MaterialTheme.typography.titleSmall)
-            val assigned = remember(book, index, revision) { BookVoices.voices(this, book, index, cast) }
             for (ch in cast.characters) {
-                val own = assigned[ch.id]
+                val own = assignment.characters[ch.id]
                 val manual = remember(book, ch.id, revision) { BookVoices.manual(this, book, ch.id) != null }
                 val gender = when (ch.gender) { "m" -> "мужской"; "f" -> "женский"; else -> "пол неизвестен" }
                 val note = when { own == null -> " · голос прочих"; manual -> " · выбран вручную"; else -> "" }
-                VoiceRoleChoice("${ch.name} · $gender · реплик ${ch.speaker}$note",
-                    own ?: when (ch.gender) { "m" -> male; "f" -> female; else -> author }, voices, preview, voicePreview::toggle) { voice ->
+                val fallback = when (ch.gender) {
+                    "m" -> BookVoices.roleVoice(this, book, VoiceRole.MALE, assignment)
+                    "f" -> BookVoices.roleVoice(this, book, VoiceRole.FEMALE, assignment)
+                    else -> author
+                }
+                VoiceRoleChoice("${ch.name} · $gender · реплик ${ch.speaker}$note", own ?: fallback, voices, preview, voicePreview::toggle) { voice ->
                     voicePreview.stop(); BookVoices.choose(this, book, ch.id, voice); changed()
                 }
                 if (manual) TextButton(onClick = { voicePreview.stop(); BookVoices.choose(this, book, ch.id, null); changed() }) {

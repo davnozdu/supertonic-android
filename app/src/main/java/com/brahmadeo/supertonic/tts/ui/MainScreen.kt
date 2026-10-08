@@ -89,6 +89,7 @@ fun MainScreen(
     onMiniPlayerPlayPauseClick: () -> Unit,
     onLlmSettingsClick: () -> Unit = {},
     onBackgroundMusicClick: () -> Unit = {},
+    onBooksClick: () -> Unit = {},
     onArticleLinkClick: () -> Unit = {},
     onSleepTimerClick: () -> Unit = {},
     onModelSelectionClick: () -> Unit = {},
@@ -137,6 +138,10 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text("Фоновая музыка") },
                             onClick = { showMenu = false; onBackgroundMusicClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Книги с голосами персонажей") },
+                            onClick = { showMenu = false; onBooksClick() }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_reset)) },
