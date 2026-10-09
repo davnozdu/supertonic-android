@@ -23,15 +23,28 @@ class CastPipeline(
         val label = "${i + 1}/${plan.requests.size} · ${r.title}"
         // Several independent answers: a merge stays only if the majority made it.
         val answers = mutableListOf<JSONObject>()
-        var failure: Exception? = null
-        for (n in 1..votes) {
+        val need = votes / 2 + 1
+        // A failed answer is asked again (two extra runs at most) so that the majority still exists.
+        for (n in 1..votes + 2) {
+            if (answers.size >= votes || (n > votes && answers.size >= need)) break
             check()
-            stage("LLM $label · ответ $n из $votes", i, plan.requests.size)
+            stage("LLM $label · ответ ${minOf(n, votes)} из $votes", i, plan.requests.size)
             try { answers += ask("${r.name}.run$n", r.prompt, CastCheck.Kind.MAIN, thinking) { true } }
             catch (e: java.util.concurrent.CancellationException) { throw e }
-            catch (e: Exception) { if (isCancellation(e)) throw e; failure = e }
+            catch (e: Exception) {
+                if (isCancellation(e)) throw e
+                // No network or the service refuses: stop here; answers already received are cached for a retry.
+                if (unavailable(e)) throw e
+            }
         }
-        if (answers.size < votes / 2 + 1) throw failure ?: IllegalStateException("LLM не вернула ответы; повторите подготовку")
+        if (answers.isEmpty()) {
+            // The model never produced a valid answer for this part: its candidates stay in «прочие», the rest
+            // of the book is still prepared.
+            notes += "${r.title}: LLM не дала ответа, все имена в «прочих»"
+            stage("Готово $label", i + 1, plan.requests.size)
+            return@mapIndexed listOf(CastCheck.build(r, null, emptyMap(), if (plan.collection) "${r.name}." else ""))
+        }
+        if (answers.size < need) notes += "${r.title}: получен один ответ LLM из $votes"
         val answer = CastCheck.combine(answers, r)
         val whos = linkedMapOf<Pair<String, String>, List<String>>()
         val targets = CastCheck.labelTargets(r, answer)
@@ -71,6 +84,9 @@ class CastPipeline(
         stage("Готово $label", i + 1, plan.requests.size)
         CastCheck.casts(r, answer, verdicts, whos, plan.collection)
     }
+
+    private fun unavailable(e: Throwable): Boolean = e is java.io.IOException || e.message.orEmpty().startsWith("API HTTP") ||
+        e.cause?.let(::unavailable) == true
 
     private fun isCancellation(e: Throwable): Boolean = e is java.util.concurrent.CancellationException ||
         e.javaClass.name.endsWith("CancellationException") || e.cause?.let(::isCancellation) == true

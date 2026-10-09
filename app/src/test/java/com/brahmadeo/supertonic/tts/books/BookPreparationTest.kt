@@ -256,4 +256,12 @@ class BookPreparationTest {
         assertEquals(listOf("c1", "c2"), casts.single().single().characters.single().refs)
         assertEquals(5, calls)
     }
+    @Test fun aPartWithoutAnyAnswerGoesToOthersButNetworkFailureStops() {
+        val r = request(candidate("c1", "ганя", "m"))
+        val plan = BookPreparationPlan("Тест", "", "f", "c", listOf(EpubBook.Section("s1", "I")), false, listOf(r), emptyMap())
+        val pipeline = CastPipeline(plan, true, { _, _, _, _, _ -> throw IllegalStateException("LLM вернула ответ не в формате JSON") })
+        val cast = pipeline.run().single().single()
+        assertTrue(cast.characters.isEmpty()); assertEquals(listOf("c1"), cast.other); assertEquals(1, pipeline.notes.size)
+        assertTrue(runCatching { CastPipeline(plan, true, { _, _, _, _, _ -> throw java.io.IOException("offline") }).run() }.isFailure)
+    }
 }
