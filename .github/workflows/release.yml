@@ -9,6 +9,9 @@ on:
       tag:
         description: 'Tag name for the release (e.g. v3.0.1)'
         required: true
+      target:
+        description: 'Branch or commit for a tag that does not exist yet (created when the release is published)'
+        required: false
 
 jobs:
   build:
@@ -24,7 +27,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event.inputs.target || env.RELEASE_TAG }}
+
+      - name: Remember the release commit
+        run: echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Validate release tag
         run: |
@@ -169,6 +175,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ env.RELEASE_SHA }}
           files: ${{ env.SIGNED_DIR }}/*.apk
           draft: true
           generate_release_notes: false
