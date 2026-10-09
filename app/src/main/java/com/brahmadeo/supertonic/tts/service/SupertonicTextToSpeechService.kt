@@ -30,6 +30,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var initJob: Job? = null
     @Volatile private var activeVoicePreview = false
+    /** Stopping a voice preview must not cancel other synthesis (the app's own player may be reading a book):
+     * only the preview request stops, without the process-wide cancel flag. */
+    @Volatile private var previewStopped = false
 
     private val attributionContext: Context by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -224,7 +227,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
     }
 
     override fun onStop() {
-        if (!activeVoicePreview) com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
+        if (activeVoicePreview) { previewStopped = true; return }
+        com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
         SupertonicTTS.setCancelled(true)
     }
 
@@ -269,6 +273,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
         val voicePreview = com.brahmadeo.supertonic.tts.llm.VoicePreview.requested(this, request.params, request.callerUid)
         activeVoicePreview = voicePreview
+        previewStopped = false
+        fun stopped() = SupertonicTTS.isCancelled() || (voicePreview && previewStopped)
         try {
         SupertonicTTS.setCancelled(false)
         runBlocking {
@@ -286,7 +292,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "TTS trace source=$traceId prepared=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(rawText)} llm=$llmProcessed ahead=${aheadText!=null}")
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Speech path=${if(voicePreview) "voice preview; LLM bypassed" else if(llmProcessed) "LLM; internal stress bypassed" else "offline fallback"} chars=${rawText.length}")
         if(aheadText!=null) com.brahmadeo.supertonic.tts.utils.DiagLog.i("ReaderAhead","Using prepared text without repeated LLM wait chars=${incomingText.length}")
-        if (SupertonicTTS.isCancelled()) { callback.error(); callback.done(); return }
+        if (stopped()) { callback.error(); callback.done(); return }
         val requestStarted = android.os.SystemClock.elapsedRealtime()
         Log.i("SupertonicTTS", "TTS request started: chars=${rawText.length}, model=${AssetManager.getModelType(this)}")
         val unusualSpaces=com.brahmadeo.supertonic.tts.utils.BookTextSpacing.unusualSpaceCount(rawText)
@@ -355,7 +361,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val streamingListener = object : SupertonicTTS.ProgressListener {
             override fun onProgress(sessionId: Long, current: Int, total: Int) {}
             override fun onAudioChunk(sessionId: Long, data: ByteArray) {
-                if (SupertonicTTS.isCancelled()) return
+                if (stopped()) return
                 // Block on send instead of busy-waiting. See PlaybackService
                 // for the same pattern + rationale (no CPU burn vs the old
                 // 50 Hz trySend poll loop).
@@ -382,7 +388,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                         part, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
                     ).map { it to style } }
                     for ((sentence, sentenceStyle) in sentences) {
-                        if (SupertonicTTS.isCancelled()) { success = false; break }
+                        if (stopped()) { success = false; break }
                         // "* * *", a lone quote or dash: nothing to voice. Never let it end the utterance.
                         if (sentence.none { it.isLetterOrDigit() }) continue
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
@@ -392,7 +398,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                             normalizedText, requestedLang, sentenceStyle, effectiveSpeed, 0.0f,
                             steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=preserveMarks
                         )
-                        if (SupertonicTTS.isCancelled()) { success = false; break }
+                        if (stopped()) { success = false; break }
                         // One failed sentence must not drop the rest of the paragraph: the reader
                         // would treat the error as done and jump ahead (swallowed ending + jump).
                         if (result == null) {
@@ -409,7 +415,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
             // Android requires audioAvailable on this synthesis thread.
             for (data in ttsChannel) {
-                if (SupertonicTTS.isCancelled()) { success = false; ttsChannel.close(); break }
+                if (stopped()) { success = false; ttsChannel.close(); break }
                 if (!firstAudioLogged) {
                     firstAudioLogged = true
                     com.brahmadeo.supertonic.tts.utils.DiagLog.i("SupertonicTTS", "TTS first audio after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms")
@@ -419,7 +425,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                     val length = callback.maxBufferSize.coerceIn(1, 4096).coerceAtMost(data.size - offset)
                     if (callback.audioAvailable(data, offset, length) != TextToSpeech.SUCCESS) {
                         success = false
-                        SupertonicTTS.setCancelled(true)
+                        if (!voicePreview) SupertonicTTS.setCancelled(true)
                         ttsChannel.close()
                         break
                     }

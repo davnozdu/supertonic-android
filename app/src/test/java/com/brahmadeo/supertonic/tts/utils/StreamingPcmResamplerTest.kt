@@ -35,4 +35,24 @@ class StreamingPcmResamplerTest {
             assertEquals(target * 2, convert(pcm(source), source, target, 901).size)
         }
     }
+    private fun sine(n: Int, rate: Int, hz: Double, amplitude: Double = 10000.0) =
+        ByteBuffer.allocate(n * 2).order(ByteOrder.LITTLE_ENDIAN).also { b ->
+            repeat(n) { b.putShort((kotlin.math.sin(2 * Math.PI * hz * it / rate) * amplitude).toInt().toShort()) }
+        }.array()
+    private fun rms(bytes: ByteArray): Double {
+        val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+        // Skip the edges: only the steady state matters.
+        val from = b.limit() / 10; val to = b.limit() - from
+        return kotlin.math.sqrt((from until to).sumOf { b.get(it).toDouble().let { v -> v * v } } / (to - from))
+    }
+    @Test fun downsamplingRemovesWhatTheTargetCannotCarryAndKeepsSpeech() {
+        // 18 kHz at 48 kHz cannot exist at 24 kHz: without filtering it would come back as a 6 kHz tone.
+        val high = convert(sine(48000, 48000, 18000.0), 48000, 24000, 1000)
+        assertTrue(rms(high) < 0.03 * 10000 / kotlin.math.sqrt(2.0))
+        for ((source, hz) in listOf(48000 to 1000.0, 44100 to 3000.0)) {
+            val low = convert(sine(source, source, hz), source, 24000, 777)
+            assertEquals(24000 * 2, low.size)
+            assertEquals(1.0, rms(low) / (10000 / kotlin.math.sqrt(2.0)), 0.05)
+        }
+    }
 }

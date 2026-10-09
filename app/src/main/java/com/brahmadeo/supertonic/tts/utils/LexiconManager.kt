@@ -143,10 +143,15 @@ object LexiconManager {
             flags = flags or Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
         }
         return try {
+            // Android's ICU-based Pattern rejects UNICODE_CHARACTER_CLASS («Unsupported flags»); there `\b` and
+            // `\w` are already Unicode, so the rule is compiled without it instead of being dropped.
+            fun compile(regex: String) = try { Pattern.compile(regex, flags) }
+                catch (_: IllegalArgumentException) { Pattern.compile(regex, flags and Pattern.UNICODE_CHARACTER_CLASS.inv()) }
             val pattern = if (item.isRegex) {
-                Pattern.compile(item.term, flags)
+                compile(item.term)
             } else {
-                Pattern.compile("\\b${Pattern.quote(item.term)}\\b", flags)
+                // Whole word by explicit letter/digit boundaries: the same on every JVM and on Android.
+                compile("(?<![\\p{L}\\p{N}_])${Pattern.quote(item.term)}(?![\\p{L}\\p{N}_])")
             }
             val replacement = Matcher.quoteReplacement(item.replacement)
             pattern to replacement

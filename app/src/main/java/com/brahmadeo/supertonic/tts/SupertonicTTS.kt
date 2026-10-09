@@ -19,6 +19,8 @@ object SupertonicTTS {
     private var hybridEngine: HybridEngine? = null
     @Volatile private var teraEngine: TeraEngine? = null
     @Volatile private var lastAudioUse = 0L
+    /** Last Tera synthesis: in a book with several models another engine may keep reading; Tera still unloads. */
+    @Volatile private var lastTeraUse = 0L
     private val idleScheduler = java.util.concurrent.ScheduledThreadPoolExecutor(1) { task ->
         Thread(task, "TeraIdle").apply { isDaemon = true }
     }.apply { removeOnCancelPolicy = true }
@@ -31,7 +33,7 @@ object SupertonicTTS {
             synchronized(this) {
                 teraIdleTask = null
                 if (teraEngine != null) {
-                    val remaining = TERA_IDLE_MS - (android.os.SystemClock.elapsedRealtime() - lastAudioUse)
+                    val remaining = TERA_IDLE_MS - (android.os.SystemClock.elapsedRealtime() - maxOf(lastTeraUse, if (appContext?.let { AssetManager.isTera(it) } == true) lastAudioUse else 0L))
                     if (remaining > 0) scheduleTeraIdle()
                     else {
                         teraEngine?.close(); teraEngine = null; prewarmed = false
@@ -392,7 +394,9 @@ object SupertonicTTS {
                     AssetManager.isKokoro(context) -> maybeKokoroEngine(context).synthesize(textPart, stylePath, speed, gain, routedListener, sid)
                     AssetManager.isPocket(context) -> maybePocketEngine(context).synthesize(textPart, stylePath, speed, gain, routedListener, sid)
                     AssetManager.isSilero(context) -> maybeSileroEngine(context).synthesize(textPart, stylePath, speed, gain, routedListener, sid)
-                    else -> maybeTeraEngine(context)?.synthesize(textPart, lang, stylePath, speed, gain, routedListener, sid, skipDictionary) ?: ByteArray(0)
+                    else -> { lastTeraUse = android.os.SystemClock.elapsedRealtime()
+                        maybeTeraEngine(context)?.synthesize(textPart, lang, stylePath, speed, gain, routedListener, sid, skipDictionary)
+                            .also { lastTeraUse = android.os.SystemClock.elapsedRealtime() } ?: ByteArray(0) }
                 }
                 val parts = if (lang in setOf("en", "cs", "eng", "ces", "cze") && !text.any { it in 'Ѐ'..'ӿ' })
                     listOf(com.brahmadeo.supertonic.tts.foreign.ForeignText.Part(text, true))
@@ -501,7 +505,9 @@ object SupertonicTTS {
         // For the hybrid INT4 preset the Rust nativePtr is intentionally 0 —
         // gate on either path being ready so XNNPACK kernel compilation runs
         // once at startup instead of on the user's first sentence.
-        if (appContext?.let { AssetManager.isSilero(it) } != true && nativePtr == 0L && maybeHybridEngine() == null && maybeTeraEngine() == null) {
+        // maybeTeraEngine() would close a book's resident Tera engine when the main model is another one.
+        if (appContext?.let { AssetManager.isSilero(it) } != true && nativePtr == 0L && maybeHybridEngine() == null &&
+            (appContext?.let { AssetManager.isTera(it) } != true || maybeTeraEngine() == null)) {
             Log.w("SupertonicTTS", "prewarm skipped: engine not ready")
             return
         }
@@ -576,7 +582,9 @@ object SupertonicTTS {
     }
 
     /** Keep the book's selected engines, evict engines from an earlier book. Idle timers still release weights. */
-    @Synchronized fun trimBookEngines(models: Set<String>) {
+    @Synchronized fun trimBookEngines(selected: Set<String>) {
+        // The main model's engine always stays: it reads everything outside the book.
+        val models = selected + listOfNotNull(appContext?.let { AssetManager.getModelType(it) })
         if (AssetManager.KOKORO_MODEL !in models) { kokoroEngine?.close(); kokoroEngine = null }
         if (AssetManager.POCKET_MODEL !in models) { pocketEngine?.close(); pocketEngine = null }
         if (AssetManager.TERA_MODEL !in models) { teraIdleTask?.cancel(false); teraIdleTask = null; teraEngine?.close(); teraEngine = null; prewarmed = false }
