@@ -73,4 +73,27 @@ class BookSpeakersTest {
         assertTrue(VoiceRoleProtocol.parseValidated(answer(
             """{"start":0,"end":10,"role":"male","confidence":"clear","speaker":"myshkin"}"""), listOf(text)).single()!!.all { it.character == null })
     }
+
+    @Test fun protagonistsKeepTheirVoiceAndSilentFiguresDoNot() {
+        // Cast order is the LLM's order of importance: the first three are protagonists.
+        val cast = BookPackage.Cast(listOf("s1"), listOf(
+            character("hero", "m", 0, mentions = 300),        // protagonist without remarks: still a voice
+            character("talker", "m", 5),
+            character("third", "f", 2),
+            character("emperor", "m", 0, mentions = 80),      // often mentioned, never speaks: «прочие»
+        ), emptyList())
+        val voices = BookVoiceAssign.assign(cast, cis, author = "ru_dmitriy").characters
+        assertTrue("hero" in voices && "talker" in voices && "third" in voices)
+        assertNull(voices["emperor"])
+    }
+
+    @Test fun firstPersonFlagReachesTheRoleRequest() {
+        val plain = org.json.JSONObject(VoiceRoleProtocol.prompt(listOf("— Да, — сказал я."), ""))
+        val first = org.json.JSONObject(VoiceRoleProtocol.prompt(listOf("— Да, — сказал я."), "", firstPerson = true))
+        assertTrue(!plain.has("first_person") && first.getBoolean("first_person"))
+        assertTrue("first_person=true" in VoiceRoleProtocol.INSTRUCTION)
+        val cast = BookPackage.Cast(listOf("s1"), emptyList(), emptyList())
+        // The role cache must not mix answers with and without first-person narration.
+        assertTrue(BookContext(1, "s1", cast, emptyMap(), firstPerson = true).key != BookContext(1, "s1", cast, emptyMap()).key)
+    }
 }

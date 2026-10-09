@@ -201,19 +201,20 @@ object LlmProviders {
     }
     internal fun cloudRequest(c: LlmConfig, prompt: String, system: String, responseSchema: JSONObject, gemini: Boolean,
                               tokens: Int = 6000, deadlineMs: Long = 12000, cancellation: CloudCancellation? = null,
-                              provider: String = if (gemini) "gemini" else "ollama"): String {
+                              provider: String = if (gemini) "gemini" else "ollama", temperature: Double = 0.0,
+                              effort: String? = null): String {
         cancellation?.check()
         val started = SystemClock.elapsedRealtime()
         fun remaining() = (deadlineMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)
         return if (provider == "deepseek") {
             require(c.deepseekKey.isNotBlank()) { "Введите ключ DeepSeek" }
-            val body = DeepSeekApi.request(c.deepseekModel, c.deepseekThinking, system, prompt, tokens)
+            val body = DeepSeekApi.request(c.deepseekModel, c.deepseekThinking, system, prompt, tokens, temperature, effort)
             DeepSeekApi.content(http(DeepSeekApi.ENDPOINT + "/chat/completions", c.deepseekKey, body,
                 deadlineMs = remaining(), cancellation = cancellation))
         } else if (gemini) {
             require(c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()) { "Выберите модель Gemini и укажите ключ" }
             require(c.geminiModel.matches(Regex("[A-Za-z0-9._-]+"))) { "Некорректное имя модели" }
-            val generationConfig = JSONObject().put("temperature", 0).put("maxOutputTokens", tokens)
+            val generationConfig = JSONObject().put("temperature", temperature).put("maxOutputTokens", tokens)
                 .put("responseMimeType", "application/json").put("responseJsonSchema", responseSchema)
             ThinkingPolicy.gemini(c.geminiModel, c.geminiThinking)?.let {
                 generationConfig.put("thinkingConfig", JSONObject().put(it.field, it.value).put("includeThoughts", false))
@@ -239,8 +240,8 @@ object LlmProviders {
                 values
             }
             val body = JSONObject().put("model", c.ollamaModel).put("stream", false)
-                .put("think", ThinkingPolicy.ollama(controls, c.ollamaThinking, c.ollamaModel))
-                .put("options", JSONObject().put("temperature", 0).put("num_predict", tokens))
+                .put("think", ThinkingPolicy.ollama(controls, c.ollamaThinking, c.ollamaModel, effort))
+                .put("options", JSONObject().put("temperature", temperature).put("num_predict", tokens))
                 .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))
                     .put(JSONObject().put("role", "user").put("content", prompt)))
             // Ollama Cloud does not support the format/schema parameter.
@@ -255,8 +256,9 @@ object LlmProviders {
     internal class CloudOutputLimitException : IllegalStateException("LLM исчерпала лимит ответа")
     fun voiceRoles(context: Context, c: LlmConfig, texts: List<String>, preceding: String, provider: String, deadlineMs: Long = 8000,
                    book: com.brahmadeo.supertonic.tts.books.BookContext? = null): List<List<VoiceRoleText>?> {
+        val firstPerson = book?.firstPerson ?: c.firstPerson
         if (provider == "local") {
-            val (prompt,pieces) = LocalVoiceRoleProtocol.prompt(texts,preceding)
+            val (prompt,pieces) = LocalVoiceRoleProtocol.prompt(texts,preceding,firstPerson)
             val answer = local(context,c,listOf(prompt),deadlineMs=deadlineMs,protocol="roles-local",
                 diagnosticInstruction=LocalVoiceRoleProtocol.INSTRUCTION,
                 outputTokenLimit=(pieces.sumOf { it.size }*8+16).coerceIn(64,272)).single()
@@ -264,7 +266,7 @@ object LlmProviders {
             return LocalVoiceRoleProtocol.parse(answer,pieces).map { plan -> plan?.map { it.copy(voice = book?.voiceOf(it.role, null)) } }
         }
         // Local Gemma keeps the plain three roles: the character list is for the cloud request only.
-        val prompt = VoiceRoleProtocol.prompt(texts, preceding, book)
+        val prompt = VoiceRoleProtocol.prompt(texts, preceding, book, firstPerson)
         return VoiceRoleProtocol.parseValidated(cloudRequest(c, prompt, VoiceRoleProtocol.INSTRUCTION,
             VoiceRoleProtocol.schema(), provider == "gemini", 2400, deadlineMs, provider = provider), texts, book)
     }

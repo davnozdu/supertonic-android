@@ -122,6 +122,11 @@ class LlmSettingsActivity : ComponentActivity() {
                             }
                             Text("LLM определяет автора, мужские и женские реплики по соседнему тексту. Слова книги сохраняются. Неясные реплики и фрагменты без готовой разметки читает автор. Голоса сохраняются отдельно для каждой звуковой модели.", style = MaterialTheme.typography.bodySmall)
                             if (config.multiVoice) {
+                                Toggle("Текст от первого лица — всегда", config.firstPerson) {
+                                    config = config.copy(firstPerson = it); save()
+                                }
+                                Text("Рассказчик говорит «я»: его собственные реплики («— сказал я») читает голос автора. Действует для всех текстов; " +
+                                    "для отдельной книги можно включить или выключить на экране «Книги с голосами персонажей».", style = MaterialTheme.typography.bodySmall)
                                 if (config.mode == LlmMode.OFF) Text("Включите LLM-обработку для определения ролей. При выключенной LLM используется обычный выбранный голос.")
                                 val roleVoices = com.brahmadeo.supertonic.tts.utils.AssetManager.russianVoices(this@LlmSettingsActivity)
                                 var roleRevision by remember { mutableStateOf(0) }

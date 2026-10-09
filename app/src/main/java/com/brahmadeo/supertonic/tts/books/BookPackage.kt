@@ -22,6 +22,35 @@ data class BookPackage(
 
     fun castOf(section: String?): Cast? = sections.firstOrNull { it.id == section }?.cast?.let { casts.getOrNull(it) }
 
+    /** Casts that share characters form one group. A novel prepared by chapters has several casts with the same
+     * characters (only who a title like «генерал» refers to differs between chapters): one voice per character
+     * and one list in the settings for the whole group. Stories of a collection have their own characters and
+     * stay separate groups. */
+    val groups: List<List<Int>> by lazy {
+        val parent = IntArray(casts.size) { it }
+        fun root(i: Int): Int { var x = i; while (parent[x] != x) x = parent[x]; return x }
+        val owner = HashMap<String, Int>()
+        casts.forEachIndexed { i, cast ->
+            for (ch in cast.characters) owner.put(ch.id, i)?.let { j -> parent[root(i)] = root(j) }
+        }
+        casts.indices.groupBy { root(it) }.values.toList()
+    }
+
+    fun groupOf(castIndex: Int): Int = groups.indexOfFirst { castIndex in it }
+
+    /** All characters of a group once: replies and mentions summed over its chapters, forms joined. */
+    fun groupCast(group: Int): Cast {
+        val members = groups.getOrNull(group).orEmpty().map { casts[it] }
+        val merged = LinkedHashMap<String, Character>()
+        for (cast in members) for (ch in cast.characters) {
+            val seen = merged[ch.id]
+            merged[ch.id] = if (seen == null) ch else seen.copy(
+                speaker = seen.speaker + ch.speaker, mentions = seen.mentions + ch.mentions,
+                forms = (seen.forms + ch.forms).distinct(), voiceHint = seen.voiceHint ?: ch.voiceHint)
+        }
+        return Cast(members.flatMap { it.sections }, merged.values.toList(), members.flatMap { it.other }.distinct())
+    }
+
     companion object {
         const val MAX_BYTES = 32L * 1024 * 1024
         private const val MAX_FINGERPRINTS = 1_000_000

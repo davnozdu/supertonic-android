@@ -19,10 +19,16 @@ object ThinkingPolicy {
         return GeminiControl("thinkingLevel", if (enabled) "HIGH" else minimum, !enabled)
     }
 
-    fun ollama(values: List<Any>, enabled: Boolean, model: String): Any {
+    /** [effort]: a lower level after the thinking did not fit the answer limit (the nearest supported level not
+     * above it); null — the default. */
+    fun ollama(values: List<Any>, enabled: Boolean, model: String, effort: String? = null): Any {
         if (!enabled && false in values) return false
-        if (enabled && true in values) return true
         val levels = values.filterIsInstance<String>()
+        if (enabled && effort != null && levels.isNotEmpty()) {
+            val order = listOf("max", "high", "medium", "low", "minimal")
+            order.drop(maxOf(0, order.indexOf(effort))).firstOrNull { it in levels }?.let { return it }
+        }
+        if (enabled && true in values) return true
         if (levels.isNotEmpty()) {
             val order = if (enabled) listOf("medium", "high", "low", "minimal") else listOf("minimal", "low", "medium", "high")
             return order.firstOrNull { it in levels } ?: levels.first()

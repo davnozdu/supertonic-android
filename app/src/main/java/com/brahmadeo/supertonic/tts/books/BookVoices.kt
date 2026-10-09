@@ -79,13 +79,16 @@ object BookVoices {
         return if (configured(ctx, book)) BookVoiceRef(model, value).key else value
     }
 
-    /** Voices of one set of characters (one story of a collection, or the whole novel). */
-    fun assignment(ctx: Context, book: Long, castIndex: Int, cast: BookPackage.Cast): BookVoiceAssign.Assignment {
+    /** Voices of one group of characters (one story of a collection, or the whole novel even when its chapters
+     * have separate casts): the same character keeps one voice in every chapter. */
+    fun assignment(ctx: Context, book: Long, pkg: BookPackage, castIndex: Int): BookVoiceAssign.Assignment {
+        val group = pkg.groupOf(castIndex)
+        val cast = if (group >= 0) pkg.groupCast(group) else BookPackage.Cast(emptyList(), emptyList(), emptyList())
         val available = available(ctx, book)
         val author = author(ctx, book)
         val ownMale = ownRole(ctx, book, VoiceRole.MALE)
         val ownFemale = ownRole(ctx, book, VoiceRole.FEMALE)
-        return cache.getOrPut("$book/$castIndex/${available.hashCode()}/$author/$ownMale/$ownFemale") {
+        return cache.getOrPut("$book/g$group/${available.hashCode()}/$author/$ownMale/$ownFemale") {
             val manual = cast.characters.mapNotNull { ch -> manual(ctx, book, ch.id)?.let { ch.id to it } }.toMap()
             val effective = if (configured(ctx, book)) cast.copy(characters = cast.characters.map { it.copy(voiceHint = null) }) else cast
             BookVoiceAssign.assign(effective, available, author, manual, ownMale, ownFemale, available.associateWith { VoiceGenderSettings.gender(ctx, it) })
@@ -105,9 +108,19 @@ object BookVoices {
         // A section without characters still reads with the book's narrator voice.
         val index = pkg.sections.firstOrNull { it.id == position.section }?.cast ?: -1
         val cast = pkg.casts.getOrNull(index) ?: BookPackage.Cast(emptyList(), emptyList(), emptyList())
-        val assignment = assignment(ctx, position.book, index, cast)
+        val assignment = assignment(ctx, position.book, pkg, index)
         val roles = VoiceRole.entries.associateWith { roleVoice(ctx, position.book, it, assignment) }
-        return BookContext(position.book, position.section, cast, assignment.characters, roles)
+        return BookContext(position.book, position.section, cast, assignment.characters, roles, firstPerson(ctx, position.book))
+    }
+
+    /** First-person narration for this book: true / false chosen on the books screen, null — the global setting. */
+    fun firstPerson(ctx: Context, book: Long): Boolean? =
+        prefs(ctx).getString("$book/first_person", null)?.let { it == "1" }
+    fun setFirstPerson(ctx: Context, book: Long, value: Boolean?) {
+        prefs(ctx).edit().apply { if (value == null) remove("$book/first_person") else putString("$book/first_person", if (value) "1" else "0") }.apply()
+        clear()
+        // Roles already prepared were marked with the old setting.
+        com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
     }
 
     fun clear() = cache.clear()

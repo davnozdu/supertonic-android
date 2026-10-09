@@ -14,9 +14,10 @@ import java.util.zip.ZipFile
 object Fb2Book {
     private val blocks = setOf("p", "subtitle", "v")
     private fun tag(e: Element) = e.tagName().substringAfter(':').lowercase()
-    private fun text(e: Element): String {
+    private fun text(e: Element, notes: Boolean = true): String {
         val parts = mutableListOf<String>()
         fun visit(n: Node) {
+            if (!notes && EpubBook.noteref(n)) return
             if (n is TextNode) parts += n.wholeText
             else if (n !is Element || tag(n) !in setOf("binary", "image", "style")) n.childNodes().forEach(::visit)
         }
@@ -24,18 +25,19 @@ object Fb2Book {
         return EpubBook.clean(parts.joinToString(" "))
     }
 
-    fun read(file: File, zipped: Boolean = false, check: () -> Unit = {}): EpubBook {
+    /** [depth] — levels of nested <section> used as sections (1: top level; [EpubBook.ALL_LEVELS]: chapters). */
+    fun read(file: File, zipped: Boolean = false, check: () -> Unit = {}, depth: Int = 1): EpubBook {
         require(file.length() in 1..EpubBook.MAX_BYTES) { "Файл книги пустой или больше 50 МБ" }
-        if (!zipped) return file.inputStream().use { parse(it, file.nameWithoutExtension, check) }
+        if (!zipped) return file.inputStream().use { parse(it, file.nameWithoutExtension, check, depth) }
         ZipFile(file).use { zip ->
             val entries = zip.entries().asSequence().filter { !it.isDirectory && it.name.lowercase().endsWith(".fb2") }.toList()
             require(entries.size == 1) { "В ZIP должна быть ровно одна книга FB2" }
             require(entries.single().size <= EpubBook.MAX_BYTES) { "FB2 больше 50 МБ после распаковки" }
-            return zip.getInputStream(entries.single()).use { parse(it, entries.single().name.substringAfterLast('/').substringBeforeLast('.'), check) }
+            return zip.getInputStream(entries.single()).use { parse(it, entries.single().name.substringAfterLast('/').substringBeforeLast('.'), check, depth) }
         }
     }
 
-    private fun parse(input: InputStream, fallbackTitle: String, check: () -> Unit): EpubBook {
+    private fun parse(input: InputStream, fallbackTitle: String, check: () -> Unit, depth: Int): EpubBook {
         var read = 0L
         val bounded = object : java.io.FilterInputStream(input) {
             override fun read(): Int {
@@ -64,38 +66,54 @@ object Fb2Book {
             ?: error("В FB2 нет основного текста")
         val sections = mutableListOf<EpubBook.Section>()
         val paragraphs = mutableListOf<EpubBook.Paragraph>()
+        val analysis = mutableMapOf<Int, String>()
         var chars = 0L
-        fun addBlocks(container: Element, section: Int) {
-            for (e in container.getAllElements()) {
-                check()
-                if (tag(e) !in blocks || e.getAllElements().drop(1).any { tag(it) in blocks }) continue
-                val value = text(e)
-                if (value.isEmpty()) continue
-                chars += value.length
-                require(chars <= 12_000_000 && paragraphs.size < 100_000) { "Текст FB2 слишком велик" }
-                paragraphs += EpubBook.Paragraph(section, value)
+        fun add(e: Element, section: Int) {
+            val value = text(e)
+            if (value.isEmpty()) return
+            chars += value.length
+            require(chars <= 12_000_000 && paragraphs.size < 100_000) { "Текст FB2 слишком велик" }
+            val bare = text(e, notes = false)
+            if (bare != value) analysis[paragraphs.size] = bare
+            paragraphs += EpubBook.Paragraph(section, value)
+        }
+        fun heading(e: Element) = e.children().firstOrNull { tag(it) == "title" }?.let { text(it) }.orEmpty()
+        fun open(e: Element, trail: List<String>): Pair<Int, List<String>> {
+            require(sections.size < 5000) { "В FB2 слишком много разделов" }
+            val label = heading(e)
+            val path = if (label.isNotBlank()) trail + label else trail
+            sections += EpubBook.Section("s${sections.size + 1}", path.joinToString(" ").ifBlank { "Раздел ${sections.size + 1}" })
+            return sections.size - 1 to path
+        }
+        // Document order; a nested <section> opens a new section while within [depth] levels.
+        fun walk(e: Element, section: Int, trail: List<String>, level: Int) {
+            check()
+            if (tag(e) in blocks) {
+                if (e.getAllElements().drop(1).none { tag(it) in blocks }) { add(e, section); return }
+            }
+            for (child in e.children()) {
+                if (tag(child) == "section" && level < depth) {
+                    val (inner, path) = open(child, trail)
+                    walk(child, inner, path, level + 1)
+                } else walk(child, section, trail, level)
             }
         }
         val children = body.children().filter { tag(it) == "section" }
         // A common FB2 layout wraps the entire book in one untitled section. Unwrap it,
         // preserving introductory text, so a collection still has separate top-level stories.
         val wrapper = children.singleOrNull()?.takeIf { e ->
-            val heading = e.children().firstOrNull { tag(it) == "title" }?.let(::text).orEmpty()
-            heading.isBlank() || heading.equals(title, ignoreCase = true)
+            val label = heading(e)
+            label.isBlank() || label.equals(title, ignoreCase = true)
         }
         val top = if (wrapper != null && wrapper.children().count { tag(it) == "section" } >= 2) wrapper else body
-        var current = -1
         for (child in top.children()) {
             check()
             if (tag(child) == "section") {
-                require(sections.size < 2000) { "В FB2 слишком много разделов" }
-                val label = child.children().firstOrNull { tag(it) == "title" }?.let(::text).orEmpty()
-                current = sections.size
-                sections += EpubBook.Section("s${current + 1}", label.ifBlank { "Раздел ${current + 1}" })
-                addBlocks(child, current)
+                val (index, path) = open(child, emptyList())
+                walk(child, index, path, 1)
             } else {
                 // Front matter attaches to the following first section, like EPUB's pre-TOC text.
-                addBlocks(child, maxOf(0, current))
+                walk(child, maxOf(0, sections.size - 1), emptyList(), depth)
             }
         }
         if (sections.isEmpty()) sections += EpubBook.Section("s1", title)
@@ -103,19 +121,19 @@ object Fb2Book {
         val used = paragraphs.map { it.section }.distinct().sorted()
         val renumber = used.withIndex().associate { it.value to it.index }
         return EpubBook(title, authors, used.mapIndexed { i, old -> sections[old].copy(id = "s${i + 1}") },
-            paragraphs.map { it.copy(section = renumber.getValue(it.section)) })
+            paragraphs.map { it.copy(section = renumber.getValue(it.section)) }, analysis = analysis)
     }
 }
 
 /** Format detection uses contents, because Android document providers often give a generic MIME type. */
 object BookInput {
-    fun read(file: File, check: () -> Unit = {}): EpubBook {
+    fun read(file: File, depth: Int = 1, check: () -> Unit = {}): EpubBook {
         check()
         val magic = file.inputStream().use { input -> ByteArray(4).also { input.read(it) } }
         if (magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte()) {
             val epub = ZipFile(file).use { it.getEntry("META-INF/container.xml") != null }
-            return if (epub) EpubBook.read(file, check) else Fb2Book.read(file, true, check)
+            return if (epub) EpubBook.read(file, check, depth) else Fb2Book.read(file, true, check, depth)
         }
-        return Fb2Book.read(file, check = check)
+        return Fb2Book.read(file, check = check, depth = depth)
     }
 }

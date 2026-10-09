@@ -10,11 +10,12 @@ internal object LocalVoiceRoleProtocol {
         val starts = (listOf(0) + Regex("(?<![^\\s\\p{Z}])[—–-](?=[\\s\\p{Z}])").findAll(text).map { it.range.first }.toList()).distinct().sorted()
         return starts.mapIndexed { i, start -> text.substring(start, starts.getOrElse(i+1) { text.length }) }.filter { it.isNotEmpty() }
     }
-    fun prompt(texts: List<String>, preceding: String): Pair<String, List<List<String>>> {
+    fun prompt(texts: List<String>, preceding: String, firstPerson: Boolean = false): Pair<String, List<List<String>>> {
         val pieces = texts.map(::fragments)
         require(pieces.sumOf { it.size } in 1..32)
         val count = pieces.sumOf { it.size }
-        val prompt = "Предыдущий контекст:\n${preceding.takeLast(600)}\nВсего $count фрагментов, номера от 0 до ${count-1}. Ответ должен содержать $count строк номер:буква.\nФрагменты:\n" +
+        val narrator = if (firstPerson) "Текст от первого лица: реплики самого рассказчика («сказал я», «ответила я») — А.\n" else ""
+        val prompt = narrator + "Предыдущий контекст:\n${preceding.takeLast(600)}\nВсего $count фрагментов, номера от 0 до ${count-1}. Ответ должен содержать $count строк номер:буква.\nФрагменты:\n" +
             pieces.flatten().mapIndexed { i, text -> "[$i] $text" }.joinToString("\n") +
             "\nКонец фрагментов. Назначь голос каждому номеру от 0 до ${count-1}."
         return prompt to pieces
