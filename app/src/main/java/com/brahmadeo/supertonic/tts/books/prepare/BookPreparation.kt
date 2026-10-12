@@ -18,6 +18,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+import com.brahmadeo.supertonic.tts.llm.VoiceRoleProtocol
 import java.io.File
 
 /** One job, owned by the app rather than the screen. Cloud calls are deliberately a sequential loop. */
@@ -56,7 +57,8 @@ object BookPreparation {
     }
 
     @Volatile private var pendingSource: Source? = null
-    @Synchronized fun start(context: Context, uri: Uri, source: Source): Boolean {
+    /** [replies]: also «Разметка реплик»; [repliesFor]: an already prepared book — only its replies are marked. */
+    @Synchronized fun start(context: Context, uri: Uri, source: Source, replies: Boolean = true, repliesFor: Long = -1): Boolean {
         if (job != null || mutable.value.running) return false
         val ctx = context.applicationContext
         ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -64,7 +66,7 @@ object BookPreparation {
         mutable.value = State(running = true, stage = "Копирование книги", startedAt = System.currentTimeMillis())
         try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, BookPreparationService::class.java)
-                .setData(uri).putExtra("thinking", source.thinking))
+                .setData(uri).putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor))
         } catch (t: Exception) {
             pendingSource = null; mutable.value = State(message = "Не удалось запустить фоновую подготовку; откройте MyTTS и повторите.")
             throw t
@@ -73,7 +75,7 @@ object BookPreparation {
     }
 
     /** Called by the foreground service, also when Android redelivers its intent after process death. */
-    @Synchronized internal fun execute(context: Context, uri: Uri, thinking: Boolean) {
+    @Synchronized internal fun execute(context: Context, uri: Uri, thinking: Boolean, replies: Boolean = true, repliesFor: Long = -1) {
         if (job != null) return
         val ctx = context.applicationContext
         val source = pendingSource ?: try { source(ctx).withThinking(thinking) } catch (_: Exception) {
@@ -108,6 +110,10 @@ object BookPreparation {
                     // No credentials in it.
                     val identity = "book-prep-v2\n${plan.fileSha}\n${source.gemini}\n${source.config.ollamaEndpoint}\n${source.label}\n${source.thinking}"
                     val folder = File(ctx.cacheDir, "book-prep/${BookPreparationPlan.hash(identity.toByteArray())}").apply { mkdirs() }
+                    if (repliesFor >= 0) {
+                        markExisting(ctx, plan, repliesFor, folder, source, cancel, startedAt)
+                        return@run
+                    }
                     val total = plan.requests.size
                     mutable.value = State(true, "LLM", 0, total, startedAt = startedAt)
                     val pipeline = CastPipeline(plan, source.thinking, { name, prompt, kind, thinking, accept ->
@@ -116,7 +122,12 @@ object BookPreparation {
                     val casts = pipeline.run()
                     cancel.check()
                     mutable.value = mutable.value.copy(stage = "Сохранение")
-                    val json = plan.export(casts)
+                    var json = plan.export(casts)
+                    var marking: ReplyMarking.Result? = null
+                    if (replies) {
+                        marking = markReplies(plan, BookPackage.parse(json), folder, source, cancel, startedAt)
+                        json = JSONObject(json).put("replies", marking.replies).toString()
+                    }
                     require(json.toByteArray().size <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
                     val pkg = BookPackage.parse(json)
                     val characters = pkg.groups.indices.sumOf { pkg.groupCast(it).characters.size }
@@ -129,6 +140,7 @@ object BookPreparation {
                         mutable.value = State(message = "Книга «${plan.title}» (${if (plan.collection) "сборник" else "роман"}): персонажей $characters, " +
                             "разделов ${plan.sections.size}, в «прочих» ${casts.flatten().sumOf { it.other.size }}. " +
                             (if (pipeline.notes.isNotEmpty()) pipeline.notes.joinToString("; ", postfix = ". ") else "") +
+                            (marking?.let { "Реплики размечены: ${it.marked} абзацев${if (it.failed > 0) ", не удалось ${it.failed}" else ""}. " } ?: "") +
                             "Откройте исходную книгу в читалке — MyTTS узнает её по тексту.", bookId = id)
                     }
                 }
@@ -155,6 +167,71 @@ object BookPreparation {
         if (cancellation == null) cancellation = LlmProviders.CloudCancellation()
         cancellation?.cancel()
         // Disconnect only our HTTP requests; do not cancel foreground-service cleanup.
+    }
+
+    /** «Разметка реплик»: the role request over the dialogue paragraphs, without thinking (one sentence of roles per
+     * paragraph does not need it; the reading-time request uses none either). */
+    private fun markReplies(plan: BookPreparationPlan, pkg: BookPackage, folder: File, source: Source,
+                            cancel: LlmProviders.CloudCancellation, startedAt: Long): ReplyMarking.Result {
+        val batches = ReplyMarking.batches(plan.sections, plan.paragraphs, pkg)
+        return ReplyMarking.mark(plan.paragraphs, batches, pkg, { batch -> roleRequest(folder, batch.prompt, source, cancel) },
+            { done, all -> mutable.value = State(true, "Разметка реплик", done, all, startedAt = startedAt) }, cancel::check)
+    }
+
+    /** Only the replies of a book already in the library (the same edition: its sections must match). */
+    private fun markExisting(ctx: Context, plan: BookPreparationPlan, id: Long, folder: File, source: Source,
+                             cancel: LlmProviders.CloudCancellation, startedAt: Long) {
+        val pkg = requireNotNull(BookLibrary.get(ctx, id)) { "Подготовленная книга не найдена" }
+        require(plan.sections.map { it.id } == pkg.sections.map { it.id }) {
+            "В книге другие разделы, чем в подготовленной: выберите тот же файл EPUB/FB2, из которого её готовили"
+        }
+        val marking = markReplies(plan, pkg, folder, source, cancel, startedAt)
+        val json = JSONObject(requireNotNull(BookLibrary.json(ctx, id))).put("replies", marking.replies).toString()
+        require(json.toByteArray().size <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
+        BookPackage.parse(json)
+        synchronized(this) {
+            cancel.check()
+            val book = BookLibrary.import(ctx, json)
+            BookMatcher.forgetAll(); BookVoices.clear(); SpeechPreparationCache.clear()
+            mutable.value = State(message = "Реплики книги «${pkg.title}» размечены: ${marking.marked} абзацев" +
+                (if (marking.failed > 0) ", не удалось ${marking.failed}" else "") + ". Голоса в читалке берутся из книги без LLM.", bookId = book)
+        }
+    }
+
+    /** One role request, cached by its prompt: up to three attempts on network or server errors. */
+    private fun roleRequest(folder: File, prompt: String, source: Source, cancel: LlmProviders.CloudCancellation): String {
+        val file = File(folder, "roles.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.json")
+        if (file.isFile && file.length() <= 512 * 1024) return file.readText()
+        val config = source.withThinking(false).config
+        var delay = 4000L
+        var last: Exception? = null
+        for (attempt in 1..3) {
+            cancel.check()
+            try {
+                val raw = LlmProviders.cloudRequest(config, prompt, VoiceRoleProtocol.INSTRUCTION, VoiceRoleProtocol.schema(), source.gemini,
+                    tokens = 8000, deadlineMs = 3 * 60 * 1000L, cancellation = cancel, provider = source.provider)
+                cancel.check()
+                val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
+                // Saved only when it is the expected JSON; a broken answer is asked again next time.
+                if (start >= 0 && end > start && runCatching { JSONObject(raw.substring(start, end + 1)).has("paragraphs") }.getOrDefault(false)) {
+                    val tmp = File(folder, "${file.name}.tmp")
+                    try { tmp.writeText(raw); check(tmp.renameTo(file)) { "Не удалось сохранить ответ LLM" } } finally { tmp.delete() }
+                    return raw
+                }
+                last = IllegalStateException("LLM вернула ответ не в формате JSON")
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) {
+                cancel.check()
+                val message = e.message.orEmpty()
+                val temporary = e is java.io.IOException || message.startsWith("LLM превышен лимит запроса") || message.startsWith("API HTTP 429") || Regex("^API HTTP 5\\d\\d").containsMatchIn(message)
+                if (!temporary || attempt == 3) throw e
+                last = e
+                val until = System.currentTimeMillis() + delay
+                while (System.currentTimeMillis() < until) { cancel.check(); Thread.sleep(500) }
+                delay *= 2
+            }
+        }
+        throw last ?: IllegalStateException("LLM не вернула ответ")
     }
 
     /** One request, cached by its prompt: up to three attempts. A truncated thinking answer is retried one level

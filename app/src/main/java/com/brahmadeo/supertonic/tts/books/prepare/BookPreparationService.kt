@@ -39,7 +39,8 @@ class BookPreparationService : Service() {
         }
         // In addition to each request's ten-minute deadline, bound the whole session.
         if (limit == null) limit = scope.launch { delay(90 * 60 * 1000L); BookPreparation.stop() }
-        BookPreparation.execute(this, uri, intent.getBooleanExtra("thinking", true))
+        BookPreparation.execute(this, uri, intent.getBooleanExtra("thinking", true), intent.getBooleanExtra("replies", true),
+            intent.getLongExtra("replies_for", -1))
         cancellation = BookPreparation.cancellationScope()
         return START_REDELIVER_INTENT
     }

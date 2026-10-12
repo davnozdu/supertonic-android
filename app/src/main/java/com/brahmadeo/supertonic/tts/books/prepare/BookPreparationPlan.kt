@@ -9,7 +9,9 @@ import java.security.MessageDigest
 /** Compact plan: the full book text is released before the first cloud request. A novel is split into chapters
  * (titles are decided chapter by chapter), a collection into stories (each with its own characters). */
 data class BookPreparationPlan(val title: String, val author: String, val fileSha: String, val contentSha: String,
-    val sections: List<EpubBook.Section>, val collection: Boolean, val requests: List<Request>, val fingerprints: Map<String, List<String>>) {
+    val sections: List<EpubBook.Section>, val collection: Boolean, val requests: List<Request>, val fingerprints: Map<String, List<String>>,
+    /** The book text by section, for «Разметка реплик» (kept in memory only while preparing). */
+    val paragraphs: List<EpubBook.Paragraph> = emptyList()) {
     data class Request(val name: String, val title: String, val sections: List<String>, val candidates: List<NameCandidates.Candidate>, val prompt: String) {
         val byId: Map<String, NameCandidates.Candidate> by lazy { candidates.associateBy { it.id } }
         val prefix get() = candidates.firstOrNull()?.id?.trimEnd { it.isDigit() } ?: "c"
@@ -133,7 +135,7 @@ data class BookPreparationPlan(val title: String, val author: String, val fileSh
             }
             val fileSha = fileDigest.digest().joinToString("") { "%02x".format(it) }
             val prints = index.entries.filter { it.value != null }.groupBy({ it.value!! }, { BookFingerprint.hex(it.key) }).mapValues { it.value.sorted() }
-            return BookPreparationPlan(book.title, book.author, fileSha, contentSha, book.sections, collection, requests, prints)
+            return BookPreparationPlan(book.title, book.author, fileSha, contentSha, book.sections, collection, requests, prints, book.paragraphs)
         }
     }
 }

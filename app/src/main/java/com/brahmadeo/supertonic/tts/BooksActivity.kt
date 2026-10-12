@@ -62,6 +62,17 @@ class BooksActivity : ComponentActivity() {
                 }
                 val prepPrefs = remember { getSharedPreferences("book_preparation", MODE_PRIVATE) }
                 var thinking by remember { mutableStateOf(prepPrefs.getBoolean("thinking", true)) }
+                var repliesOn by remember { mutableStateOf(prepPrefs.getBoolean("replies", true)) }
+                var repliesBook by remember { mutableStateOf<Long?>(null) }
+                val repliesPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    val id = repliesBook; repliesBook = null
+                    if (uri != null && id != null) scope.launch {
+                        try {
+                            val source = withContext(Dispatchers.IO) { BookPreparation.source(this@BooksActivity) }
+                            if (!BookPreparation.start(this@BooksActivity, uri, source, replies = true, repliesFor = id)) message = "Подготовка другой книги уже идёт."
+                        } catch (_: Exception) { message = "Для разметки реплик настройте облачную модель и ключ в настройках LLM." }
+                    }
+                }
                 var sourceLabel by remember { mutableStateOf("") }
                 var pendingUri by remember { mutableStateOf<Uri?>(null) }
                 var pendingSource by remember { mutableStateOf<BookPreparation.Source?>(null) }
@@ -85,11 +96,12 @@ class BooksActivity : ComponentActivity() {
                     title = { Text("Подготовить книгу") },
                     text = { Text("${pendingSource!!.label}\n\nВ облако уйдёт список кандидатов с короткими примерами, а не вся книга. " +
                         "Режим размышления ${if (pendingSource!!.thinking) "включён" else "выключен"}. " +
+                        (if (repliesOn) "Затем реплики будут размечены по голосам (абзацы с речью уходят в облако). " else "") +
                         "Подготовка может занять 10–15 минут и продолжится при выключенном экране.") },
                     confirmButton = { TextButton(onClick = {
                         val uri = pendingUri!!; val source = pendingSource!!
                         pendingUri = null; pendingSource = null
-                        try { if (!BookPreparation.start(this@BooksActivity, uri, source)) message = "Подготовка другой книги уже идёт." }
+                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn)) message = "Подготовка другой книги уже идёт." }
                         catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите книгу снова." }
                     }) { Text("Подготовить") } },
                     dismissButton = { TextButton(onClick = { pendingUri = null; pendingSource = null }) { Text("Отмена") } }
@@ -129,6 +141,15 @@ class BooksActivity : ComponentActivity() {
                                         thinking = it; prepPrefs.edit().putBoolean("thinking", it).apply()
                                     })
                                 }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("Разметить реплики")
+                                        Text("Кто говорит каждую реплику — записывается в файл книги. Голоса персонажей в любой читалке сразу, без LLM при чтении. Добавляет около 10 минут на роман.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked = repliesOn, enabled = !preparation.running, onCheckedChange = {
+                                        repliesOn = it; prepPrefs.edit().putBoolean("replies", it).apply()
+                                    })
+                                }
                                 Text("Обработка может занять 10–15 минут. Продолжается в фоне и при выключенном экране. " +
                                     "Запросы к LLM выполняются строго по одному.", style = MaterialTheme.typography.bodySmall)
                                 if (preparation.running) {
@@ -166,7 +187,8 @@ class BooksActivity : ComponentActivity() {
                                         voicePreview.stop(); openBook = if (openBook == book.id) null else book.id
                                     }.padding(vertical = 6.dp)) {
                                         Text((if (openBook == book.id) "▾ " else "▸ ") + book.title, style = MaterialTheme.typography.titleMedium)
-                                        Text(listOf(book.author, "персонажей ${book.characters}", "разделов ${book.sections}")
+                                        val marked = remember(book.id, preparation.bookId) { runCatching { BookLibrary.replies(this@BooksActivity, book.id).size > 0 }.getOrDefault(false) }
+                                        Text(listOf(book.author, "персонажей ${book.characters}", "разделов ${book.sections}", if (marked) "реплики размечены" else "")
                                             .filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                                     }
                                     if (openBook == book.id) {
@@ -179,6 +201,9 @@ class BooksActivity : ComponentActivity() {
                                                 }
                                             }) { Text("Удалить") }
                                         }
+                                        OutlinedButton(enabled = !busy && !preparation.running, modifier = Modifier.fillMaxWidth(), onClick = {
+                                            repliesBook = book.id; repliesPicker.launch(arrayOf("*/*"))
+                                        }) { Text("Разметить реплики — выбрать исходный EPUB/FB2") }
                                         CharacterVoices(book.id, voiceRevision, previewState) { voiceRevision++ }
                                     }
                                 }
