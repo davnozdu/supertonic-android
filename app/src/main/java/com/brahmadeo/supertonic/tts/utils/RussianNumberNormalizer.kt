@@ -27,9 +27,9 @@ class RussianNumberNormalizer {
     // to be inlined inside the function, costing ~7 fresh compiles per call.
     // The TTS service hits normalize() once per Russian sentence, so on a
     // 1000-sentence audiobook we were burning ~7000 redundant compiles.
-    private val rangeRegex = Regex("\\b(\\d+)\\s*[-–—]\\s*(\\d+)\\b")
-    private val percentRegex = Regex("\\b(\\d+(?:[,.]\\d+)?)\\s*%")
-    private val celsiusRegex = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°\\s*[CС]\\b")
+    private val rangeRegex = Regex("(?<![\\p{L}\\d_])(\\d+)\\s*[-–—]\\s*(\\d+)(?![\\p{L}\\d_])")
+    private val percentRegex = Regex("(?<![\\p{L}\\d_])(\\d+(?:[,.]\\d+)?)\\s*%")
+    private val celsiusRegex = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°\\s*[CС](?![\\p{L}\\d_])")
     private val degreesRegex = Regex("(-?\\d+(?:[,.]\\d+)?)\\s*°")
     private val groupedIntegerRegex = Regex("(?<![\\p{L}\\d])(-?\\d{1,3}(?:[ \\u00A0\\u202F]\\d{3})+)(?![\\p{L}\\d]|[.,]\\d)")
     private val decimalRegex = Regex("(?<![\\p{L}\\d.,])(-?\\d{1,12})[,.](\\d{1,9})(?![\\p{L}\\d]|[.,]\\d)")

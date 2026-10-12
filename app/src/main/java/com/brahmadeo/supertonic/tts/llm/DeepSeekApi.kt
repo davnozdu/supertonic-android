@@ -12,10 +12,13 @@ object DeepSeekApi {
         return (0 until data.length()).mapNotNull { data.optJSONObject(it)?.optString("id")?.takeIf(String::isNotBlank) }
             .distinct().sortedWith(compareBy<String> { it != DEFAULT_MODEL }.thenBy { it })
     }
-    fun request(model: String, thinking: Boolean, system: String, prompt: String, tokens: Int): JSONObject {
+    /** [effort]: reasoning depth with thinking (high / medium / low), null — the API default. */
+    fun request(model: String, thinking: Boolean, system: String, prompt: String, tokens: Int, temperature: Double = 0.0,
+                effort: String? = null): JSONObject {
         require(model.isNotBlank()) { "Выберите модель DeepSeek" }
-        return JSONObject().put("model", model).put("stream", false).put("temperature", 0)
+        return JSONObject().put("model", model).put("stream", false).put("temperature", temperature)
             .put("max_tokens", tokens).put("thinking", JSONObject().put("type", if (thinking) "enabled" else "disabled"))
+            .apply { if (thinking && effort in listOf("high", "medium", "low")) put("reasoning_effort", effort) }
             .put("response_format", JSONObject().put("type", "json_object"))
             .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))
                 .put(JSONObject().put("role", "user").put("content", prompt)))

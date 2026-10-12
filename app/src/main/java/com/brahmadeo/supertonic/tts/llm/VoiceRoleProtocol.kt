@@ -13,10 +13,13 @@ role=author для повествования и авторских вставо
 Образец, не включать в ответ: units="0:- | 1:Ты | 2:готов? | 3:- | 4:спросила | 5:Анна."; count=6. Диапазоны: start=0,end=3,role=female; start=3,end=6,role=author. Анна произносит «Ты готов?», а «спросила Анна» читает автор.
 Определяй говорящего по глаголам речи, обращению и контексту. Не считай упомянутое имя автоматически говорящим. Не назначай голоса только по чередованию реплик. Не выдумывай персонажей. Если пол или говорящий неясен, role=author, confidence=uncertain. Авторский текст: confidence=clear. Не маркируй внутренние мысли прямой речью без указания в тексте.
 Никаких слов книги, имён персонажей, эмоций, SSML, пояснений или рассуждений в ответе: только диапазоны, role и confidence.
+Если во входе first_person=true, текст написан от первого лица: рассказчик («я») — это автор. Реплики самого рассказчика («— Пойдём, — сказал я», «— спросила я», ответ, который рассказчик сам называет своим) — role=author, confidence=clear, без speaker. Реплики остальных персонажей размечай как обычно.
 Если во входе есть characters — это персонажи текущего раздела книги (id, имя, пол, формы имени). Для сегмента прямой речи с confidence=clear укажи speaker = id персонажа, только если несомненно, что говорит именно он: назван в ремарке к этой реплике, к нему обращаются в ответной реплике, или это продолжение его реплики. Иначе speaker не указывай: реплика прозвучит общим мужским или женским голосом. role должен совпадать с полом персонажа. Для role=author speaker не указывай."""
 
-    fun prompt(texts: List<String>, preceding: String, book: com.brahmadeo.supertonic.tts.books.BookContext? = null): String = JSONObject()
+    fun prompt(texts: List<String>, preceding: String, book: com.brahmadeo.supertonic.tts.books.BookContext? = null,
+               firstPerson: Boolean = false): String = JSONObject()
         .put("context_before", preceding)
+        .apply { if (firstPerson) put("first_person", true) }
         .apply {
             if (book != null && book.cast.characters.isNotEmpty()) put("characters", JSONArray().apply {
                 book.cast.characters.forEach { ch ->

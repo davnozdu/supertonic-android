@@ -303,7 +303,7 @@ object RussianBookNormalizer {
             val n=m.groupValues[1].toLong(); val den=m.groupValues[2].toInt()
             if (den !in 2..99) m.value else cardinal(n,feminine=true)+" "+ordinal(den,plural(n,"ая","ых","ых"))
         }
-        t=rx("\\b(\\d+)-(ыми|ого|ому|ый|ая|ое|ую|ой|ых|ым|ом|го|му|ми|й|я|е|ю|х|м)\\b").replace(t) { m ->
+        t=rx("(?<![\\p{L}\\d_])(\\d+)-(ыми|ого|ому|ый|ая|ое|ую|ой|ых|ым|ом|го|му|ми|й|я|е|ю|х|м)(?![\\p{L}\\d_])").replace(t) { m ->
             val n=m.groupValues[1].toIntOrNull() ?: return@replace m.value
             val plural=rx("^\\s+год").containsMatchIn(t.substring(m.range.last+1))
             val ending=if(plural && m.groupValues[2]=="е") "ые"

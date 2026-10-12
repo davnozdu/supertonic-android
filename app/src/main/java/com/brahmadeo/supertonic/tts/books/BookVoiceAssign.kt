@@ -5,6 +5,7 @@ package com.brahmadeo.supertonic.tts.books
 object BookVoiceAssign {
     private const val MIN_SPEAKER = 2
     private const val MIN_MENTIONS = 30
+    private const val PROTAGONISTS = 3
     private val knownGenders = mapOf(
         // All ten Tera reference styles, including English references speaking Russian.
         "ru_m1" to "m", "ru_m5" to "m", "eng_m2_whisper" to "m", "eng_m3" to "m", "eng_m4" to "m",
@@ -53,8 +54,13 @@ object BookVoiceAssign {
             out[ch.id] = voice
             sex(voice)?.let { used.getValue(it) += voice }
         }
-        val main = cast.characters.filter { it.id !in out && it.gender in listOf("m", "f") && (it.speaker >= MIN_SPEAKER || it.mentions >= MIN_MENTIONS) }
-            .sortedWith(compareBy({ -it.speaker }, { -it.mentions }, { it.id }))
+        // The first characters of the cast are the protagonists (the LLM orders them by importance): their voice is
+        // never lost. Then those who speak most: own voices are few and needed most by speakers. A character
+        // often mentioned without remarks gets a voice only as a protagonist (historical figures do not speak).
+        val leads = cast.characters.take(PROTAGONISTS).map { it.id }.toSet()
+        val main = cast.characters.filter { it.id !in out && it.gender in listOf("m", "f") && (it.speaker >= MIN_SPEAKER ||
+                (it.mentions >= MIN_MENTIONS && (it.speaker > 0 || it.id in leads))) }
+            .sortedWith(compareBy({ it.id !in leads }, { if (it.id in leads) 0 else -it.speaker }, { -it.mentions }, { it.id }))
         // Hints first: a hint may be shared on purpose (characters who never meet in the text). Free voices
         // are given only afterwards, so they never take a voice another character's hint points to.
         for (ch in main) {

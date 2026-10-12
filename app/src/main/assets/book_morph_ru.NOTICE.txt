@@ -1,0 +1,9 @@
+book_morph_ru.tsv.gz — a small part of a Russian morphological dictionary used for on-device book preparation:
+forms of first names with case and gender, forms of titles («князь», «генерала»), animate nouns, function words,
+adverbs and geographical names.
+
+Derived from the OpenCorpora dictionary (http://opencorpora.org) as packaged by pymorphy3-dicts-ru.
+OpenCorpora data is available under the Creative Commons Attribution-ShareAlike 3.0 License
+(https://creativecommons.org/licenses/by-sa/3.0/). This derived table is distributed under the same license.
+
+Built by tools/characters/build_book_morph.py.

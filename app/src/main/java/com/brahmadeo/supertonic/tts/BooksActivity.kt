@@ -277,7 +277,9 @@ class BooksActivity : ComponentActivity() {
             "Повторная обработка книги через LLM не нужна.", style = MaterialTheme.typography.bodySmall)
         if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
         HorizontalDivider()
-        val assignments = remember(book, revision) { pkg.casts.mapIndexed { i, cast -> BookVoices.assignment(this, book, i, cast) } }
+        // A novel prepared by chapters has a cast per group of chapters with the same characters: one list for it.
+        val groups = pkg.groups
+        val assignments = remember(book, revision) { groups.map { BookVoices.assignment(this, book, pkg, it.first()) } }
         val first = assignments.firstOrNull()
         val author = remember(book, revision) { BookVoices.author(this, book) }
         val ownAuthor = remember(book, revision) { BookVoices.ownRole(this, book, VoiceRole.AUTHOR) != null }
@@ -299,7 +301,7 @@ class BooksActivity : ComponentActivity() {
             BookVoices.chooseRole(this, book, VoiceRole.FEMALE, if (on) female else null); changed()
         }
         val auto = if (ownOthers) "" else " (автоматически)"
-        if (pkg.casts.size <= 1 || ownOthers) {
+        if (groups.size <= 1 || ownOthers) {
             VoiceRoleChoice("Прочие мужчины$auto", male, voices, preview, voicePreview::toggle, model = AssetManager.getModelType(this)) {
                 voicePreview.stop(); BookVoices.chooseRole(this, book, VoiceRole.MALE, it); changed()
             }
@@ -308,11 +310,22 @@ class BooksActivity : ComponentActivity() {
             }
         } else Text("Голоса прочих подбираются в каждом рассказе из оставшихся; включите переключатель, чтобы задать " +
             "одни на всю книгу.", style = MaterialTheme.typography.bodySmall)
+        val ownFirstPerson = remember(book, revision) { BookVoices.firstPerson(this, book) }
+        val globalFirstPerson = remember(book, revision) { com.brahmadeo.supertonic.tts.llm.LlmSettings.firstPerson(this) }
+        BookToggle("Текст от первого лица", ownFirstPerson ?: globalFirstPerson) { on ->
+            voicePreview.stop(); BookVoices.setFirstPerson(this, book, on); changed()
+        }
+        Text("Рассказчик говорит «я»: его собственные реплики («— сказал я») читает голос автора. " +
+            (if (ownFirstPerson == null) "Сейчас — как в настройках мультиголоса." else "Выбрано для этой книги."), style = MaterialTheme.typography.bodySmall)
+        if (ownFirstPerson != null) TextButton(onClick = { voicePreview.stop(); BookVoices.setFirstPerson(this, book, null); changed() }) {
+            Text("Как в настройках мультиголоса")
+        }
         HorizontalDivider()
-        pkg.casts.forEachIndexed { index, cast ->
-            if (cast.characters.isEmpty()) return@forEachIndexed
+        groups.indices.forEach { index ->
+            val cast = pkg.groupCast(index)
+            if (cast.characters.isEmpty()) return@forEach
             val assignment = assignments[index]
-            if (pkg.casts.size > 1) Text(cast.sections.mapNotNull { id -> pkg.sections.firstOrNull { it.id == id }?.title }.joinToString(", "),
+            if (groups.size > 1) Text(cast.sections.mapNotNull { id -> pkg.sections.firstOrNull { it.id == id }?.title }.joinToString(", "),
                 style = MaterialTheme.typography.titleSmall)
             for (ch in cast.characters) {
                 val own = assignment.characters[ch.id]

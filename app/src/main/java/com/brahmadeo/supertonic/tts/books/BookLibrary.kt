@@ -39,7 +39,7 @@ object BookLibrary {
             db.rawQuery("SELECT id FROM books WHERE content_sha=?", arrayOf(pkg.contentSha256)).use { if (it.moveToFirst()) removeLocked(db, it.getLong(0)) }
             val id = db.insertOrThrow("books", null, ContentValues().apply {
                 put("content_sha", pkg.contentSha256); put("file_sha", pkg.fileSha256); put("title", pkg.title)
-                put("author", pkg.author); put("characters", pkg.casts.sumOf { it.characters.size })
+                put("author", pkg.author); put("characters", pkg.groups.indices.sumOf { pkg.groupCast(it).characters.size })
                 put("sections", pkg.sections.size); put("added", System.currentTimeMillis()); put("json", json)
             })
             val insert = db.compileStatement("INSERT OR IGNORE INTO fingerprints(hash, book, section) VALUES (?, ?, ?)")
