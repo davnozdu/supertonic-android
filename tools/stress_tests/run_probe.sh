@@ -14,7 +14,7 @@ for i in $(seq 1 900); do
   sleep 2
 done
 sleep 1
-"${A[@]}" logcat -d -v time 'SpeechCheck:*' 'LlmPreparation:*' '*:S' | grep -E 'STRESS PROBE (DONE|FAILED)|cross-check|Rejected|failed' | cut -c1-200
+"${A[@]}" logcat -d -v time 'SpeechCheck:*' 'LlmPreparation:*' '*:S' | grep -E 'STRESS PROBE (DONE|FAILED)|cross-check|Stress vote|Stress judge|Rejected|failed' | cut -c1-200
 "${A[@]}" shell "su -c 'cat /data/data/$P/cache/stress-probe-out.json'" > "$OUT"
 "${A[@]}" shell "su -c 'cat /data/data/$P/cache/stress-probe-decisions.json 2>/dev/null'" > "${OUT%.json}-decisions.json"
 echo "saved $OUT"

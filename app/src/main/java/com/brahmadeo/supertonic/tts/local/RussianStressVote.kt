@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.brahmadeo.supertonic.tts.llm.StressCheck
 import com.brahmadeo.supertonic.tts.llm.StressJudgeDictionary
-import java.util.zip.GZIPInputStream
 
 /** Android side of [StressCheck]: Silero's opinion, RUAccent's dictionary (the full .sacc of [StressJudgeDictionary])
  * and its homograph variants (assets/ruaccent_omographs.tsv.gz, tools/ruaccent/build_omographs.py). */
@@ -13,12 +12,12 @@ object RussianStressVote {
 
     private fun homographs(ctx: Context): Map<String, List<Int>> = homographs ?: synchronized(this) {
         homographs ?: runCatching {
-            GZIPInputStream(ctx.assets.open("ruaccent_omographs.tsv.gz")).bufferedReader().useLines { lines ->
+            LocalRussianAssets.openTable(ctx, "ruaccent_omographs.tsv").useLines { lines ->
                 lines.mapNotNull { line ->
                     val tab = line.indexOf('\t')
                     if (tab <= 0) null else line.substring(0, tab) to line.substring(tab + 1).split(',').map { it.toInt() }
                 }.toMap(HashMap(40_000))
-            }
+            }.also { Log.i("StressVote", "RUAccent homographs: ${it.size}") }
         }.getOrElse { Log.w("StressVote", "RUAccent homographs unavailable: ${it.javaClass.simpleName}"); emptyMap() }
             .also { homographs = it }
     }

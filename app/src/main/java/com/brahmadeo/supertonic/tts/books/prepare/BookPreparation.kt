@@ -102,7 +102,7 @@ object BookPreparation {
                     } } ?: error("Не удалось открыть книгу")
                     val names = ctx.assets.open("names_ru.tsv").bufferedReader().useLines { RussianNames.load(it).keys }
                     effortHint = null
-                    val morph = ctx.assets.open("book_morph_ru.tsv.gz").use { BookMorph.load(it) }
+                    val morph = com.brahmadeo.supertonic.tts.local.LocalRussianAssets.openTable(ctx, "book_morph_ru.tsv").useLines { BookMorph.load(it) }
                     val plan = BookPreparationPlan.create(epub, names, morph, { stage -> mutable.value = mutable.value.copy(stage = stage) }, cancel::check)
                     // Cache identity: the book, provider/model and thinking. Every request is cached by its own prompt.
                     // No credentials in it.

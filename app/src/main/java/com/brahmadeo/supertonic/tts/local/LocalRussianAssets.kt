@@ -12,6 +12,12 @@ import java.util.zip.ZipInputStream
 import kotlin.coroutines.coroutineContext
 
 object LocalRussianAssets {
+    /** A text table from assets/[name].gz. The build stores .gz assets unpacked under the name without .gz
+     * (silero_phrases.tsv, ruaccent_omographs.tsv in the APK); the packed name is the fallback for other builds. */
+    fun openTable(ctx: Context, name: String): java.io.BufferedReader =
+        runCatching { ctx.assets.open(name).bufferedReader() }.getOrElse {
+            java.util.zip.GZIPInputStream(ctx.assets.open("$name.gz")).bufferedReader() }
+
     private const val SHA = "e0b3407ef5de497d37fbe1705c1e69af20919175bcef0028422d6f9f08233a10"
     private val sizes = mapOf("stress.json" to 2436788L, "yo.sacc" to 12681192L, "accentor.ptl" to 11002183L,
         "homo.ptl" to 48930791L, "silero-stress.LICENSE.txt" to 1075L, "eyo.LICENSE.txt" to 1082L)

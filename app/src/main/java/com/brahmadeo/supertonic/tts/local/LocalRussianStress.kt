@@ -46,10 +46,9 @@ object LocalRussianStress {
             yoDictionary = com.brahmadeo.supertonic.tts.utils.BinaryAccentDictionary.open(File(root,"yo.sacc"))
             data = json
             homoContext = runCatching {
-                val table = ctx.assets.open("silero_phrases.tsv.gz").use { raw ->
-                    java.util.zip.GZIPInputStream(raw).bufferedReader().useLines { SileroHomoContext.load(it) } }
+                val table = LocalRussianAssets.openTable(ctx, "silero_phrases.tsv").useLines { SileroHomoContext.load(it) }
                 SileroHomoContext { table[it] }
-            }.getOrElse { SileroHomoContext { null } }
+            }.getOrElse { Log.w("LocalRussian", "Silero phrase rules unavailable: ${it.javaClass.simpleName}"); SileroHomoContext { null } }
         } catch (t: Throwable) { accentor?.destroy(); homo?.destroy(); accentor = null; homo = null; throw t }
     }
     // Standard greedy WordPiece, with the homograph markers kept as special tokens.
