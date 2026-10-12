@@ -36,12 +36,20 @@ object BookLibrary {
         val db = db(context)
         db.beginTransaction()
         try {
-            db.rawQuery("SELECT id FROM books WHERE content_sha=?", arrayOf(pkg.contentSha256)).use { if (it.moveToFirst()) removeLocked(db, it.getLong(0)) }
-            val id = db.insertOrThrow("books", null, ContentValues().apply {
+            // The same text again (a newer preparation, «Разметка реплик» added): updated in place, so the book keeps its
+            // id and with it the models and voices chosen for it.
+            val existing = db.rawQuery("SELECT id FROM books WHERE content_sha=?", arrayOf(pkg.contentSha256)).use { if (it.moveToFirst()) it.getLong(0) else null }
+            val values = ContentValues().apply {
                 put("content_sha", pkg.contentSha256); put("file_sha", pkg.fileSha256); put("title", pkg.title)
                 put("author", pkg.author); put("characters", pkg.groups.indices.sumOf { pkg.groupCast(it).characters.size })
-                put("sections", pkg.sections.size); put("added", System.currentTimeMillis()); put("json", json)
-            })
+                put("sections", pkg.sections.size); put("json", json)
+            }
+            val id = if (existing != null) {
+                db.delete("fingerprints", "book=?", arrayOf(existing.toString()))
+                db.update("books", values, "id=?", arrayOf(existing.toString()))
+                packages.remove(existing)
+                existing
+            } else db.insertOrThrow("books", null, values.apply { put("added", System.currentTimeMillis()) })
             val insert = db.compileStatement("INSERT OR IGNORE INTO fingerprints(hash, book, section) VALUES (?, ?, ?)")
             val mark = db.compileStatement("UPDATE fingerprints SET book=$AMBIGUOUS WHERE hash=? AND NOT (book=? AND section=?)")
             for ((section, hashes) in pkg.fingerprints) for (h in hashes) {
@@ -76,6 +84,9 @@ object BookLibrary {
         db(context).rawQuery("SELECT json FROM books WHERE id=?", arrayOf(id.toString())).use { if (it.moveToFirst()) it.getString(0) else null }
 
     fun get(context: Context, id: Long): BookPackage? = packages[id] ?: json(context, id)?.let { BookPackage.parse(it) }?.also { packages[id] = it }
+
+    /** «Разметка реплик» of a book: sentence key → voice parts code, empty when the book has none. */
+    fun replies(context: Context, id: Long): Map<Long, String> = runCatching { get(context, id)?.replies }.getOrNull().orEmpty()
 
     fun lookup(context: Context, hashes: List<Long>): List<Hit> {
         if (hashes.isEmpty()) return emptyList()
