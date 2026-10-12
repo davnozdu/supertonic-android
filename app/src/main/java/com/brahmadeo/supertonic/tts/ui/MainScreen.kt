@@ -89,6 +89,7 @@ fun MainScreen(
     onMiniPlayerPlayPauseClick: () -> Unit,
     onLlmSettingsClick: () -> Unit = {},
     onBackgroundMusicClick: () -> Unit = {},
+    onMultilingualClick: () -> Unit = {},
     onBooksClick: () -> Unit = {},
     onArticleLinkClick: () -> Unit = {},
     onSleepTimerClick: () -> Unit = {},
@@ -138,6 +139,10 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text("Фоновая музыка") },
                             onClick = { showMenu = false; onBackgroundMusicClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Мультиязычная озвучка") },
+                            onClick = { showMenu = false; onMultilingualClick() }
                         )
                         DropdownMenuItem(
                             text = { Text("Книги с голосами персонажей") },

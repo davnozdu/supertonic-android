@@ -156,8 +156,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         val language = lang?.lowercase(Locale.ROOT) ?: return TextToSpeech.LANG_NOT_SUPPORTED
+        // With an external engine for other languages (Мультиязычная озвучка) a Russian model reads any of them.
         val supported = if (AssetManager.isRussianModel(this)) language.startsWith("ru") || language.startsWith("rus") ||
-            (normalizeLanguage(language) in setOf("en", "cs") && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))
+            (LANG_PREFIX_MAP.keys.any { language.startsWith(it) } && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))
             else LANG_PREFIX_MAP.keys.any { language.startsWith(it) }
         if (!supported) return TextToSpeech.LANG_NOT_SUPPORTED
 
@@ -182,6 +183,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
 
     override fun onLoadVoice(voiceName: String?): Int {
         if (voiceName == null) return TextToSpeech.ERROR
+        if (com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.matches(voiceName))
+            return if (multilingualReady()) TextToSpeech.SUCCESS else TextToSpeech.ERROR
         if (!voiceName.contains("-supertonic-")) return TextToSpeech.ERROR
         val styleName = voiceName.substringAfter("-supertonic-")
         if (AssetManager.isRussianModel(this) && styleName !in AssetManager.russianVoices(this)) return TextToSpeech.ERROR
@@ -194,9 +197,19 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val selected = prefs.getString("selected_voice", "F3.json") ?: "F3.json"
         val voiceName = if (selected.endsWith(".json")) selected.substringBeforeLast(".") else selected
         val requested = normalizeLanguage(lang)
-        val prefix = if (AssetManager.isRussianModel(this) && !(requested in setOf("en", "cs") && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))) "ru" else requested
+        val russian = AssetManager.isRussianModel(this)
+        if (russian && requested != "ru" && requested !in setOf("en", "cs") && multilingualReady())
+            return com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.name(requested)
+        val prefix = if (russian && !(requested in setOf("en", "cs") && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this))) "ru" else requested
         return "$prefix-supertonic-$voiceName"
     }
+
+    /** Voices are ours by name; the default check parses the name as a locale tag, which ours are not. */
+    override fun onIsValidVoiceName(voiceName: String?): Int = onLoadVoice(voiceName)
+
+    /** The «Мультиязычный» voice: a Russian model with an external engine for other languages. */
+    private fun multilingualReady() = AssetManager.isRussianModel(this) && AssetManager.isReady(this) &&
+        com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this)
 
     override fun onGetVoices(): List<Voice> {
         val voicesList = mutableListOf<Voice>()
@@ -207,6 +220,11 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         // One PackageManager query, not one per advertised locale.
         val foreign = russian && com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this)
 
+        // «Мультиязычный» first: one per language (Readest lists the voices of the book's language and takes the first).
+        if (foreign) ANDROID_LOCALE_TRIPLES.forEach { (twoLetter, _, _) ->
+            voicesList.add(Voice(com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.name(twoLetter), Locale.forLanguageTag(twoLetter),
+                Voice.QUALITY_VERY_HIGH, Voice.LATENCY_NORMAL, false, setOf()))
+        }
         ANDROID_LOCALE_TRIPLES.forEach { (twoLetter, _, _) ->
             if (russian && twoLetter != "ru" && !(twoLetter in setOf("en", "cs") && foreign)) return@forEach
             val locale = Locale.forLanguageTag(twoLetter)
@@ -309,7 +327,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
         val prefs = attributionContext.getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
 
-        val voiceFile = if (requestedVoice != null && requestedVoice.contains("-supertonic-")) {
+        // «Мультиязычный» reads like a reader without a voice: the voice chosen in MyTTS, the book's voices.
+        val voiceFile = if (requestedVoice != null && requestedVoice.contains("-supertonic-") &&
+            !com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.matches(requestedVoice)) {
             val fileName = requestedVoice.substringAfter("-supertonic-")
             // Sanitize fileName to prevent path traversal
             File(fileName).name + ".json"
