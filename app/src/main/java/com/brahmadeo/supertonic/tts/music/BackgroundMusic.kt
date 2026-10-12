@@ -36,6 +36,11 @@ object BackgroundMusic {
         }
     }
     private val idleRelease = Runnable { if (!reading.playing() || !enabled()) release(rememberPosition = true) }
+    /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
+     * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
+    private const val GAP_MS = 4000L
+    @Volatile private var gapUntil = 0L
+    private val gapEnd = Runnable { update() }
 
     @Synchronized fun initialize(ctx: Context) {
         if (context != null) return
@@ -48,11 +53,20 @@ object BackgroundMusic {
         return reading.enqueue(owner, id, flush).also { refresh() }
     }
     fun started(owner: Any, id: String?) { reading.start(owner,id); refresh() }
-    fun finished(owner: Any, id: String?, wasStarted: Boolean? = null) { reading.finish(owner,id,wasStarted); refresh() }
+    fun finished(owner: Any, id: String?, wasStarted: Boolean? = null) {
+        val was = reading.playing()
+        reading.finish(owner,id,wasStarted)
+        if (was && !reading.playing()) handler.post {
+            gapUntil = android.os.SystemClock.uptimeMillis() + GAP_MS
+            handler.removeCallbacks(gapEnd); handler.postDelayed(gapEnd, GAP_MS)
+        }
+        refresh()
+    }
     fun rejected(owner: Any, token: Long) { reading.reject(owner,token); refresh() }
-    fun stop(owner: Any) { reading.stop(owner); refresh() }
-    fun stopTts() { reading.stopTts(); refresh() }
-    fun app(ctx: Context, playing: Boolean) { initialize(ctx); reading.app(playing); refresh() }
+    fun stop(owner: Any) { reading.stop(owner); endGap(); refresh() }
+    fun stopTts() { reading.stopTts(); endGap(); refresh() }
+    fun app(ctx: Context, playing: Boolean) { initialize(ctx); reading.app(playing); if (!playing) endGap(); refresh() }
+    private fun endGap() { handler.post { gapUntil = 0L; handler.removeCallbacks(gapEnd) } }
     fun volumePreview(percent: Int) { handler.post { previewVolume = percent.coerceIn(0,100); updateVolume() } }
     internal data class Snapshot(val reading: Boolean,val prepared: Boolean,val playing: Boolean,val looping: Boolean,val position: Int)
     internal suspend fun snapshot(): Snapshot = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -76,6 +90,8 @@ object BackgroundMusic {
             loadedSource = ""
         }
         if (!enabled() || !reading.playing() || track.isEmpty()) {
+            // Between two utterances of the same reading: keep playing until the gap ends.
+            if (enabled() && track.isNotEmpty() && android.os.SystemClock.uptimeMillis() < gapUntil) return
             if (prepared) runCatching { if(player?.isPlaying==true) player?.pause() }
             handler.removeCallbacks(idleRelease)
             handler.postDelayed(idleRelease,120_000)

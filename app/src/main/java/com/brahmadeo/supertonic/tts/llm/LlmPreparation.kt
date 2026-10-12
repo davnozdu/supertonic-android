@@ -139,8 +139,25 @@ object LlmPreparation {
     fun cancelApp() = cancel(appCaller)
     fun pauseApp() = cancel(appCaller, clearContext = false)
     fun prepare(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500): String = prepareResult(ctx,text,id,timeoutMs).text
+    private val readerStyle = ReaderQueueStyle()
+    /** Texts of readers that hand over one sentence at a time, read at once by the dictionaries (bounded). */
+    private val direct = LinkedHashSet<String>()
+    const val DIRECT_KEY = "reader_direct_offline"
+    /** Records how app [uid] queues text; true when the text should not wait for the LLM («Не ждать LLM в читалках
+     * без очереди», on by default): the app sends one utterance at a time, so nothing can be prepared ahead. */
+    fun directReader(ctx: Context, uid: Int, text: String, flush: Boolean): Boolean {
+        readerStyle.record(uid, flush)
+        if (!ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(DIRECT_KEY, true) ||
+            !readerStyle.oneAtATime(uid)) return false
+        synchronized(direct) { direct.add(text); while (direct.size > 32) direct.remove(direct.first()) }
+        return true
+    }
     fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500, retainForPlayback: Boolean = false): Result {
         if (!enabled(ctx)) return Result(text,"автономно",0,true)
+        if (synchronized(direct) { direct.remove(text) }) {
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reader without a queue: dictionaries, no LLM wait chars=${text.length}")
+            return Result(text, "словарь", 0, true, "Читалка без очереди")
+        }
         initialize(ctx)
         val entry = synchronized(lock) {
             (if (id != null) entries[id] else entries.values.firstOrNull { it.text == text && !it.claimed }

@@ -112,7 +112,10 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                             if (!VoicePreview.requested(context, params, getCallingUid())) {
                                 com.brahmadeo.supertonic.tts.service.ReadingControls.externalStarted(context)
                                 readingOwners.add(caller)
-                                id = LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
+                                // A reader that sends one sentence at a time gets no LLM wait (see ReaderQueueStyle).
+                                id = if (LlmPreparation.directReader(context, getCallingUid(), text, mode != TextToSpeech.QUEUE_ADD)) {
+                                    LlmPreparation.cancel(caller); null
+                                } else LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
                                 musicOwner=caller
                                 musicToken=com.brahmadeo.supertonic.tts.music.BackgroundMusic.enqueue(context,caller,utteranceId,mode!=TextToSpeech.QUEUE_ADD)
                                 if(mode == TextToSpeech.QUEUE_ADD) {

@@ -37,6 +37,7 @@ class MultilingualActivity : ComponentActivity() {
                 val engines = remember { ForeignTts.engines(this) }
                 var enabled by remember { mutableStateOf(ForeignTts.enabled(this)) }
                 var languages by remember { mutableStateOf(ForeignTts.languages(this)) }
+                var direct by remember { mutableStateOf(prefs.getBoolean(com.brahmadeo.supertonic.tts.llm.LlmPreparation.DIRECT_KEY, true)) }
                 fun save(list: List<ForeignLanguages.Entry>) {
                     languages = list
                     prefs.edit().putString(ForeignLanguages.KEY, ForeignLanguages.serialize(list)).apply(); ForeignTts.reset()
@@ -76,6 +77,12 @@ class MultilingualActivity : ComponentActivity() {
                         HorizontalDivider()
                         Text("Читалки", style = MaterialTheme.typography.titleLarge)
                         Text("Moon+ Reader и другие читалки, которые задают только язык, получают мультиязычную озвучку сами.")
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Не ждать LLM в читалках без очереди", Modifier.weight(1f).padding(end = 12.dp))
+                            Switch(direct, { direct = it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.llm.LlmPreparation.DIRECT_KEY, it).apply() })
+                        }
+                        Text("Readest отдаёт текст по одному предложению и присылает следующее только после окончания предыдущего, поэтому подготовить его заранее нельзя. Включено: такие предложения читаются сразу, ударения и ё ставят словари (RUAccent + Silero), без пауз. Выключено: каждое предложение ждёт LLM (лучше ударения и пунктуация, но пауза 0,5–1,5 с). Moon+ ставит текст в очередь и всегда готовится через LLM.",
+                            style = MaterialTheme.typography.bodySmall)
                         Text("Readest и читалки с выбором голоса: голос «${MultilingualVoice.NAME}» в списке русских голосов MyTTS. Он читает голосом, выбранным в MyTTS, с голосами книги и персонажей, а остальные языки — движками выше. В Readest он первый и выбирается по умолчанию. Голоса «ru-supertonic-…» читают только выбранным голосом модели.")
                         if (!enabled || !ForeignTts.available(this@MultilingualActivity))
                             Text("Голос «${MultilingualVoice.NAME}» появится, когда включено чтение другими движками и подключён хотя бы один язык с установленным движком.",
