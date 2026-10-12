@@ -16,7 +16,7 @@ object BookStructure {
     private val HAS_LATIN = Regex("[A-Za-z]")
     private val DASH_START = Regex("^\\s*(?:--?|[‐‑‒–—―−])\\s*")
     private val DASH_INSIDE = Regex("(?<=\\S)\\s+(?:--?|[‐‒–—―−])\\s+|(?<=[,.!?…»\"])(?:--?|[‒–—―−])\\s+")
-    private val FOOTNOTE = Regex("\\[\\d{1,3}]|\\{\\d{1,3}}|[¹²³⁰⁴-⁹]+")
+    private val FOOTNOTE = Regex("\\[\\d{1,3}\\]|\\{\\d{1,3}\\}|[¹²³⁰⁴-⁹]+") // braces escaped: Android's ICU rejects a lone }
     private val DECOR = Regex("[*•§~_#|¤◆◇■□●○★☆►▪︎❖✦✧]+")
     private val OPEN_QUOTE = Regex("\"(?=[\\p{L}\\p{N}_])")
     private val CLOSE_QUOTE = Regex("(?<=\\S)\"")
