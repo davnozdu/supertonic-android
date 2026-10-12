@@ -164,6 +164,9 @@ object LlmPreparation {
             synchronized(localSpeakers) { localSpeakers.plan(text, cast, book?.firstPerson ?: LlmSettings.firstPerson(ctx)) }
                 .map { part -> part.copy(voice = book?.voiceOf(part.role, part.character)) }
         }.getOrElse { emptyList() } else emptyList()
+        // Diagnostics (verbose only, no book text): the code points the line starts with and the roles found.
+        com.brahmadeo.supertonic.tts.utils.DiagLog.i("MultiVoice", "Local roles lead=${text.take(2).map { "U+%04X".format(it.code) }} " +
+            "roles=${plan.map { it.role.name.first().toString() + (it.character?.let { c -> ":$c" } ?: "") + "/" + it.text.length }} book=${plan.firstOrNull()?.voice != null}")
         synchronized(directTexts) { directTexts[text] = plan; while (directTexts.size > 32) directTexts.remove(directTexts.keys.first()) }
         return true
     }
