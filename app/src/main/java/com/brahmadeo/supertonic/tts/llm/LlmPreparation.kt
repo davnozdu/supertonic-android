@@ -440,7 +440,8 @@ object LlmPreparation {
     }
     private fun needsRoleRecovery(c: LlmConfig, results: List<Result>): Boolean =
         c.multiVoice && c.mode !in listOf(LlmMode.OFF, LlmMode.LOCAL) && results.any {
-            !it.rolesReady || (c.mode != LlmMode.LOCAL && it.roleProvider != roleProviders(c).firstOrNull())
+            // Roles from the book's «Разметка реплик» are final: no cloud recovery for them.
+            it.roleProvider != "book" && (!it.rolesReady || (c.mode != LlmMode.LOCAL && it.roleProvider != roleProviders(c).firstOrNull()))
         }
     private fun routeRoles(ctx: Context, c: LlmConfig, prepared: List<Result>, preceding: String,
                            expectedEpoch: Long, ignoreCooldown: Boolean, cancelled: () -> Boolean,
@@ -509,18 +510,27 @@ object LlmPreparation {
             (if (book != null) " book=${book.book}/${book.section} characters=${results.flatMap { it.voicePlan }.mapNotNull { it.character }.groupingBy { it }.eachCount()}" else ""))
         return results
     }
-    /** Voice plans of [texts] from the book's «Разметка реплик», or null when a paragraph with speech is not in it. */
+    /** Voice plans of [texts] from the book's «Разметка реплик», or null when the book has none. A marked book never
+     * asks the LLM for roles: the rare sentence missing from the index is guessed on the phone ([LocalSpeakers]). */
     private fun bookRoles(ctx: Context, book: com.brahmadeo.supertonic.tts.books.BookContext, texts: List<String>, preceding: String): List<List<VoiceRoleText>>? {
         val replies = com.brahmadeo.supertonic.tts.books.BookLibrary.replies(ctx, book.book)
         if (replies.isEmpty()) return null
+        val cast = book.cast.characters.map { LocalSpeakers.Person(it.id, it.gender, it.forms + it.name) }
+        val firstPerson = book.firstPerson ?: LlmSettings.firstPerson(ctx)
         var previous: String? = com.brahmadeo.supertonic.tts.books.ReplyIndex.sentences(preceding).lastOrNull()
-        return texts.map { text ->
+        var missing = 0
+        val plans = texts.map { text ->
             val plan = if (!com.brahmadeo.supertonic.tts.books.ReplyIndex.isDialogue(text)) listOf(VoiceRoleText(text, VoiceRole.AUTHOR, voice = book.voiceOf(VoiceRole.AUTHOR, null)))
             else com.brahmadeo.supertonic.tts.books.ReplyIndex.resolve(text, previous, replies::get) { role, who -> book.voiceOf(role, who) }
-                .map { it.second ?: return null }.flatten()
+                .flatMap { (sentence, parts) -> parts ?: run {
+                    missing++
+                    synchronized(localSpeakers) { localSpeakers.plan(sentence, cast, firstPerson) }.map { it.copy(voice = book.voiceOf(it.role, it.character)) }
+                } }
             previous = com.brahmadeo.supertonic.tts.books.ReplyIndex.sentences(text).lastOrNull() ?: text
             plan
         }
+        if (missing > 0) com.brahmadeo.supertonic.tts.utils.DiagLog.i("MultiVoice", "Book replies: $missing sentences not in the index, guessed on the phone")
+        return plans
     }
     private fun scheduleRoleRecovery(ctx: Context, c: LlmConfig, batch: List<Entry>, preceding: String,
                                      expectedEpoch: Long, attempt: Int = 0, roleRequest: RoleRequest? = null) {
