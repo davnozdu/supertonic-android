@@ -12,9 +12,9 @@ object StressCheck {
     /** [sentence] has the target word in ⟨angle brackets⟩; [context] is the sentence before it. */
     data class Item(val sentence: String, val word: String, val options: List<String>, val context: String = "")
     /** A word for the judge: [first] is RUAccent's variant (or Silero's for a homograph), [second] the other one.
-     * [llm]: the stressed-vowel ordinal the LLM itself gave the word, if any. */
+     * [llm] / [silero]: the stressed-vowel ordinals the LLM and Silero gave the word, if any. */
     data class Dispute(val fragment: Int, val range: IntRange, val sentence: String, val first: String, val second: String,
-                       val context: String = "", val homograph: Boolean = false, val llm: Int? = null)
+                       val context: String = "", val homograph: Boolean = false, val llm: Int? = null, val silero: Int? = null)
     /** A decided word: [value] replaces [range] of [fragment]. */
     data class Mark(val fragment: Int, val range: IntRange, val value: String)
     /** [fragments] as given; [marks] (agreed or single-source) and [disputes] are applied together by [resolve]. */
@@ -97,7 +97,7 @@ object StressCheck {
                 val r = if (variants != null) null else dictionary(k) ?: if (llmAsDictionary) llm else null
                 val s = if (aligned) ordinal(b[i].value) else null
                 fun dispute(x: Int, y: Int, homo: Boolean) { disputes += Dispute(f, a[i].range, sentence(fragments[f], a[i].range),
-                    withStress(w, x), withStress(w, y), previousSentence(fragments[f], a[i].range), homo, llm) }
+                    withStress(w, x), withStress(w, y), previousSentence(fragments[f], a[i].range), homo, llm, s) }
                 when {
                     r != null && s != null && r == s -> { marks += Mark(f, a[i].range, withStress(w, r)); agreed++ }
                     r != null && s != null -> dispute(r, s, false)
@@ -123,7 +123,7 @@ object StressCheck {
     }
 
     /** The no-judge rule: the LLM's own mark when it is one of the two, otherwise [first] (RUAccent's, or Silero's for a
-     * homograph). [tie] may decide first (a name dictionary); null = no opinion. */
+     * homograph). [tie] may decide first (names, Silero's unambiguous words); null = no opinion. */
     private fun fallback(d: Dispute, tie: (Dispute) -> Int?): String {
         val a = ordinal(d.first); val b = ordinal(d.second)
         tie(d)?.let { if (it == a) return d.first; if (it == b) return d.second }

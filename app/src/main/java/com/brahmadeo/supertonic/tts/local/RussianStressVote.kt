@@ -45,10 +45,14 @@ object RussianStressVote {
             { homographVariants(ctx, it) }, { f, w -> w in explicit.getOrElse(f) { emptySet() } }, llmAsDictionary = !ready)
     }
 
-    /** Tie-break for a judge that contradicts itself: a capitalised name takes the names dictionary's stress. */
+    /** Tie-break for a judge that contradicts itself (or is unavailable): a capitalised name takes the names
+     * dictionary's stress; a RUAccent homograph that Silero knows as an ordinary word (досыта, дедов, Крыму: its
+     * dictionary, not its homograph model) keeps Silero's mark. Homographs for both (мука, атлас, письма) are left to
+     * the LLM's own mark: on the probe runs the judge's ties there were right with the LLM and wrong with Silero. */
     fun tie(ctx: Context): (StressCheck.Dispute) -> Int? = { d ->
         val word = d.first.replace("́", "")
-        if (word.first().isUpperCase()) com.brahmadeo.supertonic.tts.utils.RussianNames.ordinal(word) else null
+        val name = if (word.first().isUpperCase()) com.brahmadeo.supertonic.tts.utils.RussianNames.ordinal(word) else null
+        name ?: d.silero.takeIf { d.homograph && it != null && sileroEnabled(ctx) && !LocalRussianStress.isHomograph(ctx, word) }
     }
 
     /** No LLM: the two dictionaries alone. Words already marked in [text] (book, lexicon, names, an imported

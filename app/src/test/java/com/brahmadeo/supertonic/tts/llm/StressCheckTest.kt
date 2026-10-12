@@ -22,6 +22,8 @@ class StressCheckTest {
         val p = plan("Хло́пок, за́мок и оттепе́ль.", "Хл+опок, зам+ок и +оттепель.")
         assertEquals(listOf("хлопо́к/хло́пок", "замо́к/за́мок"), p.disputes.map { "${it.first}/${it.second}" }.map { it.lowercase() })
         assertEquals(listOf(false, true), p.disputes.map { it.homograph })
+        assertEquals(listOf(1, 2), p.disputes.map { it.silero })
+        assertEquals(listOf(1, 1), p.disputes.map { it.llm })
         assertEquals("⟨Хлопок⟩, замок и оттепель.", p.disputes[0].sentence)
         assertEquals(listOf("Хлопо́к", "Хло́пок"), StressCheck.items(p.disputes, secondFirst = false)[0].options)
         assertEquals(listOf("Хло́пок", "Хлопо́к"), StressCheck.items(p.disputes, secondFirst = true)[0].options)
