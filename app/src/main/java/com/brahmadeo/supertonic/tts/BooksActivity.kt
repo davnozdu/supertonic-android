@@ -154,7 +154,9 @@ class BooksActivity : ComponentActivity() {
                                 Text("Обработка может занять 10–15 минут. Продолжается в фоне и при выключенном экране. " +
                                     "Запросы к LLM выполняются строго по одному.", style = MaterialTheme.typography.bodySmall)
                                 if (preparation.running) {
-                                    Text(preparation.stage)
+                                    // Read with elapsedSeconds, so it is recomposed every second.
+                                    val waiting = elapsedSeconds.let { ((System.currentTimeMillis() - preparation.stageAt) / 1000).coerceAtLeast(0) }
+                                    Text(preparation.stage + if (waiting >= 5) " · ${waiting / 60}:${"%02d".format(waiting % 60)}" else "")
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                         Text("Прошло: ${elapsedSeconds / 60} мин ${elapsedSeconds % 60} с", style = MaterialTheme.typography.bodySmall)

@@ -24,7 +24,9 @@ import java.io.File
 /** One job, owned by the app rather than the screen. Cloud calls are deliberately a sequential loop. */
 object BookPreparation {
     data class State(val running: Boolean = false, val stage: String = "", val done: Int = 0, val total: Int = 0,
-                     val message: String = "", val bookId: Long? = null, val startedAt: Long = 0)
+                     val message: String = "", val bookId: Long? = null, val startedAt: Long = 0,
+                     /** When this stage (the current LLM request) began: the screen shows how long it is waiting. */
+                     val stageAt: Long = System.currentTimeMillis())
     class Source internal constructor(internal val config: LlmConfig, internal val gemini: Boolean, internal val provider: String = if (gemini) "gemini" else "ollama") {
         val label: String get() = if (provider == "deepseek") "DeepSeek · ${config.deepseekModel}" else if (gemini) "Gemini · ${config.geminiModel}" else "Ollama · ${config.ollamaModel}"
         fun withThinking(enabled: Boolean) = Source(config.copy(ollamaThinking = enabled, geminiThinking = enabled, deepseekThinking = enabled), gemini, provider)
@@ -242,7 +244,9 @@ object BookPreparation {
         val file = File(folder, "$name.${BookPreparationPlan.hash("$thinking\n$prompt".toByteArray()).take(16)}.json")
         if (file.isFile && file.length() <= 512 * 1024) runCatching { CastCheck.parse(file.readText(), kind) }.getOrNull()?.takeIf(accept)?.let { return it }
         val config = source.withThinking(thinking).config
-        var effort: String? = effortHint
+        // Medium thinking by default (user's choice: speed); providers without it take the nearest lower level
+        // (DeepSeek v4.1 Flash on Ollama offers low / high / max → low).
+        var effort: String? = effortHint ?: DEFAULT_EFFORT
         var delay = 4000L
         var last: Exception? = null
         for (attempt in 1..3) {
@@ -281,6 +285,7 @@ object BookPreparation {
         throw last ?: IllegalStateException("LLM не вернула ответ; повторите подготовку")
     }
     @Volatile private var effortHint: String? = null
+    private const val DEFAULT_EFFORT = "medium"
     private const val THINK_TEMPERATURE = 0.6
     private val EFFORTS = listOf("high", "medium", "low")
 

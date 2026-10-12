@@ -71,6 +71,16 @@ object CastCheck {
 
     // ------------------------------------------------------------ votes
 
+    /** Two answers that pick the same characters and merge the same candidates: a third vote cannot change the
+     * majority (every decision already has two of three), so it is not asked. */
+    fun sameMerges(a: JSONObject, b: JSONObject, r: BookPreparationPlan.Request): Boolean {
+        val own = r.candidates.map { it.id }.toSet()
+        fun groups(answer: JSONObject) = characters(answer).map { raw ->
+            strings(raw.optJSONArray("candidates")).filter { it in own }.distinct().sorted()
+        }.filter { it.isNotEmpty() }.toSet()
+        return groups(a) == groups(b)
+    }
+
     /** Several independent answers → one: together only those the majority put together. Literary matching changes
      * from run to run; voting removes random merges and random losses. */
     fun combine(answers: List<JSONObject>, r: BookPreparationPlan.Request): JSONObject {

@@ -3,7 +3,7 @@ package com.brahmadeo.supertonic.tts.books.prepare
 import org.json.JSONObject
 
 /** The LLM part of preparation, as in tools/characters/book_characters.py: three independent main answers
- * (majority vote), «who is this» passages for titles and bare surnames (without thinking: a choice from a list),
+ * (majority vote; the third only when the first two disagree), «who is this» passages for titles and bare surnames (without thinking: a choice from a list),
  * then verification of every merge. Incomplete verification degrades (unverified merges → «прочие») instead of
  * failing the book. Pure JVM: [ask] performs one cached request with retries and returns a valid answer or throws.
  * [ask]: (cache name, prompt, kind, thinking, accept) → answer. */
@@ -27,6 +27,8 @@ class CastPipeline(
         // A failed answer is asked again (two extra runs at most) so that the majority still exists.
         for (n in 1..votes + 2) {
             if (answers.size >= votes || (n > votes && answers.size >= need)) break
+            // Two answers that agree on every merge decide the vote already: no third request.
+            if (votes == 3 && answers.size == 2 && CastCheck.sameMerges(answers[0], answers[1], r)) break
             check()
             stage("LLM $label · ответ ${minOf(n, votes)} из $votes", i, plan.requests.size)
             try { answers += ask("${r.name}.run$n", r.prompt, CastCheck.Kind.MAIN, thinking) { true } }
