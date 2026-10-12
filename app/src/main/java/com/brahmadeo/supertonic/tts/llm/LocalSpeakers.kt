@@ -34,8 +34,8 @@ class LocalSpeakers {
     fun plan(text: String, cast: List<Person> = emptyList(), firstPerson: Boolean = false): List<VoiceRoleText> {
         val author = listOf(VoiceRoleText(text, VoiceRole.AUTHOR))
         if (text.isBlank()) return author
-        val continuation = inSpeech && !dash.containsMatchIn(text) && quoteLead.find(text) == null
-        val pieces = speechPieces(text) ?: run {
+        val dashed = dash.containsMatchIn(text)
+        val pieces = speechPieces(text, cast, firstPerson) ?: run {
             // Narration: a following sentence without a dash starts no speech.
             inSpeech = false
             return author
@@ -43,7 +43,9 @@ class LocalSpeakers {
         // Who speaks: the first remark naming someone, else the other participant of the dialogue.
         val remark = pieces.filter { !it.second }.joinToString(" ") { it.first }
         val named = if (remark.isNotBlank()) fromRemark(remark, cast, firstPerson) else null
-        val speaker = named ?: current?.takeIf { continuation } ?: next()
+        // A dash starts a new reply: the other participant. Without it (Readest drops the dash, so a new reply and the
+        // next sentence of the same one look alike) the line stays with the current speaker.
+        val speaker = named ?: (if (dashed) next() else current ?: next())
         current = speaker
         if (speaker.role != VoiceRole.AUTHOR) remember(speaker)
         inSpeech = pieces.last().second
@@ -53,12 +55,16 @@ class LocalSpeakers {
         return VoiceRolePlan.safe(text, merge(parts))
     }
 
-    /** (piece, isSpeech) covering the text, or null for plain narration. */
-    private fun speechPieces(text: String): List<Pair<String, Boolean>>? {
+    /** (piece, isSpeech) covering the text, or null for plain narration. Speech is recognised by a leading dash, «…»
+     * before a remark, a remark inside the sentence («…, — обратился он»), spoken language, or as the continuation of
+     * a reply (Readest sends replies without their leading dash). */
+    private fun speechPieces(text: String, cast: List<Person>, firstPerson: Boolean): List<Pair<String, Boolean>>? {
         val dashed = dash.containsMatchIn(text)
         val quoted = quoteLead.find(text)
-        val continues = !dashed && quoted == null && inSpeech && continuesSpeech(text)
-        if (!dashed && quoted == null && !continues) return null
+        val remarkInside = !dashed && quoted == null && turn.find(text)?.let { looksLikeRemark(text.substring(it.range.last + 1), cast) } == true
+        val spoken = !dashed && quoted == null && !remarkInside && (looksSpoken(text, firstPerson) || inSpeech && continuesSpeech(text))
+        if (!dashed && quoted == null && !remarkInside && !spoken) return null
+        if (spoken) return listOf(text to true)
         if (quoted != null) {
             val cut = quoted.range.last + 1
             return listOf(text.substring(0, cut) to true, text.substring(cut) to false).filter { it.first.isNotEmpty() }
@@ -73,6 +79,26 @@ class LocalSpeakers {
         }
         out += text.substring(start) to speech
         return out
+    }
+
+    private val gerund = Regex("^[а-яё]{3,}(в|вши|вшись)$")
+    private val narrator = setOf("я", "мы", "меня", "мне", "мной", "нас", "нам", "нами", "мой", "моя", "моё", "мое", "наш", "наша", "наше")
+
+    /** The start of a remark after a dash: a past-tense verb, a gerund («ответив»), он / она, or a character's name. */
+    private fun looksLikeRemark(after: String, cast: List<Person>): Boolean {
+        val words = word.findAll(after.lowercase()).map { it.value }.take(4).toList()
+        if (words.any { pastVerb.matches(it) || gerund.matches(it) || it == "он" || it == "она" }) return true
+        return cast.any { p -> p.forms.any { f -> f.lowercase() in words } }
+    }
+
+    /** Spoken language on its own: ! ? … at the end, addressing someone, interjections, the polite «-с». In first-person
+     * narration «я / мне / мой» belong to the narrator, not to a reply. */
+    private fun looksSpoken(text: String, firstPerson: Boolean): Boolean {
+        val t = text.trim()
+        if (t.endsWith("!") || t.endsWith("?") || t.endsWith("…") || t.endsWith("..") || t.endsWith("?!")) return true
+        val words = word.findAll(t.lowercase()).map { it.value }.toList()
+        if (words.any { (it in addressing && !(firstPerson && it in narrator)) || it in interjections }) return true
+        return Regex("[А-Яа-яЁё]-с(?![А-Яа-яЁё])").containsMatchIn(t)
     }
 
     private val interjections = setOf("гм", "ну", "эх", "ах", "ох", "ей", "эй", "ой", "ага", "хе", "ха", "фью", "тьфу", "вишь", "эка", "эвона")
@@ -99,8 +125,8 @@ class LocalSpeakers {
                     f.isNotEmpty() && " $f " in phrase }) return Speaker(role(person.gender), person.id)
         }
         if (firstPerson && "я" in lower) return Speaker(VoiceRole.AUTHOR, null)
-        // The verb or pronoun nearest the dash: «ответил сосед», «сказала она».
-        for (w in lower.take(4)) {
+        // The verb or pronoun nearest the dash: «ответил сосед», «сказала она», «— и, ответив, молодой человек оглядел».
+        for (w in lower.take(8)) {
             if (w == "он") return Speaker(VoiceRole.MALE, null)
             if (w == "она") return Speaker(VoiceRole.FEMALE, null)
             if (femaleVerb.matches(w)) return Speaker(VoiceRole.FEMALE, null)

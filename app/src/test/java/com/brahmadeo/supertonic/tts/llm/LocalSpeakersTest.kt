@@ -48,6 +48,25 @@ class LocalSpeakersTest {
             show(s.plan("Оказалось, что и это было так: белокурый молодой человек тотчас же объявил.")))
     }
 
+    @Test fun readestSendsRepliesWithoutTheirLeadingDash() {
+        val s = LocalSpeakers()
+        assertEquals("A=В конце ноября, в оттепель, часов в девять утра, поезд подходил к Петербургу.",
+            show(s.plan("В конце ноября, в оттепель, часов в девять утра, поезд подходил к Петербургу.")))
+        // A remark inside the sentence marks its start as a reply.
+        assertEquals("M=А позвольте, с кем имею честь… | A=— обратился вдруг угреватый господин.",
+            show(s.plan("А\u00a0позвольте, с кем имею честь… — обратился вдруг угреватый господин.").map { it.copy(text = it.text.replace('\u00a0', ' ')) }))
+        assertEquals("F=Да, из Швейцарии, | A=— ответила она.", show(s.plan("Да, из Швейцарии, — ответила она.")))
+        assertEquals("M=Точно так, его звали Николай Андреевич Павлищев, | A=— и, ответив, молодой человек оглядел господина.",
+            show(s.plan("Точно так, его звали Николай Андреевич Павлищев, — и, ответив, молодой человек оглядел господина.")))
+        // Spoken language without a remark: the current speaker keeps it.
+        assertEquals("M=Зябко?", show(s.plan("Зябко?")))
+        assertEquals("M=Да… учился…", show(s.plan("Да… учился…")))
+        // Narration is the author's.
+        assertEquals("A=Черноволосый присвистнул и захохотал.", show(s.plan("Черноволосый присвистнул и захохотал.")))
+        // First-person narration: «я» alone is the narrator, not a reply.
+        assertEquals("A=Я шёл домой и думал о ней.", show(LocalSpeakers().plan("Я шёл домой и думал о ней.", firstPerson = true)))
+    }
+
     @Test fun quotesAndPlainTextKeepTheTextIntact() {
         val s = LocalSpeakers()
         assertEquals("M=«Иду!» | A=— крикнул он.", show(s.plan("«Иду!» — крикнул он.")))
