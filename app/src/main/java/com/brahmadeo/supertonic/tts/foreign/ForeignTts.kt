@@ -30,32 +30,62 @@ object ForeignTts {
         else Engine(info.packageName, result.loadLabel(ctx.packageManager).toString(), info.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0)
     }.distinctBy { it.id }
     fun enabled(ctx: Context) = ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean("foreign_tts", true)
-    fun language(ctx: Context, text: String, requested: String) = ForeignText.language(text, requested,
-        ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getString("foreign_language", "auto") ?: "auto")
-    private fun selected(ctx: Context): String? {
-        val available = engines(ctx)
-        val chosen = ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getString("foreign_engine", "") ?: ""
-        if (chosen.isNotEmpty()) return available.firstOrNull { it.id == chosen }?.id
-        val default = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.TTS_DEFAULT_SYNTH)
-        return available.firstOrNull { it.id == default }?.id ?: available.firstOrNull { it.system }?.id
+    /** Languages connected in «Мультиязычная озвучка» with their engines. */
+    fun languages(ctx: Context): List<ForeignLanguages.Entry> {
+        val prefs = ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
+        return ForeignLanguages.parse(prefs.getString(ForeignLanguages.KEY, null),
+            prefs.getString("foreign_engine", "") ?: "", prefs.getString("foreign_language", "auto") ?: "auto")
     }
-    fun available(ctx: Context) = enabled(ctx) && selected(ctx) != null
-    private var client: TextToSpeech? = null
-    private var clientEngine: String? = null
-    private var init: CompletableFuture<Int>? = null
+    /** Connected languages whose engine is installed; empty when the feature is off. */
+    fun connected(ctx: Context): List<String> {
+        if (!enabled(ctx)) return emptyList()
+        val installed = engines(ctx)
+        return languages(ctx).filter { resolve(ctx, it.engine, installed) != null }.map { it.language }
+    }
+    /** Language of a fragment: the reader's tag, Czech hints, Android's language detector, the first connected one. */
+    fun language(ctx: Context, text: String, requested: String): String {
+        val connected = connected(ctx)
+        return ForeignLanguages.pick(text, requested, connected, if (connected.size > 1) detect(ctx, text) else emptyList())
+            ?: requested.substringBefore('-')
+    }
+    /** On-device language identification (Android 10+), most likely first; empty when unavailable or unsure. */
+    private fun detect(ctx: Context, text: String): List<String> = runCatching {
+        if (android.os.Build.VERSION.SDK_INT < 29 || text.count { it.isLetter() } < 12) return emptyList()
+        val classifier = ctx.getSystemService(android.view.textclassifier.TextClassificationManager::class.java)?.textClassifier
+            ?: return emptyList()
+        val result = classifier.detectLanguage(android.view.textclassifier.TextLanguage.Request.Builder(text).build())
+        (0 until result.localeHypothesisCount).map { result.getLocale(it) }
+            .filter { result.getConfidenceScore(it) >= 0.5f }.map { it.toLanguageTag().substringBefore('-') }
+    }.getOrDefault(emptyList())
+    private fun resolve(ctx: Context, chosen: String, installed: List<Engine> = engines(ctx)): String? {
+        if (chosen.isNotEmpty()) return installed.firstOrNull { it.id == chosen }?.id
+        val default = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.TTS_DEFAULT_SYNTH)
+        return installed.firstOrNull { it.id == default }?.id ?: installed.firstOrNull { it.system }?.id
+    }
+    /** Engine for [language]: its own from the list, otherwise the one of the first connected language. */
+    private fun engineFor(ctx: Context, language: String): String? {
+        val entries = languages(ctx)
+        val entry = entries.firstOrNull { it.language == language } ?: entries.firstOrNull() ?: return null
+        return resolve(ctx, entry.engine)
+    }
+    fun available(ctx: Context) = connected(ctx).isNotEmpty()
+    /** One connection per engine: alternating languages on different engines must not reconnect every fragment. */
+    private class Client(val tts: TextToSpeech, val init: CompletableFuture<Int>)
+    private val clients = HashMap<String, Client>()
     private var lastUse = 0L
     private val cooldown = HashMap<String, Long>()
     private val cache = LinkedHashMap<String, ByteArray>(16, .75f, true)
     private var cacheBytes = 0
     private val idle = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "ForeignTtsIdle").apply { isDaemon = true } }
     init { idle.scheduleWithFixedDelay({ synchronized(this) {
-        if (client != null && android.os.SystemClock.elapsedRealtime() - lastUse > 120000) closeClient()
+        if (clients.isNotEmpty() && android.os.SystemClock.elapsedRealtime() - lastUse > 120000) closeClients()
     } }, 15, 15, TimeUnit.SECONDS) }
     fun reset() { idle.execute { synchronized(this) {
-        closeClient(); cache.clear(); cacheBytes = 0; cooldown.clear()
+        closeClients(); cache.clear(); cacheBytes = 0; cooldown.clear()
     } } }
     @Synchronized fun clearAudioCache() { cache.clear(); cacheBytes=0 }
-    private fun closeClient() { client?.shutdown(); client = null; clientEngine = null; init = null }
+    private fun closeClients() { clients.values.forEach { runCatching { it.tts.shutdown() } }; clients.clear() }
+    private fun closeClient(engine: String) { clients.remove(engine)?.let { runCatching { it.tts.shutdown() } } }
     private fun waitFor(future: CompletableFuture<*>, timeoutMs: Long) {
         val until = android.os.SystemClock.elapsedRealtime() + timeoutMs
         while (!future.isDone) {
@@ -67,7 +97,7 @@ object ForeignTts {
     }
     @Synchronized fun synthesize(ctx: Context, text: String, language: String, speed: Float,
         targetRate: Int, gain: Float): ByteArray? {
-        val engine = selected(ctx) ?: return null
+        val engine = engineFor(ctx, language) ?: return null
         lastUse = android.os.SystemClock.elapsedRealtime()
         val key = "$engine\u0000$language\u0000$speed\u0000$targetRate\u0000$gain\u0000$text"
         cache[key]?.let { Log.i("ForeignTTS", "Audio cache hit lang=$language chars=${text.length}"); return it }
@@ -76,13 +106,12 @@ object ForeignTts {
         var file: File? = null
         var sink: android.os.ParcelFileDescriptor? = null
         try {
-            if (clientEngine != engine) {
-                closeClient(); val ready = CompletableFuture<Int>(); init = ready
-                client = TextToSpeech(ctx.applicationContext, { status -> ready.complete(status) }, engine)
-                clientEngine = engine
+            val connection = clients.getOrPut(engine) {
+                val ready = CompletableFuture<Int>()
+                Client(TextToSpeech(ctx.applicationContext, { status -> ready.complete(status) }, engine), ready)
             }
-            waitFor(init!!, 3000); check(init!!.get() == TextToSpeech.SUCCESS) { "External TTS init failed" }
-            val tts = client!!
+            waitFor(connection.init, 3000); check(connection.init.get() == TextToSpeech.SUCCESS) { "External TTS init failed" }
+            val tts = connection.tts
             check(tts.setLanguage(Locale.forLanguageTag(language)) >= TextToSpeech.LANG_AVAILABLE) { "External TTS has no $language voice" }
             // Prefer installed offline voices; let the selected engine handle its own downloads/settings.
             tts.voices?.filter { it.locale.language == language && !it.isNetworkConnectionRequired &&
@@ -128,7 +157,7 @@ object ForeignTts {
             Log.i("ForeignTTS", "Synthesized engine=$engine lang=$language chars=${text.length} audioMs=${pcm.size*500L/targetRate}")
             return pcm
         } catch (t: Exception) {
-            client?.stop(); closeClient()
+            clients[engine]?.tts?.stop(); closeClient(engine)
             if (!SupertonicTTS.isCancelled()) {
                 cooldown[providerKey] = android.os.SystemClock.elapsedRealtime() + 60000
                 Log.w("ForeignTTS", "External engine unavailable lang=$language: ${t.javaClass.simpleName}")

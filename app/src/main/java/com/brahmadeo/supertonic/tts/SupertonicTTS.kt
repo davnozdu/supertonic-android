@@ -398,7 +398,8 @@ object SupertonicTTS {
                         maybeTeraEngine(context)?.synthesize(textPart, lang, stylePath, speed, gain, routedListener, sid, skipDictionary)
                             .also { lastTeraUse = android.os.SystemClock.elapsedRealtime() } ?: ByteArray(0) }
                 }
-                val parts = if (lang in setOf("en", "cs", "eng", "ces", "cze") && !text.any { it in 'Ѐ'..'ӿ' })
+                // A whole non-Russian request (the reader set another language) goes to that language's engine.
+                val parts = if (!lang.lowercase().startsWith("ru") && !text.any { it in 'Ѐ'..'ӿ' })
                     listOf(com.brahmadeo.supertonic.tts.foreign.ForeignText.Part(text, true))
                     else com.brahmadeo.supertonic.tts.foreign.ForeignText.split(text)
                 val output = java.io.ByteArrayOutputStream()

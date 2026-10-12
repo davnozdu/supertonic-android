@@ -20,7 +20,8 @@ class CheckDataActivity : Activity() {
         val availableVoices = ArrayList<String>()
         val unavailableVoices = ArrayList<String>()
         val locales = if (AssetManager.isRussianModel(this)) listOf("rus-RUS") +
-            (if (com.brahmadeo.supertonic.tts.foreign.ForeignTts.available(this)) listOf("eng-USA", "ces-CZE") else emptyList())
+            com.brahmadeo.supertonic.tts.foreign.ForeignTts.connected(this).mapNotNull { language ->
+                runCatching { java.util.Locale(language).isO3Language }.getOrNull()?.takeIf { it.isNotEmpty() } }
             else SUPPORTED_TTS_LOCALES
 
         if (ready) {

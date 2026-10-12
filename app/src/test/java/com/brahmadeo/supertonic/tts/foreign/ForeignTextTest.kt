@@ -22,10 +22,13 @@ class ForeignTextTest {
         assertTrue(prepared.ranges.all { "Hello" !in prepared.text.substring(it) })
     }
     @Test fun czechAndEnglishRouting() {
-        assertEquals("cs", ForeignText.language("Dobrý den, jak se máte?", "ru", "auto"))
-        assertEquals("en", ForeignText.language("Hello world!", "ru", "auto"))
-        assertEquals("cs", ForeignText.language("Dobry den", "ru", "auto"))
-        assertEquals("cs", ForeignText.language("Hello", "ru", "cs"))
-        assertEquals("en", ForeignText.language("Hello", "eng", "auto"))
+        // The old defaults: English and Czech on one engine.
+        val legacy = ForeignLanguages.parse(null, "", "auto").map { it.language }
+        assertEquals(listOf("en", "cs"), legacy)
+        assertEquals("cs", ForeignLanguages.pick("Dobrý den, jak se máte?", "ru", legacy))
+        assertEquals("en", ForeignLanguages.pick("Hello world!", "ru", legacy))
+        assertEquals("cs", ForeignLanguages.pick("Dobry den", "ru", legacy))
+        assertEquals("cs", ForeignLanguages.pick("Hello", "ru", ForeignLanguages.parse(null, "", "cs").map { it.language }))
+        assertEquals("en", ForeignLanguages.pick("Hello", "eng", legacy))
     }
 }

@@ -26,15 +26,12 @@ internal object ForeignText {
         result += Part(text.substring(start), kind)
         return result
     }
-    fun language(text: String, requested: String, preference: String): String {
-        if (preference != "auto") return preference
-        val req = requested.lowercase().substringBefore('-').substringBefore('_')
-        if (req !in setOf("ru", "rus", "")) return when (req) { "ces", "cze" -> "cs"; "eng" -> "en"; else -> req }
+    /** Czech letters or common words; plain Latin otherwise reads as English (the old single-language default). */
+    fun looksCzech(text: String): Boolean {
         val lower = text.lowercase()
-        if (lower.any { it in "čďěňřšťůž" }) return "cs"
-        val tokens = words.findAll(lower).map { it.value }.toList()
+        if (lower.any { it in "čďěňřšťůž" }) return true
         val hints = setOf("jsem", "jsou", "prosim", "dobry", "ahoj", "neni", "dobré", "děkuji", "dobrý", "máte", "nebo")
-        return if (tokens.any { it in hints }) "cs" else "en"
+        return words.findAll(lower).any { it.value in hints }
     }
     fun prepareNumbers(text: String, normalizer: RussianNumberNormalizer): RussianNumberNormalizer.LlmNumbers {
         val output = StringBuilder(); val ranges = mutableListOf<IntRange>()
