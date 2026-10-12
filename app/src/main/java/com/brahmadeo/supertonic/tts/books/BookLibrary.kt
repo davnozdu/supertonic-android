@@ -85,8 +85,8 @@ object BookLibrary {
 
     fun get(context: Context, id: Long): BookPackage? = packages[id] ?: json(context, id)?.let { BookPackage.parse(it) }?.also { packages[id] = it }
 
-    /** «Разметка реплик» of a book: sentence key → voice parts code, empty when the book has none. */
-    fun replies(context: Context, id: Long): Map<Long, String> = runCatching { get(context, id)?.replies }.getOrNull().orEmpty()
+    /** «Разметка реплик» of a book (empty when it has none). */
+    fun replies(context: Context, id: Long): ReplyIndex = runCatching { get(context, id)?.replies }.getOrNull() ?: ReplyIndex.EMPTY
 
     fun lookup(context: Context, hashes: List<Long>): List<Hit> {
         if (hashes.isEmpty()) return emptyList()

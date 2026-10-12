@@ -14,8 +14,8 @@ data class BookPackage(
     val sections: List<Section>,
     val casts: List<Cast>,
     val fingerprints: Map<String, List<Long>>,
-    /** «Разметка реплик» (optional): sentence key → voice parts ([ReplyIndex]). */
-    val replies: Map<Long, String> = emptyMap(),
+    /** «Разметка реплик» (optional): the voice of each word of the dialogue paragraphs ([ReplyIndex]). */
+    val replies: ReplyIndex = ReplyIndex.EMPTY,
 ) {
     data class Section(val id: String, val title: String, val cast: Int?)
     data class Cast(val sections: List<String>, val characters: List<Character>, val other: List<String>)
@@ -56,7 +56,6 @@ data class BookPackage(
     companion object {
         const val MAX_BYTES = 32L * 1024 * 1024
         private const val MAX_FINGERPRINTS = 1_000_000
-        private const val MAX_REPLIES = 2_000_000
         private val ID = Regex("[a-z0-9_.]{1,80}")
 
         /** Strict: anything malformed is rejected as a whole, nothing partial reaches reading. */
@@ -95,14 +94,8 @@ data class BookPackage(
             require(fingerprints.values.sumOf { it.size } in 1..MAX_FINGERPRINTS) { "В файле нет отпечатков текста" }
             val replies = o.optJSONObject("replies")?.let { r ->
                 require(r.getString("algorithm") == ReplyIndex.ALGORITHM) { "Неизвестный способ разметки реплик: ${r.optString("algorithm")}" }
-                val entries = r.getJSONObject("entries")
-                require(entries.length() <= MAX_REPLIES) { "Слишком большая разметка реплик" }
-                entries.keys().asSequence().associate { key ->
-                    val code = entries.getString(key)
-                    require(ReplyIndex.decode(code) != null) { "Некорректная разметка реплики" }
-                    BookFingerprint.parse(key) to code
-                }
-            }.orEmpty()
+                ReplyIndex.parse(r.getJSONArray("codes").strings(), r.getString("index"))
+            } ?: ReplyIndex.EMPTY
             return BookPackage(book.getString("title"), book.optString("author"), book.optString("file_sha256"),
                 book.getString("content_sha256"), o.optString("scope", "book"), sections, casts, fingerprints, replies)
         }

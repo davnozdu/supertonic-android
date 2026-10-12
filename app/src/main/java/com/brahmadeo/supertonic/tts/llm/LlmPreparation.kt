@@ -144,8 +144,8 @@ object LlmPreparation {
      * voice parts guessed on the phone ([LocalSpeakers]): no LLM, so no pause before the sentence. */
     private val directTexts = LinkedHashMap<String, List<VoiceRoleText>>()
     private val localSpeakers = LocalSpeakers()
-    /** The last sentence a one-at-a-time reader sent: the context key of «Разметка реплик». */
-    @Volatile private var lastReaderSentence: String? = null
+    /** The last words a one-at-a-time reader sent: the context of the first words of its next text («Разметка реплик»). */
+    @Volatile private var lastReaderWords: List<String> = emptyList()
     const val DIRECT_KEY = "reader_direct_offline"
     /** Records how app [uid] queues text; true when the text should not wait for the LLM («Не ждать LLM в читалках
      * без очереди», on by default): the app sends one utterance at a time, so nothing can be prepared ahead. */
@@ -158,26 +158,25 @@ object LlmPreparation {
             // keeps its speaker once the app is recognised. Apps that queue ahead (Moon+) use the LLM instead.
             if (direct && roles && !readerStyle.queues(uid)) {
                 runCatching { synchronized(localSpeakers) { localSpeakers.plan(text) } }
-                lastReaderSentence = com.brahmadeo.supertonic.tts.books.ReplyIndex.sentences(text).lastOrNull() ?: text
+                lastReaderWords = (lastReaderWords + com.brahmadeo.supertonic.tts.books.ReplyIndex.words(text)).takeLast(com.brahmadeo.supertonic.tts.books.ReplyIndex.WINDOW - 1)
             }
             return false
         }
-        val previous = lastReaderSentence
-        lastReaderSentence = com.brahmadeo.supertonic.tts.books.ReplyIndex.sentences(text).lastOrNull() ?: text
+        val before = lastReaderWords
+        lastReaderWords = (before + com.brahmadeo.supertonic.tts.books.ReplyIndex.words(text)).takeLast(com.brahmadeo.supertonic.tts.books.ReplyIndex.WINDOW - 1)
         val plan = if (roles) runCatching {
             // The prepared book (if this text belongs to one): its characters and voices, its first-person choice.
             val position = com.brahmadeo.supertonic.tts.books.BookMatcher.feed(ctx, caller, text)
             val book = com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, position)
-            val cast = book?.cast?.characters.orEmpty().map { LocalSpeakers.Person(it.id, it.gender, it.forms + it.name) }
-            val firstPerson = book?.firstPerson ?: LlmSettings.firstPerson(ctx)
-            val replies = position?.let { com.brahmadeo.supertonic.tts.books.BookLibrary.replies(ctx, it.book) }.orEmpty()
-            // «Разметка реплик» first, sentence by sentence; a sentence not in it is guessed on the phone.
-            val sentences = if (replies.isEmpty()) listOf(text to null)
-                else com.brahmadeo.supertonic.tts.books.ReplyIndex.resolve(text, previous, replies::get) { role, who -> book?.voiceOf(role, who) }
-            val found = sentences.count { it.second != null }
-            if (replies.isNotEmpty()) com.brahmadeo.supertonic.tts.utils.DiagLog.i("MultiVoice", "Book replies found=$found/${sentences.size}")
-            sentences.flatMap { (sentence, parts) ->
-                parts ?: synchronized(localSpeakers) { localSpeakers.plan(sentence, cast, firstPerson) }
+            val replies = position?.let { com.brahmadeo.supertonic.tts.books.BookLibrary.replies(ctx, it.book) }
+            if (replies != null && replies.size > 0) {
+                // «Разметка реплик»: every word's voice from the book; nothing found = narration, the author's.
+                val marked = replies.resolve(text, before) { role, who -> book?.voiceOf(role, who) }
+                com.brahmadeo.supertonic.tts.utils.DiagLog.i("MultiVoice", "Book replies found=${marked != null}")
+                marked ?: listOf(VoiceRoleText(text, VoiceRole.AUTHOR, voice = book?.voiceOf(VoiceRole.AUTHOR, null)))
+            } else {
+                val cast = book?.cast?.characters.orEmpty().map { LocalSpeakers.Person(it.id, it.gender, it.forms + it.name) }
+                synchronized(localSpeakers) { localSpeakers.plan(text, cast, book?.firstPerson ?: LlmSettings.firstPerson(ctx)) }
                     .map { part -> part.copy(voice = book?.voiceOf(part.role, part.character)) }
             }
         }.getOrElse { emptyList() } else emptyList()
@@ -511,26 +510,17 @@ object LlmPreparation {
         return results
     }
     /** Voice plans of [texts] from the book's «Разметка реплик», or null when the book has none. A marked book never
-     * asks the LLM for roles: the rare sentence missing from the index is guessed on the phone ([LocalSpeakers]). */
+     * asks the LLM for roles: a paragraph none of whose words is in the index is narration, read by the author. */
     private fun bookRoles(ctx: Context, book: com.brahmadeo.supertonic.tts.books.BookContext, texts: List<String>, preceding: String): List<List<VoiceRoleText>>? {
         val replies = com.brahmadeo.supertonic.tts.books.BookLibrary.replies(ctx, book.book)
-        if (replies.isEmpty()) return null
-        val cast = book.cast.characters.map { LocalSpeakers.Person(it.id, it.gender, it.forms + it.name) }
-        val firstPerson = book.firstPerson ?: LlmSettings.firstPerson(ctx)
-        var previous: String? = com.brahmadeo.supertonic.tts.books.ReplyIndex.sentences(preceding).lastOrNull()
-        var missing = 0
-        val plans = texts.map { text ->
-            val plan = if (!com.brahmadeo.supertonic.tts.books.ReplyIndex.isDialogue(text)) listOf(VoiceRoleText(text, VoiceRole.AUTHOR, voice = book.voiceOf(VoiceRole.AUTHOR, null)))
-            else com.brahmadeo.supertonic.tts.books.ReplyIndex.resolve(text, previous, replies::get) { role, who -> book.voiceOf(role, who) }
-                .flatMap { (sentence, parts) -> parts ?: run {
-                    missing++
-                    synchronized(localSpeakers) { localSpeakers.plan(sentence, cast, firstPerson) }.map { it.copy(voice = book.voiceOf(it.role, it.character)) }
-                } }
-            previous = com.brahmadeo.supertonic.tts.books.ReplyIndex.sentences(text).lastOrNull() ?: text
+        if (replies.size == 0) return null
+        var before = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(preceding).takeLast(com.brahmadeo.supertonic.tts.books.ReplyIndex.WINDOW - 1)
+        return texts.map { text ->
+            val plan = replies.resolve(text, before) { role, who -> book.voiceOf(role, who) }
+                ?: listOf(VoiceRoleText(text, VoiceRole.AUTHOR, voice = book.voiceOf(VoiceRole.AUTHOR, null)))
+            before = (before + com.brahmadeo.supertonic.tts.books.ReplyIndex.words(text)).takeLast(com.brahmadeo.supertonic.tts.books.ReplyIndex.WINDOW - 1)
             plan
         }
-        if (missing > 0) com.brahmadeo.supertonic.tts.utils.DiagLog.i("MultiVoice", "Book replies: $missing sentences not in the index, guessed on the phone")
-        return plans
     }
     private fun scheduleRoleRecovery(ctx: Context, c: LlmConfig, batch: List<Entry>, preceding: String,
                                      expectedEpoch: Long, attempt: Int = 0, roleRequest: RoleRequest? = null) {

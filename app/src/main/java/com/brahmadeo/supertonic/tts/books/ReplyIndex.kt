@@ -3,117 +3,126 @@ package com.brahmadeo.supertonic.tts.books
 import com.brahmadeo.supertonic.tts.llm.VoiceRole
 import com.brahmadeo.supertonic.tts.llm.VoiceRoleText
 
-/** Who speaks each sentence of the dialogue paragraphs of a prepared book («Разметка реплик»), so a reader gets the
- * voices at once, without the LLM (Readest sends one sentence at a time; Moon+ would otherwise wait for the roles).
- * A sentence is found by two keys: its letters after the last letters of the previous sentence (short replies like
- * «— Да.» are unique only with context), and its own first 48 letters when it is long enough (reading started
- * mid-dialogue). Parts are stored by word number, so a dash a reader drops (Readest) changes nothing.
- * Code: "0:m:myshkin;4:a" — from word 0 Мышкин (male), from word 4 the author. */
-object ReplyIndex {
-    data class Part(val word: Int, val role: VoiceRole, val speaker: String?)
-    const val ALGORITHM = "ctx24-fnv1a64-48"
+/** Who speaks each word of the dialogue paragraphs of a prepared book («Разметка реплик»), so any reader gets the
+ * voices at once, without the LLM. Readers cut the text their own way — Moon+ by paragraph, Readest by sentence and
+ * further at every inline tag of the book (a piece may start with «, »), without the leading dash — so the index is
+ * by word: a word is found by its letters and the [WINDOW] − 1 words before it (across paragraphs, in reading order).
+ * Punctuation never matters; a word whose key two places share with different voices is left out (its neighbours
+ * decide). Stored compactly: sorted 8-byte keys + 2-byte voice numbers, base64 ("codes" lists the voices). */
+class ReplyIndex private constructor(private val keys: LongArray, private val values: ShortArray, private val codes: List<Voice>) {
+    data class Voice(val role: VoiceRole, val speaker: String?)
 
-    /** Sentence boundaries close to Intl.Segmenter (Readest): end punctuation, space, a capital, dash or quote. */
-    private const val SPACE = "\\s\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000\\uFEFF"
-    private val boundary = Regex("(?<=[.!?…])[$SPACE]+(?=[—–\\-«\"„(A-ZА-ЯЁ])")
-    private val unit = Regex("[^$SPACE]+[$SPACE]*")
-    private const val CONTEXT = 24
+    val size get() = keys.size
 
-    fun sentences(text: String): List<String> {
-        val out = mutableListOf<String>(); var start = 0
-        for (m in boundary.findAll(text)) { out += text.substring(start, m.range.last + 1); start = m.range.last + 1 }
-        if (start < text.length) out += text.substring(start)
-        return out.filter { it.isNotBlank() }
+    private fun voiceOf(key: Long): Voice? {
+        val i = keys.binarySearch(key)
+        return if (i >= 0) codes.getOrNull(values[i].toInt()) else null
     }
 
-    private fun hasWord(s: String) = s.any { it.isLetterOrDigit() }
-
-    /** Keys of [sentence] after [previous]: with context (always) and alone (≥ 24 letters). */
-    fun keys(previous: String?, sentence: String): List<Long> {
-        val own = BookFingerprint.letters(sentence, BookFingerprint.LETTERS)
-        if (own.isEmpty()) return emptyList()
-        val keys = mutableListOf<Long>()
-        val before = previous?.let { BookFingerprint.letters(it).takeLast(CONTEXT) }.orEmpty()
-        if (before.isNotEmpty()) keys += BookFingerprint.hash("$before|$own")
-        if (own.length >= BookFingerprint.MIN_LETTERS) keys += BookFingerprint.hash("|$own")
-        return keys
+    /** Voice parts of [text] (they join back to [text] exactly) after the words [before] (the reader's previous text,
+     * at most [WINDOW] − 1 kept), or null when no word of it is in the index. */
+    fun resolve(text: String, before: List<String>, voice: (VoiceRole, String?) -> String?): List<VoiceRoleText>? {
+        val units = unit.findAll(text).toList()
+        val words = units.indices.filter { letters(units[it].value).isNotEmpty() }
+        if (words.isEmpty()) return null
+        val window = ArrayDeque(before.takeLast(WINDOW - 1))
+        val found = words.map { u ->
+            window.addLast(letters(units[u].value)); while (window.size > WINDOW) window.removeFirst()
+            if (window.size == WINDOW) voiceOf(key(window)) else null
+        }
+        if (found.all { it == null }) return null
+        // A word not found takes the voice of the word before it (or, at the start, the first one found).
+        val filled = ArrayList<Voice>(found.size)
+        var last = found.first { it != null }!!
+        for (v in found) { if (v != null) last = v; filled += last }
+        val cuts = mutableListOf(0); val voices = mutableListOf(filled[0])
+        for (i in 1 until words.size) if (filled[i] != filled[i - 1]) {
+            // Punctuation right before a word (a dash before a remark) goes with that word.
+            var u = words[i]
+            while (u > 0 && letters(units[u - 1].value).isEmpty()) u--
+            val cut = units[u].range.first
+            if (cut > cuts.last()) { cuts += cut; voices += filled[i] }
+        }
+        val parts = voices.indices.map { i ->
+            val v = voices[i]
+            VoiceRoleText(text.substring(cuts[i], cuts.getOrNull(i + 1) ?: text.length), v.role, v.speaker, voice(v.role, v.speaker))
+        }
+        return parts.takeIf { it.joinToString("") { p -> p.text } == text }
     }
 
-    fun encode(parts: List<Part>): String = parts.joinToString(";") { p ->
-        "${p.word}:${when (p.role) { VoiceRole.MALE -> "m"; VoiceRole.FEMALE -> "f"; else -> "a" }}" + (p.speaker?.let { ":$it" } ?: "")
-    }
+    companion object {
+        const val ALGORITHM = "words4-fnv1a64"
+        const val WINDOW = 4
+        private const val SPACE = "\\s\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000\\uFEFF"
+        private val unit = Regex("[^$SPACE]+[$SPACE]*")
+        private val dialogue = Regex("^[$SPACE]*[—–\\-]|«")
 
-    fun decode(code: String): List<Part>? = runCatching {
-        code.split(';').map { item ->
-            val f = item.split(':')
-            Part(f[0].toInt(), when (f[1]) { "m" -> VoiceRole.MALE; "f" -> VoiceRole.FEMALE; "a" -> VoiceRole.AUTHOR; else -> error("role") },
-                f.getOrNull(2)?.ifBlank { null })
-        }.also { require(it.isNotEmpty() && it.first().word == 0 && it.zipWithNext().all { (a, b) -> b.word > a.word }) }
-    }.getOrNull()
+        /** Lowercase letters and digits of a word (ё → е, no stress marks). */
+        fun letters(word: String) = BookFingerprint.letters(word)
+        fun key(window: Collection<String>) = BookFingerprint.hash(window.joinToString(" "))
+        /** The words of [text] in reading order (for the window of the next text). */
+        fun words(text: String): List<String> = unit.findAll(text).map { letters(it.value) }.filter { it.isNotEmpty() }.toList()
+        /** A paragraph that may hold speech; the others are narration and are not in the index (the author reads them). */
+        fun isDialogue(text: String) = dialogue.containsMatchIn(text)
 
-    /** Index entries of a paragraph from its voice plan (the LLM's roles over the paragraph text): one per sentence. */
-    fun entries(paragraph: String, plan: List<VoiceRoleText>, previous: String?): List<Pair<List<Long>, String>> {
-        if (plan.joinToString("") { it.text } != paragraph) return emptyList()
-        // Role of every character of the paragraph.
-        val roleAt = arrayOfNulls<VoiceRoleText>(paragraph.length)
-        var pos = 0
-        for (part in plan) { for (i in part.text.indices) roleAt[pos + i] = part; pos += part.text.length }
-        val out = mutableListOf<Pair<List<Long>, String>>()
-        var prev = previous; var offset = 0
-        for (sentence in sentences(paragraph)) {
-            val start = paragraph.indexOf(sentence, offset).also { offset = it + sentence.length }
-            val parts = mutableListOf<Part>(); var word = 0
-            for (m in unit.findAll(sentence)) {
-                if (!hasWord(m.value)) continue
-                // The part of the unit's first letter: a leading dash never decides.
-                val at = start + m.range.first + m.value.indexOfFirst { it.isLetterOrDigit() }
-                val r = roleAt[at] ?: continue
-                val role = r.role; val speaker = if (role == VoiceRole.AUTHOR) null else r.character
-                if (parts.lastOrNull()?.let { it.role == role && it.speaker == speaker } != true) parts += Part(word, role, speaker)
-                word++
+        fun code(v: Voice) = (when (v.role) { VoiceRole.MALE -> "m"; VoiceRole.FEMALE -> "f"; else -> "a" }) + (v.speaker?.let { ":$it" } ?: "")
+        fun voice(code: String): Voice? {
+            val f = code.split(':')
+            val role = when (f[0]) { "m" -> VoiceRole.MALE; "f" -> VoiceRole.FEMALE; "a" -> VoiceRole.AUTHOR; else -> return null }
+            return Voice(role, f.getOrNull(1)?.ifBlank { null }?.takeIf { role != VoiceRole.AUTHOR })
+        }
+
+        /** Builder: feed every paragraph of the book in reading order; [plan] is the LLM's voices of a dialogue paragraph. */
+        class Builder {
+            private val window = ArrayDeque<String>()
+            private val entries = HashMap<Long, Voice>()
+            private val clash = HashSet<Long>()
+            val size get() = entries.size
+            val clashes get() = clash.size
+            fun add(paragraph: String, plan: List<VoiceRoleText>?) {
+                val roleAt: Array<VoiceRoleText?>? = plan?.takeIf { it.joinToString("") { p -> p.text } == paragraph }?.let { p ->
+                    val a = arrayOfNulls<VoiceRoleText>(paragraph.length); var pos = 0
+                    for (part in p) { for (i in part.text.indices) a[pos + i] = part; pos += part.text.length }
+                    a
+                }
+                for (m in unit.findAll(paragraph)) {
+                    val w = letters(m.value); if (w.isEmpty()) continue
+                    window.addLast(w); while (window.size > WINDOW) window.removeFirst()
+                    if (roleAt == null || window.size < WINDOW) continue
+                    val part = roleAt[m.range.first + m.value.indexOfFirst { it.isLetterOrDigit() }] ?: continue
+                    val v = Voice(part.role, part.character?.takeIf { part.role != VoiceRole.AUTHOR })
+                    val k = key(window)
+                    if (k in clash) continue
+                    val old = entries.putIfAbsent(k, v)
+                    if (old != null && old != v) { entries.remove(k); clash += k }
+                }
             }
-            val keys = keys(prev, sentence)
-            if (parts.isNotEmpty() && keys.isNotEmpty()) out += keys to encode(parts)
-            prev = sentence
-        }
-        return out
-    }
-
-    private val dialogue = Regex("^[$SPACE]*[—–\\-]|«")
-    /** A paragraph that may hold speech; the others are narration and are not in the index (the author reads them). */
-    fun isDialogue(text: String) = dialogue.containsMatchIn(text)
-
-    /** Each sentence of [text] with its parts from [lookup] (null where it is not in the index); [previous] is the
-     * sentence a reader sent before [text]. */
-    fun resolve(text: String, previous: String?, lookup: (Long) -> String?, voice: (VoiceRole, String?) -> String?): List<Pair<String, List<VoiceRoleText>?>> {
-        val parts = sentences(text).takeIf { it.joinToString("") == text } ?: listOf(text)
-        var prev = previous
-        return parts.map { sentence ->
-            val found = keys(prev, sentence).firstNotNullOfOrNull { k -> lookup(k)?.let(::decode) }?.let { apply(sentence, it, voice) }
-            prev = sentence
-            sentence to found
-        }
-    }
-
-    /** Voice parts of a [sentence] as a reader sent it (its text joins back exactly), or null when [parts] do not fit.
-     * Punctuation before a word goes with that word's part, except a dash before a remark, which is the author's. */
-    fun apply(sentence: String, parts: List<Part>, voice: (VoiceRole, String?) -> String?): List<VoiceRoleText>? {
-        val units = unit.findAll(sentence).toList()
-        val wordUnits = units.indices.filter { hasWord(units[it].value) }
-        if (wordUnits.isEmpty() || parts.last().word >= wordUnits.size) return null
-        val cuts = parts.map { p ->
-            if (p.word == 0) 0 else {
-                var u = wordUnits[p.word]
-                // Units without letters right before this word (a dash) join this part.
-                while (u > 0 && !hasWord(units[u - 1].value)) u--
-                units[u].range.first
+            /** (codes, base64 index) for the package. */
+            fun export(): Pair<List<String>, String> {
+                val codes = entries.values.map(::code).distinct().sorted()
+                val number = codes.withIndex().associate { it.value to it.index }
+                val sorted = entries.entries.sortedBy { it.key }
+                val bytes = java.nio.ByteBuffer.allocate(sorted.size * 10)
+                for ((k, v) in sorted) { bytes.putLong(k); bytes.putShort(number.getValue(code(v)).toShort()) }
+                return codes to java.util.Base64.getEncoder().encodeToString(bytes.array())
             }
         }
-        if (cuts.zipWithNext().any { (a, b) -> b <= a }) return null
-        val out = parts.mapIndexed { i, p ->
-            val text = sentence.substring(cuts[i], cuts.getOrNull(i + 1) ?: sentence.length)
-            VoiceRoleText(text, p.role, p.speaker, voice(p.role, p.speaker))
-        }.toMutableList()
-        return out.takeIf { it.joinToString("") { p -> p.text } == sentence }
+
+        fun parse(codes: List<String>, index: String): ReplyIndex {
+            val voices = codes.map { requireNotNull(voice(it)) { "Некорректная разметка реплики" } }
+            require(voices.size <= Short.MAX_VALUE) { "Слишком много голосов в разметке" }
+            val bytes = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(index))
+            require(bytes.remaining() % 10 == 0) { "Некорректная разметка реплик" }
+            val n = bytes.remaining() / 10
+            val keys = LongArray(n); val values = ShortArray(n)
+            for (i in 0 until n) {
+                keys[i] = bytes.long; values[i] = bytes.short
+                require(values[i] in 0 until voices.size) { "Некорректная разметка реплик" }
+                require(i == 0 || keys[i] > keys[i - 1]) { "Разметка реплик не упорядочена" }
+            }
+            return ReplyIndex(keys, values, voices)
+        }
+
+        val EMPTY = ReplyIndex(LongArray(0), ShortArray(0), emptyList())
     }
 }
