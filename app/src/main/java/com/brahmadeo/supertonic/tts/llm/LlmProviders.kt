@@ -160,7 +160,7 @@ object LlmProviders {
 У каждого элемента есть номер id. Верни только JSON {"choices":[{"id":номер элемента,"choice":0 или 1},...]} — по одному объекту на каждый элемент, choice — номер выбранного варианта в options. Рассуждения в ответ не включай."""
     private fun stressCheckSchema() = JSONObject("""{"type":"object","properties":{"choices":{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"choice":{"type":"integer"}},"required":["id","choice"]}}},"required":["choices"],"additionalProperties":false}""")
     private const val STRESS_CHECK_CHUNK = 12
-    /** Second look at words where the LLM and the offline Silero Stress disagree: the LLM chooses again with only
+    /** The judge of [StressCheck]: for a word RUAccent and Silero disagree on (or a homograph) the LLM chooses with only
      * this sentence and these two options in front of it. Returns one option index per item. */
     /** Diagnostics (StressProbe): null = production default, true/false = reasoning for the stress check. */
     @Volatile internal var verifyThinkingOverride: Boolean? = null
@@ -177,25 +177,50 @@ object LlmProviders {
             // A cancelled batch or changed settings: no further judge requests.
             if (stopped()) throw java.util.concurrent.CancellationException("Проверка ударений отменена")
             val chunk = items.subList(from, minOf(items.size, from + STRESS_CHECK_CHUNK))
-            val array = JSONArray()
-            chunk.forEachIndexed { i, it -> array.put(JSONObject().put("id", i).put("sentence", it.sentence).put("context", it.context)
-                .put("word", it.word).put("options", JSONArray(it.options))) }
             val judgeStarted = SystemClock.elapsedRealtime()
-            val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking, deepseekThinking = thinking), JSONObject().put("items", array).toString(),
+            val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking, deepseekThinking = thinking), stressItems(chunk),
                 STRESS_CHECK, stressCheckSchema(), gemini,
                 tokens = 64 + chunk.size * 16 + (if (thinking) 4096 else 0),
                 // ~5 s cut Gemini judges off mid-answer (IOException: Canceled); the check runs ahead of playback.
                 deadlineMs = if (thinking) 60_000L else 15_000L, provider = provider)
-            val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
-            require(start >= 0 && end > start) { "Проверка ударений: нет JSON" }
-            val choices = JSONObject(answer.substring(start, end + 1)).getJSONArray("choices")
-            var answered = 0
-            for (k in 0 until choices.length()) {
-                val o = choices.optJSONObject(k) ?: continue
-                val id = o.optInt("id", -1); val v = o.optInt("choice", -1)
-                if (id in chunk.indices && (v == 0 || v == 1) && out[from + id] == null) { out[from + id] = v; answered++ }
-            }
+            val answered = stressChoices(answer, chunk.size, out, from)
             Log.i("LlmPreparation", "Stress judge $lastVerifier items=${chunk.size} answered=$answered ms=${SystemClock.elapsedRealtime() - judgeStarted}")
+        }
+        return out.toList()
+    }
+    private fun stressItems(chunk: List<StressCheck.Item>): String {
+        val array = JSONArray()
+        chunk.forEachIndexed { i, it -> array.put(JSONObject().put("id", i).put("sentence", it.sentence).put("context", it.context)
+            .put("word", it.word).put("options", JSONArray(it.options))) }
+        return JSONObject().put("items", array).toString()
+    }
+    /** Writes the judge's {"choices":[{"id","choice"}]} into [out] from [from]; returns how many were answered. */
+    private fun stressChoices(answer: String, size: Int, out: Array<Int?>, from: Int): Int {
+        val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
+        require(start >= 0 && end > start) { "Проверка ударений: нет JSON" }
+        val choices = JSONObject(answer.substring(start, end + 1)).getJSONArray("choices")
+        var answered = 0
+        for (k in 0 until choices.length()) {
+            val o = choices.optJSONObject(k) ?: continue
+            val id = o.optInt("id", -1); val v = o.optInt("choice", -1)
+            if (id in 0 until size && (v == 0 || v == 1) && out[from + id] == null) { out[from + id] = v; answered++ }
+        }
+        return answered
+    }
+    private const val STRESS_PROTOCOL = "stress-check"
+    /** Protocols whose prompt and answer pass through as they are (no text-fragment wrapping or response checks). */
+    private fun rawProtocol(protocol: String) = protocol.startsWith("roles") || protocol == STRESS_PROTOCOL
+    /** [verifyStress] with local Gemma (GPU LiteRT or NPU, whichever is selected), without reasoning. */
+    fun verifyStressLocal(context: Context, c: LlmConfig, items: List<StressCheck.Item>, stopped: () -> Boolean = { false }): List<Int?> {
+        val out = arrayOfNulls<Int>(items.size)
+        for (from in items.indices step STRESS_CHECK_CHUNK) {
+            if (stopped()) throw java.util.concurrent.CancellationException("Проверка ударений отменена")
+            val chunk = items.subList(from, minOf(items.size, from + STRESS_CHECK_CHUNK))
+            val judgeStarted = SystemClock.elapsedRealtime()
+            val answer = local(context, c.copy(localThinking = false), listOf(stressItems(chunk)), deadlineMs = 4000L + chunk.size * 1500L,
+                protocol = STRESS_PROTOCOL, diagnosticInstruction = STRESS_CHECK, outputTokenLimit = 64 + chunk.size * 16).single()
+            val answered = stressChoices(answer, chunk.size, out, from)
+            Log.i("LlmPreparation", "Stress judge gemma items=${chunk.size} answered=$answered ms=${SystemClock.elapsedRealtime() - judgeStarted}")
         }
         return out.toList()
     }
@@ -298,18 +323,18 @@ object LlmProviders {
         }
         usedAt = SystemClock.elapsedRealtime()
         check(generation == cancelGeneration.get()) { "Подготовка отменена" }
-        val system=diagnosticInstruction ?: instructionOverride?.takeIf { !protocol.startsWith("roles") } ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
+        val system=diagnosticInstruction ?: instructionOverride?.takeIf { !rawProtocol(protocol) } ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
         fun generate(engine: Engine, index: Int): String {
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             val text=texts[index]
-            val prompt=if (protocol.startsWith("roles")) text else LocalSpeechText.prompt(text,
+            val prompt=if (rawProtocol(protocol)) text else LocalSpeechText.prompt(text,
                 texts.getOrNull(index-1)?.takeLast(256).orEmpty(),
                 texts.getOrNull(index+1)?.take(256).orEmpty())
             val timedOut=java.util.concurrent.atomic.AtomicBoolean()
             return engine.createConversation(ConversationConfig(systemInstruction=Contents.of(system),
                 samplerConfig=SamplerConfig(1,0.95,0.0),
                 thinkingConfig=ThinkingConfig(c.localThinking,if(c.localThinking) 512 else 0),
-                maxOutputToken=outputTokenLimit ?: if (protocol == "roles-local") 64 else if (protocol.startsWith("roles")) 1600 else LocalSpeechText.outputTokens(text.length))).use { conversation ->
+                maxOutputToken=outputTokenLimit ?: if (protocol == "roles-local") 64 else if (rawProtocol(protocol)) 1600 else LocalSpeechText.outputTokens(text.length))).use { conversation ->
                 activeConversation=conversation
                 val started=SystemClock.elapsedRealtime()
                 val budget=fragmentDeadline(deadlineMs, text, protocol)
@@ -319,7 +344,7 @@ object LlmProviders {
                     check(!timedOut.get()) { "LLM локальная: превышен лимит ${budget}мс" }
                     check(generation==cancelGeneration.get()) { "Подготовка отменена" }
                     Log.i("LlmPreparation","Local Gemma fragment=$index chars=${text.length} outputChars=${raw.length} backend=${if(localGpu==true) "GPU" else "CPU"} ms=${SystemClock.elapsedRealtime()-started}")
-                    if (protocol.startsWith("roles")) raw else LocalSpeechText.response(raw,text,protocol)
+                    if (rawProtocol(protocol)) raw else LocalSpeechText.response(raw,text,protocol)
                 } catch(e: Exception) {
                     if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${budget}мс")
                     throw e
@@ -348,25 +373,25 @@ object LlmProviders {
                 hexagon = it; Log.i("LlmPreparation", "Local Gemma loaded backend=NPU (own process) ms=${SystemClock.elapsedRealtime()-started}") }
         }
         usedAt = SystemClock.elapsedRealtime()
-        val system=diagnosticInstruction ?: instructionOverride?.takeIf { !protocol.startsWith("roles") } ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
+        val system=diagnosticInstruction ?: instructionOverride?.takeIf { !rawProtocol(protocol) } ?: LocalSpeechText.instruction(c.stress,c.punctuation,c.restoreYo,protocol)
         return texts.indices.map { index ->
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             val text=texts[index]
-            val prompt=if (protocol.startsWith("roles")) text else LocalSpeechText.prompt(text,
+            val prompt=if (rawProtocol(protocol)) text else LocalSpeechText.prompt(text,
                 texts.getOrNull(index-1)?.takeLast(256).orEmpty(), texts.getOrNull(index+1)?.take(256).orEmpty())
-            val limit=outputTokenLimit ?: if (protocol == "roles-local") 64 else if (protocol.startsWith("roles")) 1600 else LocalSpeechText.outputTokens(text.length)
+            val limit=outputTokenLimit ?: if (protocol == "roles-local") 64 else if (rawProtocol(protocol)) 1600 else LocalSpeechText.outputTokens(text.length)
             val timedOut=java.util.concurrent.atomic.AtomicBoolean()
             val started=SystemClock.elapsedRealtime()
             val budget=fragmentDeadline(deadlineMs, text, protocol)
             val deadline=timer.schedule({ timedOut.set(true); model.cancel() },budget,java.util.concurrent.TimeUnit.MILLISECONDS)
             hexagonActive=model
-            val raw=try { model.generate(GemmaHexagon.prompt(system, prompt), limit, if (protocol.startsWith("roles")) 1 else 0) } catch(e: Exception) {
+            val raw=try { model.generate(GemmaHexagon.prompt(system, prompt), limit, if (rawProtocol(protocol)) 1 else 0) } catch(e: Exception) {
                 if(timedOut.get()) throw IllegalStateException("LLM локальная: превышен лимит ${budget}мс")
                 throw e
             } finally { deadline.cancel(false); hexagonActive=null; usedAt=SystemClock.elapsedRealtime() }
             check(generation==cancelGeneration.get()) { "Подготовка отменена" }
             Log.i("LlmPreparation","Local Gemma fragment=$index chars=${text.length} outputChars=${raw.length} backend=NPU ms=${SystemClock.elapsedRealtime()-started} ${model.stats()}")
-            val output=if (protocol.startsWith("roles")) raw else LocalSpeechText.response(raw,text,protocol)
+            val output=if (rawProtocol(protocol)) raw else LocalSpeechText.response(raw,text,protocol)
             onOutput(index,output); output
         }
     }
@@ -374,7 +399,7 @@ object LlmProviders {
     /** Text fragments get time proportional to their length (≈25 ms/char, ~2× Gemma NPU decode); a fixed
      * 12 s cancelled ~950-char fragments near their end. Role requests keep the caller's deadline. */
     private fun fragmentDeadline(base: Long, text: String, protocol: String) =
-        if (protocol.startsWith("roles")) base else maxOf(base, 4000L + text.length * 25L).coerceAtMost(maxOf(base, 45_000L))
+        if (rawProtocol(protocol)) base else maxOf(base, 4000L + text.length * 25L).coerceAtMost(maxOf(base, 45_000L))
     private fun parse(answer: String, count: Int): List<String> {
         val start = answer.indexOf('{'); val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "LLM не вернула JSON" }

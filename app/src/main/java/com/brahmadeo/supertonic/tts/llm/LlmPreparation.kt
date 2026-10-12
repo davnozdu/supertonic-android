@@ -172,52 +172,51 @@ object LlmPreparation {
     /** Diagnostics (StressProbe): validated LLM text per source, before names, offline fill and arbitration. */
     @Volatile internal var probeRaw: MutableMap<String, String>? = null
     private val verifyPool = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "LLM-stress-check").apply { isDaemon = true } }
-    /** [StressCheck]: words where the cloud LLM and the offline Silero Stress disagree are asked again, in their
-     * sentence. Without the offline model, or on any failure, the LLM's own marks stay. */
-    /** Returns the checked texts and the offline opinions it computed (reused to fill unmarked words, so Silero runs
-     * once per batch instead of twice). */
-    private fun crossCheck(ctx: Context, c: LlmConfig, outputs: List<String>, provider: String, stopped: () -> Boolean): Pair<List<String>, List<String>?> = try {
+    /** [StressCheck]: RUAccent's dictionary and Silero Stress mark the batch; their disagreements and RUAccent's
+     * homographs go to the LLM judge ([judge]: "local" = Gemma, otherwise the cloud provider). Returns the checked
+     * texts and Silero's opinions (reused to fill unmarked words, so Silero runs once per batch). On a failed judge
+     * the no-judge rule decides; on any other failure the LLM's own marks stay. */
+    private fun stressVote(ctx: Context, c: LlmConfig, outputs: List<String>, sources: List<String>, judge: String,
+                           stopped: () -> Boolean): Pair<List<String>, List<String>?> = try {
         val started = SystemClock.elapsedRealtime()
-        val offline = outputs.map { com.brahmadeo.supertonic.tts.utils.RussianNames.overlay(ctx,
-            com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
-            com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx, StressCheck.unmarked(it)), "ru")) }
+        val silero = outputs.map { com.brahmadeo.supertonic.tts.local.RussianStressVote.silero(ctx, it) }
         val offlineMs = SystemClock.elapsedRealtime() - started
-        val conflicts = StressCheck.disputes(outputs, offline)
-        // Homographs both sides stressed alike are asked too: agreement is no proof there (о́рган/орга́н).
-        val disputes = (conflicts + StressCheck.homographs(outputs, conflicts) {
-            com.brahmadeo.supertonic.tts.local.LocalRussianStress.homographVariants(ctx, it) }).take(40)
-        val checked = if (disputes.isEmpty()) outputs
-        else {
-            // The same provider judges by default: on «Идиот» ch. 1 it scored 34-36/42 key words against 33/42 for a
-            // Gemini judge (hard set 63/71 both), and it needs no second key or extra requests to another service.
-            val hasGemini = c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()
-            val hasOllama = c.ollamaModel.isNotBlank()
-            val gemini = provider == "gemini"
-            val judgeGemini = when (LlmProviders.verifierOverride) {
-                "GEMINI" -> hasGemini
-                "OLLAMA" -> !hasOllama
-                "SAME" -> gemini
-                else -> gemini
+        val plan = com.brahmadeo.supertonic.tts.local.RussianStressVote.plan(ctx, outputs, silero, sources)
+        val asked = plan.disputes.take(StressCheck.MAX_JUDGED)
+        val choices: List<Int?>? = if (asked.isEmpty()) emptyList() else try {
+            val first = StressCheck.items(asked, secondFirst = false)
+            val second = StressCheck.items(asked, secondFirst = true)
+            val (a, b) = if (judge == "local") {
+                // One Gemma at a time: the two orders run one after the other.
+                LlmProviders.verifyStressLocal(ctx, c, first, stopped) to LlmProviders.verifyStressLocal(ctx, c, second, stopped)
+            } else {
+                // The same provider judges by default: on «Идиот» ch. 1 it scored 34-36/42 key words against 33/42 for
+                // a Gemini judge (hard set 63/71 both), and it needs no second key or extra requests to another service.
+                val hasGemini = c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()
+                val hasOllama = c.ollamaModel.isNotBlank()
+                val judgeGemini = when (LlmProviders.verifierOverride) {
+                    "GEMINI" -> hasGemini
+                    "OLLAMA" -> !hasOllama
+                    else -> judge == "gemini"
+                }
+                val judgeProvider = if (LlmProviders.verifierOverride in listOf("GEMINI", "OLLAMA")) { if (judgeGemini) "gemini" else "ollama" } else judge
+                val reversed = verifyPool.submit<List<Int?>> { LlmProviders.verifyStress(c, second, judgeGemini, stopped, judgeProvider) }
+                try {
+                    LlmProviders.verifyStress(c, first, judgeGemini, stopped, judgeProvider) to reversed.get(30, TimeUnit.SECONDS)
+                } finally { reversed.cancel(true) }
             }
-            val judgeProvider = if (LlmProviders.verifierOverride in listOf("GEMINI", "OLLAMA")) { if (judgeGemini) "gemini" else "ollama" } else provider
-            val reversed = verifyPool.submit<List<Int?>> { LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = true), judgeGemini, stopped, judgeProvider) }
-            val choices = try {
-                LlmProviders.verifyStress(c, StressCheck.items(disputes, offlineFirst = false), judgeGemini, stopped, judgeProvider) + reversed.get(30, TimeUnit.SECONDS)
-            } finally { reversed.cancel(true) }
-            // The judge disagreeing with itself: the full dictionary decides non-homographs (when downloaded).
-            val dictionaryReady = StressJudgeDictionary.ensure(ctx)
-            StressCheck.apply(outputs, disputes, choices) { d ->
-                val bare = StressCheck.bareWord(d)
-                val nameOrdinal = if (bare.first().isUpperCase()) com.brahmadeo.supertonic.tts.utils.RussianNames.ordinal(bare) else null
-                if (nameOrdinal != null) nameOrdinal == StressCheck.offlineOrdinal(d)
-                else dictionaryReady && !com.brahmadeo.supertonic.tts.local.LocalRussianStress.isHomograph(ctx, bare) &&
-                    StressJudgeDictionary.ordinal(bare).let { it != null && it == StressCheck.offlineOrdinal(d) }
-            }
+            val n = plan.disputes.size
+            List(2 * n) { i -> if (i < n) a.getOrNull(i) else b.getOrNull(i - n) }
+        } catch (e: Exception) {
+            if (e is java.util.concurrent.CancellationException || stopped()) throw e
+            Log.w("LlmPreparation", "Stress judge failed: ${e.javaClass.simpleName}: ${e.message}; dictionaries decide"); null
         }
-        Log.i("LlmPreparation", "Stress cross-check judge=${if (disputes.isEmpty()) "-" else LlmProviders.lastVerifier} disputes=${disputes.size} offlineChosen=${StressCheck.lastOfflineChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
-        checked to offline
+        val checked = StressCheck.resolve(plan, choices, com.brahmadeo.supertonic.tts.local.RussianStressVote.tie(ctx))
+        Log.i("LlmPreparation", "Stress vote judge=${if (asked.isEmpty()) "-" else if (judge == "local") "gemma" else LlmProviders.lastVerifier} agreed=${plan.agreed} single=${plan.single} llmOnly=${plan.llmOnly} disputes=${plan.disputes.size} asked=${asked.size} secondChosen=${StressCheck.lastSecondChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
+        checked to silero
     } catch (e: Exception) {
-        Log.w("LlmPreparation", "Stress cross-check skipped: ${e.javaClass.simpleName}: ${e.message}")
+        if (e is java.util.concurrent.CancellationException) throw e
+        Log.w("LlmPreparation", "Stress vote skipped: ${e.javaClass.simpleName}: ${e.message}")
         outputs to null
     }
     private val wordPattern = Regex("[+А-Яа-яЁё\u0301]+")
@@ -563,10 +562,11 @@ object LlmPreparation {
                         val named = if (c.restoreYo && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo) {
                             com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) } else withNames
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
-                            // Stress: the offline Silero Stress outscored Gemma, so it decides where both mark a word.
-                            // One Silero pass serves both the arbitration and the fill of words Gemma left unmarked.
-                            val offlineOpinion=offlineMarks(ctx,named,null)
-                            val arbitrated=if(c.stress) StressCheck.preferOffline(named,offlineOpinion,source) else named
+                            // Stress: RUAccent and Silero vote, Gemma judges their disagreements (as the cloud does).
+                            // One Silero pass serves both the vote and the fill of words nobody marked.
+                            val (voted,opinions)=if(c.stress) stressVote(ctx,c,listOf(named),listOf(source),"local") { expectedEpoch != epoch || cancelled() } else listOf(named) to null
+                            val offlineOpinion=opinions?.single() ?: offlineMarks(ctx,named,null)
+                            val arbitrated=voted.single()
                             val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(arbitrated,offlineOpinion,c.restoreYo)
                             MissingSpeechMarks.merge(arbitrated,safe,c.stress,c.restoreYo,ambiguousLocalYo)
                         } else if (c.stress) {
@@ -590,7 +590,7 @@ object LlmPreparation {
                     val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (NameStress.hint(requestTexts) +
                         com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList(), provider = provider)
                     if (expectedEpoch != epoch || cancelled()) break // No judge requests for a cancelled batch.
-                    val (checked, opinions) = if (c.stress) crossCheck(ctx,c,outputs,provider) { expectedEpoch != epoch || cancelled() } else outputs to null
+                    val (checked, opinions) = if (c.stress) stressVote(ctx,c,outputs,requestTexts,provider) { expectedEpoch != epoch || cancelled() } else outputs to null
                     batchOpinions = opinions
                     try { checked.forEachIndexed { index,text -> accept(index,text) } } finally { batchOpinions = null }
                 }

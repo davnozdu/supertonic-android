@@ -41,17 +41,21 @@ internal object StressProbe {
         try { prepare(ctx, provider, paragraphs) } finally { LlmProviders.instructionOverride = null; LlmProviders.cloudInstructionOverride = null }
     }
 
-    /** The offline chain alone (Silero Stress + dictionary), as the dictionary fallback marks a paragraph. */
+    /** The offline chain alone (RUAccent + Silero vote), as the dictionary fallback marks a paragraph. */
     private fun offline(ctx: Context, paragraphs: List<String>) {
         val out = JSONArray()
+        StressCheck.takeDecisions()
+        val decisions = JSONArray()
         for (p in paragraphs) {
-            val marked = com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
-                com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(ctx, p), "ru")
+            val marked = com.brahmadeo.supertonic.tts.local.RussianStressVote.offline(ctx,
+                com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(p, "ru"))
                 .replace(Regex("\\+([аеёиоуыэюяАЕЁИОУЫЭЮЯ])")) { it.groupValues[1] + "\u0301" }
             out.put(JSONObject().put("source", p).put("text", marked).put("provider", "offline").put("fallback", false).put("ms", 0).put("reason", ""))
         }
+        StressCheck.takeDecisions().forEach { decisions.put(it) }
         File(ctx.cacheDir, "stress-probe-out.json").writeText(out.toString(1))
-        Log.i("SpeechCheck", "STRESS PROBE DONE paragraphs=${paragraphs.size} mode=OFFLINE")
+        File(ctx.cacheDir, "stress-probe-decisions.json").writeText(decisions.toString(1))
+        Log.i("SpeechCheck", "STRESS PROBE DONE paragraphs=${paragraphs.size} mode=OFFLINE dictionary=${com.brahmadeo.supertonic.tts.local.RussianStressVote.dictionaryReady(ctx)}")
     }
 
     private fun prepare(ctx: Context, provider: String?, paragraphs: List<String>) {

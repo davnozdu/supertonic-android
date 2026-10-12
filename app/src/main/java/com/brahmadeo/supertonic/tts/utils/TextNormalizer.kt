@@ -342,8 +342,10 @@ class TextNormalizer {
                 val original = t
                 if (!skipStress) {
                     t = RussianNames.restore(context, t)
-                    context?.let { t = com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(it, t) }
+                    // An imported dictionary is the user's choice: its words are marked first and stay as they are.
                     t = AccentDictionaryManager.apply(t, lowerLang)
+                    // RUAccent's dictionary and Silero Stress vote; without an LLM a disagreement takes RUAccent's mark.
+                    context?.let { t = com.brahmadeo.supertonic.tts.local.RussianStressVote.offline(it, t) }
                     t = RussianYoPolicy.apply(original, t, context?.getSharedPreferences("llm_settings",0)?.getBoolean("restore_yo",true) ?: true)
                 }
                 t

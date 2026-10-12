@@ -57,12 +57,17 @@ class NamesAndYoTest {
     }
 
     @Test fun agreedHomographsAreAskedToo() {
+        // Silero agrees with the LLM on both homographs ("звучал о́рган" is wrong): RUAccent lists them, so the judge
+        // is asked anyway; with no dictionary mark the homograph's first option is Silero's.
         val llm = listOf("Звучал о́рган, а он уже́ ушёл.")
-        val variants = mapOf("орган" to listOf("о́рган", "орга́н"), "уже" to listOf("уже́", "у́же"))
-        val d = StressCheck.homographs(llm, emptyList()) { variants[it] }
-        assertEquals(listOf("о́рган/орга́н", "уже́/у́же"), d.map { "${it.llm}/${it.offline}" })
-        assertEquals("Звучал ⟨орган⟩, а он уже ушёл.", d[0].sentence)
-        // Homographs never take the dictionary tie-break: an inconsistent judge keeps the LLM mark.
-        assertEquals(llm, StressCheck.apply(llm, d, listOf(0, 0, 0, 0)) { true })
+        val variants = mapOf("орган" to listOf(1, 2), "уже" to listOf(1, 2))
+        val p = StressCheck.plan(llm, listOf("Звучал +орган, а он уж+е ушёл."), { null }, { variants[it] })
+        assertEquals(listOf("о́рган/орга́н", "уже́/у́же"), p.disputes.map { "${it.first}/${it.second}" })
+        assertEquals(listOf(true, true), p.disputes.map { it.homograph })
+        assertEquals("Звучал ⟨орган⟩, а он уже ушёл.", p.disputes[0].sentence)
+        // An inconsistent judge: the LLM's own mark stays (it is one of the two options).
+        assertEquals(llm, StressCheck.resolve(p, listOf(0, 0, 0, 0)))
+        // A consistent one switches: орган both times second, уже both times first.
+        assertEquals(listOf("Звучал орга́н, а он уже́ ушёл."), StressCheck.resolve(p, listOf(1, 0, 0, 1)))
     }
 }

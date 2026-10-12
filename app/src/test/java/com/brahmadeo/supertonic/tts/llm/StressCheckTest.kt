@@ -4,59 +4,70 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class StressCheckTest {
-    private val llm = listOf("Это ещё оттепе́ль, а он нача́л смея́ться. Мы́шкин молча́л.")
-    private val offline = listOf("Это ещё о́ттепель, а он на́чал смея́ться. Мышки́н молча́л.")
+    // RUAccent's dictionary (homographs left out) and its homograph variants, as on the phone.
+    private val dictionary = mapOf("оттепель" to 1, "смеяться" to 3, "молчал" to 2, "мышкин" to 1, "начал" to 1, "хлопок" to 2)
+    private val homographs = mapOf("замок" to listOf(1, 2), "начал" to listOf(1, 2))
+    private fun plan(llm: String, silero: String, keep: Set<String> = emptySet(), llmAsDictionary: Boolean = false) =
+        StressCheck.plan(listOf(llm), listOf(silero), { dictionary[it] }, { homographs[it] }, { _, w -> w in keep }, llmAsDictionary)
 
-    @Test fun findsOnlyDisagreements() {
-        val d = StressCheck.disputes(llm, offline)
-        assertEquals(listOf("оттепе́ль/о́ттепель", "нача́л/на́чал", "Мы́шкин/Мышки́н"), d.map { "${it.llm}/${it.offline}" })
-        assertEquals("Это ещё ⟨оттепель⟩, а он начал смеяться.", d[0].sentence)
-        assertEquals("⟨Мышкин⟩ молчал.", d[2].sentence)
+    @Test fun agreementIsFinalEvenAgainstTheLlm() {
+        val p = plan("Это оттепе́ль, все смея́лись.", "Это +оттепель, все сме+ялись.")
+        assertEquals(0, p.disputes.size)
+        assertEquals("Это о́ттепель, все смея́лись.", StressCheck.resolve(p, emptyList()).single())
+        assertEquals(1, p.agreed); assertEquals(1, p.single)
     }
 
-    @Test fun eachDisputeIsAskedInBothOrdersAndSwitchesOnlyWhenConsistent() {
-        val d = StressCheck.disputes(llm, offline)
-        assertEquals(listOf("оттепе́ль", "о́ттепель"), StressCheck.items(d, offlineFirst = false)[0].options)
-        assertEquals(listOf("о́ттепель", "оттепе́ль"), StressCheck.items(d, offlineFirst = true)[0].options)
-        // оттепель: offline both times -> switch; начал: offline then LLM -> keep; name: LLM both times -> keep.
-        val fixed = StressCheck.apply(llm, d, listOf(1, 1, 0, 0, 1, 1))
-        assertEquals("Это ещё о́ттепель, а он нача́л смея́ться. Мы́шкин молча́л.", fixed.single())
-        assertEquals(1, StressCheck.lastOfflineChosen)
+    @Test fun disagreementsAndHomographsGoToTheJudgeInBothOrders() {
+        // хлопок: RUAccent 2, Silero 1; замок: homograph, Silero chose 2; оттепель agreed.
+        val p = plan("Хло́пок, за́мок и оттепе́ль.", "Хл+опок, зам+ок и +оттепель.")
+        assertEquals(listOf("хлопо́к/хло́пок", "замо́к/за́мок"), p.disputes.map { "${it.first}/${it.second}" }.map { it.lowercase() })
+        assertEquals(listOf(false, true), p.disputes.map { it.homograph })
+        assertEquals("⟨Хлопок⟩, замок и оттепель.", p.disputes[0].sentence)
+        assertEquals(listOf("Хлопо́к", "Хло́пок"), StressCheck.items(p.disputes, secondFirst = false)[0].options)
+        assertEquals(listOf("Хло́пок", "Хлопо́к"), StressCheck.items(p.disputes, secondFirst = true)[0].options)
+        // хлопок: second both times -> Хло́пок; замок: first both times -> замо́к.
+        assertEquals("Хло́пок, замо́к и о́ттепель.", StressCheck.resolve(p, listOf(1, 0, 0, 1)).single())
+        assertEquals(1, StressCheck.lastSecondChosen)
     }
 
-    @Test fun anInconsistentJudgeLeavesTheDecisionToTheTieBreaker() {
-        val d = StressCheck.disputes(llm, offline)
-        // оттепель: judge said 0 and 0 (inconsistent) -> tie-breaker (dictionary) says offline;
-        // начал: 1 and 1 (inconsistent), tie-breaker refuses -> LLM stays; name: consistent LLM.
-        val fixed = StressCheck.apply(llm, d, listOf(0, 1, 0, 0, 1, 1)) { it.offline == "о́ттепель" }
-        assertEquals("Это ещё о́ттепель, а он нача́л смея́ться. Мы́шкин молча́л.", fixed.single())
-        assertEquals(0, StressCheck.lastOfflineChosen)
-        assertEquals(1, StressCheck.lastTieBreaks)
-        assertEquals(1, StressCheck.offlineOrdinal(d[0]))
-        assertEquals("оттепель", StressCheck.bareWord(d[0]))
+    @Test fun aContradictingJudgeFallsBackToTheLlmMarkThenRuaccent() {
+        val p = plan("Хло́пок, за́мок.", "Хл+опок, зам+ок.")
+        // Both asks picked position 0: the judge contradicts itself. хлопок: the LLM's own mark (1) is an option;
+        // замок: the LLM's mark (1) is the second option too.
+        assertEquals("Хло́пок, за́мок.", StressCheck.resolve(p, listOf(0, 0, 0, 0)).single())
+        assertEquals(2, StressCheck.lastTieBreaks)
+        // No LLM at all: a disagreement takes RUAccent's mark, a homograph Silero's.
+        val offline = plan("Хлопок, замок.", "Хл+опок, зам+ок.")
+        assertEquals("Хлопо́к, замо́к.", StressCheck.resolve(offline, null).single())
+        // A name dictionary may decide first.
+        assertEquals("Хло́пок, замо́к.", StressCheck.resolve(offline, null) { if (it.first.startsWith("Хл")) 1 else null }.single())
     }
 
-    @Test fun localGemmaYieldsToOfflineExceptExplicitSourceMarks() {
-        val gemma = "Ра́скольников жил в Вологде́, а за́мок был стар."
-        val offline = "Раско́льников жил в Во́логде, а замо́к был стар."
-        assertEquals("Раско́льников жил в Во́логде, а замо́к был стар.",
-            StressCheck.preferOffline(gemma, offline, "Раскольников жил в Вологде, а замок был стар."))
-        // The book itself marked за́мок: that mark stays.
-        assertEquals("Раско́льников жил в Во́логде, а за́мок был стар.",
-            StressCheck.preferOffline(gemma, offline, "Раскольников жил в Вологде, а за+мок был стар."))
+    @Test fun aWordNoDictionaryKnowsKeepsTheLlmMark() {
+        val p = plan("Тут ве́рмишель.", "Тут вермишель.")
+        assertEquals(1, p.llmOnly)
+        assertEquals("Тут ве́рмишель.", StressCheck.resolve(p, null).single())
     }
 
-    @Test fun preferOfflineIsNotLimitedByTheJudgeBudget() {
-        val n = 45
-        val gemma = List(n) { "оттепе́ль" }.joinToString(" ") + "."
-        val offline = List(n) { "о́ттепель" }.joinToString(" ") + "."
-        assertEquals(offline, StressCheck.preferOffline(gemma, offline, List(n) { "оттепель" }.joinToString(" ") + "."))
-        assertEquals(40, StressCheck.disputes(listOf(gemma), listOf(offline)).size)
+    @Test fun marksAddedToUnmarkedWordsDoNotShiftLaterDisputes() {
+        // Without an LLM every new mark makes a word one character longer; the dispute after them must still land.
+        val p = plan("Оттепель, молчал, хлопок.", "+Оттепель, молч+ал, хл+опок.")
+        assertEquals("О́ттепель, молча́л, хлопо́к.", StressCheck.resolve(p, null).single())
     }
 
-    @Test fun skipsYoMonosyllablesAndMisalignedFragments() {
-        assertEquals(0, StressCheck.disputes(listOf("Всё ещё́ тут."), listOf("Всё е́щё тут.")).size)
-        assertEquals(0, StressCheck.disputes(listOf("Оди́н два."), listOf("Оди́н.")).size)
-        assertEquals(0, StressCheck.disputes(listOf("Вода́ тут"), listOf("Вода тут")).size)
+    @Test fun yoExplicitMonosyllablesAndMisalignedSileroAreSkipped() {
+        val p = plan("Ещё о́ттепель, а он был тут.", "Ещё оттеп+ель, а он был тут.", keep = setOf("оттепель"))
+        assertEquals(0, p.disputes.size + p.agreed + p.single)
+        assertEquals("Ещё о́ттепель, а он был тут.", StressCheck.resolve(p, null).single())
+        assertEquals(setOf("за+мок".replace("+", ""), "оттепель"), StressCheck.explicitWords("За+мок и о́ттепель, хлопок."))
+        // Silero's text does not line up: only the dictionary speaks (single source).
+        val q = plan("Оттепель молчал.", "Оттепель.")
+        assertEquals("О́ттепель молча́л.", StressCheck.resolve(q, null).single())
+    }
+
+    @Test fun withoutTheDictionaryTheLlmMarkIsTheSecondOpinion() {
+        val p = StressCheck.plan(listOf("Вермише́ль тут."), listOf("Верм+ишель тут."), { null }, { null }, llmAsDictionary = true)
+        assertEquals(1, p.disputes.size)
+        assertEquals("Вермише́ль/Верми́шель", "${p.disputes[0].first}/${p.disputes[0].second}")
     }
 }

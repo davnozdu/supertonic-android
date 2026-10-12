@@ -148,7 +148,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
                             message = "Кэш текста и аудио очищен. Уже переданный Android звук может доиграть; следующие фрагменты будут подготовлены заново."
                         }) { Text("Очистить кэш текста и аудио") }
-                        Text("Целые числа сначала точно переводятся в слова. LLM расставляет ударения и пунктуацию и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется.", style = MaterialTheme.typography.bodySmall)
+                        Text("Целые числа сначала точно переводятся в слова. Ударения расставляют словарь RUAccent (179 МБ, скачивается сам по Wi-Fi) и Silero; где они расходятся и в омографах, выбирает LLM. LLM ставит пунктуацию, ё и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется.", style = MaterialTheme.typography.bodySmall)
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
                             Text("Звук Tera",style=MaterialTheme.typography.titleMedium)
                             Text("PCM 44,1 кГц, 16 бит. Быстрый distilled — по умолчанию. Teacher — альтернативный полный синтез, примерно в 2–3 раза медленнее; результат сравните на слух.",style=MaterialTheme.typography.bodySmall)
@@ -242,7 +242,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             Toggle("Локальные ударения и ё по контексту", offlineStress) {
                                 offlineStress = it; pausePrefs.edit().putBoolean("local_russian_stress",it).apply()
                             }
-                            if (!offlineStress) Text("Локальный акцентор выключен. Если LLM недоступна или не успела ответить, Silero может читать слова без правильных ударений. Для стабильного чтения рекомендуется включить локальные ударения; ударения LLM сохраняют приоритет.", style = MaterialTheme.typography.bodySmall)
+                            if (!offlineStress) Text("Локальный акцентор выключен. Если LLM недоступна или не успела ответить, Silero может читать слова без правильных ударений. Для стабильного чтения рекомендуется включить локальные ударения: их расставляют словарь RUAccent и Silero, а спорные слова и омографы решает LLM.", style = MaterialTheme.typography.bodySmall)
                             Button(enabled = !offlineBusy && !offlineReady, onClick = {
                                 offlineBusy = true
                                 scope.launch {
