@@ -142,27 +142,33 @@ object LlmPreparation {
     private val readerStyle = ReaderQueueStyle()
     /** Texts of readers that hand over one sentence at a time, read at once by the dictionaries (bounded), with the
      * voice parts guessed on the phone ([LocalSpeakers]): no LLM, so no pause before the sentence. */
-    private val direct = LinkedHashMap<String, List<VoiceRoleText>>()
+    private val directTexts = LinkedHashMap<String, List<VoiceRoleText>>()
     private val localSpeakers = LocalSpeakers()
     const val DIRECT_KEY = "reader_direct_offline"
     /** Records how app [uid] queues text; true when the text should not wait for the LLM («Не ждать LLM в читалках
      * без очереди», on by default): the app sends one utterance at a time, so nothing can be prepared ahead. */
     fun directReader(ctx: Context, caller: Any, uid: Int, text: String, flush: Boolean): Boolean {
         readerStyle.record(uid, flush)
-        if (!ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(DIRECT_KEY, true) ||
-            !readerStyle.oneAtATime(uid)) return false
-        val plan = if (LlmSettings.multiVoiceEnabled(ctx) && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)) runCatching {
+        val roles = LlmSettings.multiVoiceEnabled(ctx) && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)
+        val direct = ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(DIRECT_KEY, true)
+        if (!direct || !readerStyle.oneAtATime(uid)) {
+            // Not recognised yet (the first sentences): still follow the dialogue, so a reply begun with a dash
+            // keeps its speaker once the app is recognised. Apps that queue ahead (Moon+) use the LLM instead.
+            if (direct && roles && !readerStyle.queues(uid)) runCatching { synchronized(localSpeakers) { localSpeakers.plan(text) } }
+            return false
+        }
+        val plan = if (roles) runCatching {
             // The prepared book (if this text belongs to one): its characters and voices, its first-person choice.
             val book = com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, com.brahmadeo.supertonic.tts.books.BookMatcher.feed(ctx, caller, text))
             val cast = book?.cast?.characters.orEmpty().map { LocalSpeakers.Person(it.id, it.gender, it.forms + it.name) }
             synchronized(localSpeakers) { localSpeakers.plan(text, cast, book?.firstPerson ?: LlmSettings.firstPerson(ctx)) }
                 .map { part -> part.copy(voice = book?.voiceOf(part.role, part.character)) }
         }.getOrElse { emptyList() } else emptyList()
-        synchronized(direct) { direct[text] = plan; while (direct.size > 32) direct.remove(direct.keys.first()) }
+        synchronized(directTexts) { directTexts[text] = plan; while (directTexts.size > 32) directTexts.remove(directTexts.keys.first()) }
         return true
     }
     fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500, retainForPlayback: Boolean = false): Result {
-        synchronized(direct) { if (text in direct) direct.remove(text) else null }?.let { plan ->
+        synchronized(directTexts) { if (text in directTexts) directTexts.remove(text) else null }?.let { plan ->
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reader without a queue: dictionaries, no LLM wait chars=${text.length} voices=${plan.size}")
             return Result(text, "словарь", 0, true, "Читалка без очереди", voicePlan = plan, rolesReady = plan.isNotEmpty(), roleProvider = "local")
         }

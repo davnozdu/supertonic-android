@@ -13,6 +13,9 @@ internal class ReaderQueueStyle {
         while (apps.size > 16) apps.remove(apps.keys.first())
     }
 
+    /** [uid] has queued an utterance behind another (Moon+): it never needs the one-at-a-time handling. */
+    @Synchronized fun queues(uid: Int): Boolean = (apps[uid]?.adds ?: 0) > 0
+
     /** Two utterances or more seen from [uid], none queued behind another. */
     @Synchronized fun oneAtATime(uid: Int): Boolean = apps[uid]?.let { it.adds == 0 && it.flushes >= 2 } ?: false
 }

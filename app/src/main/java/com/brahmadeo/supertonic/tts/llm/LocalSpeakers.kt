@@ -75,10 +75,18 @@ class LocalSpeakers {
         return out
     }
 
+    private val interjections = setOf("гм", "ну", "эх", "ах", "ох", "ей", "эй", "ой", "ага", "хе", "ха", "фью", "тьфу", "вишь", "эка", "эвона")
+    private val pastVerb = Regex("^[а-яё]{2,}(л|ла|ло|ли|лся|лась|лось|лись)$")
+
+    /** A sentence after speech, without a dash of its own (Readest sends a long reply sentence by sentence): still the
+     * reply unless it reads like narration — past-tense verbs and nothing of spoken language (я/вы, «-с», «гм», ! ? …). */
     private fun continuesSpeech(text: String): Boolean {
         val t = text.trim()
-        if (t.endsWith("!") || t.endsWith("?") || t.endsWith("!..") || t.endsWith("?..") || t.endsWith("?!")) return true
-        return word.findAll(t.lowercase()).any { it.value in addressing }
+        if (t.endsWith("!") || t.endsWith("?") || t.endsWith("…") || t.endsWith("..") || t.endsWith("?!")) return true
+        val words = word.findAll(t.lowercase()).map { it.value }.toList()
+        if (words.any { it in addressing || it in interjections }) return true
+        if (Regex("[А-Яа-яЁё]-с(?![А-Яа-яЁё])").containsMatchIn(t)) return true
+        return words.none { pastVerb.matches(it) }
     }
 
     private fun fromRemark(remark: String, cast: List<Person>, firstPerson: Boolean): Speaker? {
@@ -103,12 +111,12 @@ class LocalSpeakers {
 
     private fun role(gender: String) = when (gender) { "f" -> VoiceRole.FEMALE; else -> VoiceRole.MALE }
 
-    /** A line without a remark: the participant who did not speak last; with no history, a male voice. */
+    /** A line without a remark: the other known participant; with one known, a man answers a woman and a man answers a
+     * man (most classic dialogues are between men — a guessed woman's voice there sounds wrong). */
     private fun next(): Speaker {
         val last = recent.lastOrNull() ?: return Speaker(VoiceRole.MALE, null)
-        return recent.lastOrNull { it != last } ?: if (last.character == null) Speaker(other(last.role), null) else last
+        return recent.lastOrNull { it != last } ?: if (last.character == null) Speaker(VoiceRole.MALE, null) else last
     }
-    private fun other(role: VoiceRole) = if (role == VoiceRole.FEMALE) VoiceRole.MALE else VoiceRole.FEMALE
 
     private fun remember(s: Speaker) {
         if (recent.lastOrNull() == s) return

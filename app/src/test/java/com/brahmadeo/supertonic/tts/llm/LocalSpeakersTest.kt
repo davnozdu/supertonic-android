@@ -35,6 +35,19 @@ class LocalSpeakersTest {
         assertEquals("A=— Иду, — сказал я.", show(LocalSpeakers().plan("— Иду, — сказал я.", firstPerson = true)))
     }
 
+    @Test fun aLongReplySentByTheSentenceStaysWithItsSpeaker() {
+        val s = LocalSpeakers()
+        assertEquals("M=— Даром деньги на франкировку письма истратили.", show(s.plan("— Даром деньги на франкировку письма истратили.")))
+        assertEquals("M=Гм… по крайней мере, простодушны и искренны, а сие похвально!", show(s.plan("Гм… по крайней мере, простодушны и искренны, а сие похвально!")))
+        assertEquals("M=Гм… генерала же Епанчина знаем-с, собственно потому, что человек общеизвестный.",
+            show(s.plan("Гм… генерала же Епанчина знаем-с, собственно потому, что человек общеизвестный.")))
+        assertEquals("M=Другой доселе в Крыму, а Николай Андреевич, покойник, был человек почтенный и четыре тысячи душ имели-с…",
+            show(s.plan("Другой доселе в Крыму, а Николай Андреевич, покойник, был человек почтенный и четыре тысячи душ имели-с…")))
+        // Narration: past tense, nothing spoken.
+        assertEquals("A=Оказалось, что и это было так: белокурый молодой человек тотчас же объявил.",
+            show(s.plan("Оказалось, что и это было так: белокурый молодой человек тотчас же объявил.")))
+    }
+
     @Test fun quotesAndPlainTextKeepTheTextIntact() {
         val s = LocalSpeakers()
         assertEquals("M=«Иду!» | A=— крикнул он.", show(s.plan("«Иду!» — крикнул он.")))
