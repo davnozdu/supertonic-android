@@ -70,6 +70,7 @@ class BooksActivity : ComponentActivity() {
                         try {
                             val source = withContext(Dispatchers.IO) { BookPreparation.source(this@BooksActivity) }
                             if (!BookPreparation.start(this@BooksActivity, uri, source, replies = true, repliesFor = id)) message = "Подготовка другой книги уже идёт."
+                            else allowBackground()
                         } catch (_: Exception) { message = "Для разметки реплик настройте облачную модель и ключ в настройках LLM." }
                     }
                 }
@@ -101,7 +102,7 @@ class BooksActivity : ComponentActivity() {
                     confirmButton = { TextButton(onClick = {
                         val uri = pendingUri!!; val source = pendingSource!!
                         pendingUri = null; pendingSource = null
-                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn)) message = "Подготовка другой книги уже идёт." }
+                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn)) message = "Подготовка другой книги уже идёт." else allowBackground() }
                         catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите книгу снова." }
                     }) { Text("Подготовить") } },
                     dismissButton = { TextButton(onClick = { pendingUri = null; pendingSource = null }) { Text("Отмена") } }
@@ -212,6 +213,17 @@ class BooksActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    /** Preparation runs for minutes with the screen off. OnePlus (Hans) freezes an app and drops its network when
+     * the screen goes off unless it may run without battery restrictions — the cloud request then hangs until the
+     * screen is on again. Ask once with the system dialog; reading aloud never needed it (playing audio is exempt). */
+    private fun allowBackground() {
+        val power = getSystemService(android.os.PowerManager::class.java)
+        if (power?.isIgnoringBatteryOptimizations(packageName) != false) return
+        runCatching {
+            startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
         }
     }
 
