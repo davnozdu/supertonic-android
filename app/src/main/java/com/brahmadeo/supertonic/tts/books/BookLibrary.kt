@@ -89,9 +89,26 @@ object BookLibrary {
         generateSequence { if (c.moveToNext()) c.getLong(0) to c.getString(1) else null }.toMap()
     }
 
-    /** The file as imported, for «Поделиться». */
-    fun json(context: Context, id: Long): String? =
-        db(context).rawQuery("SELECT json FROM books WHERE id=?", arrayOf(id.toString())).use { if (it.moveToFirst()) it.getString(0) else null }
+    /** Characters per read: a row is read through a CursorWindow of ~2 MB, and a novel with «Разметка реплик» is
+     * larger («Идиот»: 2.5 MB). Read whole, it threw SQLiteBlobTooBigException after a restart, so the book was not
+     * recognised, its voices were not shown and its replies could not be marked again. */
+    private const val CHUNK = 200_000
+
+    /** The file as imported, for «Поделиться». Read in pieces (see [CHUNK]). */
+    fun json(context: Context, id: Long): String? {
+        val db = db(context)
+        val key = id.toString()
+        val length = db.rawQuery("SELECT length(json) FROM books WHERE id=?", arrayOf(key)).use { if (it.moveToFirst()) it.getLong(0) else null } ?: return null
+        val out = StringBuilder(length.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+        var start = 1L
+        while (start <= length) {
+            db.rawQuery("SELECT substr(json, ?, ?) FROM books WHERE id=?", arrayOf(start.toString(), CHUNK.toString(), key)).use {
+                if (it.moveToFirst()) out.append(it.getString(0)) else return null
+            }
+            start += CHUNK
+        }
+        return out.toString()
+    }
 
     fun get(context: Context, id: Long): BookPackage? = packages[id] ?: json(context, id)?.let { BookPackage.parse(it) }?.also { packages[id] = it }
 
