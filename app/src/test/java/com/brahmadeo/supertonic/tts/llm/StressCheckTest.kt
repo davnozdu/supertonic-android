@@ -144,4 +144,13 @@ class StressCheckTest {
         assertEquals(1, p.disputes.size)
         assertEquals("⟨замка⟩".let { "У замка нет $it." }, p.disputes.single().sentence)
     }
+
+    @Test fun gemmasAddedYoNeedsADictionary() {
+        val known = setOf("черный" to "чёрный", "все" to "всё")
+        val out = StressCheck.confirmYo("Звонит телефон, черный и все.", "Звони́т телёфон, чёрный и всё.") { e, yo -> (e to yo) in known }
+        assertEquals("Звони́т телефон, чёрный и всё.", out)
+        // The book's own ё and a changed word count are left alone.
+        assertEquals("Ёлка телёфон", StressCheck.confirmYo("Ёлка телёфон", "Ёлка телёфон") { _, _ -> false })
+        assertEquals("Ёлка", StressCheck.confirmYo("Елка и", "Ёлка") { _, _ -> false })
+    }
 }

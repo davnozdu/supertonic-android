@@ -234,7 +234,9 @@ object LlmPreparation {
         val offlineMs = SystemClock.elapsedRealtime() - started
         val plan = com.brahmadeo.supertonic.tts.local.RussianStressVote.plan(ctx, outputs, silero, sources, cloud = judge != "local", bookNames = bookNames)
         val asked = plan.disputes.take(StressCheck.MAX_JUDGED)
-        val choices: List<Int?>? = if (asked.isEmpty()) emptyList() else try {
+        // Local Gemma does not judge: on the hard probe set it answered few disputes, mostly wrongly (59/71 against 61/71
+        // for the dictionaries' rule), and it cost 1-3 s per paragraph. The no-judge rule decides (choices = null).
+        val choices: List<Int?>? = if (asked.isEmpty()) emptyList() else if (judge == "local") null else try {
             val first = StressCheck.items(asked, secondFirst = false)
             val second = StressCheck.items(asked, secondFirst = true)
             val (a, b) = if (judge == "local") {
@@ -626,7 +628,7 @@ object LlmPreparation {
                         numericInputs[index].ranges, c.restoreYo, requireStress=provider!="local" && c.stress, onReject)
                     // One rewritten word or misplaced mark must not send a whole, otherwise correct
                     // paragraph to the offline dictionary: repair only those words, then re-validate.
-                    val validated = check(proposed) { rejection = it } ?: PreparedTextRepair.repair(source, proposed)?.let { fix ->
+                    var validated = check(proposed) { rejection = it } ?: PreparedTextRepair.repair(source, proposed)?.let { fix ->
                         check(fix.text) {}?.also { Log.i("LlmPreparation", "Repaired fragment=$index, chars=${source.length}, provider=$provider, reason=$rejection, replacedWords=${fix.replacedWords}") }
                     }
                     if (traceSynthetic) Log.i("SpeechCheck","SYNTHETIC PROPOSAL provider=$provider: $proposed")
@@ -634,6 +636,17 @@ object LlmPreparation {
                         // Names: learn from the cloud models (the small local one stresses them less reliably),
                         // then give a known name the LLM left unmarked the stress this book already uses.
                         probeRaw?.put(source, validated)
+                        // Gemma's own ё only where a dictionary has it on that vowel (or the word is one of the
+                        // context pairs все/всё, узнает/узнаёт): it wrote «телёфон».
+                        if (provider == "local" && c.restoreYo) {
+                            com.brahmadeo.supertonic.tts.local.RussianStressVote.dictionaryReady(ctx) // loads RUAccent's dictionary
+                            validated = StressCheck.confirmYo(source, validated) { e, yo ->
+                                val yoVowel = yo.substring(0, yo.indexOf('ё') + 1).count { it in "аеёиоуыэюя" }
+                                e in ambiguousLocalYo ||
+                                    com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, e)?.replace("\u0301", "")?.lowercase() == yo ||
+                                    StressJudgeDictionary.ordinal(e) == yoVowel
+                            }
+                        }
                         // Only the marks the LLM placed itself: a name the dictionaries filled in is not a second opinion.
                         if (c.stress && provider != "local") NameStress.learn(validated, batchRaw?.getOrNull(requestIndex)?.let { NameStress.marked(it) })
                         val learned = if (c.stress) NameStress.fill(validated) else validated

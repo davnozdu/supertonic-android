@@ -95,6 +95,26 @@ object StressCheck {
     }
     private fun capitalised(w: String) = w.first().isUpperCase() && w.drop(1).any { it.isLowerCase() }
 
+    /** ё an LLM added ([text] against [source], word by word) is kept only when [confirmed] (bare lowercase е-form,
+     * its ё-form) says so; otherwise the word is spelled with е again (keeping its mark). Local Gemma wrote
+     * «телёфон»; the cloud's added ё goes to the judge in [plan] instead. */
+    fun confirmYo(source: String, text: String, confirmed: (String, String) -> Boolean): String {
+        val a = word.findAll(source).toList()
+        val b = word.findAll(text).toList()
+        if (a.size != b.size) return text
+        val out = StringBuilder(text)
+        for (i in b.indices.reversed()) {
+            val w = b[i].value
+            if ('ё' !in w && 'Ё' !in w) continue
+            val src = bare(a[i].value)
+            if ('ё' in src || 'Ё' in src || key(w) != key(src)) continue
+            val yoForm = bare(w).lowercase()
+            if (confirmed(yoForm.replace('ё', 'е'), yoForm)) continue
+            out.replace(b[i].range.first, b[i].range.last + 1, w.replace('ё', 'е').replace('Ё', 'Е'))
+        }
+        return out.toString()
+    }
+
     /** [fragments]: the LLM's text with its own marks, or the plain text without an LLM. [silero]: Silero Stress on
      * [unmarked] of the same fragment. [dictionary]: RUAccent's ordinal of a bare lowercase word (null = unknown).
      * [homograph]: the variant ordinals of a RUAccent homograph. [keep]: words never touched (fragment, bare lowercase,
