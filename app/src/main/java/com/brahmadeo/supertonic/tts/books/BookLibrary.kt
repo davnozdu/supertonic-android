@@ -71,12 +71,22 @@ object BookLibrary {
     private fun removeLocked(db: SQLiteDatabase, id: Long) {
         db.delete("fingerprints", "book=?", arrayOf(id.toString()))
         db.delete("books", "id=?", arrayOf(id.toString()))
-        packages.remove(id)
+        packages.remove(id); shas.remove(id)
     }
 
     fun list(context: Context): List<Entry> = db(context).rawQuery(
         "SELECT id, title, author, characters, sections, added FROM books ORDER BY added DESC", null).use { c ->
         generateSequence { if (c.moveToNext()) Entry(c.getLong(0), c.getString(1), c.getString(2).orEmpty(), c.getInt(3), c.getInt(4), c.getLong(5)) else null }.toList()
+    }
+
+    private val shas = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    /** content_sha256 of book [id]: the same text keeps it through a regeneration or a delete and new import, so the
+     * voices chosen for the book are stored under it (BookVoices), not under the row id. */
+    fun contentSha(context: Context, id: Long): String? = shas[id] ?: db(context).rawQuery("SELECT content_sha FROM books WHERE id=?",
+        arrayOf(id.toString())).use { if (it.moveToFirst()) it.getString(0) else null }?.also { shas[id] = it }
+    /** Every book: row id -> content_sha256. */
+    fun contentShas(context: Context): Map<Long, String> = db(context).rawQuery("SELECT id, content_sha FROM books", null).use { c ->
+        generateSequence { if (c.moveToNext()) c.getLong(0) to c.getString(1) else null }.toMap()
     }
 
     /** The file as imported, for «Поделиться». */
