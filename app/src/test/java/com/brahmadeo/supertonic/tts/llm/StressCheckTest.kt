@@ -82,7 +82,7 @@ class StressCheckTest {
 
     @Test fun dictionariesAgreeingOnACommonWordDoNotOverruleTheLlmOnASurname() {
         // базаров = gen. pl. of базар for both dictionaries; the LLM knows Ба́заров.
-        val p = cloud("Пришёл Ба́заров.", "Пришёл База+ров.", dict = mapOf("базаров" to 2))
+        val p = cloud("Пришёл Ба́заров.", "Пришёл Баз+аров.", dict = mapOf("базаров" to 2))
         assertEquals(listOf("Ба́заров/База́ров"), p.disputes.map { "${it.first}/${it.second}" })
         assertEquals("Пришёл Ба́заров.", StressCheck.resolve(p, null).single())
         assertEquals("Пришёл Ба́заров.", StressCheck.resolve(p, listOf(0, 0, 0, 0)).single()) // contradicting judge
@@ -100,16 +100,16 @@ class StressCheckTest {
 
     @Test fun knownNamesSentenceStartsAndGemmaKeepTheVote() {
         // The names dictionary knows it: the usual vote (here the dictionaries agree, final).
-        val known = cloud("Пришёл Ба́заров.", "Пришёл База+ров.", dict = mapOf("базаров" to 2), known = setOf("базаров"))
+        val known = cloud("Пришёл Ба́заров.", "Пришёл Баз+аров.", dict = mapOf("базаров" to 2), known = setOf("базаров"))
         assertEquals("Пришёл База́ров.", StressCheck.resolve(known, null).single())
         // A sentence start is an ordinary word for all we know...
-        val start = cloud("Ба́заров пришёл.", "База+ров пришёл.", dict = mapOf("базаров" to 2))
+        val start = cloud("Ба́заров пришёл.", "Баз+аров пришёл.", dict = mapOf("базаров" to 2))
         assertEquals("База́ров пришёл.", StressCheck.resolve(start, null).single())
         // ...unless the prepared book lists it among its characters.
-        val book = cloud("Ба́заров пришёл.", "База+ров пришёл.", dict = mapOf("базаров" to 2), book = setOf("базаров"))
+        val book = cloud("Ба́заров пришёл.", "Баз+аров пришёл.", dict = mapOf("базаров" to 2), book = setOf("базаров"))
         assertEquals("Ба́заров пришёл.", StressCheck.resolve(book, null).single())
         // Without knownName (local Gemma) nothing changes.
-        assertEquals("Пришёл База́ров.", StressCheck.resolve(plan("Пришёл Ба́заров.", "Пришёл База+ров."), null).single())
+        assertEquals("Пришёл База́ров.", StressCheck.resolve(plan("Пришёл Ба́заров.", "Пришёл Баз+аров."), null).single())
     }
 
     @Test fun anLlmYoTheDictionaryDoesNotKnowIsAsked() {
@@ -127,7 +127,7 @@ class StressCheckTest {
 
     @Test fun homographsOfThreeVariantsAndOutsideMarksAreAsked() {
         val v = mapOf("выходите" to listOf(1, 2, 3), "замок" to listOf(1, 2))
-        val three = cloud("Выходи́те.", "Вы+ходите.", variants = v)
+        val three = cloud("Выходи́те.", "В+ыходите.", variants = v)
         assertEquals(listOf("Вы́ходите/Выходи́те"), three.disputes.map { "${it.first}/${it.second}" })
         assertEquals("Выходи́те.", StressCheck.resolve(three, null).single())
         // Silero's mark is none of the variants: the LLM's variant against the other one, not a final Silero mark.

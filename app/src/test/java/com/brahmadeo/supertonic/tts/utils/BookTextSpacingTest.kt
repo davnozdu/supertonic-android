@@ -33,7 +33,6 @@ class BookTextSpacingTest {
         assertEquals("Он пил молоко.", BookTextSpacing.normalize("\uFEFFОн пил мо\u00ADлоко."))
         assertEquals("ёж и йод", BookTextSpacing.canonical("е\u0308ж и и\u0306од"))
         assertEquals("молоко\u0301 и ве\u0301ник", BookTextSpacing.canonical("молоко\u0300 и ве\u0300ник"))
-        assertEquals("слово", BookTextSpacing.canonical("сло\u200Bво"))
         // Latin letters inside a Russian word (a stress typed as ó, look-alikes); foreign words stay for the other engine.
         assertEquals("молоко\u0301, Хорошо, ёлка", BookTextSpacing.canonical("молокó, Xорошо, ëлка"))
         assertEquals("iPhone-ом, Shakespeare и café", BookTextSpacing.canonical("iPhone-ом, Shakespeare и café"))

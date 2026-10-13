@@ -458,7 +458,6 @@ FNV_OFFSET, FNV_PRIME, MASK64 = 0xcbf29ce484222325, 0x100000001b3, (1 << 64) - 1
 # составные буквы собраны (е + ◌̈ = ё), гравис-ударение заменено на акут, латинские двойники внутри русского слова
 # стали кириллицей. Иначе подготовленный текст читалки не совпадает с отпечатками книги.
 INVISIBLE = dict.fromkeys(map(ord, "\u00ad\ufeff\u2060\u200c\u200d\u180e"))
-WORD_SPACE = re.compile(r"(?<=[^\W\d_])\u200b(?=[^\W\d_])")
 GRAVE_STRESS = re.compile("([аеёиоуыэюяАЕЁИОУЫЭЮЯ])\u0300")
 TOKEN = re.compile(r"(?:[^\W\d_]|[\u0300-\u036f])+")
 LATIN = {"a": "а", "e": "е", "o": "о", "p": "р", "c": "с", "x": "х", "y": "у", "k": "к",
@@ -473,8 +472,6 @@ def _cyrillic(c: str) -> bool:
 
 def canonical(text: str) -> str:
     t = text.translate(INVISIBLE)
-    if "\u200b" in t:
-        t = WORD_SPACE.sub("", t)
     if any(0x300 <= ord(c) <= 0x36F or c in "ѐѝЀЍ" for c in t):
         t = unicodedata.normalize("NFC", t).replace("ѐ", "е\u0301").replace("ѝ", "и\u0301").replace("Ѐ", "Е\u0301").replace("Ѝ", "И\u0301")
         t = GRAVE_STRESS.sub(lambda m: m.group(1) + "\u0301", t)
