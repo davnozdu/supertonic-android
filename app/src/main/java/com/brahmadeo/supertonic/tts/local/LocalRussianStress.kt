@@ -131,7 +131,7 @@ object LocalRussianStress {
                 // Capitalized personal names remain names, never guessed as a different ё-name.
                 val properNames=mapOf("Лене" to "Л+ене","Дарье" to "Д+арье","Пети" to "П+ети","Алле" to "+Алле","Инге" to "+Инге")
                 properNames[original]?.let { return@replace it }
-                if (original == "Семена" && text.take(m.range.first).trimEnd().lastOrNull()?.let { it !in ".!?…" } == true)
+                if (original == "Семена" && m.range.first > 0 && !com.brahmadeo.supertonic.tts.utils.SentenceStart.at(text, m.range.first))
                     return@replace "Семёна"
                 yoDictionary?.lookup(original.toByteArray(Charsets.UTF_8))?.let { return@replace it }
                 if (lower == "письма" && Regex("текст\\s+$",RegexOption.IGNORE_CASE).containsMatchIn(text.take(m.range.first)))

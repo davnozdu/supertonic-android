@@ -68,4 +68,31 @@ class PreparedTextValidatorTest {
         assertNull(PreparedTextValidator.validate("Он все знает", "Он всё понима́ет."))
         assertEquals("Все лю́ди пришли́.", PreparedTextValidator.validate("Все люди пришли", "Все лю́ди пришли́."))
     }
+
+    @Test fun quoteStylesAndApostrophesFollowTheSource() {
+        // Another quote style or apostrophe from the LLM: the source characters are put back, the stress kept.
+        assertEquals("Он сказа́л: \"Иди́ домо́й\".", PreparedTextValidator.validate("Он сказал: \"Иди домой\".", "Он сказа́л: «Иди́ домо́й»."))
+        assertEquals("Он сказа́л: «Иди́ домо́й».", PreparedTextValidator.validate("Он сказал: «Иди домой».", "Он сказа́л: \"Иди́ домо́й\"."))
+        assertEquals("«Он сказа́л: „Иди́ домо́й“», — отве́тила она́.",
+            PreparedTextValidator.validate("«Он сказал: „Иди домой“», — ответила она.", "«Он сказа́л: «Иди́ домо́й»», — отве́тила она́."))
+        assertEquals("Пришёл д’Артанья́н.", PreparedTextValidator.validate("Пришёл д’Артаньян.", "Пришёл д'Артанья́н."))
+        assertEquals("Сло́во ‹дом› ста́рое.", PreparedTextValidator.validate("Слово ‹дом› старое.", "Сло́во \"дом\" ста́рое."))
+        // A quote moved to another place is still a rewrite.
+        assertNull(PreparedTextValidator.validate("Он сказал «готов»", "Он «сказа́л гото́в»"))
+        var reason = ""
+        PreparedTextValidator.validate("«окно»", "окно́") { reason = it }
+        assertEquals("quotes", reason)
+    }
+
+    @Test fun punctuationIsAddedOrChangedButNeverDeleted() {
+        // Sentence ends of the source stay.
+        assertEquals("Да. Нет. Это бы́ло не раз.", PreparedTextValidator.validate("Да. Нет. Это было не раз.", "Да Нет Это бы́ло не раз."))
+        assertEquals("Он ушёл.", PreparedTextValidator.validate("Он ушёл.", "Он ушёл"))
+        // The author's comma and dash stay; a comma may become a dash, a new comma may be added.
+        assertEquals("Ну, что́ ж — пойдём.", PreparedTextValidator.validate("Ну, что ж — пойдём.", "Ну что́ ж пойдём."))
+        assertEquals("Ну — что́ ж, пойдём.", PreparedTextValidator.validate("Ну, что ж пойдём.", "Ну — что́ ж, пойдём."))
+        assertEquals("Да! Нет?", PreparedTextValidator.validate("Да. Нет.", "Да! Нет?"))
+        // The leading dialogue dash marks a reply for the voices.
+        assertEquals("— Иди́ домо́й.", PreparedTextValidator.validate("— Иди домой.", "Иди́ домо́й."))
+    }
 }

@@ -33,4 +33,20 @@ class NameStressTest {
         NameStress.learn("— Хорошо́, — сказа́л он. «Ла́дно» и Ганя")
         assertEquals(emptyList<String>(), NameStress.hint(listOf("Хорошо Ладно")))
     }
+
+    @Test fun learnsOnlyWhatTheLlmMarkedItself() {
+        NameStress.clear()
+        // The vote filled «Залу́меров» from Silero; the LLM had marked only «Мы́шкин».
+        NameStress.learn("Вошли Мы́шкин и Залу́меров.", NameStress.marked("Вошли Мы́шкин и Залумеров."))
+        assertEquals(listOf("Мы́шкин"), NameStress.hint(listOf("и Мышкин и Залумеров")))
+    }
+
+    @Test fun yoSpellingsShareOneNameAndMarksMustFollowAVowel() {
+        NameStress.clear()
+        NameStress.learn("и Семе́нов пришёл")
+        assertEquals("Семе́нов", NameStress.fill("Семенов"))
+        NameStress.clear()
+        NameStress.learn("Пришёл Залум́еров.")
+        assertEquals("Залумеров", NameStress.fill("Залумеров"))
+    }
 }

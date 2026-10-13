@@ -6,7 +6,14 @@ object PreparedTextValidator {
     private val numbers = Regex("[0-9]+(?:[.,:/-][0-9]+)*")
     private val vowels = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
     private fun plain(s: String) = s.replace("+", "").replace("\u0301", "")
-    private fun symbols(s: String) = s.filter { !it.isLetterOrDigit() && !it.isWhitespace() && it !in "+\u0301,.;:!?…—–-\"'«»“”„()[]" }
+    /** Quotes and apostrophes: an LLM may write «» for "" or ' for ’; their places are checked, the source's characters
+     * are put back. Brackets must stay as they are. */
+    private const val QUOTES = "\"'«»“”„‚‘’‹›"
+    private const val DELIMITERS = QUOTES + "()[]"
+    private const val SENTENCE_END = ".!?…"
+    private const val INNER_MARKS = ",;:—–"
+    private fun symbols(s: String) = s.filter { !it.isLetterOrDigit() && !it.isWhitespace() && it !in "+\u0301,.;:!?…—–-" && it !in DELIMITERS }
+    private fun shape(s: String) = s.filter { it in DELIMITERS }.map { if (it in QUOTES) 'Q' else it }.joinToString("")
     fun validate(original: String, response: String, allowPunctuation: Boolean = true, allowStress: Boolean = true,
                  numberRanges: List<IntRange> = emptyList(), allowYo: Boolean = true, requireStress: Boolean = allowStress,
                  onReject: (String) -> Unit = {}): String? {
@@ -14,8 +21,10 @@ object PreparedTextValidator {
         // Some providers insert dialogue quotes despite the instruction. If the
         // source has none, discard those formatting additions before validation.
         // Existing source quotes/brackets must still retain their exact anchors.
-        val delimiters = "\"'«»“”„()[]"
-        val proposed = if (original.none { it in delimiters }) response.filterNot { it in delimiters } else response
+        val stripped = if (original.none { it in DELIMITERS }) response.filterNot { it in DELIMITERS } else response
+        if (shape(original) != shape(stripped)) return reject("quotes")
+        val sourceQuotes = original.filter { it in QUOTES }.iterator()
+        val proposed = stripped.map { if (it in QUOTES) sourceQuotes.next() else it }.joinToString("")
         if (proposed.length > original.length * 2 + 100 || proposed.isBlank()) return reject("response_length")
         val a = words.findAll(original).toList()
         val b = words.findAll(proposed).toList()
@@ -30,19 +39,19 @@ object PreparedTextValidator {
         if (numbers.findAll(original).map { it.value }.toList() != numbers.findAll(proposed).map { it.value }.toList()) return reject("number_changed")
         if (symbols(original) != symbols(proposed)) return reject("unsupported_symbols")
         if (original.count { it == '\n' } != proposed.count { it == '\n' }) return reject("paragraph_count")
-        if (original.filter { it in "\"'«»“”„()[]" } != proposed.filter { it in "\"'«»“”„()[]" }) return null
+        if (original.filter { it in DELIMITERS } != proposed.filter { it in DELIMITERS }) return reject("quotes")
         // A hyphen inside a word is spelling, not freely editable punctuation.
         for (i in 0 until a.lastIndex) {
             val sourceGap = original.substring(a[i].range.last + 1, a[i + 1].range.first)
             val targetGap = proposed.substring(b[i].range.last + 1, b[i + 1].range.first)
             if ((sourceGap == "-") != (targetGap == "-")) return reject("word_hyphen")
             if (sourceGap.count { it == '+' } != targetGap.count { it == '+' }) return reject("plus_operator")
-            if (sourceGap.count { it == '\n' } != targetGap.count { it == '\n' }) return null
-            if (sourceGap.filter { it in "\"'«»“”„()[]" } != targetGap.filter { it in "\"'«»“”„()[]" }) return null
+            if (sourceGap.count { it == '\n' } != targetGap.count { it == '\n' }) return reject("paragraph_moved")
+            if (sourceGap.filter { it in DELIMITERS } != targetGap.filter { it in DELIMITERS }) return reject("quotes_moved")
         }
-        fun anchors(s: String) = s.filter { it == '\n' || it in "+\"'«»“”„()[]" }
-        if (anchors(original.substring(0, a.first().range.first)) != anchors(proposed.substring(0, b.first().range.first))) return null
-        if (anchors(original.substring(a.last().range.last + 1)) != anchors(proposed.substring(b.last().range.last + 1))) return null
+        fun anchors(s: String) = s.filter { it == '\n' || it == '+' || it in DELIMITERS }
+        if (anchors(original.substring(0, a.first().range.first)) != anchors(proposed.substring(0, b.first().range.first))) return reject("edge_anchors")
+        if (anchors(original.substring(a.last().range.last + 1)) != anchors(proposed.substring(b.last().range.last + 1))) return reject("edge_anchors")
         val replacements = mutableListOf<Pair<IntRange, String>>()
         var needsStress = false
         var suppliedStress = false
@@ -94,8 +103,23 @@ object PreparedTextValidator {
             for (i in a.indices.reversed()) out.replace(a[i].range.first, a[i].range.last + 1, replacements[i].second)
             return out.toString()
         }
-        val out = StringBuilder(proposed)
-        for ((range, replacement) in replacements.asReversed()) out.replace(range.first, range.last + 1, replacement)
+        // Punctuation may be added or corrected, never deleted: a sentence end of the source stays («Да. Нет.» is not
+        // «Да Нет»: intonation, pauses, the homograph's sentence), and so does the author's comma, colon or dash where
+        // the answer left no mark at all. Such a gap is taken from the source as a whole.
+        // The leading dialogue dash marks a reply for the voices: it is kept like any other mark.
+        fun keep(source: String, target: String, dash: Boolean = false): String {
+            val inner = if (dash) INNER_MARKS + "-" else INNER_MARKS
+            val lostEnd = source.any { it in SENTENCE_END } && target.none { it in SENTENCE_END }
+            val lostMark = source.any { it in inner } && target.none { it in inner || it in SENTENCE_END }
+            return if (lostEnd || lostMark) source else target
+        }
+        val out = StringBuilder(keep(original.substring(0, a.first().range.first), proposed.substring(0, b.first().range.first), dash = true))
+        for (i in a.indices) {
+            out.append(replacements[i].second)
+            if (i == a.lastIndex) break
+            out.append(keep(original.substring(a[i].range.last + 1, a[i + 1].range.first), proposed.substring(b[i].range.last + 1, b[i + 1].range.first)))
+        }
+        out.append(keep(original.substring(a.last().range.last + 1), proposed.substring(b.last().range.last + 1)))
         return out.toString()
     }
 }

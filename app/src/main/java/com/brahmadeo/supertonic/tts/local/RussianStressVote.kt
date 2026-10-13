@@ -37,12 +37,20 @@ object RussianStressVote {
     /** RUAccent's dictionary ready (downloaded once, unmetered network); false = the download is started. */
     fun dictionaryReady(ctx: Context) = StressJudgeDictionary.ensure(ctx)
 
-    /** [fragments] with the LLM's marks ([sources] give the book's own explicit marks) planned against [silero]. */
-    fun plan(ctx: Context, fragments: List<String>, silero: List<String>, sources: List<String>): StressCheck.Plan {
+    /** [fragments] with the LLM's marks ([sources] give the book's own explicit marks) planned against [silero].
+     * [cloud]: the LLM names people and places reliably, so unknown names and the ё it added are checked against it
+     * (Gemma's own marks are weaker than the dictionaries'). */
+    fun plan(ctx: Context, fragments: List<String>, silero: List<String>, sources: List<String>, cloud: Boolean = false,
+             bookNames: Set<String> = emptySet()): StressCheck.Plan {
         val ready = dictionaryReady(ctx)
-        val explicit = sources.map { StressCheck.explicitWords(it) }
+        val explicit = sources.map { StressCheck.explicitOccurrences(it) }
+        if (cloud) com.brahmadeo.supertonic.tts.utils.RussianNames.init(ctx)
+        val added = if (cloud) fragments.indices.map { StressCheck.addedYo(sources.getOrElse(it) { "" }, fragments[it]) } else emptyList()
         return StressCheck.plan(fragments, silero, { if (ready) StressJudgeDictionary.ordinal(it) else null },
-            { homographVariants(ctx, it) }, { f, w -> w in explicit.getOrElse(f) { emptySet() } }, llmAsDictionary = !ready)
+            { homographVariants(ctx, it) }, { f, w, n -> explicit.getOrNull(f)?.get(w)?.contains(n) == true }, llmAsDictionary = !ready,
+            knownName = if (cloud) ({ w: String -> com.brahmadeo.supertonic.tts.utils.RussianNames.form(w) != null }) else null,
+            addedYo = { f, w -> added.getOrNull(f)?.contains(w) == true },
+            bookName = { w -> w.lowercase().replace('ё', 'е') in bookNames })
     }
 
     /** Tie-break for a judge that contradicts itself (or is unavailable): a capitalised name takes the names
@@ -63,9 +71,9 @@ object RussianStressVote {
         // Silero's ё (its safe dictionary, «Семёна») first: a word with ё needs no mark and is left out of the vote.
         val withYo = com.brahmadeo.supertonic.tts.llm.MissingSpeechMarks.merge(text, silero, stress = false, yo = true)
         val ready = dictionaryReady(ctx)
-        val explicit = StressCheck.explicitWords(text)
+        val explicit = StressCheck.explicitOccurrences(text)
         val plan = StressCheck.plan(listOf(withYo), listOf(silero), { if (ready) StressJudgeDictionary.ordinal(it) else null },
-            { homographVariants(ctx, it) }, { _, w -> w in explicit })
+            { homographVariants(ctx, it) }, { _, w, n -> explicit[w]?.contains(n) == true })
         return StressCheck.resolve(plan, null, tie(ctx)).single()
     }
 }

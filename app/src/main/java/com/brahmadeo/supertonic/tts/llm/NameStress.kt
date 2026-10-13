@@ -16,17 +16,15 @@ object NameStress {
     }
 
     private fun bare(w: String) = w.replace(ACUTE.toString(), "")
+    /** One key for «Семенов» and «Семёнов». */
+    private fun key(w: String) = bare(w).lowercase().replace('ё', 'е')
     private fun vowelCount(w: String) = w.count { it in VOWELS }
     private fun capitalized(w: String) = w.first().isUpperCase() && w.drop(1).any { it.isLowerCase() }
-    private fun sentenceStart(text: String, index: Int): Boolean {
-        var i = index - 1
-        while (i >= 0 && (text[i].isWhitespace() || text[i] in "«»\"„“”'()[]—–-")) { if (text[i] == '\n') return true; i-- }
-        return i < 0 || text[i] in ".!?…:;"
-    }
+    private fun sentenceStart(text: String, index: Int) = com.brahmadeo.supertonic.tts.utils.SentenceStart.at(text, index)
     /** Ordinal of the vowel carrying the acute mark, or null when there is none. */
     private fun stressOrdinal(w: String): Int? {
         val mark = w.indexOf(ACUTE)
-        if (mark <= 0 || w.indexOf(ACUTE, mark + 1) >= 0) return null
+        if (mark <= 0 || w.indexOf(ACUTE, mark + 1) >= 0 || w[mark - 1] !in VOWELS) return null
         return w.substring(0, mark).count { it in VOWELS }.takeIf { it > 0 }
     }
     private fun best(key: String): Int? = names[key]?.maxByOrNull { it.value }?.key
@@ -37,12 +35,17 @@ object NameStress {
         return out.toString()
     }
 
-    @Synchronized fun learn(text: String) {
+    /** Keys of the words of [text] that carry a mark: what an LLM stressed itself. */
+    fun marked(text: String): Set<String> = word.findAll(text).map { it.value }.filter { ACUTE in it }.map { key(it) }.toSet()
+
+    /** Learns the names of [text]; with [only], just those keys (the words the LLM marked itself). */
+    @Synchronized fun learn(text: String, only: Set<String>? = null) {
         for (m in word.findAll(text)) {
             val w = m.value
             if (!capitalized(w) || sentenceStart(text, m.range.first) || vowelCount(w) < 2) continue
+            if (only != null && key(w) !in only) continue
             val ordinal = stressOrdinal(w) ?: continue
-            val counts = names.getOrPut(bare(w).lowercase()) { HashMap() }
+            val counts = names.getOrPut(key(w)) { HashMap() }
             counts[ordinal] = (counts[ordinal] ?: 0) + 1
         }
     }
@@ -53,7 +56,7 @@ object NameStress {
         for (text in texts) for (m in word.findAll(text)) {
             val w = bare(m.value)
             if (!capitalized(w) || vowelCount(w) < 2) continue
-            val ordinal = best(w.lowercase()) ?: continue
+            val ordinal = best(key(w)) ?: continue
             out += withStress(w, ordinal)
             if (out.size >= limit) return out.toList()
         }
@@ -64,7 +67,7 @@ object NameStress {
     @Synchronized fun fill(text: String): String = word.replace(text) { m ->
         val w = m.value
         if (ACUTE in w || 'ё' in w || 'Ё' in w || !capitalized(w) || vowelCount(w) < 2) w
-        else best(w.lowercase())?.let { withStress(w, it) } ?: w
+        else best(key(w))?.let { withStress(w, it) } ?: w
     }
 
     @Synchronized fun clear() = names.clear()

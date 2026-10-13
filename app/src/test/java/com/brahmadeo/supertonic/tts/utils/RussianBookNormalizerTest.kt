@@ -49,4 +49,11 @@ class RussianBookNormalizerTest {
         val once=RussianBookNormalizer.normalize("05.05.2024 в 02:01, 3,14 кг, SIM-карта [1]")
         assertEquals(once,RussianBookNormalizer.normalize(once))
     }
+
+    @Test fun footnoteMarksAreDropped() {
+        assertEquals("Он пил молоко. Дальше.", RussianBookNormalizer.normalize("Он пил молоко¹. Дальше.", expandNumbers = false, dates = false))
+        assertEquals("Он пил молоко. Дальше.", RussianBookNormalizer.normalize("Он пил молоко.* Дальше.", expandNumbers = false, dates = false))
+        // A «* * *» separator stays.
+        assertEquals("* * *", RussianBookNormalizer.normalize("* * *", expandNumbers = false, dates = false))
+    }
 }

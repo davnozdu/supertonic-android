@@ -11,7 +11,8 @@ object RussianNames {
     private const val ACUTE = '́'
     private const val VOWELS = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
     @Volatile private var forms: Map<String, String>? = null
-    private val word = Regex("[А-Яа-яЁё́]+")
+    // '+' inside the word as in StressCheck.explicitOccurrences, so occurrence numbers line up.
+    private val word = Regex("[+А-Яа-яЁё́]+")
     /** Name forms that open a sentence equally well as common words ("Семена взошли"), with the name's family. */
     private val ambiguousAtSentenceStart = mapOf("семена" to "семен")
     /** Name families met inside sentences in this reading (RAM): then a sentence-initial "Семена" is the name too. */
@@ -36,11 +37,7 @@ object RussianNames {
 
     private fun key(w: String) = w.replace(ACUTE.toString(), "").replace("+", "").lowercase().replace('ё', 'е')
     private fun capitalised(w: String) = w.first().isUpperCase() && w.drop(1).any { it.isLowerCase() }
-    private fun sentenceStart(text: String, index: Int): Boolean {
-        var i = index - 1
-        while (i >= 0 && (text[i].isWhitespace() || text[i] in "«»\"„“”'()[]—–-")) { if (text[i] == '\n') return true; i-- }
-        return i < 0 || text[i] in ".!?…:;"
-    }
+    private fun sentenceStart(text: String, index: Int) = SentenceStart.at(text, index)
 
     /** Dictionary form of a capitalised word, lowercase with ё and an acute mark (null when unknown). */
     fun form(word: String): String? = forms?.get(key(word))
@@ -75,40 +72,64 @@ object RussianNames {
         return f
     }
 
-    /** Capitalised names get the dictionary's ё always and its stress when the word has no mark yet. A mark the
-     * LLM placed stays (the stress check compares it with this dictionary); ё makes any other mark redundant.
+    /** Capitalised names (and names in capitals, «ФЕДОР») get the dictionary's ё and its stress when the word has no
+     * mark yet. A mark the LLM placed stays (the stress check compares it with this dictionary). ё replaces a mark
+     * on the same vowel («Семе́н» -> «Семён»), not one on another vowel: «Федо́ра Егоровна» is another name than the
+     * dictionary's «Фёдора». [explicit]: the occurrences the book or the user lexicon marked (bare lowercase word ->
+     * occurrence numbers, [com.brahmadeo.supertonic.tts.llm.StressCheck.explicitOccurrences]) are never changed.
      * [stress] and [yo] are the user's switches: each adds only its own kind of mark. */
-    fun restore(ctx: Context?, text: String, stress: Boolean = true, yo: Boolean = true): String {
+    fun restore(ctx: Context?, text: String, stress: Boolean = true, yo: Boolean = true,
+                explicit: Map<String, Set<Int>> = emptyMap()): String {
         if (!stress && !yo) return text
         if (forms == null && ctx != null) init(ctx)
         val map = forms ?: return text
         if (map.isEmpty()) return text
-        return word.replace(text) { m ->
+        val occurrences = HashMap<String, Int>()
+        val t = compounds(text, map, marked = false) { allowed(it, stress, yo) }
+        return word.replace(t) { m ->
             val w = m.value
-            if (!capitalised(w) || '+' in w) return@replace w
+            val plain = w.replace(ACUTE.toString(), "").replace("+", "").lowercase()
+            val n = occurrences[plain] ?: 0
+            occurrences[plain] = n + 1
+            if (!(capitalised(w) || capitals(w)) || '+' in w || explicit[plain]?.contains(n) == true) return@replace w
             val f = map[key(w)]?.let { allowed(it, stress, yo) } ?: return@replace w
-            if (ambiguousHere(text, m.range.first, key(w))) return@replace w
-            if (!sentenceStart(text, m.range.first)) remember(key(w))
+            if (ambiguousHere(t, m.range.first, key(w))) return@replace w
+            if (!sentenceStart(t, m.range.first)) remember(key(w))
             val hasYo = 'ё' in f
             when {
                 ACUTE !in w && 'ё' !in w && 'Ё' !in w -> respell(w, f)
-                // ё carries the stress itself, so the LLM's mark (possibly on another vowel) is replaced.
-                hasYo && 'ё' !in w.lowercase() -> respell(w, f)
+                hasYo && 'ё' !in w.lowercase() && stressed(w) == yoVowel(f) -> respell(w, f)
                 else -> w
             }
         }
     }
+    /** Unmarked hyphenated names the dictionary has as a whole (Алма-Ата́, Али-Баба́, Абу-Да́би): one mark for the name,
+     * not a guess for each part. Marked parts and the book's own spelling are left to the word pass. */
+    private val compound = Regex("(?<![+А-Яа-яЁё́-])\\+?[А-ЯЁ][+А-Яа-яЁё́]*(?:-[+А-Яа-яЁё́]+)+(?![+А-Яа-яЁё́-])")
+    /** [marked]: Silero's opinion, whose marks are replaced; otherwise a marked part keeps the name as written. */
+    private fun compounds(text: String, map: Map<String, String>, marked: Boolean, form: (String) -> String): String =
+        if ('-' !in text) text else compound.replace(text) { m ->
+            if (!marked && m.value.any { it == '+' || it == ACUTE }) m.value
+            else map[key(m.value)]?.let { respell(m.value, form(it)) } ?: m.value
+        }
+    /** A whole word in capitals (a heading, «ФЕДОР»), at least three letters: abbreviations are shorter or unknown. */
+    private fun capitals(w: String) = w.length >= 3 && w.all { it.isUpperCase() || it == ACUTE }
+    private fun stressed(w: String): Int? = w.indexOf(ACUTE).takeIf { it > 0 }?.let { i -> w.substring(0, i).count { it in VOWELS } }
+    private fun yoVowel(f: String): Int = f.substring(0, f.indexOf('ё') + 1).count { it in VOWELS }
 
     /** The offline opinion for the stress check: every capitalised name the dictionary knows takes its stress, so
-     * the LLM's name marks are compared with Wiktionary rather than with Silero's guess for an unknown word. */
+     * the LLM's name marks are compared with Wiktionary rather than with Silero's guess for an unknown word.
+     * [text] is Silero's output: its marks are '+' («Волк+ов»), replaced here (before 5.0.4-beta27 a '+' word was
+     * skipped, so the overlay almost never applied and RUAccent's «волко́в» agreed with Silero against Во́лков). */
     fun overlay(ctx: Context?, text: String): String {
         if (forms == null && ctx != null) init(ctx)
         val map = forms ?: return text
-        return word.replace(text) { m ->
+        val t = compounds(text, map, marked = true) { it }
+        return word.replace(t) { m ->
             val w = m.value
-            if (!capitalised(w) || '+' in w) return@replace w
+            if (!capitalised(w.replace("+", ""))) return@replace w
             val f = map[key(w)] ?: return@replace w
-            if (ACUTE !in f || ambiguousHere(text, m.range.first, key(w))) w else respell(w, f)
+            if (ACUTE !in f || ambiguousHere(t, m.range.first, key(w))) w else respell(w, f)
         }
     }
 

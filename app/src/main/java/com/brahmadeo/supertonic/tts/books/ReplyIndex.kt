@@ -55,7 +55,7 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
         const val WINDOW = 4
         private const val SPACE = "\\s\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000\\uFEFF"
         private val unit = Regex("[^$SPACE]+[$SPACE]*")
-        private val dialogue = Regex("^[$SPACE]*[—–\\-]|«")
+        private val dialogue = Regex("^[$SPACE]*[—–\\-]|[«„“\"]")
 
         /** Lowercase letters and digits of a word (ё → е, no stress marks). */
         fun letters(word: String) = BookFingerprint.letters(word)

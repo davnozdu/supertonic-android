@@ -16,7 +16,8 @@ class LocalSpeakers {
     private val dash = Regex("^[\\s\\p{Z}]*[—–-][\\s\\p{Z}]")
     /** ", — " / "! — " / "? — " / "… — " between speech and remark (and back). */
     private val turn = Regex("(?<=[,.!?…:])[\\s\\p{Z}]+[—–][\\s\\p{Z}]+")
-    private val quoteLead = Regex("^[\\s\\p{Z}]*«[^»]+»[,!?…]?(?=[\\s\\p{Z}]+[—–][\\s\\p{Z}])")
+    // Speech in «…», „…“, “…” or "…" before a dash remark: books and readers use all four.
+    private val quoteLead = Regex("^[\\s\\p{Z}]*(?:«[^»]+»|„[^“”]+[“”]|“[^”]+”|\"[^\"]+\")[,!?…]?(?=[\\s\\p{Z}]+[—–][\\s\\p{Z}])")
     private val word = Regex("[А-Яа-яЁё]+")
     private val addressing = setOf("я", "мы", "ты", "вы", "вас", "вам", "вами", "меня", "мне", "мной", "тебя", "тебе", "тобой",
         "нас", "нам", "нами", "ваш", "ваша", "ваше", "ваши", "наш", "наша", "наше", "мой", "моя", "моё", "мое", "твой", "твоя")

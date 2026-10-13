@@ -70,6 +70,9 @@ class LocalSpeakersTest {
     @Test fun quotesAndPlainTextKeepTheTextIntact() {
         val s = LocalSpeakers()
         assertEquals("M=«Иду!» | A=— крикнул он.", show(s.plan("«Иду!» — крикнул он.")))
+        // The same speech in „…“ and "…".
+        assertEquals("F=„Иду!“ | A=— крикнула она.", show(LocalSpeakers().plan("„Иду!“ — крикнула она.")))
+        assertEquals("M=\"Иду!\" | A=— крикнул он.", show(LocalSpeakers().plan("\"Иду!\" — крикнул он.")))
         val text = "В конце ноября, в оттепель, поезд подходил к Петербургу."
         assertEquals(text, s.plan(text).joinToString("") { it.text })
         assertEquals("A=" + text, show(s.plan(text)))

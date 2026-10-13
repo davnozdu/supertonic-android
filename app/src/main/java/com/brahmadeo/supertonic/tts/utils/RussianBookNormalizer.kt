@@ -279,6 +279,9 @@ object RussianBookNormalizer {
         var t=abbreviations(BookTextSpacing.normalize(text))
         t=rx("(?<=[а-яёА-ЯЁ])-\\s*\\r?\\n\\s*(?=[а-яёА-ЯЁ])").replace(t,"")
         t=rx("\\[\\d{1,5}]").replace(t,"")
+        // Footnote marks after a word or its punctuation («слово¹», «слово.*»): an LLM wrote them as digits and the
+        // whole paragraph failed. Units keep theirs (км², м³) and «* * *» separators stand alone.
+        t=rx("(?<=[\\p{L}]{3}|[.,!?;:…»”)\\]])(?:[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\\*{1,3})(?=[\\s\\p{P}]|$)").replace(t,"")
         for ((key,value) in mapOf("т. е." to "то есть","т.е." to "то есть","т. д." to "так далее","т.д." to "так далее","т. п." to "тому подобное","т.п." to "тому подобное","т.к." to "так как","г-н" to "господин","г-жа" to "госпожа"))
             t=rx("(?<![\\p{L}])${Regex.escape(key)}",RegexOption.IGNORE_CASE).replace(t,value)
         t=rx("([\\$€₽])\\s*(\\d+(?:[,.]\\d+)?)").replace(t) { "${it.groupValues[2]} ${it.groupValues[1]}" }

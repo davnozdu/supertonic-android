@@ -7,7 +7,8 @@ import org.junit.Test
 class NamesAndYoTest {
     private val names = RussianNames.load(sequenceOf(
         "# test", "семен\tсемён", "семена\tсемёна", "петр\tпётр", "петра\tпетра́", "федор\tфёдор",
-        "мышкин\tмы́шкин", "твери\tтвери́", "алена\tалёна"))
+        "мышкин\tмы́шкин", "твери\tтвери́", "алена\tалёна", "федора\tфёдора", "волков\tво́лков",
+        "алма-ата\tалма-ата́"))
 
     @Test fun namesGetTheirYoAndStress() {
         RussianNames.initForTests(names)
@@ -69,5 +70,42 @@ class NamesAndYoTest {
         assertEquals(llm, StressCheck.resolve(p, listOf(0, 0, 0, 0)))
         // A consistent one switches: орган both times second, уже both times first.
         assertEquals(listOf("Звучал орга́н, а он уже́ ушёл."), StressCheck.resolve(p, listOf(1, 0, 0, 1)))
+    }
+
+    @Test fun explicitAndOtherVowelMarksSurviveTheNamesDictionary() {
+        RussianNames.initForTests(names)
+        // The LLM read «Федо́ра Егоровна» (a woman): not the dictionary's genitive «Фёдора».
+        assertEquals("Пришла Федо́ра Егоровна.", RussianNames.restore(null, "Пришла Федо́ра Егоровна."))
+        // A mark of the book itself stays, even on the ё vowel; only its occurrence.
+        val source = "Позвали Фе́дора и Федора."
+        assertEquals("Позвали Фе́дора и Фёдора.", RussianNames.restore(null, source, explicit = StressCheck.explicitOccurrences(source)))
+        // Without ё the name is stressed at once (the offline chain no longer drops it later).
+        assertEquals("Позвали Фе́дора.", RussianNames.restore(null, "Позвали Федора.", stress = true, yo = false))
+    }
+
+    @Test fun capitalsAndHyphenatedNames() {
+        RussianNames.initForTests(names)
+        assertEquals("ГЛАВА ПЕРВАЯ. ФЁДОР", RussianNames.restore(null, "ГЛАВА ПЕРВАЯ. ФЕДОР"))
+        assertEquals("Уехал в Алма-Ату, а потом в Алма-Ата́.",
+            RussianNames.restore(null, "Уехал в Алма-Ату, а потом в Алма-Ата."))
+    }
+
+    @Test fun overlayReplacesSilerosPlusMarks() {
+        RussianNames.initForTests(names)
+        assertEquals("Пришёл Во́лков, за ним волк+ов стая.", RussianNames.overlay(null, "Пришёл Волк+ов, за ним волк+ов стая."))
+        assertEquals("Вошёл Мы́шкин", RussianNames.overlay(null, "Вошёл Мышк+ин"))
+    }
+
+    @Test fun quotesAndDashesOpenSentences() {
+        RussianNames.initForTests(names)
+        assertEquals("— Семена взошли. Он сказал: «Семена взошли».", RussianNames.restore(null, "— Семена взошли. Он сказал: «Семена взошли»."))
+    }
+
+    @Test fun safeYoKeepsTheBooksOwnMark() {
+        val table = mapOf("черный" to "ч+ёрный")
+        val source = "Че́рный и черный."
+        assertEquals("Че́рный и чёрный.", YoRestore.apply(source, emptySet(), StressCheck.explicitOccurrences(source)) { table[it] })
+        // An LLM mark on another vowel of a certain-ё word goes.
+        assertEquals("чёрный", YoRestore.apply("черны́й", emptySet()) { table[it] })
     }
 }

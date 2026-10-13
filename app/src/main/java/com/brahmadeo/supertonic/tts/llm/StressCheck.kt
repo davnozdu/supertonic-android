@@ -14,7 +14,8 @@ object StressCheck {
     /** A word for the judge: [first] is RUAccent's variant (or Silero's for a homograph), [second] the other one.
      * [llm] / [silero]: the stressed-vowel ordinals the LLM and Silero gave the word, if any. */
     data class Dispute(val fragment: Int, val range: IntRange, val sentence: String, val first: String, val second: String,
-                       val context: String = "", val homograph: Boolean = false, val llm: Int? = null, val silero: Int? = null)
+                       val context: String = "", val homograph: Boolean = false, val llm: Int? = null, val silero: Int? = null,
+                       val yo: Boolean = false)
     /** A decided word: [value] replaces [range] of [fragment]. */
     data class Mark(val fragment: Int, val range: IntRange, val value: String)
     /** [fragments] as given; [marks] (agreed or single-source) and [disputes] are applied together by [resolve]. */
@@ -75,12 +76,41 @@ object StressCheck {
     fun explicitWords(source: String): Set<String> =
         word.findAll(source).map { it.value }.filter { w -> w.any { it == '+' || it == ACUTE } }.map { bare(it).lowercase() }.toSet()
 
+    /** The marked occurrences of [source]: bare lowercase word -> its 0-based occurrence numbers that carry '+' or
+     * U+0301. Only that occurrence is kept: «У за́мка нет замка» still checks the second «замка». */
+    fun explicitOccurrences(source: String): Map<String, Set<Int>> {
+        val seen = HashMap<String, Int>(); val out = HashMap<String, MutableSet<Int>>()
+        for (m in word.findAll(source)) {
+            val k = bare(m.value).lowercase(); val n = seen[k] ?: 0; seen[k] = n + 1
+            if (m.value.any { it == '+' || it == ACUTE }) out.getOrPut(k) { HashSet() } += n
+        }
+        return out
+    }
+
+    /** Bare lowercase words of [fragment] whose ё the LLM added: [source] spells them only with е. */
+    fun addedYo(source: String, fragment: String): Set<String> {
+        val src = word.findAll(source).map { bare(it.value).lowercase() }.toSet()
+        return word.findAll(fragment).map { bare(it.value).lowercase() }
+            .filter { 'ё' in it && it !in src && it.replace('ё', 'е') in src }.toSet()
+    }
+    private fun capitalised(w: String) = w.first().isUpperCase() && w.drop(1).any { it.isLowerCase() }
+
     /** [fragments]: the LLM's text with its own marks, or the plain text without an LLM. [silero]: Silero Stress on
      * [unmarked] of the same fragment. [dictionary]: RUAccent's ordinal of a bare lowercase word (null = unknown).
-     * [homograph]: the variant ordinals of a RUAccent homograph. [keep]: words never touched (fragment, bare lowercase).
-     * [llmAsDictionary]: the dictionary is not downloaded yet; the LLM's own mark stands in for it. */
+     * [homograph]: the variant ordinals of a RUAccent homograph. [keep]: words never touched (fragment, bare lowercase,
+     * occurrence number of that word in the fragment). [llmAsDictionary]: the dictionary is not downloaded yet; the
+     * LLM's own mark stands in for it.
+     * [knownName]: set for an LLM that names people reliably (the cloud). A capitalised word inside a sentence that the
+     * names dictionary does not know is a name: the two dictionaries only know the common word spelled the same
+     * (база́ров, ша́риков, сомо́в for Ба́заров, Шарико́в, Со́мов) and Silero's accentor only guesses (Ферды́щенко). Their
+     * opinion is then not final against the LLM: the judge decides, a tie keeps the LLM's mark.
+     * [bookName]: a character's word form of the prepared book: a name at the start of a sentence too.
+     * [addedYo]: words whose ё the LLM added (fragment, bare lowercase). When RUAccent knows the word with the stress on
+     * another vowel and no ё («рассе́рженный» for «рассержённый») the judge chooses; a tie takes the dictionary. */
     fun plan(fragments: List<String>, silero: List<String>, dictionary: (String) -> Int?, homograph: (String) -> List<Int>?,
-             keep: (Int, String) -> Boolean = { _, _ -> false }, llmAsDictionary: Boolean = false): Plan {
+             keep: (Int, String, Int) -> Boolean = { _, _, _ -> false }, llmAsDictionary: Boolean = false,
+             knownName: ((String) -> Boolean)? = null, addedYo: (Int, String) -> Boolean = { _, _ -> false },
+             bookName: (String) -> Boolean = { false }): Plan {
         val marks = mutableListOf<Mark>()
         val disputes = mutableListOf<Dispute>()
         var agreed = 0; var single = 0; var llmOnly = 0
@@ -88,24 +118,51 @@ object StressCheck {
             val a = word.findAll(fragments[f]).toList()
             val b = word.findAll(silero[f]).toList()
             val aligned = a.size == b.size && a.indices.all { key(a[it].value) == key(b[it].value) }
+            val occurrences = HashMap<String, Int>()
             for (i in a.indices) {
                 val w = a[i].value
-                if ('+' in w || 'ё' in w || 'Ё' in w || w.count { it in VOWELS } < 2 || keep(f, bare(w).lowercase())) continue
                 val k = bare(w).lowercase()
+                val occurrence = occurrences[k] ?: 0
+                occurrences[k] = occurrence + 1
+                if ('+' in w || w.count { it in VOWELS } < 2 || keep(f, k, occurrence)) continue
+                val s = if (aligned) ordinal(b[i].value) else null
+                if ('ё' in w || 'Ё' in w) {
+                    // A name inside a sentence keeps the LLM's ё (Королёв, Пугачёв): RUAccent knows the common words.
+                    if (!addedYo(f, k) || (capitalised(w) && !com.brahmadeo.supertonic.tts.utils.SentenceStart.at(fragments[f], a[i].range.first))) continue
+                    val plainE = bare(w).replace('ё', 'е').replace('Ё', 'Е')
+                    val yoAt = bare(w).let { v -> v.substring(0, v.indexOfFirst { it == 'ё' || it == 'Ё' } + 1).count { it in VOWELS } }
+                    val r = if (homograph(plainE.lowercase()) != null) null else dictionary(plainE.lowercase())
+                    if (r != null && r != yoAt) disputes += Dispute(f, a[i].range, sentence(fragments[f], a[i].range),
+                        withStress(plainE, r), bare(w), previousSentence(fragments[f], a[i].range), silero = s, yo = true)
+                    continue
+                }
                 val variants = homograph(k)?.distinct()?.takeIf { it.size >= 2 }
                 val llm = ordinal(w)
                 val r = if (variants != null) null else dictionary(k) ?: if (llmAsDictionary) llm else null
-                val s = if (aligned) ordinal(b[i].value) else null
                 fun dispute(x: Int, y: Int, homo: Boolean) { disputes += Dispute(f, a[i].range, sentence(fragments[f], a[i].range),
                     withStress(w, x), withStress(w, y), previousSentence(fragments[f], a[i].range), homo, llm, s) }
+                val unknownName = knownName != null && llm != null && variants == null && capitalised(w) && !knownName(bare(w)) &&
+                    (bookName(bare(w)) || !com.brahmadeo.supertonic.tts.utils.SentenceStart.at(fragments[f], a[i].range.first))
                 when {
+                    unknownName -> {
+                        val other = listOfNotNull(r, s).firstOrNull { it != llm }
+                        when {
+                            other != null -> dispute(llm!!, other, false)
+                            r != null || s != null -> { marks += Mark(f, a[i].range, withStress(w, llm!!)); agreed++ }
+                            else -> llmOnly++
+                        }
+                    }
                     r != null && s != null && r == s -> { marks += Mark(f, a[i].range, withStress(w, r)); agreed++ }
                     r != null && s != null -> dispute(r, s, false)
-                    variants?.size == 2 -> {
-                        val m = r ?: s
-                        if (m == null) dispute(variants[0], variants[1], true)
-                        else if (m in variants) dispute(m, variants.first { it != m }, true)
-                        else { marks += Mark(f, a[i].range, withStress(w, m)); single++ }
+                    variants != null -> {
+                        // Silero's variant first (or the LLM's, or the dictionary's first), against the LLM's other
+                        // variant or the next one: a homograph of 3-4 variants is asked as well. A Silero mark outside
+                        // RUAccent's variants is not an opinion about this homograph.
+                        val m = s?.takeIf { it in variants }
+                        val l = llm?.takeIf { it in variants }
+                        val x = m ?: l ?: variants[0]
+                        val y = (if (m != null) l?.takeIf { it != m } else null) ?: variants.first { it != x }
+                        dispute(x, y, true)
                     }
                     r != null || s != null -> { marks += Mark(f, a[i].range, withStress(w, (r ?: s)!!)); single++ }
                     llm != null -> llmOnly++

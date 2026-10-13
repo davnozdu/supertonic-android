@@ -12,10 +12,12 @@ object BookFingerprint {
     private const val OFFSET = -0x340d631b7bdddcdbL // 0xcbf29ce484222325
     private const val PRIME = 0x100000001b3L
 
-    /** Lowercase letters and digits only (ё → е, no stress marks), at most [limit]. */
+    /** Lowercase letters and digits only (ё → е, no stress marks), at most [limit]. The text is first spelled as the
+     * reading pipeline spells it ([com.brahmadeo.supertonic.tts.utils.BookTextSpacing.canonical]: no soft hyphens,
+     * composed letters, Cyrillic look-alikes inside Russian words), so the prepared text finds its book. */
     fun letters(text: String, limit: Int = Int.MAX_VALUE): String {
         val out = StringBuilder(minOf(limit, text.length))
-        for (ch in text) {
+        for (ch in com.brahmadeo.supertonic.tts.utils.BookTextSpacing.canonical(text)) {
             val c = ch.lowercaseChar().let { if (it == 'ё') 'е' else it }
             if (c in 'а'..'я' || c in 'a'..'z' || c in '0'..'9') {
                 out.append(c)

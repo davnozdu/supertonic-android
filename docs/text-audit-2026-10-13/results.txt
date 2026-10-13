@@ -1,0 +1,34 @@
+A01 rare surname: disputes=0, result=Пришёл Залу́меров.
+A02 three variants: disputes=0, result=Вы́ходите.
+A03 explicit name: Позвали Фёдора.
+A04 explicit ordinary yo: чёрный
+A05 capitals: Позвали ФЕДОРА и федора.
+A06 morphology: Залумеров пришёл к Залумерову и Залу́меровым.
+A07 sentence start: []
+A08 correction of marked name: Пришёл Залуме́ров.
+A09 seeds after name: Семёна взошли весной.
+A10 lost sentence boundaries: Да Нет Это бы́ло не раз.
+A11 introduced yo: Он был рассержённый.
+A12 yo bypass: disputes=0, result=Он рассержённый.
+A13 low coverage: Наста́сья Филипповна увидела Рогожина.
+A14 Kokoro proper name: он приехал в то́во.
+A15 misplaced name mark: Залу́меров
+A16 offline yo disabled: Позвали Федора.
+A17 explicit occurrence scope: disputes=0, result=У за́мка нет за́мка.
+dictionary size: 27051
+dictionary hyphenated: 330
+dictionary иванов: null
+dictionary иванова: null
+dictionary иванову: null
+dictionary рогожин: null
+dictionary рогожина: null
+dictionary мышкин: мы́шкин
+dictionary мышкина: мы́шкина
+dictionary салтыков-щедрин: null
+dictionary жюль: null
+dictionary пьер: null
+dictionary дюран: null
+dictionary дюпонт: null
+dictionary федор: фёдор
+dictionary федора: фёдора
+existing JVM tests passed: 41

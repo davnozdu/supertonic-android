@@ -341,12 +341,15 @@ class TextNormalizer {
                 t = RussianBookNormalizer.normalize(t)
                 val original = t
                 if (!skipStress) {
-                    t = RussianNames.restore(context, t)
+                    val restoreYo = context?.getSharedPreferences("llm_settings",0)?.getBoolean("restore_yo",true) ?: true
+                    // The ё switch applies to names at once: «Федо́ра» with ё off, not a bare «Федора» after the vote.
+                    t = RussianNames.restore(context, t, stress = true, yo = restoreYo,
+                        explicit = com.brahmadeo.supertonic.tts.llm.StressCheck.explicitOccurrences(t))
                     // An imported dictionary is the user's choice: its words are marked first and stay as they are.
                     t = AccentDictionaryManager.apply(t, lowerLang)
                     // RUAccent's dictionary and Silero Stress vote; without an LLM a disagreement takes RUAccent's mark.
                     context?.let { t = com.brahmadeo.supertonic.tts.local.RussianStressVote.offline(it, t) }
-                    t = RussianYoPolicy.apply(original, t, context?.getSharedPreferences("llm_settings",0)?.getBoolean("restore_yo",true) ?: true)
+                    t = RussianYoPolicy.apply(original, t, restoreYo)
                 }
                 t
             } else {

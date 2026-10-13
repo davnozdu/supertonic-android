@@ -228,11 +228,11 @@ object LlmPreparation {
      * texts and Silero's opinions (reused to fill unmarked words, so Silero runs once per batch). On a failed judge
      * the no-judge rule decides; on any other failure the LLM's own marks stay. */
     private fun stressVote(ctx: Context, c: LlmConfig, outputs: List<String>, sources: List<String>, judge: String,
-                           stopped: () -> Boolean): Pair<List<String>, List<String>?> = try {
+                           bookNames: Set<String> = emptySet(), stopped: () -> Boolean): Pair<List<String>, List<String>?> = try {
         val started = SystemClock.elapsedRealtime()
         val silero = outputs.map { com.brahmadeo.supertonic.tts.local.RussianStressVote.silero(ctx, it) }
         val offlineMs = SystemClock.elapsedRealtime() - started
-        val plan = com.brahmadeo.supertonic.tts.local.RussianStressVote.plan(ctx, outputs, silero, sources)
+        val plan = com.brahmadeo.supertonic.tts.local.RussianStressVote.plan(ctx, outputs, silero, sources, cloud = judge != "local", bookNames = bookNames)
         val asked = plan.disputes.take(StressCheck.MAX_JUDGED)
         val choices: List<Int?>? = if (asked.isEmpty()) emptyList() else try {
             val first = StressCheck.items(asked, secondFirst = false)
@@ -284,6 +284,8 @@ object LlmPreparation {
     }
     /** Opinions of the batch being accepted (cloud path), by request index. */
     @Volatile private var batchOpinions: List<String>? = null
+    /** The cloud LLM's answers of the batch before the stress vote: names are learned only from its own marks. */
+    @Volatile private var batchRaw: List<String>? = null
     /** Diagnostics: one reading batch through the production path (providers, validator, repair, names). */
     internal fun testBatch(ctx: Context, c: LlmConfig, texts: List<String>): List<Result> {
         initialize(ctx)
@@ -421,7 +423,7 @@ object LlmPreparation {
             routed.forEachIndexed { i, result -> if (result.rolesReady) { earlyRoles[indices[i]] = result; onPrepared(indices[i],result) } }
         }
         val prepared = processText(ctx, c, texts, expectedEpoch, ignoreCooldown, traceSynthetic, cancelled,
-            if (multi) onTextPrepared else onPrepared, beforeRetry = ::routeAcceptedBeforeRetry)
+            if (multi) onTextPrepared else onPrepared, beforeRetry = ::routeAcceptedBeforeRetry, bookNames = bookNames(book))
             .mapIndexed { i, result -> earlyRoles[i]?.takeIf { it.text == result.text } ?: result }
         if (!multi || expectedEpoch != epoch || cancelled()) return prepared
         val results = routeRoles(ctx, c, prepared, preceding, expectedEpoch, ignoreCooldown, cancelled, resolved = onPrepared, roleRequest = roleRequest, book = book)
@@ -545,9 +547,15 @@ object LlmPreparation {
             else Log.i("MultiVoice", "Cloud/local roles recovered in background fragments=${pending.size}; no cache clear required")
         } }, if (attempt == 0) 5 else 10, TimeUnit.SECONDS)
     }
+    /** Word forms of the prepared book's characters (lowercase, ё as е): names even where a sentence starts. */
+    private fun bookNames(book: com.brahmadeo.supertonic.tts.books.BookContext?): Set<String> =
+        book?.cast?.characters.orEmpty().flatMap { ch -> (ch.forms + ch.name).flatMap { Regex("[А-Яа-яЁё]+").findAll(it).map { m -> m.value } } }
+            .filter { w -> w.first().isUpperCase() && w.count { it.lowercaseChar() in "аеёиоуыэюя" } >= 2 }
+            .map { it.lowercase().replace('ё', 'е') }.toSet()
     private fun processText(ctx: Context, c: LlmConfig, texts: List<String>, expectedEpoch: Long = epoch,
                         ignoreCooldown: Boolean = false, traceSynthetic: Boolean = false, cancelled: () -> Boolean = { false },
-                        onPrepared: (Int, Result) -> Unit = { _, _ -> }, beforeRetry: (List<Result?>) -> Unit = {}): List<Result> {
+                        onPrepared: (Int, Result) -> Unit = { _, _ -> }, beforeRetry: (List<Result?>) -> Unit = {},
+                        bookNames: Set<String> = emptySet()): List<Result> {
         val started = SystemClock.elapsedRealtime()
         val results = arrayOfNulls<Result>(texts.size)
         preparedCache.get(c, texts)?.let { cached ->
@@ -626,12 +634,15 @@ object LlmPreparation {
                         // Names: learn from the cloud models (the small local one stresses them less reliably),
                         // then give a known name the LLM left unmarked the stress this book already uses.
                         probeRaw?.put(source, validated)
-                        if (c.stress && provider != "local") NameStress.learn(validated)
+                        // Only the marks the LLM placed itself: a name the dictionaries filled in is not a second opinion.
+                        if (c.stress && provider != "local") NameStress.learn(validated, batchRaw?.getOrNull(requestIndex)?.let { NameStress.marked(it) })
                         val learned = if (c.stress) NameStress.fill(validated) else validated
                         // Names (Семён, Пётр, Фёдор) from Wiktionary; ordinary words from Silero's safe ё table. Books
                         // typed without ё ("Семен", "черный") otherwise depended on the LLM noticing every one.
-                        val withNames = if (c.stress || c.restoreYo) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned, c.stress, c.restoreYo) else learned
-                        val named = if (c.restoreYo && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo) {
+                        // The book's and the lexicon's own marks (by occurrence) stay as written.
+                        val explicit = StressCheck.explicitOccurrences(source)
+                        val withNames = if (c.stress || c.restoreYo) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned, c.stress, c.restoreYo, explicit) else learned
+                        val named = if (c.restoreYo && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo, explicit) {
                             com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) } else withNames
                         val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
                             // Stress: RUAccent and Silero vote, Gemma judges their disagreements (as the cloud does).
@@ -659,12 +670,13 @@ object LlmPreparation {
                 if (provider == "local") {
                     LlmProviders.local(ctx,c,requestTexts,deadlineMs=if(c.multiVoice) 12000 else 45000,onOutput=::accept)
                 } else {
-                    val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (NameStress.hint(requestTexts) +
-                        com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList(), provider = provider)
+                    // The names dictionary first: on the same name it wins over what this book has learned.
+                    val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts) +
+                        NameStress.hint(requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList(), provider = provider)
                     if (expectedEpoch != epoch || cancelled()) break // No judge requests for a cancelled batch.
-                    val (checked, opinions) = if (c.stress) stressVote(ctx,c,outputs,requestTexts,provider) { expectedEpoch != epoch || cancelled() } else outputs to null
-                    batchOpinions = opinions
-                    try { checked.forEachIndexed { index,text -> accept(index,text) } } finally { batchOpinions = null }
+                    val (checked, opinions) = if (c.stress) stressVote(ctx,c,outputs,requestTexts,provider,bookNames) { expectedEpoch != epoch || cancelled() } else outputs to null
+                    batchOpinions = opinions; batchRaw = outputs
+                    try { checked.forEachIndexed { index,text -> accept(index,text) } } finally { batchOpinions = null; batchRaw = null }
                 }
                 if (expectedEpoch != epoch || cancelled()) break
                 val elapsed = SystemClock.elapsedRealtime()-started

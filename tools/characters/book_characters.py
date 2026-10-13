@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 import sys
 import time
 import urllib.error
@@ -453,8 +454,42 @@ SENTENCES = re.compile(r"(?<=[.!?…])\s+")
 FNV_OFFSET, FNV_PRIME, MASK64 = 0xcbf29ce484222325, 0x100000001b3, (1 << 64) - 1
 
 
+# Тот же канон символов, что BookTextSpacing.canonical в MyTTS: без мягких переносов и невидимых знаков,
+# составные буквы собраны (е + ◌̈ = ё), гравис-ударение заменено на акут, латинские двойники внутри русского слова
+# стали кириллицей. Иначе подготовленный текст читалки не совпадает с отпечатками книги.
+INVISIBLE = dict.fromkeys(map(ord, "\u00ad\ufeff\u2060\u200c\u200d\u180e"))
+WORD_SPACE = re.compile(r"(?<=[^\W\d_])\u200b(?=[^\W\d_])")
+GRAVE_STRESS = re.compile("([аеёиоуыэюяАЕЁИОУЫЭЮЯ])\u0300")
+TOKEN = re.compile(r"(?:[^\W\d_]|[\u0300-\u036f])+")
+LATIN = {"a": "а", "e": "е", "o": "о", "p": "р", "c": "с", "x": "х", "y": "у", "k": "к",
+         "A": "А", "B": "В", "E": "Е", "K": "К", "M": "М", "H": "Н", "O": "О", "P": "Р", "C": "С", "T": "Т",
+         "X": "Х", "Y": "У", "á": "а\u0301", "é": "е\u0301", "ó": "о\u0301", "ý": "у\u0301", "à": "а\u0301",
+         "è": "е\u0301", "ò": "о\u0301", "Á": "А\u0301", "É": "Е\u0301", "Ó": "О\u0301", "Ý": "У\u0301", "ë": "ё", "Ë": "Ё"}
+
+
+def _cyrillic(c: str) -> bool:
+    return "А" <= c <= "я" or c in "ёЁ"
+
+
+def canonical(text: str) -> str:
+    t = text.translate(INVISIBLE)
+    if "\u200b" in t:
+        t = WORD_SPACE.sub("", t)
+    if any(0x300 <= ord(c) <= 0x36F or c in "ѐѝЀЍ" for c in t):
+        t = unicodedata.normalize("NFC", t).replace("ѐ", "е\u0301").replace("ѝ", "и\u0301").replace("Ѐ", "Е\u0301").replace("Ѝ", "И\u0301")
+        t = GRAVE_STRESS.sub(lambda m: m.group(1) + "\u0301", t)
+    if any(c in LATIN for c in t):
+        def fix(m: re.Match) -> str:
+            w = m.group(0)
+            if not any(_cyrillic(c) for c in w) or any(c.isalpha() and not _cyrillic(c) and c not in LATIN for c in w):
+                return w
+            return "".join(LATIN.get(c, c) for c in w)
+        t = TOKEN.sub(fix, t)
+    return t
+
+
 def letters(text: str) -> str:
-    return "".join(c for c in text.lower().replace("ё", "е").replace(ACUTE, "") if "а" <= c <= "я" or "a" <= c <= "z" or "0" <= c <= "9")
+    return "".join(c for c in canonical(text).lower().replace("ё", "е").replace(ACUTE, "") if "а" <= c <= "я" or "a" <= c <= "z" or "0" <= c <= "9")
 
 
 def sentence_fingerprints(text: str) -> list[str]:
@@ -472,7 +507,7 @@ def sentence_fingerprints(text: str) -> list[str]:
 
 def fingerprint(text: str) -> str | None:
     """Первые 80 букв абзаца без регистра, ё, ударений и знаков: так же нормализует читалка."""
-    letters = re.sub(r"[^a-zа-я0-9]", "", text.lower().replace("ё", "е").replace(ACUTE, ""))
+    letters = re.sub(r"[^a-zа-я0-9]", "", canonical(text).lower().replace("ё", "е").replace(ACUTE, ""))
     return hashlib.sha1(letters[:80].encode()).hexdigest()[:12] if len(letters) >= 24 else None
 
 

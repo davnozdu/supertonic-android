@@ -37,4 +37,11 @@ class BookFingerprintTest {
             assertTrue("принят некорректный файл: $bad", runCatching { BookPackage.parse(bad) }.isFailure)
         }
     }
+
+    @Test fun typingDetailsDoNotChangeFingerprints() {
+        // The reader may send soft hyphens or a Latin look-alike; the prepared text has the canonical spelling.
+        val plain = "Князь Мышкин вошёл в комнату и тихо сел у окна."
+        assertEquals(BookFingerprint.sentences(plain), BookFingerprint.sentences("Кня\u00ADзь Мышкин вошёл в кoмнату и тихо сел у окна."))
+        assertEquals(BookFingerprint.letters("молоко"), BookFingerprint.letters("молокó"))
+    }
 }
