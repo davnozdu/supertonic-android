@@ -1,6 +1,7 @@
 package com.brahmadeo.supertonic.tts.books.prepare
 
 import android.content.Context
+import android.util.Log
 import android.net.Uri
 import android.content.Intent
 import androidx.core.content.ContextCompat
@@ -149,7 +150,9 @@ object BookPreparation {
             } catch (_: CancellationException) {
                 mutable.value = State(message = "Подготовка остановлена. Уже полученные ответы сохранены; можно выбрать книгу снова.")
             } catch (t: Exception) {
-                mutable.value = State(message = if (runCatching { cancel.check() }.isFailure) "Подготовка остановлена. Можно выбрать книгу снова." else safeError(t))
+                val stopped = runCatching { cancel.check() }.isFailure
+                if (!stopped) report(ctx, t)
+                mutable.value = State(message = if (stopped) "Подготовка остановлена. Можно выбрать книгу снова." else safeError(t) + " [${t.javaClass.simpleName}]")
             } finally {
                 temp?.delete()
                 runCatching { ctx.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -288,6 +291,16 @@ object BookPreparation {
     private const val DEFAULT_EFFORT = "medium"
     private const val THINK_TEMPERATURE = 0.6
     private val EFFORTS = listOf("high", "medium", "low")
+
+    /** Where a preparation failed, for diagnosis: exception classes and stack frames, never the messages (they may
+     * hold URLs or credentials). In the log and in cache/book-prep-error.txt (OnePlus drops app logs after a while). */
+    private fun report(ctx: Context, t: Throwable) {
+        val text = generateSequence(t) { it.cause }.take(4).joinToString("\ncaused by ") { e ->
+            e.javaClass.name + e.stackTrace.take(12).joinToString("") { "\n  at $it" }
+        }
+        Log.e("BookPreparation", "Preparation failed: $text")
+        runCatching { File(ctx.cacheDir, "book-prep-error.txt").writeText("${java.util.Date()}\n$text\n") }
+    }
 
     /** Never show arbitrary provider/network messages: URLs or credentials may be embedded in them. */
     private fun safeError(t: Exception): String {
