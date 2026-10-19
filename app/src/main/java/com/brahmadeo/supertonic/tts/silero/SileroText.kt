@@ -65,6 +65,14 @@ internal object SileroText {
     /** Silero v5.5 end-symbol corrections, adapted from RuVoice Stress.modelEnd/stretchShort.
      * Only model input changes: source text, cache keys and reader highlighting stay intact.
      * Do not introduce inter-word pauses or change question/exclamation punctuation. */
+    /** v5.6 ends phrases itself: a final stressed vowel keeps its dot (without it the phrase was cut, 70 ms of
+     * silence instead of 250) and short words need no doubled vowel (13 frames already; doubled 22-29 drawled).
+     * Only a phrase without final punctuation gets its dot. */
+    fun modelInputV56(prepared: String): ModelInput {
+        val text = prepared.trimEnd()
+        val added = text.lastOrNull()?.isLetter() == true
+        return ModelInput(if (added) "$text." else text, added)
+    }
     fun modelInput(prepared: String): ModelInput {
         val text = prepared.trimEnd()
         if (text.isEmpty()) return ModelInput(text, false)

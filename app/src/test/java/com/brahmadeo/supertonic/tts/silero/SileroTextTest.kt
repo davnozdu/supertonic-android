@@ -62,6 +62,12 @@ class SileroTextTest {
         assertEquals("с+еверо з+апад, двух тр+ёх", SileroText.prepare("Се́веро-за́пад, двух-трёх"))
         assertEquals("кт+ото приш+ёл", SileroText.modelInput(SileroText.prepare("Кто́-то пришёл.")).text)
     }
+    @Test fun v56KeepsPhraseEndsAsWritten() {
+        assertEquals(SileroText.ModelInput("стало светл+о.", false), SileroText.modelInputV56("стало светл+о."))
+        assertEquals(SileroText.ModelInput("да.", false), SileroText.modelInputV56("да."))
+        assertEquals(SileroText.ModelInput("кто?", false), SileroText.modelInputV56("кто?"))
+        assertEquals(SileroText.ModelInput("он пришёл д+омой.", true), SileroText.modelInputV56("он пришёл д+омой"))
+    }
     @Test fun punctuationFramesIncludeNaturalPrefix() {
         assertEquals(24L,SileroPauseFrames.forPunctuation(',',180))
         assertEquals(31L,SileroPauseFrames.forPunctuation('–',180))

@@ -416,13 +416,16 @@ class TextNormalizer {
         return normalized
     }
 
-    fun splitIntoSentences(text: String, lang: String = "en", preservePunctuation: Boolean = false): List<String> {
+    fun splitIntoSentences(text: String, lang: String = "en", preservePunctuation: Boolean = false,
+                           wholeSentences: Boolean = preservePunctuation && context?.let { AssetManager.isSilero(it) } == true): List<String> {
         // Per-call chunk limit. SMALL gives sub-second first-audio for short
         // notifications; LARGE merges multiple sentences for audiobook
         // narration with continuous intonation; DEFAULT is the legacy 300-char
         // balance. Re-read on every call so the user can flip the toggle
         // between sessions without restarting.
-        val chunkLimit = PlaybackPrefs.chunkMode.limit
+        // Silero (v5.6 types every sentence of one input): a sentence cut at a comma was voiced as two utterances
+        // with an ending tone and a gap in between; several whole sentences in one pass keep their natural joins.
+        val chunkLimit = if (wholeSentences) PlaybackPrefs.ChunkMode.HUGE.limit else PlaybackPrefs.chunkMode.limit
 
         var protectedText = BookTextSpacing.normalize(text)
 
@@ -538,7 +541,7 @@ class TextNormalizer {
                 continue
             }
 
-            if (chunkedSentences.isEmpty()) {
+            if (chunkedSentences.isEmpty() && !wholeSentences) {
                 // Opening sentence alone exceeds the fast-start budget: peel
                 // its leading comma-clauses into chunk #0 and hand the rest
                 // back for normal accumulation. If the first clause is itself

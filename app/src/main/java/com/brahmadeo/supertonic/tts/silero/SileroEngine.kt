@@ -70,7 +70,7 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
             val source = SileroText.prepare(text)
             // These end-symbol quirks were measured on v5.5 RU; other voice packs
             // keep their original input until independently verified.
-            val input = if (nativeTypes) SileroText.modelInput(source) else SileroText.ModelInput(source, false)
+            val input = if (focusArgs) SileroText.modelInputV56(source) else if (nativeTypes) SileroText.modelInput(source) else SileroText.ModelInput(source, false)
             val prepared = if (nativeTypes) input.text else input.text.replace('–', '—')
             if (prepared.isEmpty() || SupertonicTTS.isCancelled()) return ByteArray(0)
             require(prepared.length <= 1200) { "Silero sentence is too long" }
