@@ -371,7 +371,10 @@ class MainActivity : ComponentActivity() {
                                     saveStringPref("selected_lang", "ru")
                                 } else if (AssetManager.isRussianModel(this@MainActivity)) {
                                     viewModel.currentLang.value = "ru"
-                                    viewModel.selectedVoiceFile.value = if (AssetManager.isKokoro(this@MainActivity)) "sveta.json" else if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else if (AssetManager.isPocket(this@MainActivity)) "alba.json" else "ru_f1.json"
+                                    // The model's own narrator voice when it has one (multi-voice settings keep it per model).
+                                    viewModel.selectedVoiceFile.value = runCatching { com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.selected(this@MainActivity,
+                                        com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR) + ".json" }.getOrNull()?.takeIf { getSharedPreferences("SupertonicPrefs", MODE_PRIVATE)
+                                        .contains("multi_voice_${model}_author") } ?: if (AssetManager.isKokoro(this@MainActivity)) "sveta.json" else if (AssetManager.isSilero(this@MainActivity)) com.brahmadeo.supertonic.tts.silero.SileroDownload.defaultVoice(this@MainActivity) + ".json" else if (AssetManager.isPocket(this@MainActivity)) "alba.json" else "ru_f1.json"
                                     saveStringPref("selected_lang", "ru")
                                     saveStringPref("selected_voice", viewModel.selectedVoiceFile.value)
                                     viewModel.isMixingEnabled.value = false
@@ -534,6 +537,12 @@ class MainActivity : ComponentActivity() {
                             if (viewModel.selectedVoiceFile.value != it) {
                                 viewModel.selectedVoiceFile.value = it
                                 saveStringPref("selected_voice", it)
+                                // The main voice is the narrator: with multi-voice reading on, the author role read the
+                                // text with its own saved voice and this choice seemed to change nothing.
+                                if (AssetManager.isRussianModel(this@MainActivity)) runCatching {
+                                    com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.save(this@MainActivity,
+                                        com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR, it.removeSuffix(".json"))
+                                }
                                 val resetIntent = Intent(this, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
                                 startService(resetIntent)
                             }
@@ -646,6 +655,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // The author's voice may have been changed in the multi-voice settings: it is the main voice too.
+        getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getString("selected_voice", null)?.let { viewModel.selectedVoiceFile.value = it }
         checkResumeState()
         if (awaitingInstallPermission && android.os.Build.VERSION.SDK_INT >= 26 &&
             packageManager.canRequestPackageInstalls()) {

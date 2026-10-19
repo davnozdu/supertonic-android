@@ -14,9 +14,11 @@ object MultiVoiceSettings {
         val author = p.getString(key(ctx, VoiceRole.AUTHOR), "").orEmpty().takeIf { it in voices } ?: current
         return VoiceRoleDefaults.select(AssetManager.getModelType(ctx), role, author, voices)
     }
+    /** The author's voice is also the main voice of the model (MyTTS screen, «MyTTS Один голос»), and back. */
     fun save(ctx: Context, role: VoiceRole, voice: String) {
         require(voice in AssetManager.russianVoices(ctx))
-        ctx.getSharedPreferences("SupertonicPrefs", 0).edit().putString(key(ctx, role), voice).apply()
+        ctx.getSharedPreferences("SupertonicPrefs", 0).edit().putString(key(ctx, role), voice)
+            .apply { if (role == VoiceRole.AUTHOR) putString("selected_voice", "$voice.json") }.apply()
         com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
     }
     /** All synthesis paths share the same validated segmentation and voice selection. */
