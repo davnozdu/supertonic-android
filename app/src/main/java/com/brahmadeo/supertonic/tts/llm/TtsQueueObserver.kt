@@ -88,6 +88,21 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                 finally { rewritten.recycle() }
             }
         }
+        // synthesizeToFileDescriptor (KOReader's audiobook plugin): the app writes one sentence to a file, plays it
+        // and only then asks for the next, so nothing is queued ahead and every sentence waited ~1.5 s for the cloud
+        // LLM and the roles. Treated like a one-at-a-time reader (Readest): the dictionaries read it at once.
+        if (Build.VERSION.SDK_INT in 24..36 && code == FIRST_CALL_TRANSACTION + 1 && getCallingUid() != context.applicationInfo.uid) {
+            try {
+                data.enforceInterface("android.speech.tts.ITextToSpeechService")
+                val caller = data.readStrongBinder()
+                val text = if (data.readInt() != 0) TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(data)?.toString() else null
+                // No reading notification: the app plays the file itself, MyTTS's pause would not reach it.
+                if (caller != null && text != null) {
+                    if (LlmPreparation.directReader(context, caller, getCallingUid(), text, true)) LlmPreparation.cancel(caller)
+                }
+            } catch (_: Exception) { Log.w("LlmPreparation", "File synthesis observation unavailable; using ordinary synthesis") }
+            finally { data.setDataPosition(position) }
+        }
         var id: Long? = null
         var musicOwner: IBinder? = null
         var musicToken: Long? = null
