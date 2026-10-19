@@ -1,10 +1,16 @@
 package com.brahmadeo.supertonic.tts.foreign
 
-/** The one «MyTTS Мультиязычный» voice, for readers that set a voice explicitly (Readest lists the voices of the
- * book's language and takes the first by name). It reads like a reader that only sets the language (Moon+): the voice
- * chosen in MyTTS (and the book's voices) for Russian, every other connected language through its own engine from
- * «Мультиязычная озвучка». Advertised under Russian, the language of the models; "MyTTS…" sorts before "ru-supertonic-…". */
+/** Voices for readers that set a voice explicitly (Readest, KOReader's audiobook plugin): they list the voices of the
+ * book's language and pick one (Readest takes the first by name). Advertised under Russian for every Russian model,
+ * with or without other languages: "MyTTS…" sorts before "ru-supertonic-…", «Мультиголос» before «Один голос».
+ * - [NAME] reads like a reader that only sets the language (Moon+): the voice chosen in MyTTS, the book's and the
+ *   characters' voices; other languages connected in «Мультиязычная озвучка» through their engines.
+ * - [SINGLE] the voice chosen in MyTTS alone, no role voices, for readers whose user wants one narrator.
+ * [LEGACY] is the name of 5.0.4-beta14…5.0.5-beta1, still accepted as [NAME]. */
 object MultilingualVoice {
-    const val NAME = "MyTTS Мультиязычный"
-    fun matches(voiceName: String?) = voiceName == NAME
+    const val NAME = "MyTTS Мультиголос"
+    const val SINGLE = "MyTTS Один голос"
+    const val LEGACY = "MyTTS Мультиязычный"
+    fun matches(voiceName: String?) = voiceName == NAME || voiceName == SINGLE || voiceName == LEGACY
+    fun single(voiceName: String?) = voiceName == SINGLE
 }
