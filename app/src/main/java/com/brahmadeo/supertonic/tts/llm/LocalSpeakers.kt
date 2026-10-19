@@ -92,28 +92,31 @@ class LocalSpeakers {
         return cast.any { p -> p.forms.any { f -> f.lowercase() in words } }
     }
 
-    /** Spoken language on its own: ! ? … at the end, addressing someone, interjections, the polite «-с». In first-person
-     * narration «я / мне / мой» belong to the narrator, not to a reply. */
+    /** A reply without a dash, a quote or a remark (Readest drops the dash): only clear spoken language — ! or ? at the
+     * end, talking to someone (ты / вы…), an interjection, the polite «-с». «я / мне / мой» and a final «…» are not
+     * enough: first-person narration is full of them, and every such sentence used to get a man's reply voice. */
     private fun looksSpoken(text: String, firstPerson: Boolean): Boolean {
         val t = text.trim()
-        if (t.endsWith("!") || t.endsWith("?") || t.endsWith("…") || t.endsWith("..") || t.endsWith("?!")) return true
+        if (t.endsWith("!") || t.endsWith("?") || t.endsWith("?!") || t.endsWith("!..") || t.endsWith("?..")) return true
         val words = word.findAll(t.lowercase()).map { it.value }.toList()
-        if (words.any { (it in addressing && !(firstPerson && it in narrator)) || it in interjections }) return true
+        if (words.any { it in secondPerson || it in interjections }) return true
         return Regex("[А-Яа-яЁё]-с(?![А-Яа-яЁё])").containsMatchIn(t)
     }
+    private val secondPerson = setOf("ты", "вы", "вас", "вам", "вами", "тебя", "тебе", "тобой", "ваш", "ваша", "ваше", "ваши",
+        "твой", "твоя", "твоё", "твое", "твои")
 
     private val interjections = setOf("гм", "ну", "эх", "ах", "ох", "ей", "эй", "ой", "ага", "хе", "ха", "фью", "тьфу", "вишь", "эка", "эвона")
     private val pastVerb = Regex("^[а-яё]{2,}(л|ла|ло|ли|лся|лась|лось|лись)$")
 
-    /** A sentence after speech, without a dash of its own (Readest sends a long reply sentence by sentence): still the
-     * reply unless it reads like narration — past-tense verbs and nothing of spoken language (я/вы, «-с», «гм», ! ? …). */
+    /** A sentence after speech, without a dash of its own (Readest sends a long reply sentence by sentence): the reply
+     * goes on only with signs of spoken language (я/вы, «-с», «гм», ! ? …). A plain sentence is the author's: on doubt
+     * the narrator's voice, not a character's (a present-tense narration sentence used to stay with the speaker). */
     private fun continuesSpeech(text: String): Boolean {
         val t = text.trim()
         if (t.endsWith("!") || t.endsWith("?") || t.endsWith("…") || t.endsWith("..") || t.endsWith("?!")) return true
         val words = word.findAll(t.lowercase()).map { it.value }.toList()
         if (words.any { it in addressing || it in interjections }) return true
-        if (Regex("[А-Яа-яЁё]-с(?![А-Яа-яЁё])").containsMatchIn(t)) return true
-        return words.none { pastVerb.matches(it) }
+        return Regex("[А-Яа-яЁё]-с(?![А-Яа-яЁё])").containsMatchIn(t)
     }
 
     private fun fromRemark(remark: String, cast: List<Person>, firstPerson: Boolean): Speaker? {

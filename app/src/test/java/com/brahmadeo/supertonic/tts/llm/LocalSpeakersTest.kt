@@ -67,6 +67,17 @@ class LocalSpeakersTest {
         assertEquals("A=Я шёл домой и думал о ней.", show(LocalSpeakers().plan("Я шёл домой и думал о ней.", firstPerson = true)))
     }
 
+    @Test fun narrationSentByTheSentenceStaysWithTheAuthor() {
+        // KOReader: first-person narration, one sentence at a time, the first-person switch off.
+        val s = LocalSpeakers()
+        assertEquals("A=Я вышел из комнаты и спустился во двор.", show(s.plan("Я вышел из комнаты и спустился во двор.")))
+        assertEquals("A=Мне было холодно, и мой плащ промок…", show(s.plan("Мне было холодно, и мой плащ промок…")))
+        assertEquals("M=— Ну, здравствуй, | A=— сказал он.", show(s.plan("— Ну, здравствуй, — сказал он.")))
+        // After the reply: a plain sentence without a past-tense verb is narration, not the reply going on.
+        assertEquals("A=Ночь стоит тёмная, над рекой туман.", show(s.plan("Ночь стоит тёмная, над рекой туман.")))
+        assertEquals("A=Я молчу и смотрю на него.", show(s.plan("Я молчу и смотрю на него.")))
+    }
+
     @Test fun quotesAndPlainTextKeepTheTextIntact() {
         val s = LocalSpeakers()
         assertEquals("M=«Иду!» | A=— крикнул он.", show(s.plan("«Иду!» — крикнул он.")))
