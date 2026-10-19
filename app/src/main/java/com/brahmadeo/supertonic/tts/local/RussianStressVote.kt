@@ -22,20 +22,24 @@ object RussianStressVote {
             .also { homographs = it }
     }
 
-    fun homographVariants(ctx: Context, word: String): List<Int>? = homographs(ctx)[word.lowercase()]
+    /** RUAccent's homographs, null when its dictionary is switched off. */
+    fun homographVariants(ctx: Context, word: String): List<Int>? =
+        if (!com.brahmadeo.supertonic.tts.utils.StressOptions.ruaccent(ctx)) null else homographs(ctx)[word.lowercase()]
 
-    /** Silero Stress downloaded and not switched off («Локальные ударения и ё по контексту»). */
-    fun sileroEnabled(ctx: Context) = LocalRussianAssets.ready(ctx) &&
-        ctx.getSharedPreferences("SupertonicPrefs", 0).getBoolean("local_russian_stress", true)
+    /** Silero Stress downloaded and switched on («Ударения и буква ё»). */
+    fun sileroEnabled(ctx: Context) = LocalRussianAssets.ready(ctx) && com.brahmadeo.supertonic.tts.utils.StressOptions.silero(ctx)
+    private fun names(ctx: Context) = com.brahmadeo.supertonic.tts.utils.StressOptions.names(ctx)
 
     /** Silero Stress (with the user lexicon and the names dictionary) on [text] without the LLM's marks. Without
      * Silero the LLM's own text stands in for its opinion, so a disagreement with RUAccent still reaches the judge. */
     fun silero(ctx: Context, text: String): String = if (!sileroEnabled(ctx)) text else
-        com.brahmadeo.supertonic.tts.utils.RussianNames.overlay(ctx, com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(
-            LocalRussianStress.apply(ctx, StressCheck.unmarked(text)), "ru"))
+        com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.apply(LocalRussianStress.apply(ctx, StressCheck.unmarked(text)), "ru").let {
+            if (names(ctx)) com.brahmadeo.supertonic.tts.utils.RussianNames.overlay(ctx, it) else it
+        }
 
-    /** RUAccent's dictionary ready (downloaded once, unmetered network); false = the download is started. */
-    fun dictionaryReady(ctx: Context) = StressJudgeDictionary.ensure(ctx)
+    /** RUAccent's dictionary switched on and ready (downloaded once, unmetered network); false = off, or the download
+     * is started. */
+    fun dictionaryReady(ctx: Context) = com.brahmadeo.supertonic.tts.utils.StressOptions.ruaccent(ctx) && StressJudgeDictionary.ensure(ctx)
 
     /** [fragments] with the LLM's marks ([sources] give the book's own explicit marks) planned against [silero].
      * [cloud]: the LLM names people and places reliably, so unknown names and the ё it added are checked against it
@@ -44,11 +48,12 @@ object RussianStressVote {
              bookNames: Set<String> = emptySet()): StressCheck.Plan {
         val ready = dictionaryReady(ctx)
         val explicit = sources.map { StressCheck.explicitOccurrences(it) }
-        if (cloud) com.brahmadeo.supertonic.tts.utils.RussianNames.init(ctx)
+        val useNames = cloud && names(ctx)
+        if (useNames) com.brahmadeo.supertonic.tts.utils.RussianNames.init(ctx)
         val added = if (cloud) fragments.indices.map { StressCheck.addedYo(sources.getOrElse(it) { "" }, fragments[it]) } else emptyList()
         return StressCheck.plan(fragments, silero, { if (ready) StressJudgeDictionary.ordinal(it) else null },
             { homographVariants(ctx, it) }, { f, w, n -> explicit.getOrNull(f)?.get(w)?.contains(n) == true }, llmAsDictionary = !ready,
-            knownName = if (cloud) ({ w: String -> com.brahmadeo.supertonic.tts.utils.RussianNames.form(w) != null }) else null,
+            knownName = if (useNames) ({ w: String -> com.brahmadeo.supertonic.tts.utils.RussianNames.form(w) != null }) else null,
             addedYo = { f, w -> added.getOrNull(f)?.contains(w) == true },
             bookName = { w -> w.lowercase().replace('ё', 'е') in bookNames })
     }
@@ -59,21 +64,23 @@ object RussianStressVote {
      * the LLM's own mark: on the probe runs the judge's ties there were right with the LLM and wrong with Silero. */
     fun tie(ctx: Context): (StressCheck.Dispute) -> Int? = { d ->
         val word = d.first.replace("́", "")
-        val name = if (word.first().isUpperCase()) com.brahmadeo.supertonic.tts.utils.RussianNames.ordinal(word) else null
+        val name = if (word.first().isUpperCase() && names(ctx)) com.brahmadeo.supertonic.tts.utils.RussianNames.ordinal(word) else null
         name ?: d.silero.takeIf { d.homograph && it != null && sileroEnabled(ctx) && !LocalRussianStress.isHomograph(ctx, word) }
     }
 
     /** No LLM: the two dictionaries alone. Words already marked in [text] (book, lexicon, names, an imported
      * dictionary) stay. */
     fun offline(ctx: Context, text: String): String {
-        if (!sileroEnabled(ctx)) return text
-        val silero = LocalRussianStress.apply(ctx, text)
-        // Silero's ё (its safe dictionary, «Семёна») first: a word with ё needs no mark and is left out of the vote.
-        val withYo = com.brahmadeo.supertonic.tts.llm.MissingSpeechMarks.merge(text, silero, stress = false, yo = true)
+        val silero = sileroEnabled(ctx)
         val ready = dictionaryReady(ctx)
+        if (!silero && !ready) return text
+        val opinion = if (silero) LocalRussianStress.apply(ctx, text) else text
+        // Silero's ё (its safe dictionary, «Семёна») first: a word with ё needs no mark and is left out of the vote.
+        val withYo = com.brahmadeo.supertonic.tts.llm.MissingSpeechMarks.merge(text, opinion, stress = false, yo = com.brahmadeo.supertonic.tts.utils.StressOptions.yoSilero(ctx))
         val explicit = StressCheck.explicitOccurrences(text)
-        val plan = StressCheck.plan(listOf(withYo), listOf(silero), { if (ready) StressJudgeDictionary.ordinal(it) else null },
-            { homographVariants(ctx, it) }, { _, w, n -> explicit[w]?.contains(n) == true })
+        // RUAccent alone does not guess homographs: without Silero their first variant would be arbitrary.
+        val plan = StressCheck.plan(listOf(withYo), listOf(opinion), { if (ready) StressJudgeDictionary.ordinal(it) else null },
+            { if (silero) homographVariants(ctx, it) else null }, { _, w, n -> explicit[w]?.contains(n) == true })
         return StressCheck.resolve(plan, null, tie(ctx)).single()
     }
 }

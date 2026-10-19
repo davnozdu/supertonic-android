@@ -236,7 +236,7 @@ object LlmPreparation {
         val asked = plan.disputes.take(StressCheck.MAX_JUDGED)
         // Local Gemma does not judge: on the hard probe set it answered few disputes, mostly wrongly (59/71 against 61/71
         // for the dictionaries' rule), and it cost 1-3 s per paragraph. The no-judge rule decides (choices = null).
-        val choices: List<Int?>? = if (asked.isEmpty()) emptyList() else if (judge == "local") null else try {
+        val choices: List<Int?>? = if (asked.isEmpty()) emptyList() else if (judge == "local" || !com.brahmadeo.supertonic.tts.utils.StressOptions.arbiter(ctx)) null else try {
             val first = StressCheck.items(asked, secondFirst = false)
             val second = StressCheck.items(asked, secondFirst = true)
             val (a, b) = if (judge == "local") {
@@ -265,7 +265,7 @@ object LlmPreparation {
             Log.w("LlmPreparation", "Stress judge failed: ${e.javaClass.simpleName}: ${e.message}; dictionaries decide"); null
         }
         val checked = StressCheck.resolve(plan, choices, com.brahmadeo.supertonic.tts.local.RussianStressVote.tie(ctx))
-        Log.i("LlmPreparation", "Stress vote judge=${if (asked.isEmpty()) "-" else if (judge == "local") "gemma" else LlmProviders.lastVerifier} agreed=${plan.agreed} single=${plan.single} llmOnly=${plan.llmOnly} disputes=${plan.disputes.size} asked=${asked.size} secondChosen=${StressCheck.lastSecondChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
+        Log.i("LlmPreparation", "Stress vote judge=${if (asked.isEmpty()) "-" else if (judge == "local") "gemma" else if (choices == null) "off" else LlmProviders.lastVerifier} agreed=${plan.agreed} single=${plan.single} llmOnly=${plan.llmOnly} disputes=${plan.disputes.size} asked=${asked.size} secondChosen=${StressCheck.lastSecondChosen} tieBreaks=${StressCheck.lastTieBreaks} offlineMs=$offlineMs ms=${SystemClock.elapsedRealtime() - started}")
         checked to silero
     } catch (e: Exception) {
         if (e is java.util.concurrent.CancellationException) throw e
@@ -654,17 +654,23 @@ object LlmPreparation {
                         // typed without ё ("Семен", "черный") otherwise depended on the LLM noticing every one.
                         // The book's and the lexicon's own marks (by occurrence) stay as written.
                         val explicit = StressCheck.explicitOccurrences(source)
-                        val withNames = if (c.stress || c.restoreYo) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned, c.stress, c.restoreYo, explicit) else learned
-                        val named = if (c.restoreYo && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo, explicit) {
+                        val options = com.brahmadeo.supertonic.tts.utils.StressOptions
+                        val dictionaries = options.dictionaries(ctx)
+                        val yoSilero = options.yoSilero(ctx)
+                        val withNames = if (options.names(ctx)) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned, true, true, explicit) else learned
+                        val named = if (yoSilero && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo, explicit) {
                             com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) } else withNames
-                        val completed=if(provider=="local" && (c.stress || c.restoreYo)) {
+                        val completed=if(provider=="local" && (c.stress || dictionaries || c.restoreYo || yoSilero)) {
                             // Stress: RUAccent and Silero vote, Gemma judges their disagreements (as the cloud does).
                             // One Silero pass serves both the vote and the fill of words nobody marked.
-                            val (voted,opinions)=if(c.stress) stressVote(ctx,c,listOf(named),listOf(source),"local") { expectedEpoch != epoch || cancelled() } else listOf(named) to null
+                            val (voted,opinions)=if(dictionaries) stressVote(ctx,c,listOf(named),listOf(source),"local") { expectedEpoch != epoch || cancelled() } else listOf(named) to null
                             val offlineOpinion=opinions?.single() ?: offlineMarks(ctx,named,null)
                             val arbitrated=voted.single()
-                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(arbitrated,offlineOpinion,c.restoreYo)
-                            MissingSpeechMarks.merge(arbitrated,safe,c.stress,c.restoreYo,ambiguousLocalYo)
+                            val safe=com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(arbitrated,offlineOpinion,yoSilero)
+                            MissingSpeechMarks.merge(arbitrated,safe,c.stress || dictionaries,yoSilero,ambiguousLocalYo)
+                        } else if (!c.stress && dictionaries) {
+                            // No LLM stress: the dictionaries mark the accepted text (the LLM is only the arbiter, if on).
+                            stressVote(ctx,c,listOf(named),listOf(source),provider) { expectedEpoch != epoch || cancelled() }.first.single()
                         } else if (c.stress) {
                             // A word the cloud LLM left unmarked used to reach the TTS model as a guess (eSpeak in
                             // Kokoro). The offline Silero Stress reads the whole sentence (context BERT for homographs,
@@ -684,10 +690,10 @@ object LlmPreparation {
                     LlmProviders.local(ctx,c,requestTexts,deadlineMs=if(c.multiVoice) 12000 else 45000,onOutput=::accept)
                 } else {
                     // The names dictionary first: on the same name it wins over what this book has learned.
-                    val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) (com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts) +
+                    val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) ((if (com.brahmadeo.supertonic.tts.utils.StressOptions.names(ctx)) com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts) else emptyList()) +
                         NameStress.hint(requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList(), provider = provider)
                     if (expectedEpoch != epoch || cancelled()) break // No judge requests for a cancelled batch.
-                    val (checked, opinions) = if (c.stress) stressVote(ctx,c,outputs,requestTexts,provider,bookNames) { expectedEpoch != epoch || cancelled() } else outputs to null
+                    val (checked, opinions) = if (c.stress && com.brahmadeo.supertonic.tts.utils.StressOptions.dictionaries(ctx)) stressVote(ctx,c,outputs,requestTexts,provider,bookNames) { expectedEpoch != epoch || cancelled() } else outputs to null
                     batchOpinions = opinions; batchRaw = outputs
                     try { checked.forEachIndexed { index,text -> accept(index,text) } } finally { batchOpinions = null; batchRaw = null }
                 }

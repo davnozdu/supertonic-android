@@ -55,7 +55,8 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     try { com.brahmadeo.supertonic.tts.llm.StressProbe.run(this@SpeechDiagnosticsActivity, intent.getStringExtra("provider"),
                         if (intent.hasExtra("verifyThinking")) intent.getBooleanExtra("verifyThinking", false) else null,
                         intent.getStringExtra("verifier"), intent.getStringExtra("engine"),
-                        if (intent.hasExtra("localThinking")) intent.getBooleanExtra("localThinking", false) else null) }
+                        if (intent.hasExtra("localThinking")) intent.getBooleanExtra("localThinking", false) else null,
+                        intent.getStringExtra("sources")) }
                     catch (e: Exception) { Log.e("SpeechCheck", "STRESS PROBE FAILED ${e.javaClass.simpleName}: ${e.message}") }
                     finally { running.set(false) }
                     return@withContext
@@ -72,7 +73,7 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                 val oldMultiVoice=llmPrefs.getBoolean("multi_voice",false)
                 val multiVoiceProbe=intent.getBooleanExtra("multiVoiceProbe",false) || intent.getBooleanExtra("roleRecoveryProbe",false)
                 val voicePreviewProbe=intent.getBooleanExtra("voicePreviewProbe",false)
-                val oldRestoreYo=llmPrefs.getBoolean("restore_yo",true)
+                val oldRestoreYo=llmPrefs.getBoolean("restore_yo",false)
                 val offline=intent.getBooleanExtra("offline",false)
                 val oldLocalStress=prefs.getBoolean("local_russian_stress",true)
                 val verifyStress=intent.getBooleanExtra("stress",false)
@@ -238,12 +239,11 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                             val normalizer=com.brahmadeo.supertonic.tts.utils.TextNormalizer()
                             val wall=normalizer.normalize("По стенам.","ru")
                             check("стёнам" !in wall.replace("+","").replace("\u0301","").lowercase())
-                            llmPrefs.edit().putBoolean("restore_yo",false).commit()
-                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            val oldYoSilero=prefs.getBoolean(com.brahmadeo.supertonic.tts.utils.StressOptions.YO_SILERO,true)
+                            prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.StressOptions.YO_SILERO,false).commit()
                             val plain=normalizer.normalize("Зеленый ребенок, ковер и берёза.","ru").replace("+","").replace("\u0301","")
                             check("Зеленый ребенок, ковер и берёза." == plain)
-                            llmPrefs.edit().putBoolean("restore_yo",oldRestoreYo).commit()
-                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.StressOptions.YO_SILERO,oldYoSilero).commit()
                             Log.i("SpeechCheck","YO SWITCH AND WALL REGRESSION PASSED: $wall; disabled=$plain")
                         }
                     }

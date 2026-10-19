@@ -101,7 +101,7 @@ object LocalRussianStress {
         data!!.getJSONObject("homodict").has(word.lowercase().replace("\u0301", "").replace("+", ""))
     }.getOrDefault(true)
     @Synchronized fun apply(ctx: Context, text: String): String {
-        if (!LocalRussianAssets.ready(ctx) || !ctx.getSharedPreferences("SupertonicPrefs",0).getBoolean("local_russian_stress",true)) return text
+        if (!LocalRussianAssets.ready(ctx) || !com.brahmadeo.supertonic.tts.utils.StressOptions.silero(ctx)) return text
         cache[text]?.let { return it }
         val started = android.os.SystemClock.elapsedRealtime()
         lastUsed = started
@@ -122,7 +122,7 @@ object LocalRussianStress {
                 val stWidth=st.size/candidates.size;val yoWidth=yp.size/candidates.size
                 candidates.forEachIndexed { i,m -> predicted[m.range.first]=st.copyOfRange(i*stWidth,(i+1)*stWidth) to yp.copyOfRange(i*yoWidth,(i+1)*yoWidth) }
             }
-            val result = words.replace(text) { m ->
+            var result = words.replace(text) { m ->
                 val original = m.value
                 if ('+' in original || '\u0301' in original || 'ё' in original || 'Ё' in original) return@replace original
                 val lower = original.lowercase()
@@ -177,6 +177,8 @@ object LocalRussianStress {
                 // can invent ё in ordinary words such as "стенам".
                 value.substring(0,pos)+"+"+value.substring(pos)
             }
+            // «Буква ё · Silero» off: its stress stays on the same vowel, written е.
+            if (!com.brahmadeo.supertonic.tts.utils.StressOptions.yoSilero(ctx)) result = com.brahmadeo.supertonic.tts.utils.RussianYoPolicy.apply(text, result, false)
             cache[text] = result
             Log.i("LocalRussian", "Offline stress/yo chars=${text.length} ms=${android.os.SystemClock.elapsedRealtime()-started}")
             result

@@ -2,7 +2,7 @@ package com.brahmadeo.supertonic.tts.silero
 
 import java.util.Locale
 
-/** v5.5's native alphabet and sentence-type inputs. Explicit stress wins. */
+/** Silero RU's native alphabet and sentence-type inputs. Explicit stress wins. */
 internal object SileroText {
     private const val symbols = "_~|!+,-.:;?абвгдежзийклмнопрстуфхцчшщъыьэюяё–… "
     private val acute = Regex("([аеёиоуыэюя])\u0301")
@@ -13,14 +13,31 @@ internal object SileroText {
         val stress = Regex("[а-яё+]+").replace(manual) { word ->
             if('ё' in word.value && '+' !in word.value) word.value.replace("ё","+ё") else word.value
         }
-        return stress.replace('—', '–').replace('\n', ' ').replace('\t', ' ')
+        return dashes(stress).replace('\n', ' ').replace('\t', ' ')
             .map { c -> when {
                 c in symbols && c !in "_~|" -> c
                 c.isLetter() || Character.getType(c)==Character.NON_SPACING_MARK.toInt() -> null
                 else -> ' '
             } }.filterNotNull().joinToString("")
-            .replace(Regex(" +"), " ").trim()
+            // A dropped quote or bracket must not leave a space before the comma («Да», — сказал -> да, сказал).
+            .replace(Regex(" +"), " ").replace(Regex(" (?=[,.!?…:;])"), "").trim()
     }
+    private val hyphenWord = Regex("[а-яё+]+(?:-[а-яё+]+)+")
+    private val suffixParticles = setOf("то", "либо", "нибудь", "ка", "таки", "де", "тка", "с")
+    private val prefixParticles = setOf("кое", "кой", "по", "во", "в", "из")
+    /** The model reads a dash as a pause and drawls the vowel before it, and a hyphen inside a word as a micro-pause
+     * (v5.6: 4-9 frames of 12.5 ms plus a longer vowel). Dashes go; a particle joins its word («кто-то» -> «ктото»,
+     * one stress, said as one word), other compounds get an ordinary word boundary («северо запад»). */
+    fun dashes(text: String): String = hyphenWord.replace(text) { m ->
+        val parts = m.value.split('-')
+        buildString {
+            append(parts[0])
+            for (i in 1 until parts.size) {
+                if (parts[i].replace("+", "") !in suffixParticles && parts[i - 1].replace("+", "") !in prefixParticles) append(' ')
+                append(parts[i])
+            }
+        }
+    }.replace(Regex("[-–—]+"), " ").replace(Regex(" +(?=[,.!?…:;])"), "").replace(Regex(" {2,}"), " ").trim()
     fun phrases(input: String, extraSentencePauseMs: Int = 0): List<String> {
         val spaced=com.brahmadeo.supertonic.tts.utils.BookTextSpacing.normalize(input)
         val sentences=if(extraSentencePauseMs>0) com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses

@@ -71,7 +71,11 @@ class LlmSettingsActivity : ComponentActivity() {
                 var offlineReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.local.LocalRussianAssets.ready(this)) }
                 var offlineBusy by remember { mutableStateOf(false) }
                 var offlineStatus by remember { mutableStateOf("") }
-                var offlineStress by remember { mutableStateOf(pausePrefs.getBoolean("local_russian_stress",true)) }
+                var sileroStress by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.StressOptions.silero(this)) }
+                var ruaccentStress by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.StressOptions.ruaccent(this)) }
+                var namesStress by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.StressOptions.names(this)) }
+                var stressArbiter by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.StressOptions.arbiter(this)) }
+                var yoSilero by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.StressOptions.yoSilero(this)) }
                 var pcmCacheMb by remember { mutableIntStateOf(pausePrefs.getInt("reader_pcm_cache_mb",256)) }
                 var aheadMinutes by remember { mutableIntStateOf(pausePrefs.getInt(SupertonicTTS.AHEAD_MINUTES_KEY,5)) }
                 var readerAhead by remember { mutableStateOf(pausePrefs.getBoolean("reader_early_prepare",true)) }
@@ -149,7 +153,23 @@ class LlmSettingsActivity : ComponentActivity() {
                             com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
                             message = "Кэш текста и аудио очищен. Уже переданный Android звук может доиграть; следующие фрагменты будут подготовлены заново."
                         }) { Text("Очистить кэш текста и аудио") }
-                        Text("Целые числа сначала точно переводятся в слова. Ударения расставляют словарь RUAccent (179 МБ, скачивается сам по Wi-Fi) и Silero; где они расходятся и в омографах, выбирает LLM. LLM ставит пунктуацию, ё и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется.", style = MaterialTheme.typography.bodySmall)
+                        Text("Целые числа сначала точно переводятся в слова. LLM ставит пунктуацию и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется. Ударения и ё — по настройкам ниже.", style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider()
+                        Text("Ударения и буква ё", style = MaterialTheme.typography.titleLarge)
+                        Text("Каждый источник включается отдельно. По умолчанию только Silero Stress: акцентор и модель омографов на телефоне, без сети. Ударения и ё, уже написанные в книге или в словаре пользователя, сохраняются всегда.", style = MaterialTheme.typography.bodySmall)
+                        fun option(key: String, value: Boolean) = pausePrefs.edit().putBoolean(key, value).apply()
+                        Toggle("Silero Stress", sileroStress) { sileroStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.SILERO, it) }
+                        if (!offlineReady) Text("Ресурсы Silero Stress ещё не скачаны — кнопка ниже, в разделе «Локальная подготовка книг».", style = MaterialTheme.typography.bodySmall)
+                        Toggle("Словарь RUAccent (179 МБ, скачивается сам по Wi-Fi)", ruaccentStress) { ruaccentStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.RUACCENT, it) }
+                        Text("Голосует вместе с Silero: совпавшее ударение окончательное, при расхождении без арбитра — словарь RUAccent, для омографа — Silero.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("Словарь имён: ударение и ё в именах", namesStress) { namesStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.NAMES, it) }
+                        Toggle("Ударения от LLM", config.stress) { config = config.copy(stress = it); save() }
+                        Toggle("LLM-арбитр для споров и омографов", stressArbiter) { stressArbiter = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.ARBITER, it) }
+                        Text("Арбитр — облачная LLM: спорное слово спрашивается дважды в разном порядке вариантов. Работает при включённой LLM-обработке и двух мнениях (Silero и RUAccent или LLM); локальная Gemma арбитром не бывает.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("Буква ё: словарь Silero (черный → чёрный)", yoSilero) { yoSilero = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.YO_SILERO, it) }
+                        Toggle("Буква ё: LLM по контексту (все/всё, узнает/узнаёт)", config.restoreYo) { config = config.copy(restoreYo = it); save() }
+                        if (!sileroStress && !ruaccentStress && !config.stress) Text("Все источники ударений выключены: модель прочитает слова со своими догадками.", style = MaterialTheme.typography.bodySmall)
+                        Text("Изменение настроек сбрасывает кэш подготовленного текста и аудио.", style = MaterialTheme.typography.bodySmall)
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
                             Text("Звук Tera",style=MaterialTheme.typography.titleMedium)
                             Text("PCM 44,1 кГц, 16 бит. Быстрый distilled — по умолчанию. Teacher — альтернативный полный синтез, примерно в 2–3 раза медленнее; результат сравните на слух.",style=MaterialTheme.typography.bodySmall)
@@ -240,10 +260,6 @@ class LlmSettingsActivity : ComponentActivity() {
                             Text("Одинаковый ориентир громкости для Silero, Tera и Shtorm. Усиление постоянно внутри фразы: ритм и паузы сохраняются.", style = MaterialTheme.typography.bodySmall)
                             Text("Локальная подготовка книг", style = MaterialTheme.typography.titleMedium)
                             Text("Числа, даты, время, годы, единицы, валюты, дроби, сокращения и сноски обрабатываются на телефоне даже при выключенной LLM.")
-                            Toggle("Локальные ударения и ё по контексту", offlineStress) {
-                                offlineStress = it; pausePrefs.edit().putBoolean("local_russian_stress",it).apply()
-                            }
-                            if (!offlineStress) Text("Локальный акцентор выключен. Если LLM недоступна или не успела ответить, Silero может читать слова без правильных ударений. Для стабильного чтения рекомендуется включить локальные ударения: их расставляют словарь RUAccent и Silero, а спорные слова и омографы решает LLM.", style = MaterialTheme.typography.bodySmall)
                             Button(enabled = !offlineBusy && !offlineReady, onClick = {
                                 offlineBusy = true
                                 scope.launch {
@@ -277,10 +293,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             }
                             Text("Тип предложения передаётся прямо в звуковую модель. При выключении используется повествовательная интонация.", style = MaterialTheme.typography.bodySmall)
                         }
-                        Toggle("Расставлять ударения", config.stress) { config = config.copy(stress = it); save() }
                         Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it); save() }
-                        Toggle("Восстанавливать букву ё по контексту", config.restoreYo) { config = config.copy(restoreYo = it); save() }
-                        Text("Переключатель ё действует на LLM и локальные словари. Исходная ё в книге сохраняется. Изменение настроек автоматически сбрасывает кэш подготовки и готового аудио.", style = MaterialTheme.typography.bodySmall)
                         Text("Текст, уже отправленный читалкой, подготавливается в фоне с контекстом до 4000 символов. Если читалка отправляет по одному фрагменту, первая подготовка каждого нового фрагмента может занять время.", style = MaterialTheme.typography.bodySmall)
                         Text("Чтение ждёт подготовку не более 1,5 секунды. Если результат ещё не готов, используется словарь, а очередь подготавливается дальше в фоне.", style = MaterialTheme.typography.bodySmall)
                         Choice("Подготовка текста вперёд в приложении", "${config.aheadChars} символов",

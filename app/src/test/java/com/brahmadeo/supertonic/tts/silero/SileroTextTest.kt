@@ -16,7 +16,7 @@ class SileroTextTest {
         assertEquals("светл+о...",SileroText.modelInput("светл+о...").text)
     }
     @Test fun shortIsolatedFinalVowelsSurviveSileroAcceleration() {
-        for ((source,spoken) in listOf("да." to "даа.","кто?" to "ктоо?","вс+ё." to "вс+ёё.","– да!" to "– даа!","пишут см+и." to "пишут см+ии."))
+        for ((source,spoken) in listOf("да." to "даа.","кто?" to "ктоо?","вс+ё." to "вс+ёё.","да!" to "даа!","пишут см+и." to "пишут см+ии."))
             assertEquals(spoken,SileroText.modelInput(source).text)
         // A correction to a standalone response must not stretch little words
         // inside a paragraph or add micro-pauses between them.
@@ -47,7 +47,20 @@ class SileroTextTest {
     }
     @Test fun separatorsAndHyphensDoNotDisappear() {
         assertEquals("не раз было",SileroText.prepare("не/раз(было)"))
-        assertEquals("по-прежнему",SileroText.prepare("по\u2011прежнему"))
+        assertEquals("попрежнему",SileroText.prepare("по\u2011прежнему"))
+    }
+    @Test fun dashesGoAndHyphenatedWordsStayWhole() {
+        assertEquals("он врач.", SileroText.prepare("Он — врач."))
+        assertEquals("привет, сказал он. нет.", SileroText.prepare("— Привет, — сказал он. — Нет."))
+        assertEquals("да, ответил он.", SileroText.prepare("«Да», — ответил он."))
+        assertEquals("он сказал: иди.", SileroText.prepare("Он сказал: – Иди."))
+        assertEquals("слово вот.", SileroText.prepare("слово - вот."))
+        // Particles join their word with its own stress: no micro-pause inside «как-нибудь».
+        assertEquals("к+акниб+удь кт+ото пом+оему изза", SileroText.dashes("к+ак-ниб+удь кт+о-то по-м+оему из-за"))
+        assertEquals("к+акнибудь, дайка, коечто", SileroText.prepare("Ка́к-нибудь, дай-ка, кое-что"))
+        // Other compounds: an ordinary word boundary.
+        assertEquals("с+еверо з+апад, двух тр+ёх", SileroText.prepare("Се́веро-за́пад, двух-трёх"))
+        assertEquals("кт+ото приш+ёл", SileroText.modelInput(SileroText.prepare("Кто́-то пришёл.")).text)
     }
     @Test fun punctuationFramesIncludeNaturalPrefix() {
         assertEquals(24L,SileroPauseFrames.forPunctuation(',',180))
@@ -57,7 +70,7 @@ class SileroTextTest {
     }
     @Test fun explicitStressAndYo() {
         val text = SileroText.prepare("Светло́. Всё — хорошо́!")
-        assertEquals("светл+о. вс+ё – хорош+о!", text)
+        assertEquals("светл+о. вс+ё хорош+о!", text)
         val ids = SileroText.sequence(text)
         assertEquals(2L, ids.first()); assertEquals(1L, ids.last())
         assertTrue(ids.all { it in 0..46 })

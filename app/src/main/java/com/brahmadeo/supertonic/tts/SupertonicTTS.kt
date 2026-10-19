@@ -116,6 +116,7 @@ object SupertonicTTS {
     fun setApplicationContext(context: Context) {
         appContext = context.applicationContext
         com.brahmadeo.supertonic.tts.utils.DiagLog.init(context)
+        com.brahmadeo.supertonic.tts.utils.StressOptions.migrate(context)
         com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.initialize(context)
         com.brahmadeo.supertonic.tts.utils.TextNormalizer.context = context.applicationContext
         com.brahmadeo.supertonic.tts.utils.ReadingMemory.purgeLegacy(context.applicationContext)

@@ -48,7 +48,7 @@ object LlmSettings {
     fun enabled(context: Context): Boolean {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return p.getString("mode", "OFF") != "OFF" &&
-            (p.getBoolean("stress", true) || p.getBoolean("punctuation", true) || p.getBoolean("restore_yo", true) || p.getBoolean("multi_voice", false))
+            (p.getBoolean("stress", false) || p.getBoolean("punctuation", true) || p.getBoolean("restore_yo", false) || p.getBoolean("multi_voice", false))
     }
     fun multiVoiceEnabled(context: Context): Boolean {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -101,8 +101,8 @@ object LlmSettings {
             geminiThinking = p.getBoolean("gemini_thinking", false),
             localThinking = p.getBoolean("local_thinking", false),
             idleSeconds = p.getInt("idle_seconds", 120).coerceIn(30, 600),
-            punctuation = p.getBoolean("punctuation", true), stress = p.getBoolean("stress", true),
-            aheadChars = aheadChars(context), restoreYo = p.getBoolean("restore_yo", true), multiVoice = p.getBoolean("multi_voice", false),
+            punctuation = p.getBoolean("punctuation", true), stress = p.getBoolean("stress", false),
+            aheadChars = aheadChars(context), restoreYo = p.getBoolean("restore_yo", false), multiVoice = p.getBoolean("multi_voice", false),
             firstPerson = p.getBoolean("first_person", false)
         )
     }

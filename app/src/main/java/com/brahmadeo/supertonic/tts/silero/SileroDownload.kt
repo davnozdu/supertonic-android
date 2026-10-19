@@ -12,9 +12,10 @@ import java.util.zip.ZipInputStream
 import kotlin.coroutines.coroutineContext
 
 object SileroDownload {
-    private const val RU_SHA = "9b04263adc838d33050286cc3705bf0a4867605ed697e29b7db61531d2d82761"
+    // Silero v5_6_ru, exported by tools/export_silero_pack.py (forward takes focus_mask zeros and emphasis).
+    private const val RU_SHA = "d79386e8e25c391ea4bf5b0081daf3b358ed0da494317cb4da1f95b549281fda"
     private const val BASE = "https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1"
-    private val ruSizes = mapOf("pack.json" to 935L, "tts_mel.ptl" to 28152216L,
+    private val ruSizes = mapOf("pack.json" to 922L, "tts_mel.ptl" to 26877978L,
         "backbone.pte" to 53380480L, "head.ptl" to 4961893L)
     private val ruVoices = listOf("aidar", "baya", "kseniya", "eugene", "xenia")
     private const val CIS_SHA = "07d9b4d999852892102cf56ab7b94a6b0ceff204f5fde12c13ed980e4ec2141f"
@@ -26,8 +27,9 @@ object SileroDownload {
     fun defaultVoice(context: Context) = if (cis(context)) "ru_alexandr" else "kseniya"
     private fun sha(context: Context) = if (cis(context)) CIS_SHA else RU_SHA
     private fun sizes(context: Context) = if (cis(context)) cisSizes else ruSizes
-    private fun title(context: Context) = if (cis(context)) "Silero CIS · 29 голосов" else "Silero v5.5"
+    private fun title(context: Context) = if (cis(context)) "Silero CIS · 29 голосов" else "Silero v5.6"
     fun supported() = android.os.Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a"
+    // The RU folder keeps its v5.5 name: selected voice paths and book voices stay valid; the new SHA asks for v5.6.
     fun root(context: Context) = File(context.filesDir, if (cis(context)) "silero-cis_ru" else "silero-v5_5_ru")
     fun ready(context: Context): Boolean {
         val dir = root(context)
@@ -36,7 +38,7 @@ object SileroDownload {
             voices(context).all { File(dir, "$it.json").isFile }
     }
     suspend fun download(context: Context, progress: (String, Float) -> Unit) = com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) { withContext(Dispatchers.IO) {
-        check(supported()) { "Silero v5.5 работает только в версии ARM64 на телефоне ARM64" }
+        check(supported()) { "Silero работает только в версии ARM64 на телефоне ARM64" }
         if (ready(context)) { progress("${title(context)} готова", 1f); return@withContext }
         val sizes = sizes(context)
         val SHA = sha(context)
@@ -46,7 +48,7 @@ object SileroDownload {
         stage.deleteRecursively(); check(stage.mkdirs())
         val archive = File(context.filesDir, dir.name + ".download.zip")
         try {
-            com.brahmadeo.supertonic.tts.utils.ResumableModelFile.fetch("$BASE/ruvoice-pack-${if (cis(context)) "cis_ru" else "ru"}.zip",archive,if (cis(context)) 85285099L else 86495507L,SHA) { received,total ->
+            com.brahmadeo.supertonic.tts.utils.ResumableModelFile.fetch("$BASE/ruvoice-pack-${if (cis(context)) "cis_ru" else "ru-v5_6"}.zip",archive,if (cis(context)) 85285099L else 85221248L,SHA) { received,total ->
                 progress("$title: ${received / 1048576} / ${total / 1048576} МБ",(received.toFloat()/total*.85f).coerceAtMost(.85f))
             }
             progress("Проверка и распаковка $title", .9f)

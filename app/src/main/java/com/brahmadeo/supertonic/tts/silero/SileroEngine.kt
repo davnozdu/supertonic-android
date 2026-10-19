@@ -14,11 +14,13 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-/** Direct Android inference using the exported v5.5 mel/backbone/head files. */
+/** Direct Android inference using the exported Silero RU (v5.6) / CIS mel/backbone/head files. */
 class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)) : AutoCloseable {
     private val root = SileroDownload.root(context)
     private val metadata = JSONObject(File(root, "pack.json").readText())
     private val nativeTypes = metadata.optBoolean("types", true)
+    /** v5.6 adds `emphasis` (14 forward arguments) and was trained with a zero focus mask, not None. */
+    private val focusArgs = metadata.optInt("args", 13) >= 14
     private val symbolIds = metadata.getJSONObject("symbol_to_id")
     private val speakers = metadata.getJSONObject("speakers")
     private val prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
@@ -43,7 +45,7 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
             head = LiteModuleLoader.load(File(root, "head.ptl").absolutePath)
             backbone = org.pytorch.executorch.Module.load(File(root, "backbone.pte").absolutePath,
                 org.pytorch.executorch.Module.LOAD_MODE_MMAP, threads)
-            Log.i("SileroTTS", "Silero v5.5 loaded threads=$threads")
+            Log.i("SileroTTS", "${metadata.optString("title", "Silero")} loaded threads=$threads")
         } catch (t: Throwable) { unload(); throw t }
     }
     @Synchronized fun synthesize(text: String, voice: String, speed: Float, gain: Float,
@@ -103,7 +105,10 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
             )
             if (nativeTypes) {
                 args += IValue.from(Tensor.fromBlob(types, shape))
-                args += IValue.optionalNull()
+                if (focusArgs) {
+                    args += IValue.from(Tensor.fromBlob(LongArray(seq.size), shape))
+                    args += IValue.optionalNull()
+                } else args += IValue.optionalNull()
             }
             val melResult = mel!!.forward(*args.toTypedArray()).toTuple()
             val out = melResult[0].toTensor()
