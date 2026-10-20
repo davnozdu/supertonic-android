@@ -169,6 +169,21 @@ class LlmSettingsActivity : ComponentActivity() {
                         Toggle("Буква ё: словарь Silero (черный → чёрный)", yoSilero) { yoSilero = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.YO_SILERO, it) }
                         Toggle("Буква ё: LLM по контексту (все/всё, узнает/узнаёт)", config.restoreYo) { config = config.copy(restoreYo = it); save() }
                         if (!sileroStress && !ruaccentStress && !config.stress) Text("Все источники ударений выключены: модель прочитает слова со своими догадками.", style = MaterialTheme.typography.bodySmall)
+                        // Switches that the current combination leaves without effect, said plainly.
+                        val llmOff = config.mode == LlmMode.OFF
+                        if (llmOff && (config.stress || config.restoreYo || stressArbiter))
+                            Text("LLM-обработка выключена: «Ударения от LLM», «ё от LLM» и арбитр сейчас не действуют, работают только словари.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (!llmOff && stressArbiter && config.mode == LlmMode.LOCAL)
+                            Text("Режим «Автономно: Gemma 4»: арбитр не работает (Gemma не решает споры ударений), спор решают словари.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (!llmOff && stressArbiter && config.mode != LlmMode.LOCAL &&
+                            !((sileroStress && ruaccentStress) || ((sileroStress || ruaccentStress) && config.stress)))
+                            Text("Арбитру нечего решать: нужны два мнения — Silero Stress и RUAccent, или один из них вместе с «Ударения от LLM».",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (!llmOff && (config.stress || config.restoreYo))
+                            Text("В читалках, которые присылают по одному предложению (KOReader, Readest), при включённом «Не ждать LLM в читалках без очереди» LLM не используется: ударения и ё там ставят только словари.",
+                                style = MaterialTheme.typography.bodySmall)
                         Text("Изменение настроек сбрасывает кэш подготовленного текста и аудио.", style = MaterialTheme.typography.bodySmall)
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
                             Text("Звук Tera",style=MaterialTheme.typography.titleMedium)

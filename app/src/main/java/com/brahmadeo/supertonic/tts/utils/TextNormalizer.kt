@@ -350,6 +350,12 @@ class TextNormalizer {
                     t = AccentDictionaryManager.apply(t, lowerLang)
                     // RUAccent's dictionary and Silero Stress vote; without an LLM a disagreement takes RUAccent's mark.
                     context?.let { t = com.brahmadeo.supertonic.tts.local.RussianStressVote.offline(it, t) }
+                    // «Буква ё: словарь Silero» works without «Silero Stress» too (as in the cloud path): its safe table.
+                    context?.takeIf { restoreYo && !StressOptions.silero(it) }?.let { ctx ->
+                        t = YoRestore.apply(t, setOf("все", "узнает", "берет"),
+                            com.brahmadeo.supertonic.tts.llm.StressCheck.explicitOccurrences(named)) {
+                            com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) }
+                    }
                     t = RussianYoPolicy.apply(named, t, restoreYo)
                 }
                 t

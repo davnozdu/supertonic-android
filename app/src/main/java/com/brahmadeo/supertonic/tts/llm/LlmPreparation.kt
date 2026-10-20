@@ -658,7 +658,8 @@ object LlmPreparation {
                         val dictionaries = options.dictionaries(ctx)
                         val yoSilero = options.yoSilero(ctx)
                         val withNames = if (options.names(ctx)) com.brahmadeo.supertonic.tts.utils.RussianNames.restore(ctx, learned, true, true, explicit) else learned
-                        val named = if (yoSilero && provider != "local") com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo, explicit) {
+                        // Gemma's path takes Silero's ё from its opinion below; without «Silero Stress» from the table.
+                        val named = if (yoSilero && (provider != "local" || !options.silero(ctx))) com.brahmadeo.supertonic.tts.utils.YoRestore.apply(withNames, ambiguousLocalYo, explicit) {
                             com.brahmadeo.supertonic.tts.local.LocalRussianStress.yoForm(ctx, it) } else withNames
                         val completed=if(provider=="local" && (c.stress || dictionaries || c.restoreYo || yoSilero)) {
                             // Stress: RUAccent and Silero vote, Gemma judges their disagreements (as the cloud does).
