@@ -316,7 +316,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         Column {
                                             Text("Kokoro-RU v2", style = MaterialTheme.typography.titleMedium)
-                                            Text("Русский · Света, Маша, Дима · 24 кГц · ≈266 МБ, полная точность ещё ≈620 МБ. Компактный Q8 или полная точность — в настройках, раздел «Звук Kokoro».", style = MaterialTheme.typography.bodySmall)
+                                            Text("Русский · Света, Маша, Дима · 24 кГц · ≈266 МБ, полная точность ещё ≈620 МБ. Компактный Q8 или полная точность — на главном экране под стилем голоса.", style = MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }
@@ -329,7 +329,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         Column {
                                             Text("Shtorm PocketTTS RU v2 · экспериментальная",style=MaterialTheme.typography.titleMedium)
-                                            Text("Для книг · ≈439 МБ · CPU · 7 скачиваемых голосов. Короткие фразы, поддержка ударений. Живая подача; спокойная (slow, ещё ≈341 МБ) — в настройках, раздел «Звук Shtorm».",style=MaterialTheme.typography.bodySmall)
+                                            Text("Для книг · ≈439 МБ · CPU · 7 скачиваемых голосов. Короткие фразы, поддержка ударений. Живая подача; спокойная (slow, ещё ≈341 МБ) — на главном экране под стилем голоса.",style=MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }
@@ -490,6 +490,7 @@ class MainActivity : ComponentActivity() {
                     val threadModel = AssetManager.getModelType(this@MainActivity)
                     var cpuThreads by remember(threadModel) { mutableStateOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(this@MainActivity, threadModel)) }
                     MainScreen(
+                        modelType = threadModel,
                         showPocketVoicesDownload=AssetManager.isPocket(this@MainActivity) && !com.brahmadeo.supertonic.tts.pocket.PocketVoices.ready(this@MainActivity),
                         onPocketVoicesDownload={
                             viewModel.isDownloading.value=true

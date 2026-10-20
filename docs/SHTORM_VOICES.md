@@ -24,4 +24,4 @@ and `model_slow` (calmer delivery, freer pauses). `tools/export_shtorm.py slow` 
 `text_conditioner.onnx`, ≈341 MB; `flow_lm_flow`/`mimi_decoder`/tokenizer are shared. Source revision
 33f6c328 (weights unchanged since 01.10.2026). On the phone the slow files live in `shtorm-pocket-v2/slow/`
 with symlinks to the shared fast files; this folder is also the native voice cache (`.cache/*.emb|*.kv`
-depend on the weights). Choice: settings, «Звук Shtorm», pref `shtorm_slow` (default fast).
+depend on the weights). Choice: main screen under the voice style (ui/ModelPackageChoice, also Kokoro Q8/full), pref `shtorm_slow` (default fast).

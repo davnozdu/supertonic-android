@@ -95,6 +95,7 @@ fun MainScreen(
     onSleepTimerClick: () -> Unit = {},
     onModelSelectionClick: () -> Unit = {},
     showPocketVoicesDownload: Boolean = false,
+    modelType: String = "",
     onPocketVoicesDownload: () -> Unit = {},
     cpuThreads: Int = 4,
     maxCpuThreads: Int = 8,
@@ -320,6 +321,8 @@ fun MainScreen(
                             selectedOption = voices.entries.find { it.value == selectedVoiceFile }?.key ?: "",
                             onOptionSelected = { name -> onVoiceChange(voices[name] ?: "M1.json") }
                         )
+
+                        ModelPackageChoice(modelType)
 
                         if (!isTeraModel) Row(
                             verticalAlignment = Alignment.CenterVertically,
