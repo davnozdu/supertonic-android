@@ -12,7 +12,11 @@ import android.util.Log
 /** Observe incoming queue; forward every original transaction and callback unchanged.
  * Internal AOSP protocol: unknown SDKs or decoding failures fall back to ordinary TTS.
  */
+/** Measured Kokoro/Silero speech at the default rate: about 55-70 ms per character. */
+private const val FILE_SPEECH_MS_PER_CHAR = 70L
+
 class TtsQueueObserver(private val context: Context, private val delegate: IBinder) : Binder() {
+    @Volatile private var lastFileChars = 0
     private val musicCallbacks = HashMap<IBinder, com.brahmadeo.supertonic.tts.music.MusicTtsCallback>()
     private val readingOwners = java.util.concurrent.ConcurrentHashMap.newKeySet<IBinder>()
     /** The local callback proxy cannot die with the remote client; preserve framework cleanup explicitly. */
@@ -99,6 +103,10 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                 // No reading notification: the app plays the file itself, MyTTS's pause would not reach it.
                 if (caller != null && text != null) {
                     if (LlmPreparation.directReader(context, caller, getCallingUid(), text, true)) LlmPreparation.cancel(caller)
+                    // The reader never says when its file plays or pauses. With its lookahead this request comes as the
+                    // previous sentence starts; without it, this sentence plays next. Cover the longer one plus the gap.
+                    val chars = maxOf(text.length, lastFileChars); lastFileChars = text.length
+                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context, (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L))
                 }
             } catch (_: Exception) { Log.w("LlmPreparation", "File synthesis observation unavailable; using ordinary synthesis") }
             finally { data.setDataPosition(position) }

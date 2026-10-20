@@ -41,6 +41,11 @@ object BackgroundMusic {
     private const val GAP_MS = 4000L
     @Volatile private var gapUntil = 0L
     private val gapEnd = Runnable { update() }
+    /** A reader that synthesizes to files and plays them itself (KOReader's audiobook plugin) never says when its
+     * audio plays or stops: each request holds the music for about as long as its speech, plus the gap. */
+    @Volatile private var holdUntil = 0L
+    private const val HOLD_AFTER_STOP_MS = 1500L
+    private val holdEnd = Runnable { update() }
 
     @Synchronized fun initialize(ctx: Context) {
         if (context != null) return
@@ -63,10 +68,28 @@ object BackgroundMusic {
         refresh()
     }
     fun rejected(owner: Any, token: Long) { reading.reject(owner,token); refresh() }
-    fun stop(owner: Any) { reading.stop(owner); endGap(); refresh() }
+    fun hold(ctx: Context, ms: Long) {
+        initialize(ctx)
+        handler.post {
+            holdUntil = maxOf(holdUntil, android.os.SystemClock.uptimeMillis() + ms)
+            handler.removeCallbacks(holdEnd); handler.postAtTime(holdEnd, holdUntil)
+            update()
+        }
+    }
+    /** KOReader's plugin also calls stop() before every sentence it synthesizes: a held track keeps 1.5 s for the
+     * next request, so a real pause still silences it. */
+    fun stop(owner: Any) {
+        reading.stop(owner)
+        handler.post {
+            gapUntil = 0L; handler.removeCallbacks(gapEnd)
+            val now = android.os.SystemClock.uptimeMillis()
+            if (holdUntil > now + HOLD_AFTER_STOP_MS) { holdUntil = now + HOLD_AFTER_STOP_MS; handler.removeCallbacks(holdEnd); handler.postAtTime(holdEnd, holdUntil) }
+        }
+        refresh()
+    }
     fun stopTts() { reading.stopTts(); endGap(); refresh() }
     fun app(ctx: Context, playing: Boolean) { initialize(ctx); reading.app(playing); if (!playing) endGap(); refresh() }
-    private fun endGap() { handler.post { gapUntil = 0L; handler.removeCallbacks(gapEnd) } }
+    private fun endGap() { handler.post { gapUntil = 0L; holdUntil = 0L; handler.removeCallbacks(gapEnd); handler.removeCallbacks(holdEnd) } }
     fun volumePreview(percent: Int) { handler.post { previewVolume = percent.coerceIn(0,100); updateVolume() } }
     internal data class Snapshot(val reading: Boolean,val prepared: Boolean,val playing: Boolean,val looping: Boolean,val position: Int)
     internal suspend fun snapshot(): Snapshot = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -89,7 +112,8 @@ object BackgroundMusic {
             savedPosition = 0
             loadedSource = ""
         }
-        if (!enabled() || !reading.playing() || track.isEmpty()) {
+        val held = android.os.SystemClock.uptimeMillis() < holdUntil
+        if (!enabled() || !(reading.playing() || held) || track.isEmpty()) {
             // Between two utterances of the same reading: keep playing until the gap ends.
             if (enabled() && track.isNotEmpty() && android.os.SystemClock.uptimeMillis() < gapUntil) return
             if (prepared) runCatching { if(player?.isPlaying==true) player?.pause() }
