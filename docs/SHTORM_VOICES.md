@@ -14,3 +14,14 @@ These are compatible references for Russian Shtorm voice cloning, not additional
 
 License: https://creativecommons.org/licenses/by/4.0/
 Source attribution: https://huggingface.co/kyutai/tts-voices
+
+## v2 slow (5.0.5-beta8)
+
+Shtorm-PocketTTS-RU v2 ships two weight sets: `model_fast` (livelier, the base package `shtorm-pocket-v2`)
+and `model_slow` (calmer delivery, freer pauses). `tools/export_shtorm.py slow` (workflow
+`shtorm-slow-model.yml`) exports slow and publishes only graphs whose bytes differ from fast to release
+`shtorm-pocket-v2-slow`: `flow_lm_main.onnx`, `mimi_encoder.onnx` (holds the speaker projection),
+`text_conditioner.onnx`, ≈341 MB; `flow_lm_flow`/`mimi_decoder`/tokenizer are shared. Source revision
+33f6c328 (weights unchanged since 01.10.2026). On the phone the slow files live in `shtorm-pocket-v2/slow/`
+with symlinks to the shared fast files; this folder is also the native voice cache (`.cache/*.emb|*.kv`
+depend on the weights). Choice: settings, «Звук Shtorm», pref `shtorm_slow` (default fast).

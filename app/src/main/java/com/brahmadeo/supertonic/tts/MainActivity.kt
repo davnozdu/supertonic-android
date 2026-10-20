@@ -329,7 +329,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         Column {
                                             Text("Shtorm PocketTTS RU v2 · экспериментальная",style=MaterialTheme.typography.titleMedium)
-                                            Text("Для книг · ≈439 МБ · CPU · 7 скачиваемых голосов. Короткие фразы, поддержка ударений. Скорость проверяется на устройстве.",style=MaterialTheme.typography.bodySmall)
+                                            Text("Для книг · ≈439 МБ · CPU · 7 скачиваемых голосов. Короткие фразы, поддержка ударений. Живая подача; спокойная (slow, ещё ≈341 МБ) — в настройках, раздел «Звук Shtorm».",style=MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }

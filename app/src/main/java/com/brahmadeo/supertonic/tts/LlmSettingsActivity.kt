@@ -66,6 +66,10 @@ class LlmSettingsActivity : ComponentActivity() {
                 var kokoroFullReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullReady(this)) }
                 var kokoroFull by remember { mutableStateOf(pausePrefs.getBoolean("kokoro_full_precision",true)) }
                 var kokoroBusy by remember { mutableStateOf(false) }
+                var shtormSlowReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowReady(this)) }
+                var shtormSlow by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.pocket.PocketDownload.SLOW_KEY,false)) }
+                var shtormBusy by remember { mutableStateOf(false) }
+                var shtormStatus by remember { mutableStateOf("") }
                 var kokoroStatus by remember { mutableStateOf("") }
                 var sileroIntonation by remember { mutableStateOf(pausePrefs.getBoolean("silero_intonation", true)) }
                 var offlineReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.local.LocalRussianAssets.ready(this)) }
@@ -259,6 +263,28 @@ class LlmSettingsActivity : ComponentActivity() {
                                     "NPU не запустился для Kokoro; используется процессор."
                                     else "Генератор звука Kokoro считается на нейропроцессоре Snapdragon (FP16), текст и финальная сборка звука — на процессоре. Первый запуск около минуты готовит графы в фоне; в это время чтение идёт на процессоре. Переключатель общий с Tera.",
                                     style=MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isPocket(this@LlmSettingsActivity)) {
+                            Text("Звук Shtorm",style=MaterialTheme.typography.titleMedium)
+                            Text("Shtorm v2 в двух вариантах с теми же голосами. Живая подача: шире интонация, быстрые голоса могут «строчить». Спокойная: свободнее паузы, ровнее тон, глава звучит примерно на 7% дольше, медленные голоса могут тянуть. Переключение очищает кэш аудио.",style=MaterialTheme.typography.bodySmall)
+                            Button(enabled=!shtormBusy && !shtormSlowReady,onClick={
+                                voicePreview.stop();shtormBusy=true
+                                scope.launch {
+                                    try {
+                                        com.brahmadeo.supertonic.tts.pocket.PocketDownload.downloadSlow(this@LlmSettingsActivity) { status,_ ->
+                                            runOnUiThread { shtormStatus=status }
+                                        }
+                                        shtormSlowReady=true;shtormStatus="Спокойная подача установлена"
+                                    } catch(t: Exception) { shtormStatus="Ошибка установки: ${t.message}" }
+                                    finally { shtormBusy=false }
+                                }
+                            }) { Text(if(shtormSlowReady) "Спокойная подача установлена" else "Скачать спокойную подачу · ${com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowSizeMb(this@LlmSettingsActivity)} МБ") }
+                            if(shtormStatus.isNotBlank()) Text(shtormStatus)
+                            Choice("Подача Shtorm",if(shtormSlow && shtormSlowReady) "Спокойная (slow)" else "Живая (fast)",
+                                if(shtormSlowReady) listOf("Живая (fast)","Спокойная (slow)") else listOf("Живая (fast)")) {
+                                voicePreview.stop();shtormSlow=it=="Спокойная (slow)"
+                                pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.pocket.PocketDownload.SLOW_KEY,shtormSlow).apply()
                             }
                         }
                         if (config.mode != LlmMode.OFF) {

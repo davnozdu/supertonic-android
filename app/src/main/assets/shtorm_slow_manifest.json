@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "variant": "slow",
+  "source_revision": "33f6c328d62c4da5c1227bbe081e89b574a6183a",
+  "sample_rate": 24000,
+  "changed_weights": [
+    "flow_lm.bos_before_voice",
+    "flow_lm.bos_emb",
+    "flow_lm.conditioner",
+    "flow_lm.input_linear",
+    "flow_lm.out_norm",
+    "flow_lm.speaker_proj_weight",
+    "flow_lm.transformer"
+  ],
+  "files": [
+    {
+      "name": "flow_lm_main.onnx",
+      "size": 302364167,
+      "sha256": "c8c9b75d8840d254c975748817e348527e205b86aa07a32cc58d2c5f04e0bde9"
+    },
+    {
+      "name": "mimi_encoder.onnx",
+      "size": 39282087,
+      "sha256": "e6a0c33d204c643aba692096277b6cabb4302cf8b8d952e7c6b4a307ddd4351a"
+    },
+    {
+      "name": "text_conditioner.onnx",
+      "size": 16388309,
+      "sha256": "8a4f3062c91e3de5e0d0a3f68d0812707dd3a71a91325556402065c926ac3051"
+    },
+    {
+      "name": "LICENSE.txt",
+      "size": 196,
+      "sha256": "9b010cbbd7ac00124ed897fa586697d27a075e3fc0ebd0be153d5a7b9b0fae77"
+    }
+  ]
+}

@@ -54,7 +54,8 @@ object SupertonicTTS {
         val all=prefs.all
         val settings=listOf("voice_loudness_normalization","tera_teacher","tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
         val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
-        return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
+        val pocketSlow=AssetManager.isPocket(context) && com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowEnabled(context)
+        return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,pocketSlow,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
     }
     @Synchronized private fun maybeKokoroEngine(context: Context): com.brahmadeo.supertonic.tts.kokoro.KokoroEngine {
         val full=com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
@@ -64,8 +65,9 @@ object SupertonicTTS {
     }
     @Synchronized private fun maybePocketEngine(context: Context): com.brahmadeo.supertonic.tts.pocket.PocketEngine {
         val threads = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)
-        pocketEngine?.let { if (it.threads == threads) return it; it.close(); pocketEngine = null }
-        return com.brahmadeo.supertonic.tts.pocket.PocketEngine(context, threads).also { pocketEngine = it }
+        val slow = com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowEnabled(context)
+        pocketEngine?.let { if (it.threads == threads && it.slow == slow) return it; it.close(); pocketEngine = null }
+        return com.brahmadeo.supertonic.tts.pocket.PocketEngine(context, threads, slow).also { pocketEngine = it }
     }
     @Synchronized private fun maybeSileroEngine(context: Context): com.brahmadeo.supertonic.tts.silero.SileroEngine {
         val model = AssetManager.getModelType(context)
