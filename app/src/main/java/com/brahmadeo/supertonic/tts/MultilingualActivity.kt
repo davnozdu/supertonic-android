@@ -1,6 +1,5 @@
 package com.brahmadeo.supertonic.tts
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -37,7 +36,6 @@ class MultilingualActivity : ComponentActivity() {
                 val engines = remember { ForeignTts.engines(this) }
                 var enabled by remember { mutableStateOf(ForeignTts.enabled(this)) }
                 var languages by remember { mutableStateOf(ForeignTts.languages(this)) }
-                var direct by remember { mutableStateOf(prefs.getBoolean(com.brahmadeo.supertonic.tts.llm.LlmPreparation.DIRECT_KEY, true)) }
                 fun save(list: List<ForeignLanguages.Entry>) {
                     languages = list
                     prefs.edit().putString(ForeignLanguages.KEY, ForeignLanguages.serialize(list)).apply(); ForeignTts.reset()
@@ -75,18 +73,7 @@ class MultilingualActivity : ComponentActivity() {
                             style = MaterialTheme.typography.bodySmall)
                         if (engines.isEmpty()) Text("Других движков TTS на телефоне не найдено.", color = MaterialTheme.colorScheme.error)
                         HorizontalDivider()
-                        Text("Читалки", style = MaterialTheme.typography.titleLarge)
-                        Text("Moon+ Reader и другие читалки, которые задают только язык, получают мультиязычную озвучку сами.")
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Не ждать LLM в читалках без очереди", Modifier.weight(1f).padding(end = 12.dp))
-                            Switch(direct, { direct = it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.llm.LlmPreparation.DIRECT_KEY, it).apply() })
-                        }
-                        Text("Readest и KOReader отдают текст по одному предложению и присылают следующее только после окончания предыдущего, поэтому подготовить его заранее нельзя. Включено: такие предложения читаются сразу, без пауз: ударения и ё ставят словари (по настройкам «Ударения и буква ё»), голоса по ролям определяются по ремаркам («— ответила она», «— сказал Рогожин») и персонажам подготовленной книги. Выключено: каждое предложение ждёт LLM (лучше ударения и пунктуация, но пауза 0,5–1,5 с). Moon+ ставит текст в очередь и всегда готовится через LLM.",
-                            style = MaterialTheme.typography.bodySmall)
-                        Text("Readest, KOReader и читалки с выбором голоса: в списке русских голосов MyTTS есть «${MultilingualVoice.NAME}» — голос, выбранный в MyTTS, с голосами книги и персонажей, — и «${MultilingualVoice.SINGLE}» — только выбранный голос, без голосов персонажей. Остальные языки оба читают движками выше, если они подключены. В Readest «${MultilingualVoice.NAME}» первый и выбирается по умолчанию.")
-                        OutlinedButton(onClick = { runCatching { startActivity(Intent("com.android.settings.TTS_SETTINGS")) } },
-                            modifier = Modifier.fillMaxWidth()) { Text("Настройки синтеза речи Android") }
-                        Text("Readest использует движок по умолчанию: выберите там MyTTS.", style = MaterialTheme.typography.bodySmall)
+                        Text("Голоса MyTTS для Readest и KOReader, ожидание LLM в таких читалках — в пункте меню «Сторонние читалки».", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

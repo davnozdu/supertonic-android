@@ -22,7 +22,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Settings, one group per root-menu item ([EXTRA_SECTION]) instead of one long list. */
 class LlmSettingsActivity : ComponentActivity() {
+    enum class Section(val title: String) {
+        LLM("Подготовка текста LLM"), MODELS("Модели LLM и ключи"), STRESS("Ударения и буква ё"),
+        VOICES("Мультиголосовая озвучка"), SOUND("Звук и паузы"), BUFFER("Упреждение и кэш"), READERS("Сторонние читалки");
+        companion object { fun from(name: String?) = entries.firstOrNull { it.name == name } ?: LLM }
+    }
+    companion object {
+        const val EXTRA_SECTION = "section"
+        fun intent(ctx: android.content.Context, section: Section) =
+            android.content.Intent(ctx, LlmSettingsActivity::class.java).putExtra(EXTRA_SECTION, section.name)
+    }
     private lateinit var voicePreview: VoicePreview
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,6 +41,7 @@ class LlmSettingsActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         LlmPreparation.initialize(this)
         voicePreview = VoicePreview(this)
+        val section = Section.from(intent.getStringExtra(EXTRA_SECTION))
         setContent {
             SupertonicTheme {
                 var config by remember { mutableStateOf(LlmSettings.load(this)) }
@@ -101,216 +113,45 @@ class LlmSettingsActivity : ComponentActivity() {
                         finally { busy = false; refreshing = null }
                     }
                 }
-                Scaffold(topBar = { TopAppBar(title = { Text("Подготовка текста LLM") }, navigationIcon = {
+                Scaffold(topBar = { TopAppBar(title = { Text(section.title) }, navigationIcon = {
                     TextButton(onClick = { finish() }) { Text("Назад") }
                 }) }) { padding ->
                     Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        fun option(key: String, value: Boolean) = pausePrefs.edit().putBoolean(key, value).apply()
+                        if (section == Section.LLM) {
                         Toggle("LLM-обработка", config.mode != LlmMode.OFF) {
                             config = config.copy(mode = if (it) LlmSettings.previousMode(this@LlmSettingsActivity) else LlmMode.OFF)
                             save()
-                        }
-                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
-                            Text("Мультиголосовая озвучка · эксперимент", style = MaterialTheme.typography.titleMedium)
-                            Toggle("Читать автора и диалоги разными голосами", config.multiVoice) {
-                                voicePreview.stop()
-                                config = config.copy(multiVoice = it); save()
-                            }
-                            Text("LLM определяет автора, мужские и женские реплики по соседнему тексту. Слова книги сохраняются. Неясные реплики и фрагменты без готовой разметки читает автор. Голоса сохраняются отдельно для каждой звуковой модели.", style = MaterialTheme.typography.bodySmall)
-                            if (config.multiVoice) {
-                                Toggle("Текст от первого лица — всегда", config.firstPerson) {
-                                    config = config.copy(firstPerson = it); save()
-                                }
-                                Text("Рассказчик говорит «я»: его собственные реплики («— сказал я») читает голос автора. Действует для всех текстов; " +
-                                    "для отдельной книги можно включить или выключить на экране «Книги с голосами персонажей».", style = MaterialTheme.typography.bodySmall)
-                                if (config.mode == LlmMode.OFF) Text("Включите LLM-обработку для определения ролей. При выключенной LLM используется обычный выбранный голос.")
-                                val roleVoices = com.brahmadeo.supertonic.tts.utils.AssetManager.russianVoices(this@LlmSettingsActivity)
-                                var roleRevision by remember { mutableStateOf(0) }
-                                VoiceRole.entries.forEach { role ->
-                                    var selected by remember(role, roleVoices, roleRevision) { mutableStateOf(MultiVoiceSettings.selected(this@LlmSettingsActivity, role)) }
-                                    VoiceRoleChoice(when(role) { VoiceRole.AUTHOR -> "Голос автора"; VoiceRole.MALE -> "Мужской голос"; VoiceRole.FEMALE -> "Женский голос" }, selected, roleVoices,
-                                        previewState, voicePreview::toggle) {
-                                        voicePreview.stop(); selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it); roleRevision++
-                                    }
-                                }
-                                OutlinedButton(onClick = { startActivity(android.content.Intent(this@LlmSettingsActivity, BooksActivity::class.java)) }) {
-                                    Text("Книги с голосами персонажей")
-                                }
-                                if (VoiceRole.entries.map { MultiVoiceSettings.selected(this@LlmSettingsActivity, it) }.distinct().size < 3)
-                                    Text("Для нескольких ролей выбран одинаковый голос. Чтобы слышать переключение, выберите три разных голоса.", style = MaterialTheme.typography.bodySmall)
-                                Text("При обрыве облака используется установленная Gemma 4. Повторные запросы идут в фоне; готовая разметка заменяет резервную в ещё не проигранных фрагментах.", style = MaterialTheme.typography.bodySmall)
-                                if (previewState.message.isNotBlank()) Text(previewState.message, style = MaterialTheme.typography.bodySmall)
-                                Text("У каждого голоса есть кнопка «Прослушать», в том числе в списке выбора. Повторное нажатие останавливает пробу. Для сравнения используется одинаковая короткая фраза без LLM и фоновой музыки.", style = MaterialTheme.typography.bodySmall)
-                                Text("Подготовка идёт заранее в пределах очереди читалки. Чтение не ждёт разметку дольше обычного лимита. Облако рекомендуется; локальная Gemma может ошибаться в ролях.", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        Text("Ударения и пунктуация готовятся до синтеза. При ошибке или превышении времени ожидания используется обычная обработка со словарём.")
-                        Button(onClick = {
-                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
-                            message = "Кэш текста и аудио очищен. Уже переданный Android звук может доиграть; следующие фрагменты будут подготовлены заново."
-                        }) { Text("Очистить кэш текста и аудио") }
-                        Text("Целые числа сначала точно переводятся в слова. LLM ставит пунктуацию и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется. Ударения и ё — по настройкам ниже.", style = MaterialTheme.typography.bodySmall)
-                        HorizontalDivider()
-                        Text("Ударения и буква ё", style = MaterialTheme.typography.titleLarge)
-                        Text("Каждый источник включается отдельно. По умолчанию только Silero Stress: акцентор и модель омографов на телефоне, без сети. Ударения и ё, уже написанные в книге или в словаре пользователя, сохраняются всегда.", style = MaterialTheme.typography.bodySmall)
-                        fun option(key: String, value: Boolean) = pausePrefs.edit().putBoolean(key, value).apply()
-                        Toggle("Silero Stress", sileroStress) { sileroStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.SILERO, it) }
-                        if (!offlineReady) Text("Ресурсы Silero Stress ещё не скачаны — кнопка ниже, в разделе «Локальная подготовка книг».", style = MaterialTheme.typography.bodySmall)
-                        Toggle("Словарь RUAccent (179 МБ, скачивается сам по Wi-Fi)", ruaccentStress) { ruaccentStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.RUACCENT, it) }
-                        Text("Голосует вместе с Silero: совпавшее ударение окончательное, при расхождении без арбитра — словарь RUAccent, для омографа — Silero.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("Словарь имён: ударение и ё в именах", namesStress) { namesStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.NAMES, it) }
-                        Toggle("Ударения от LLM", config.stress) { config = config.copy(stress = it); save() }
-                        Toggle("LLM-арбитр для споров и омографов", stressArbiter) { stressArbiter = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.ARBITER, it) }
-                        Text("Арбитр — облачная LLM: спорное слово спрашивается дважды в разном порядке вариантов. Работает при включённой LLM-обработке и двух мнениях (Silero и RUAccent или LLM); локальная Gemma арбитром не бывает.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("Буква ё: словарь Silero (черный → чёрный)", yoSilero) { yoSilero = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.YO_SILERO, it) }
-                        Toggle("Буква ё: LLM по контексту (все/всё, узнает/узнаёт)", config.restoreYo) { config = config.copy(restoreYo = it); save() }
-                        if (!sileroStress && !ruaccentStress && !config.stress) Text("Все источники ударений выключены: модель прочитает слова со своими догадками.", style = MaterialTheme.typography.bodySmall)
-                        // Switches that the current combination leaves without effect, said plainly.
-                        val llmOff = config.mode == LlmMode.OFF
-                        if (llmOff && (config.stress || config.restoreYo || stressArbiter))
-                            Text("LLM-обработка выключена: «Ударения от LLM», «ё от LLM» и арбитр сейчас не действуют, работают только словари.",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        if (!llmOff && stressArbiter && config.mode == LlmMode.LOCAL)
-                            Text("Режим «Автономно: Gemma 4»: арбитр не работает (Gemma не решает споры ударений), спор решают словари.",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        if (!llmOff && stressArbiter && config.mode != LlmMode.LOCAL &&
-                            !((sileroStress && ruaccentStress) || ((sileroStress || ruaccentStress) && config.stress)))
-                            Text("Арбитру нечего решать: нужны два мнения — Silero Stress и RUAccent, или один из них вместе с «Ударения от LLM».",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        if (!llmOff && (config.stress || config.restoreYo))
-                            Text("В читалках, которые присылают по одному предложению (KOReader, Readest), при включённом «Не ждать LLM в читалках без очереди» LLM не используется: ударения и ё там ставят только словари.",
-                                style = MaterialTheme.typography.bodySmall)
-                        Text("Изменение настроек сбрасывает кэш подготовленного текста и аудио.", style = MaterialTheme.typography.bodySmall)
-                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
-                            Text("Звук Tera",style=MaterialTheme.typography.titleMedium)
-                            Text("PCM 44,1 кГц, 16 бит. Быстрый distilled — по умолчанию. Teacher — альтернативный полный синтез, примерно в 2–3 раза медленнее; результат сравните на слух.",style=MaterialTheme.typography.bodySmall)
-                            Button(enabled=!teacherBusy && !teacherReady,onClick={
-                                teacherBusy=true
-                                scope.launch {
-                                    try {
-                                        withContext(Dispatchers.IO) {
-                                            com.brahmadeo.supertonic.tts.tera.TeraQuality.download(this@LlmSettingsActivity) {
-                                                teacherStatus="Скачивание Tera teacher: $it %"
-                                            }
-                                        }
-                                        teacherReady=true
-                                        teacherStatus="Tera teacher установлена"
-                                        com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
-                                    } catch(t: Exception) { teacherStatus="Ошибка: ${t.message}" }
-                                    finally { teacherBusy=false }
-                                }
-                            }) { Text(if(teacherReady) "Tera teacher установлена" else "Скачать Tera teacher · 257 МБ") }
-                            if(teacherStatus.isNotBlank()) Text(teacherStatus)
-                            if(teacherReady) Toggle("Tera teacher · экспериментальный режим",teacherEnabled) {
-                                teacherEnabled=it
-                                pausePrefs.edit().putBoolean("tera_teacher",it).apply()
-                            }
-                            Text("Оба варианта используют выбранный голос и подготовку LLM. Загружается только один вариант синтеза; при переключении кэш аудио очищается.",style=MaterialTheme.typography.bodySmall)
-                            Toggle("Не растягивать короткие реплики",shortWordCap) {
-                                shortWordCap=it
-                                pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY,it).apply()
-                            }
-                            Text("Модель даёт «Да.», «Нет.» и «Хорошо.» почти секунду. Для фраз до четырёх гласных длительность ограничивается обычным темпом речи; длинные фразы не меняются.",style=MaterialTheme.typography.bodySmall)
-                            val npuSupported = remember { com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity) }
-                            if (npuSupported) {
-                                Toggle("Ускоритель NPU · эксперимент", npuEnabled) {
-                                    npuEnabled = it
-                                    if (it) com.brahmadeo.supertonic.tts.utils.Npu.clearFailure(this@LlmSettingsActivity)
-                                    pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, it).apply()
-                                }
-                                Text(if (npuEnabled && com.brahmadeo.supertonic.tts.utils.Npu.failed(this@LlmSettingsActivity))
-                                    "NPU не запустился на этом телефоне; используется процессор."
-                                    else "Вокодер Tera выполняется на нейропроцессоре Snapdragon (FP16). Первый запуск компилирует модель несколько секунд. При ошибке чтение продолжается на процессоре.",
-                                    style=MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
-                            Text("Звук Kokoro",style=MaterialTheme.typography.titleMedium)
-                            if (com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity)) {
-                                Toggle("Ускоритель NPU · эксперимент", npuEnabled) {
-                                    npuEnabled = it
-                                    if (it) com.brahmadeo.supertonic.tts.utils.Npu.clearFailure(this@LlmSettingsActivity)
-                                    pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, it).apply()
-                                }
-                                Text(if (npuEnabled && com.brahmadeo.supertonic.tts.utils.Npu.failed(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.Npu.KOKORO))
-                                    "NPU не запустился для Kokoro; используется процессор."
-                                    else "Генератор звука Kokoro считается на нейропроцессоре Snapdragon (FP16), текст и финальная сборка звука — на процессоре. Первый запуск около минуты готовит графы в фоне; в это время чтение идёт на процессоре. Переключатель общий с Tera.",
-                                    style=MaterialTheme.typography.bodySmall)
-                            }
                         }
                         if (config.mode != LlmMode.OFF) {
                             Choice("Режим", config.mode.title, LlmMode.entries.filter { it != LlmMode.OFF }.map { it.title }) { title ->
                                 config = config.copy(mode = LlmMode.entries.first { it.title == title }); save()
                             }
                         }
-                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
-                            var levelVoices by remember { mutableStateOf(pausePrefs.getBoolean("voice_loudness_normalization", true)) }
-                            Toggle("Выравнивать громкость голосов", levelVoices) {
-                                levelVoices = it; pausePrefs.edit().putBoolean("voice_loudness_normalization", it).apply()
-                                com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
-                            }
-                            Text("Одинаковый ориентир громкости для Silero, Tera и Shtorm. Усиление постоянно внутри фразы: ритм и паузы сохраняются.", style = MaterialTheme.typography.bodySmall)
-                            Text("Локальная подготовка книг", style = MaterialTheme.typography.titleMedium)
-                            Text("Числа, даты, время, годы, единицы, валюты, дроби, сокращения и сноски обрабатываются на телефоне даже при выключенной LLM.")
-                            Button(enabled = !offlineBusy && !offlineReady, onClick = {
-                                offlineBusy = true
-                                scope.launch {
-                                    try {
-                                        com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(this@LlmSettingsActivity) { status,_ -> runOnUiThread { offlineStatus = status } }
-                                        offlineReady = true
-                                    } catch (t: Exception) { offlineStatus = "Ошибка установки: ${t.message}" }
-                                    finally { offlineBusy = false }
-                                }
-                            }) { Text(if (offlineReady) "Локальный акцентор установлен" else "Скачать локальные ударения и ё · 37 МБ") }
-                            if (offlineStatus.isNotBlank()) Text(offlineStatus)
-                            Toggle("Готовить текст читалки заранее", readerAhead) {
-                                readerAhead = it; pausePrefs.edit().putBoolean("reader_early_prepare",it).apply()
-                            }
-                            Choice("Кэш готового аудио в RAM", "$pcmCacheMb МБ", listOf("64 МБ","128 МБ","256 МБ","512 МБ","1024 МБ")) {
-                                pcmCacheMb=it.substringBefore(' ').toInt();pausePrefs.edit().putInt("reader_pcm_cache_mb",pcmCacheMb).apply()
-                            }
-                            Choice("Запас готового звука вперёд", "$aheadMinutes мин", listOf("2 мин","5 мин","10 мин","20 мин","60 мин")) {
-                                aheadMinutes=it.substringBefore(' ').toInt();pausePrefs.edit().putInt(SupertonicTTS.AHEAD_MINUTES_KEY,aheadMinutes).apply()
-                            }
-                            Text("Сколько звука заранее синтезировать сверх текущего места. Меньше — экономнее: при остановке или переходе по книге заготовленное не пропадает зря. 5 минут с запасом скрывают задержки LLM и синтеза.", style = MaterialTheme.typography.bodySmall)
-                            val effectiveCacheMb = com.brahmadeo.supertonic.tts.utils.SpeechCacheBudget.limit(pcmCacheMb,Runtime.getRuntime().maxMemory())/(1024*1024)
-                            if (effectiveCacheMb < pcmCacheMb) Text("На этом устройстве кэш ограничен до $effectiveCacheMb МБ, чтобы оставить память для синтеза и воспроизведения.", style = MaterialTheme.typography.bodySmall)
-                            Text("Подготавливаются только фрагменты, уже поставленные читалкой в очередь. Пауза считается минимальной: тишина модели засчитывается.", style = MaterialTheme.typography.bodySmall)
-
-                            Text("Иностранные фрагменты и голос для Readest — в пункте меню «Мультиязычная озвучка».", style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity) && !com.brahmadeo.supertonic.tts.silero.SileroDownload.cis(this@LlmSettingsActivity)) {
-                            Toggle("Silero: вопросительная и восклицательная интонация", sileroIntonation) {
-                                sileroIntonation = it; pausePrefs.edit().putBoolean("silero_intonation", it).apply()
-                            }
-                            Text("Тип предложения передаётся прямо в звуковую модель. При выключении используется повествовательная интонация.", style = MaterialTheme.typography.bodySmall)
-                        }
+                        Text("Ударения и пунктуация готовятся до синтеза. При ошибке или превышении времени ожидания используется обычная обработка со словарём.")
+                        Text("Целые числа сначала точно переводятся в слова. LLM ставит пунктуацию и согласует один/одна/одно, два/две внутри числительных. Изменение значения числа, остальных слов или границ абзацев запрещено; такой ответ отклоняется. Ударения и ё — в пункте меню «Ударения и буква ё».", style = MaterialTheme.typography.bodySmall)
                         Toggle("Восстанавливать пунктуацию", config.punctuation) { config = config.copy(punctuation = it); save() }
                         Text("Текст, уже отправленный читалкой, подготавливается в фоне с контекстом до 4000 символов. Если читалка отправляет по одному фрагменту, первая подготовка каждого нового фрагмента может занять время.", style = MaterialTheme.typography.bodySmall)
                         Text("Чтение ждёт подготовку не более 1,5 секунды. Если результат ещё не готов, используется словарь, а очередь подготавливается дальше в фоне.", style = MaterialTheme.typography.bodySmall)
-                        Choice("Подготовка текста вперёд в приложении", "${config.aheadChars} символов",
-                            listOf("4000 символов", "8000 символов", "16000 символов", "32000 символов", "48000 символов")) {
-                            config = config.copy(aheadChars = it.substringBefore(' ').toInt()); save()
-                        }
-                        Text("Подготовленный текст хранится в кэше RAM: до 8 млн символов вместе с исходным контекстом (около 16 МБ текста). Повторное чтение того же блока не требует LLM. Кэш очищается при изменении настроек и закрытии процесса.")
-                        Text("Движущийся буфер заранее обрабатывает следующие части загруженного текста и пополняется во время чтения. Для сторонней читалки доступны только уже переданные ею фрагменты.", style = MaterialTheme.typography.bodySmall)
+                        Text("Ключи шифруются Android Keystore. При выборе облака текст передаётся выбранному провайдеру. Проверка ниже обрабатывает только введённый отрывок и не воспроизводит звук.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
-                        Text("Паузы русских моделей при чтении", style = MaterialTheme.typography.titleLarge)
-                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
-                            Text("Kokoro сама задаёт ритм по пунктуации: запятые, точки, вопросы и восклицания передаются в модель. Дополнительные фиксированные паузы для неё не применяются.", style = MaterialTheme.typography.bodySmall)
-                        } else {
-                        Toggle(if(sileroPauses) "Дополнительные фиксированные паузы Silero" else "Слышимые паузы по пунктуации", punctuationPauses) {
-                            punctuationPauses = it; pausePrefs.edit().putBoolean(pauseKey, it).apply()
+                        OutlinedTextField(testText, { testText = it.take(2000) }, label = { Text("Отрывок для проверки") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+                        Button(enabled = !busy && config.mode != LlmMode.OFF, onClick = {
+                            busy = true; message = "Обработка отрывка…"
+                            val snapshot = config; val sample = testText
+                            scope.launch {
+                                try {
+                                    val result = withContext(Dispatchers.IO) { LlmPreparation.test(this@LlmSettingsActivity, snapshot, sample) }
+                                    message = "${result.provider}, ${result.elapsedMs} мс${if (result.fallback) " — резервная обработка; ${result.reason.orEmpty()}" else ""}\n\n${result.text}"
+                                } catch (_: Exception) { message = "Проверка не завершилась; проверьте модель, ключ и сеть" }
+                                finally { busy = false }
+                            }
+                        }) { Text("Проверить без озвучивания") }
+                        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (message.isNotEmpty()) Text(message)
                         }
-                        Choice("Запятая", "$commaPause мс", listOf("100 мс", "140 мс", "180 мс", "220 мс", "300 мс")) {
-                            commaPause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_comma_pause_ms", commaPause).apply()
-                        }
-                        Choice("Точка, вопрос и восклицание", "$sentencePause мс", listOf("0 мс", "250 мс", "350 мс", "420 мс", "550 мс", "700 мс")) {
-                            sentencePause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_sentence_pause_ms", sentencePause).apply()
-                        }
-                        Text(if(sileroPauses) "По умолчанию используется естественный ритм Silero: модель сама задаёт паузы и сохраняет связную интонацию. Дополнительные паузы можно включить вручную." else "Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу.", style = MaterialTheme.typography.bodySmall)
-                        }
-                        HorizontalDivider()
+                        if (section == Section.MODELS) {
                         Text("Ollama Cloud", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.ollamaEndpoint, { config = config.copy(ollamaEndpoint = it) }, label = { Text("Адрес API (HTTPS)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(config.ollamaKey, { config = config.copy(ollamaKey = it) }, label = { Text("Ключ Ollama") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -410,22 +251,227 @@ class LlmSettingsActivity : ComponentActivity() {
                             scope.launch { withContext(Dispatchers.IO) { LlmProviders.unload() }; message = "Локальная модель выгружена из RAM" }
                         }) { Text("Выгрузить из памяти сейчас") }
                         Button(onClick = { save() }, modifier = Modifier.fillMaxWidth()) { Text("Сохранить настройки") }
-                        Text("Ключи шифруются Android Keystore. При выборе облака текст передаётся выбранному провайдеру. Проверка ниже обрабатывает только введённый отрывок и не воспроизводит звук.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (section == Section.STRESS) {
+                        Text("Каждый источник включается отдельно. По умолчанию только Silero Stress: акцентор и модель омографов на телефоне, без сети. Ударения и ё, уже написанные в книге или в словаре пользователя, сохраняются всегда.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("Silero Stress", sileroStress) { sileroStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.SILERO, it) }
+                        if (!offlineReady) Text("Ресурсы Silero (ударения и словарь ё) ещё не скачаны — кнопка ниже. До скачивания эти переключатели не действуют.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Toggle("Словарь RUAccent (179 МБ, скачивается сам по Wi-Fi)", ruaccentStress) { ruaccentStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.RUACCENT, it) }
+                        Text("Голосует вместе с Silero: совпавшее ударение окончательное, при расхождении без арбитра — словарь RUAccent, для омографа — Silero.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("Словарь имён: ударение и ё только в именах (Семен → Семён)", namesStress) { namesStress = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.NAMES, it) }
+                        Text("Около 27 тысяч русских имён и отчеств из Викисловаря: ставит ударение и ё только в словах с заглавной буквы. Обычные слова (черный, ребенок) не трогает — для них «Буква ё: словарь Silero».", style = MaterialTheme.typography.bodySmall)
+                        Toggle("Ударения от LLM", config.stress) { config = config.copy(stress = it); save() }
+                        Toggle("LLM-арбитр для споров и омографов", stressArbiter) { stressArbiter = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.ARBITER, it) }
+                        Text("Арбитр — облачная LLM: спорное слово спрашивается дважды в разном порядке вариантов. Работает при включённой LLM-обработке и двух мнениях (Silero и RUAccent или LLM); локальная Gemma арбитром не бывает.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("Буква ё: словарь Silero (черный → чёрный)", yoSilero) { yoSilero = it; option(com.brahmadeo.supertonic.tts.utils.StressOptions.YO_SILERO, it) }
+                        Toggle("Буква ё: LLM по контексту (все/всё, узнает/узнаёт)", config.restoreYo) { config = config.copy(restoreYo = it); save() }
+                        if (!sileroStress && !ruaccentStress && !config.stress) Text("Все источники ударений выключены: модель прочитает слова со своими догадками.", style = MaterialTheme.typography.bodySmall)
+                        // Switches that the current combination leaves without effect, said plainly.
+                        val llmOff = config.mode == LlmMode.OFF
+                        if (!yoSilero && !namesStress && (llmOff || !config.restoreYo))
+                            Text("Все источники ё выключены: книга, набранная без ё, прочитается через е (черный, ребенок). Обычно достаточно «Буква ё: словарь Silero».",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        else if (!yoSilero && namesStress)
+                            Text("ё ставится только в именах; в обычных словах (черный, ребенок) — только если её поставит LLM. Для них включите «Буква ё: словарь Silero».",
+                                style = MaterialTheme.typography.bodySmall)
+                        if (llmOff && (config.stress || config.restoreYo || stressArbiter))
+                            Text("LLM-обработка выключена: «Ударения от LLM», «ё от LLM» и арбитр сейчас не действуют, работают только словари.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (!llmOff && stressArbiter && config.mode == LlmMode.LOCAL)
+                            Text("Режим «Автономно: Gemma 4»: арбитр не работает (Gemma не решает споры ударений), спор решают словари.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (!llmOff && stressArbiter && config.mode != LlmMode.LOCAL &&
+                            !((sileroStress && ruaccentStress) || ((sileroStress || ruaccentStress) && config.stress)))
+                            Text("Арбитру нечего решать: нужны два мнения — Silero Stress и RUAccent, или один из них вместе с «Ударения от LLM».",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (!llmOff && (config.stress || config.restoreYo))
+                            Text("В читалках, которые присылают по одному предложению (KOReader, Readest), при включённом «Не ждать LLM в читалках без очереди» LLM не используется: ударения и ё там ставят только словари.",
+                                style = MaterialTheme.typography.bodySmall)
+                        Text("Изменение настроек сбрасывает кэш подготовленного текста и аудио.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
-                        OutlinedTextField(testText, { testText = it.take(2000) }, label = { Text("Отрывок для проверки") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
-                        Button(enabled = !busy && config.mode != LlmMode.OFF, onClick = {
-                            busy = true; message = "Обработка отрывка…"
-                            val snapshot = config; val sample = testText
-                            scope.launch {
-                                try {
-                                    val result = withContext(Dispatchers.IO) { LlmPreparation.test(this@LlmSettingsActivity, snapshot, sample) }
-                                    message = "${result.provider}, ${result.elapsedMs} мс${if (result.fallback) " — резервная обработка; ${result.reason.orEmpty()}" else ""}\n\n${result.text}"
-                                } catch (_: Exception) { message = "Проверка не завершилась; проверьте модель, ключ и сеть" }
-                                finally { busy = false }
+                        Text("Локальные ресурсы", style = MaterialTheme.typography.titleLarge)
+                            Text("Числа, даты, время, годы, единицы, валюты, дроби, сокращения и сноски обрабатываются на телефоне даже при выключенной LLM.")
+                            Button(enabled = !offlineBusy && !offlineReady, onClick = {
+                                offlineBusy = true
+                                scope.launch {
+                                    try {
+                                        com.brahmadeo.supertonic.tts.local.LocalRussianAssets.download(this@LlmSettingsActivity) { status,_ -> runOnUiThread { offlineStatus = status } }
+                                        offlineReady = true
+                                    } catch (t: Exception) { offlineStatus = "Ошибка установки: ${t.message}" }
+                                    finally { offlineBusy = false }
+                                }
+                            }) { Text(if (offlineReady) "Локальный акцентор установлен" else "Скачать локальные ударения и ё · 37 МБ") }
+                            if (offlineStatus.isNotBlank()) Text(offlineStatus)
+                        }
+                        if (section == Section.VOICES) {
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
+                            Text("Мультиголосовая озвучка · эксперимент", style = MaterialTheme.typography.titleMedium)
+                            Toggle("Читать автора и диалоги разными голосами", config.multiVoice) {
+                                voicePreview.stop()
+                                config = config.copy(multiVoice = it); save()
                             }
-                        }) { Text("Проверить без озвучивания") }
-                        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        if (message.isNotEmpty()) Text(message)
+                            Text("LLM определяет автора, мужские и женские реплики по соседнему тексту. Слова книги сохраняются. Неясные реплики и фрагменты без готовой разметки читает автор. Голоса сохраняются отдельно для каждой звуковой модели.", style = MaterialTheme.typography.bodySmall)
+                            if (config.multiVoice) {
+                                Toggle("Текст от первого лица — всегда", config.firstPerson) {
+                                    config = config.copy(firstPerson = it); save()
+                                }
+                                Text("Рассказчик говорит «я»: его собственные реплики («— сказал я») читает голос автора. Действует для всех текстов; " +
+                                    "для отдельной книги можно включить или выключить на экране «Книги с голосами персонажей».", style = MaterialTheme.typography.bodySmall)
+                                if (config.mode == LlmMode.OFF) Text("Включите LLM-обработку для определения ролей. При выключенной LLM используется обычный выбранный голос.")
+                                val roleVoices = com.brahmadeo.supertonic.tts.utils.AssetManager.russianVoices(this@LlmSettingsActivity)
+                                var roleRevision by remember { mutableStateOf(0) }
+                                VoiceRole.entries.forEach { role ->
+                                    var selected by remember(role, roleVoices, roleRevision) { mutableStateOf(MultiVoiceSettings.selected(this@LlmSettingsActivity, role)) }
+                                    VoiceRoleChoice(when(role) { VoiceRole.AUTHOR -> "Голос автора"; VoiceRole.MALE -> "Мужской голос"; VoiceRole.FEMALE -> "Женский голос" }, selected, roleVoices,
+                                        previewState, voicePreview::toggle) {
+                                        voicePreview.stop(); selected = it; MultiVoiceSettings.save(this@LlmSettingsActivity, role, it); roleRevision++
+                                    }
+                                }
+                                OutlinedButton(onClick = { startActivity(android.content.Intent(this@LlmSettingsActivity, BooksActivity::class.java)) }) {
+                                    Text("Книги с голосами персонажей")
+                                }
+                                if (VoiceRole.entries.map { MultiVoiceSettings.selected(this@LlmSettingsActivity, it) }.distinct().size < 3)
+                                    Text("Для нескольких ролей выбран одинаковый голос. Чтобы слышать переключение, выберите три разных голоса.", style = MaterialTheme.typography.bodySmall)
+                                Text("При обрыве облака используется установленная Gemma 4. Повторные запросы идут в фоне; готовая разметка заменяет резервную в ещё не проигранных фрагментах.", style = MaterialTheme.typography.bodySmall)
+                                if (previewState.message.isNotBlank()) Text(previewState.message, style = MaterialTheme.typography.bodySmall)
+                                Text("У каждого голоса есть кнопка «Прослушать», в том числе в списке выбора. Повторное нажатие останавливает пробу. Для сравнения используется одинаковая короткая фраза без LLM и фоновой музыки.", style = MaterialTheme.typography.bodySmall)
+                                Text("Подготовка идёт заранее в пределах очереди читалки. Чтение не ждёт разметку дольше обычного лимита. Облако рекомендуется; локальная Gemma может ошибаться в ролях.", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
+                            var levelVoices by remember { mutableStateOf(pausePrefs.getBoolean("voice_loudness_normalization", true)) }
+                            Toggle("Выравнивать громкость голосов", levelVoices) {
+                                levelVoices = it; pausePrefs.edit().putBoolean("voice_loudness_normalization", it).apply()
+                                com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            }
+                            Text("Одинаковый ориентир громкости для Silero, Tera и Shtorm. Усиление постоянно внутри фразы: ритм и паузы сохраняются.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text("Иностранные фрагменты и голос для Readest — в пункте меню «Мультиязычная озвучка».", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (section == Section.SOUND) {
+                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
+                            Text("Звук Tera",style=MaterialTheme.typography.titleMedium)
+                            Text("PCM 44,1 кГц, 16 бит. Быстрый distilled — по умолчанию. Teacher — альтернативный полный синтез, примерно в 2–3 раза медленнее; результат сравните на слух.",style=MaterialTheme.typography.bodySmall)
+                            Button(enabled=!teacherBusy && !teacherReady,onClick={
+                                teacherBusy=true
+                                scope.launch {
+                                    try {
+                                        withContext(Dispatchers.IO) {
+                                            com.brahmadeo.supertonic.tts.tera.TeraQuality.download(this@LlmSettingsActivity) {
+                                                teacherStatus="Скачивание Tera teacher: $it %"
+                                            }
+                                        }
+                                        teacherReady=true
+                                        teacherStatus="Tera teacher установлена"
+                                        com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                                    } catch(t: Exception) { teacherStatus="Ошибка: ${t.message}" }
+                                    finally { teacherBusy=false }
+                                }
+                            }) { Text(if(teacherReady) "Tera teacher установлена" else "Скачать Tera teacher · 257 МБ") }
+                            if(teacherStatus.isNotBlank()) Text(teacherStatus)
+                            if(teacherReady) Toggle("Tera teacher · экспериментальный режим",teacherEnabled) {
+                                teacherEnabled=it
+                                pausePrefs.edit().putBoolean("tera_teacher",it).apply()
+                            }
+                            Text("Оба варианта используют выбранный голос и подготовку LLM. Загружается только один вариант синтеза; при переключении кэш аудио очищается.",style=MaterialTheme.typography.bodySmall)
+                            Toggle("Не растягивать короткие реплики",shortWordCap) {
+                                shortWordCap=it
+                                pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY,it).apply()
+                            }
+                            Text("Модель даёт «Да.», «Нет.» и «Хорошо.» почти секунду. Для фраз до четырёх гласных длительность ограничивается обычным темпом речи; длинные фразы не меняются.",style=MaterialTheme.typography.bodySmall)
+                            val npuSupported = remember { com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity) }
+                            if (npuSupported) {
+                                Toggle("Ускоритель NPU · эксперимент", npuEnabled) {
+                                    npuEnabled = it
+                                    if (it) com.brahmadeo.supertonic.tts.utils.Npu.clearFailure(this@LlmSettingsActivity)
+                                    pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, it).apply()
+                                }
+                                Text(if (npuEnabled && com.brahmadeo.supertonic.tts.utils.Npu.failed(this@LlmSettingsActivity))
+                                    "NPU не запустился на этом телефоне; используется процессор."
+                                    else "Вокодер Tera выполняется на нейропроцессоре Snapdragon (FP16). Первый запуск компилирует модель несколько секунд. При ошибке чтение продолжается на процессоре.",
+                                    style=MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
+                            Text("Звук Kokoro",style=MaterialTheme.typography.titleMedium)
+                            if (com.brahmadeo.supertonic.tts.utils.Npu.supported(this@LlmSettingsActivity)) {
+                                Toggle("Ускоритель NPU · эксперимент", npuEnabled) {
+                                    npuEnabled = it
+                                    if (it) com.brahmadeo.supertonic.tts.utils.Npu.clearFailure(this@LlmSettingsActivity)
+                                    pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, it).apply()
+                                }
+                                Text(if (npuEnabled && com.brahmadeo.supertonic.tts.utils.Npu.failed(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.Npu.KOKORO))
+                                    "NPU не запустился для Kokoro; используется процессор."
+                                    else "Генератор звука Kokoro считается на нейропроцессоре Snapdragon (FP16), текст и финальная сборка звука — на процессоре. Первый запуск около минуты готовит графы в фоне; в это время чтение идёт на процессоре. Переключатель общий с Tera.",
+                                    style=MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isSilero(this@LlmSettingsActivity) && !com.brahmadeo.supertonic.tts.silero.SileroDownload.cis(this@LlmSettingsActivity)) {
+                            Toggle("Silero: вопросительная и восклицательная интонация", sileroIntonation) {
+                                sileroIntonation = it; pausePrefs.edit().putBoolean("silero_intonation", it).apply()
+                            }
+                            Text("Тип предложения передаётся прямо в звуковую модель. При выключении используется повествовательная интонация.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        val sentencePauseOnly = com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity) || com.brahmadeo.supertonic.tts.utils.AssetManager.isPocket(this@LlmSettingsActivity)
+                        Text("Паузы", style = MaterialTheme.typography.titleLarge)
+                        Toggle(if(sileroPauses) "Дополнительные фиксированные паузы Silero" else "Слышимые паузы по пунктуации", punctuationPauses) {
+                            punctuationPauses = it; pausePrefs.edit().putBoolean(pauseKey, it).apply()
+                        }
+                        // Kokoro and Shtorm pace commas themselves; only the sentence end gets the missing silence (SupertonicTTS.sentencePauseMs).
+                        if (!sentencePauseOnly) Choice("Запятая", "$commaPause мс", listOf("100 мс", "140 мс", "180 мс", "220 мс", "300 мс")) {
+                            commaPause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_comma_pause_ms", commaPause).apply()
+                        }
+                        Choice("Точка, вопрос и восклицание", "$sentencePause мс", listOf("0 мс", "150 мс", "250 мс", "350 мс", "420 мс", "550 мс", "700 мс")) {
+                            sentencePause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_sentence_pause_ms", sentencePause).apply()
+                        }
+                        Text(when {
+                            sileroPauses -> "По умолчанию используется естественный ритм Silero: модель сама задаёт паузы и сохраняет связную интонацию. Дополнительные паузы можно включить вручную."
+                            sentencePauseOnly -> "Модель сама делает паузы на запятых. После точки, вопроса и восклицания добавляется только недостающая тишина до выбранной длины. Меньше — чтение плавнее; в читалках, которые присылают по одному предложению (KOReader, Readest), это и есть пауза между предложениями."
+                            else -> "Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу."
+                        }, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (section == Section.BUFFER) {
+                        if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
+                            Toggle("Готовить текст читалки заранее", readerAhead) {
+                                readerAhead = it; pausePrefs.edit().putBoolean("reader_early_prepare",it).apply()
+                            }
+                            Choice("Кэш готового аудио в RAM", "$pcmCacheMb МБ", listOf("64 МБ","128 МБ","256 МБ","512 МБ","1024 МБ")) {
+                                pcmCacheMb=it.substringBefore(' ').toInt();pausePrefs.edit().putInt("reader_pcm_cache_mb",pcmCacheMb).apply()
+                            }
+                            Choice("Запас готового звука вперёд", "$aheadMinutes мин", listOf("2 мин","5 мин","10 мин","20 мин","60 мин")) {
+                                aheadMinutes=it.substringBefore(' ').toInt();pausePrefs.edit().putInt(SupertonicTTS.AHEAD_MINUTES_KEY,aheadMinutes).apply()
+                            }
+                            Text("Сколько звука заранее синтезировать сверх текущего места. Меньше — экономнее: при остановке или переходе по книге заготовленное не пропадает зря. 5 минут с запасом скрывают задержки LLM и синтеза.", style = MaterialTheme.typography.bodySmall)
+                            val effectiveCacheMb = com.brahmadeo.supertonic.tts.utils.SpeechCacheBudget.limit(pcmCacheMb,Runtime.getRuntime().maxMemory())/(1024*1024)
+                            if (effectiveCacheMb < pcmCacheMb) Text("На этом устройстве кэш ограничен до $effectiveCacheMb МБ, чтобы оставить память для синтеза и воспроизведения.", style = MaterialTheme.typography.bodySmall)
+                            Text("Подготавливаются только фрагменты, уже поставленные читалкой в очередь. Пауза считается минимальной: тишина модели засчитывается.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Choice("Подготовка текста вперёд в приложении", "${config.aheadChars} символов",
+                            listOf("4000 символов", "8000 символов", "16000 символов", "32000 символов", "48000 символов")) {
+                            config = config.copy(aheadChars = it.substringBefore(' ').toInt()); save()
+                        }
+                        Text("Подготовленный текст хранится в кэше RAM: до 8 млн символов вместе с исходным контекстом (около 16 МБ текста). Повторное чтение того же блока не требует LLM. Кэш очищается при изменении настроек и закрытии процесса.")
+                        Text("Движущийся буфер заранее обрабатывает следующие части загруженного текста и пополняется во время чтения. Для сторонней читалки доступны только уже переданные ею фрагменты.", style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = {
+                            com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
+                            message = "Кэш текста и аудио очищен. Уже переданный Android звук может доиграть; следующие фрагменты будут подготовлены заново."
+                        }) { Text("Очистить кэш текста и аудио") }
+                        }
+                        if (section == Section.READERS) {
+                        Text("Moon+ Reader и другие читалки, которые задают только язык, получают мультиязычную озвучку сами.")
+                        var direct by remember { mutableStateOf(pausePrefs.getBoolean(LlmPreparation.DIRECT_KEY, true)) }
+                        Toggle("Не ждать LLM в читалках без очереди", direct) { direct = it; option(LlmPreparation.DIRECT_KEY, it) }
+                        Text("Readest и KOReader отдают текст по одному предложению и присылают следующее только после окончания предыдущего, поэтому подготовить его заранее нельзя. Включено: такие предложения читаются сразу, без пауз: ударения и ё ставят словари (по настройкам «Ударения и буква ё»), голоса по ролям определяются по ремаркам («— ответила она», «— сказал Рогожин») и персонажам подготовленной книги. Выключено: каждое предложение ждёт LLM (лучше ударения и пунктуация, но пауза 0,5–1,5 с). Moon+ ставит текст в очередь и всегда готовится через LLM.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Text("Readest, KOReader и читалки с выбором голоса: в списке русских голосов MyTTS есть «${com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.NAME}» — голос, выбранный в MyTTS, с голосами книги и персонажей, — и «${com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.SINGLE}» — только выбранный голос, без голосов персонажей. Остальные языки оба читают движками из пункта «Мультиязычная озвучка», если они подключены. В Readest «${com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.NAME}» первый и выбирается по умолчанию.")
+                        OutlinedButton(onClick = { runCatching { startActivity(android.content.Intent("com.android.settings.TTS_SETTINGS")) } },
+                            modifier = Modifier.fillMaxWidth()) { Text("Настройки синтеза речи Android") }
+                        Text("Readest использует движок по умолчанию: выберите там MyTTS.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (section != Section.LLM) {
+                            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                            if (message.isNotEmpty()) Text(message)
+                        }
                         Spacer(Modifier.height(24.dp))
                     }
                 }

@@ -615,7 +615,7 @@ class MainActivity : ComponentActivity() {
                         onHistoryClick = { historyLauncher.launch(Intent(this, HistoryActivity::class.java)) },
                         onQueueClick = { startActivity(Intent(this, QueueActivity::class.java)) },
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
-                        onLlmSettingsClick = { startActivity(Intent(this, LlmSettingsActivity::class.java)) },
+                        onSettingsSectionClick = { startActivity(LlmSettingsActivity.intent(this, it)) },
                         onBackgroundMusicClick = { startActivity(Intent(this, BackgroundMusicActivity::class.java)) },
                         onMultilingualClick = { startActivity(Intent(this, MultilingualActivity::class.java)) },
                         onBooksClick = { startActivity(Intent(this, BooksActivity::class.java)) },

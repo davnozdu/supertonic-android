@@ -130,7 +130,7 @@ class BooksActivity : ComponentActivity() {
                                 Text("EPUB · FB2 · FB2.ZIP", style = MaterialTheme.typography.bodySmall)
                                 Text("Выберите EPUB или FB2 — MyTTS найдёт персонажей и подготовит файл голосов для чтения.")
                                 if (sourceLabel.isNotBlank()) Text(sourceLabel, style = MaterialTheme.typography.bodySmall)
-                                TextButton(enabled = !preparation.running, onClick = { startActivity(Intent(this@BooksActivity, LlmSettingsActivity::class.java)) }) {
+                                TextButton(enabled = !preparation.running, onClick = { startActivity(LlmSettingsActivity.intent(this@BooksActivity, LlmSettingsActivity.Section.MODELS)) }) {
                                     Text("Настройки LLM")
                                 }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

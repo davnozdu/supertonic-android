@@ -87,7 +87,7 @@ fun MainScreen(
     miniPlayerIsPlaying: Boolean,
     onMiniPlayerClick: () -> Unit,
     onMiniPlayerPlayPauseClick: () -> Unit,
-    onLlmSettingsClick: () -> Unit = {},
+    onSettingsSectionClick: (com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section) -> Unit = {},
     onBackgroundMusicClick: () -> Unit = {},
     onMultilingualClick: () -> Unit = {},
     onBooksClick: () -> Unit = {},
@@ -133,22 +133,50 @@ fun MainScreen(
                             text = { Text(stringResource(AppR.string.action_model_packs)) },
                             onClick = { showMenu = false; onModelSelectionClick() }
                         )
+                        HorizontalDivider()
                         DropdownMenuItem(
-                            text = { Text("Подготовка текста LLM") },
-                            onClick = { showMenu = false; onLlmSettingsClick() }
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.SOUND.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.SOUND) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Фоновая музыка") },
-                            onClick = { showMenu = false; onBackgroundMusicClick() }
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.STRESS.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.STRESS) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.LLM.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.LLM) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.MODELS.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.MODELS) }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.VOICES.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.VOICES) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Книги с голосами персонажей") },
+                            onClick = { showMenu = false; onBooksClick() }
                         )
                         DropdownMenuItem(
                             text = { Text("Мультиязычная озвучка") },
                             onClick = { showMenu = false; onMultilingualClick() }
                         )
                         DropdownMenuItem(
-                            text = { Text("Книги с голосами персонажей") },
-                            onClick = { showMenu = false; onBooksClick() }
+                            text = { Text("Фоновая музыка") },
+                            onClick = { showMenu = false; onBackgroundMusicClick() }
                         )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.READERS.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.READERS) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.BUFFER.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.BUFFER) }
+                        )
+                        HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text(stringResource(AppR.string.action_reset)) },
                             onClick = { showMenu = false; onResetClick() }
