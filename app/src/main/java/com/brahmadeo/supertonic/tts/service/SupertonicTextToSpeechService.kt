@@ -451,6 +451,13 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             producer.join()
         }
         if (success && !anyAudio && failedSentences > 0) success = false
+        // Nothing speakable («).» left of a bracket, a lone dash): a reader that writes the request to a file got an
+        // empty WAV it could not play, retried it and reported the engine as dead. A short silence is a valid answer.
+        if (success && !anyAudio && !stopped()) {
+            val silence = ByteArray(SupertonicTTS.getAudioSampleRate() / 10 * 2)
+            if (callback.audioAvailable(silence, 0, minOf(silence.size, callback.maxBufferSize.coerceAtLeast(2))) != TextToSpeech.SUCCESS) success = false
+            Log.i("SupertonicTTS", "Nothing to say in chars=${rawText.length}; answered with 100 ms of silence")
+        }
         Log.i("SupertonicTTS", "TTS request finished after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms, success=$success failedSentences=$failedSentences")
         if (success) callback.done() else callback.error()
         } finally { activeVoicePreview = false }
