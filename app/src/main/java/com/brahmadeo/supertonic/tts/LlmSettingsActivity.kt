@@ -411,6 +411,24 @@ class LlmSettingsActivity : ComponentActivity() {
                             else -> "Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу."
                         }, style = MaterialTheme.typography.bodySmall)
                         }
+                        if (section == Section.SOUND) {
+                            HorizontalDivider()
+                            val bracketTitles = mapOf(
+                                com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.WORDS to "Словами",
+                                com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.PAUSE to "Паузой",
+                                com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.OFF to "Не выделять")
+                            var bracketMode by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.BracketReading.from(
+                                pausePrefs.getString(com.brahmadeo.supertonic.tts.utils.BracketReading.KEY, null))) }
+                            Choice("Скобки", bracketTitles.getValue(bracketMode), bracketTitles.values.toList()) { title ->
+                                bracketMode = bracketTitles.entries.first { it.value == title }.key
+                                pausePrefs.edit().putString(com.brahmadeo.supertonic.tts.utils.BracketReading.KEY, bracketMode.name).apply()
+                            }
+                            Text(when (bracketMode) {
+                                com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.WORDS -> "Текст в скобках читается со словами «скобка открывается … скобка закрывается»."
+                                com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.PAUSE -> "Текст в скобках выделяется паузами, как запятыми; слово «скобка» не произносится."
+                                else -> "Скобки не выделяются: текст в них читается подряд с остальной фразой."
+                            } + " Сноски вида [1] или (1) не читаются. Работает для всех моделей, с LLM и без неё.", style = MaterialTheme.typography.bodySmall)
+                        }
                         if (section == Section.AUDIO) {
                         Text("Фильтры применяются к готовому звуку всех русских моделей, до кэша. Каждый включается отдельно — переключите и послушайте: кэш звука сбрасывается, следующие фразы звучат уже с новой настройкой.", style = MaterialTheme.typography.bodySmall)
                         var f_fade by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.SpeechFilters.enabled(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.SpeechFilters.FADE)) }

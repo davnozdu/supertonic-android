@@ -333,6 +333,8 @@ object RussianBookNormalizer {
         }
         val letterNames=mapOf('А' to "а",'Б' to "бэ",'В' to "вэ",'Г' to "гэ",'Д' to "дэ",'Е' to "е",'Ё' to "ё",'Ж' to "жэ",'З' to "зэ",'И' to "и",'Й' to "и краткое",'К' to "ка",'Л' to "эль",'М' to "эм",'Н' to "эн",'О' to "о",'П' to "пэ",'Р' to "эр",'С' to "эс",'Т' to "тэ",'У' to "у",'Ф' to "эф",'Х' to "ха",'Ц' to "цэ",'Ч' to "че",'Ш' to "ша",'Щ' to "ща",'Ъ' to "твёрдый знак",'Ы' to "ы",'Ь' to "мягкий знак",'Э' to "э",'Ю' to "ю",'Я' to "я")
         t=acronyms(t)
+        // Brackets after the telephone formats above, which use them; the same text in the LLM and offline paths.
+        t=BracketReading.apply(t)
         if (!expandNumbers) return t
         // Case-aware ordinary numbers, after compound formats have been resolved.
         t=rx("(?<![\\p{L}\\d.,])(-?\\d{1,12})(?![\\p{L}\\d]|[.,]\\d)").replace(t) { m ->

@@ -12,13 +12,14 @@ object SpeechPreparationCache {
     private val cleaner = Executors.newSingleThreadExecutor { Thread(it,"SpeechCacheClear").apply { isDaemon=true } }
     private val keys = setOf("selected_model","selected_voice","selected_voice_2","is_mixing_enabled","mix_alpha","is_advanced_normalization","selected_lang","speed","diffusion_steps",
         "local_russian_stress","reader_early_prepare","reader_pcm_cache_mb","tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_teacher","kokoro_full_precision","shtorm_slow",
-        "tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","silero_every_comma","foreign_tts","foreign_engine","foreign_language","foreign_languages") + StressOptions.keys + SpeechFilters.keys
+        "tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","silero_every_comma",BracketReading.KEY,"foreign_tts","foreign_engine","foreign_language","foreign_languages") + StressOptions.keys + SpeechFilters.keys
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key?.startsWith(EngineThreadPolicy.PREFIX) == true) {
             revision.incrementAndGet()
             context?.let { com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.invalidate(it) } ?: com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.cancel()
             com.brahmadeo.supertonic.tts.SupertonicTTS.clearAudioCache()
         } else if(key == null || key in keys) {
+            if (key == null || key == BracketReading.KEY) prefs?.let { BracketReading.mode = BracketReading.from(it.getString(BracketReading.KEY, null)) }
             clear()
             if (key == "selected_model") cleaner.execute { com.brahmadeo.supertonic.tts.SupertonicTTS.releaseInactive() }
         }
@@ -29,6 +30,7 @@ object SpeechPreparationCache {
         if(prefs != null) return
         this.context = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs",0).also { it.registerOnSharedPreferenceChangeListener(listener) }
+        BracketReading.mode = BracketReading.from(prefs?.getString(BracketReading.KEY, null))
     }
     fun clear() {
         revision.incrementAndGet()
