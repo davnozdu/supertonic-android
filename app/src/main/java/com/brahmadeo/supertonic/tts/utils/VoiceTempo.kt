@@ -11,8 +11,8 @@ object VoiceTempo {
     const val KEY = "voice_tempo_equalize"
     const val PHRASE = "Сегодня утром мы долго шли по тихой улице и разговаривали о новых книгах."
     private const val STORE = "voice_tempo"
-    private const val MIN = .75f
-    private const val MAX = 1.33f
+    private const val MIN = .67f
+    private const val MAX = 1.5f
 
     fun enabled(ctx: Context) = ctx.getSharedPreferences("SupertonicPrefs", 0).getBoolean(KEY, true)
 

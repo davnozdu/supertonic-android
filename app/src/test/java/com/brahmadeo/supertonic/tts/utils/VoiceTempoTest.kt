@@ -24,8 +24,9 @@ class VoiceTempoTest {
     @Test fun slowerVoiceIsSpedUpWithinBounds() {
         assertEquals(1.2f, VoiceTempo.factor(3600, 3000), .001f)   // 20% slower voice reads 20% faster
         assertEquals(.8f, VoiceTempo.factor(2400, 3000), .001f)
-        assertEquals(1.33f, VoiceTempo.factor(9000, 3000), .001f)
-        assertEquals(.75f, VoiceTempo.factor(1000, 3000), .001f)
+        assertEquals(1.5f, VoiceTempo.factor(9000, 3000), .001f)
+        assertEquals(4480f / 3050, VoiceTempo.factor(4480, 3050), .001f)   // Silero aidar against eugene, measured
+        assertEquals(.67f, VoiceTempo.factor(1000, 3000), .001f)
         assertEquals(1f, VoiceTempo.factor(0, 3000), .001f)
     }
 }
