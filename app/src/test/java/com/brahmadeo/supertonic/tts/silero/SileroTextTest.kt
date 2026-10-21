@@ -74,6 +74,24 @@ class SileroTextTest {
         assertNull(SileroPauseFrames.forPunctuation(',',0))
         assertNull(SileroPauseFrames.forPunctuation(' ',180))
     }
+    /** Which commas get the fixed pause, on the phrases of the 21 Oct endings probe (prepared as the engine sees them). */
+    @Test fun commaPausesOnlyBetweenWholeParts() {
+        fun paused(source: String): List<String> {
+            val text = SileroText.prepare(source)
+            return text.indices.filter { SileroPauseFrames.commaNeedsPause(text, it) }
+                .map { text.substring(0, it).replace("+", "").split(' ').takeLast(3).joinToString(" ") }
+        }
+        assertEquals(emptyList<String>(), paused("Впрочем, это уже неважно."))
+        assertEquals(emptyList<String>(), paused("Он взял с собой всё: хлеб, воду, нож и старую карту."))
+        assertEquals(listOf("что он прав"), paused("Я знал, что он прав, однако спорить не стал."))
+        assertEquals(listOf("сказал он тихо"), paused("— Послушай, — сказал он тихо, — мне нужно тебе кое-что рассказать."))
+        assertEquals(listOf("утром, едва рассвело"), paused("Утром, едва рассвело, отец ушёл в поле."))
+        assertEquals(listOf("спустя много лет"), paused("Наконец, спустя много лет, он вернулся домой."))
+        assertEquals(2, paused("Когда стемнело, мы зажгли свечи, сели за стол и начали разговор.").size)
+        assertEquals(1, paused("Если ты придёшь завтра, я покажу тебе сад.").size)
+        assertEquals(emptyList<String>(), paused("Может быть, он прав."))
+        assertFalse(SileroPauseFrames.commaNeedsPause("да.", 0))
+    }
     @Test fun explicitStressAndYo() {
         val text = SileroText.prepare("Светло́. Всё — хорошо́!")
         assertEquals("светл+о. вс+ё хорош+о!", text)

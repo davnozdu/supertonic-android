@@ -90,8 +90,11 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
             val t = android.os.SystemClock.elapsedRealtime()
             val pauses = prefs.getBoolean("silero_fixed_pauses",false)
             val commaMs = prefs.getInt("tera_comma_pause_ms",180).coerceIn(0,400)
+            // «Пауза на каждой запятой» off (default): only commas between whole parts of the phrase get the fixed pause.
+            val everyComma = prefs.getBoolean(SileroPauseFrames.EVERY_COMMA_KEY,false)
             val durations = prepared.mapIndexedNotNull { index, c ->
-                if (pauses) SileroPauseFrames.forPunctuation(c,commaMs)?.let { (index+1).toLong() to IValue.from(it) } else null
+                if (!pauses || (c==',' && !everyComma && !SileroPauseFrames.commaNeedsPause(prepared,index))) null
+                else SileroPauseFrames.forPunctuation(c,commaMs)?.let { (index+1).toLong() to IValue.from(it) }
             }.toMap().toMutableMap()
             // A synthetic terminal dot protects the last vowel without adding
             // a new sentence pause (the model's natural prefix is ten frames).

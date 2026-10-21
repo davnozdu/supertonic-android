@@ -391,6 +391,13 @@ class LlmSettingsActivity : ComponentActivity() {
                         Toggle(if(sileroPauses) "Дополнительные фиксированные паузы Silero" else "Слышимые паузы по пунктуации", punctuationPauses) {
                             punctuationPauses = it; pausePrefs.edit().putBoolean(pauseKey, it).apply()
                         }
+                        if (sileroPauses && punctuationPauses) {
+                            var everyComma by remember { mutableStateOf(pausePrefs.getBoolean("silero_every_comma", false)) }
+                            Toggle("Пауза на каждой запятой", everyComma) { everyComma = it; option("silero_every_comma", it) }
+                            Text(if (everyComma) "Пауза ставится на каждой запятой, включая вводные слова и перечисления — так чтение может звучать «спотыкаясь»."
+                                else "Пауза только там, где запятая разделяет целые части фразы. После вводных слов и обращений («Впрочем,», «Послушай,»), в перечислениях («хлеб, воду, нож») и перед «что/чтобы/как» после короткой фразы («Я знал, что…») модель читает в своём ритме, без остановки.",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
                         // Kokoro and Shtorm pace commas themselves; only the sentence end gets the missing silence (SupertonicTTS.sentencePauseMs).
                         if (!sentencePauseOnly) Choice("Запятая", "$commaPause мс", listOf("100 мс", "140 мс", "180 мс", "220 мс", "300 мс")) {
                             commaPause = it.substringBefore(' ').toInt(); pausePrefs.edit().putInt("tera_comma_pause_ms", commaPause).apply()
