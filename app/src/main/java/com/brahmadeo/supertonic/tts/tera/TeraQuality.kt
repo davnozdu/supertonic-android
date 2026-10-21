@@ -5,6 +5,8 @@ import com.brahmadeo.supertonic.tts.utils.AssetManager
 import com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground
 import com.brahmadeo.supertonic.tts.utils.ResumableModelFile
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Optional sampler; never part of the base model's required download. */
 object TeraQuality {
@@ -20,10 +22,13 @@ object TeraQuality {
     }
     fun selected(context: Context): String =
         if(context.getSharedPreferences("SupertonicPrefs",0).getBoolean("tera_teacher",false) && ready(context)) TEACHER else FAST
+    // Network and file work off the caller's thread: the model package choice calls this from the main thread.
     suspend fun download(context: Context, progress: (Int)->Unit) = ModelDownloadForeground.run(context) {
-        val root=root(context).apply { mkdirs() }
-        ResumableModelFile.fetch("https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1/$TEACHER.onnx",
-            File(root,"$TEACHER.onnx"),SIZE,SHA) { done,total -> progress((done*100/total).toInt()) }
-        File(root,"teacher.verified").writeText(SHA)
+        withContext(Dispatchers.IO) {
+            val root=root(context).apply { mkdirs() }
+            ResumableModelFile.fetch("https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1/$TEACHER.onnx",
+                File(root,"$TEACHER.onnx"),SIZE,SHA) { done,total -> progress((done*100/total).toInt()) }
+            File(root,"teacher.verified").writeText(SHA)
+        }
     }
 }

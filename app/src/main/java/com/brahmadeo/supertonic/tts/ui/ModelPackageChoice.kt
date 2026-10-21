@@ -60,7 +60,7 @@ fun ModelPackageChoice(model: String) {
                     ready = true; enabled = true
                     prefs.edit().putBoolean(key, true).apply()
                     status = "$second установлена"
-                } catch (t: Exception) { status = "Ошибка установки: ${t.message}" }
+                } catch (t: Exception) { status = "Ошибка установки: ${t.message ?: t.javaClass.simpleName}" }
                 finally { busy = false }
             }
         }) { Text(if (kokoro) "Скачать полную точность · 622 МБ" else if (tera) "Скачать Tera teacher · 257 МБ" else "Скачать спокойную подачу · ${PocketDownload.slowSizeMb(context)} МБ") }
