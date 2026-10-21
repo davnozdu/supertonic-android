@@ -31,6 +31,30 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
         }
         error("Missing WAV PCM")
     }
+    private fun endingsProbe() {
+        val lines = File(cacheDir, "endings-probe.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        require(lines.size in 1..200)
+        val dir = File(cacheDir, "endings").apply { deleteRecursively(); mkdirs() }
+        val ready = CompletableFuture<Int>()
+        val tts = TextToSpeech(this, { ready.complete(it) }, packageName)
+        try {
+            check(ready.get(60, TimeUnit.SECONDS) == TextToSpeech.SUCCESS)
+            check(tts.setLanguage(Locale("ru")) >= TextToSpeech.LANG_AVAILABLE)
+            for ((index, text) in lines.withIndex()) {
+                val id = "ending-$index"; val done = CompletableFuture<Unit>()
+                tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) { if (utteranceId == id) done.complete(Unit) }
+                    override fun onError(utteranceId: String?) { if (utteranceId == id) done.completeExceptionally(IllegalStateException(id)) }
+                })
+                val output = File(dir, "%03d.wav".format(index))
+                check(tts.synthesizeToFile(text, Bundle(), output, id) == TextToSpeech.SUCCESS)
+                done.get(120, TimeUnit.SECONDS)
+                Log.i("SpeechCheck", "ENDING case=$index bytes=${output.length()}")
+            }
+            Log.i("SpeechCheck", "ENDINGS DONE cases=${lines.size}")
+        } finally { tts.shutdown() }
+    }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -42,6 +66,12 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
+                // Read-only: cache/endings-probe.txt (one phrase per line) through the selected model and voice, the
+                // way readers without a queue call it (synthesizeToFile per sentence); WAVs kept in cache/endings/.
+                if (intent.getBooleanExtra("endingsProbe", false)) {
+                    try { endingsProbe() } finally { running.set(false) }
+                    return@withContext
+                }
                 // Read-only NPU benchmark: never touches model, voice or reading settings.
                 if (intent.getBooleanExtra("teraNpuProbe", false)) {
                     try { com.brahmadeo.supertonic.tts.kokoro.NpuProbe.teraHybrid(this@SpeechDiagnosticsActivity) } finally { running.set(false) }
