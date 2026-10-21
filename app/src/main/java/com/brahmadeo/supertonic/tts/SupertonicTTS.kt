@@ -324,7 +324,13 @@ object SupertonicTTS {
     }
 
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null, skipDictionary: Boolean = false, aheadOwner: String? = null): ByteArray? {
-        val pcm = generateAudioOne(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
+        // Several voices (roles, book characters, mixed models) read at one tempo: each is scaled to the selected voice.
+        val voiceSpeed = appContext?.takeIf { routeContext(stylePath)?.let { AssetManager.isRussianModel(it) } == true }?.let { ctx ->
+            com.brahmadeo.supertonic.tts.utils.VoiceTempo.speed(ctx, stylePath, speed, getAudioSampleRate()) { voice, phrase ->
+                if (isCancelled()) null else generateAudioOne(phrase, "ru", voice, 1.0f, 0f, steps, 1.0f, null, preparationGeneration, true, null)
+            }
+        } ?: speed
+        val pcm = generateAudioOne(text,lang,stylePath,voiceSpeed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
         val pauseMs = routeContext(stylePath)?.let { sentencePauseMs(it) } ?: 0
         // One inference per chunk: Kokoro pays ~0.5 s per call, so splitting sentences into
         // separate calls cost far more than it gained. Only the chunk end gets a pause.

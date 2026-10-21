@@ -44,7 +44,7 @@ object BackgroundMusic {
     /** A reader that synthesizes to files and plays them itself (KOReader's audiobook plugin) never says when its
      * audio plays or stops: each request holds the music for about as long as its speech, plus the gap. */
     @Volatile private var holdUntil = 0L
-    private const val HOLD_AFTER_STOP_MS = 1500L
+    private const val HOLD_AFTER_STOP_MS = 800L
     private val holdEnd = Runnable { update() }
 
     @Synchronized fun initialize(ctx: Context) {
@@ -77,7 +77,7 @@ object BackgroundMusic {
         }
     }
     /** KOReader's plugin also calls stop() before every sentence it synthesizes: a held track keeps 1.5 s for the
-     * next request, so a real pause still silences it. */
+     * next request (0.8 s), so a real pause still silences it. */
     fun stop(owner: Any) {
         reading.stop(owner)
         handler.post {

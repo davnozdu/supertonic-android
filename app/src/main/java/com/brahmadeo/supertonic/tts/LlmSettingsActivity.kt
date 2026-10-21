@@ -341,6 +341,11 @@ class LlmSettingsActivity : ComponentActivity() {
                                 com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
                             }
                             Text("Одинаковый ориентир громкости для Silero, Tera, Kokoro и Shtorm. Усиление постоянно внутри фразы: ритм и паузы сохраняются.", style = MaterialTheme.typography.bodySmall)
+                            var levelTempo by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.VoiceTempo.enabled(this@LlmSettingsActivity)) }
+                            Toggle("Выравнивать темп голосов", levelTempo) {
+                                levelTempo = it; option(com.brahmadeo.supertonic.tts.utils.VoiceTempo.KEY, it)
+                            }
+                            Text("У каждого голоса свой естественный темп: один читает медленнее, другой быстрее. Каждый голос один раз замеряется на одинаковой фразе, и его скорость подстраивается под выбранный голос (голос автора). Работает для ролей, персонажей книг и разных моделей.", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("Иностранные фрагменты и голос для Readest — в пункте меню «Мультиязычная озвучка».", style = MaterialTheme.typography.bodySmall)
                         }
