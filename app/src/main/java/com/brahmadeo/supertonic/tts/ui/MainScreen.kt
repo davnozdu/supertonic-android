@@ -139,6 +139,10 @@ fun MainScreen(
                             onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.SOUND) }
                         )
                         DropdownMenuItem(
+                            text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.AUDIO.title) },
+                            onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.AUDIO) }
+                        )
+                        DropdownMenuItem(
                             text = { Text(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.STRESS.title) },
                             onClick = { showMenu = false; onSettingsSectionClick(com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section.STRESS) }
                         )

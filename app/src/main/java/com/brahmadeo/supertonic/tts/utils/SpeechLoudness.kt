@@ -28,9 +28,11 @@ object SpeechLoudness {
 
     fun pcm(samples: FloatArray, scale: Float): ByteArray {
         val bytes = ByteArray(samples.size * 2)
+        val soft = SpeechFilters.softLimit
         samples.forEachIndexed { i, sample ->
             require(sample.isFinite())
-            val value = (sample * scale).coerceIn(-.98f, .98f)
+            // «Мягкий ограничитель»: a Tera chunk louder than its first one rounds off instead of clipping.
+            val value = if (soft) SpeechFilters.limit(sample * scale) else (sample * scale).coerceIn(-.98f, .98f)
             val integer = (value * 32767f).toInt()
             bytes[i * 2] = integer.toByte()
             bytes[i * 2 + 1] = (integer shr 8).toByte()

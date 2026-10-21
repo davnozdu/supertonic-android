@@ -383,12 +383,15 @@ object SupertonicTTS {
                 val sourceRate = when { AssetManager.isSilero(context) -> 48000; AssetManager.isTera(context) -> 44100; else -> 24000 }
                 val targetRate = getAudioSampleRate()
                 val converter = if (sourceRate != targetRate) com.brahmadeo.supertonic.tts.utils.StreamingPcmResampler(sourceRate, targetRate) else null
+                // «Обработка звука»: after the resampler, at the output rate (also reads the soft-limiter switch).
+                val filters = com.brahmadeo.supertonic.tts.utils.SpeechFilters.stream(context, targetRate)
                 val converted = java.io.ByteArrayOutputStream()
-                val routedListener = if (converter == null) listener else object : ProgressListener {
+                val routedListener = if (converter == null && filters == null) listener else object : ProgressListener {
                     override fun onProgress(sessionId: Long, current: Int, total: Int) { listener?.onProgress(sessionId, current, total) }
                     override fun onAudioChunk(sessionId: Long, data: ByteArray) {
                         if (isCancelled()) return
-                        val bytes = converter.feed(data)
+                        val resampled = converter?.feed(data) ?: data
+                        val bytes = filters?.feed(resampled) ?: resampled
                         converted.write(bytes)
                         if (bytes.isNotEmpty()) listener?.onAudioChunk(sessionId, bytes)
                     }
@@ -426,8 +429,10 @@ object SupertonicTTS {
                         output.write(pcm)
                     }
                 }
-                val result = if (converter == null) output.toByteArray() else {
-                    val tail = converter.finish(); converted.write(tail)
+                val result = if (converter == null && filters == null) output.toByteArray() else {
+                    val rest = converter?.finish() ?: ByteArray(0)
+                    val tail = if (filters == null) rest else filters.feed(rest) + filters.finish()
+                    converted.write(tail)
                     if (tail.isNotEmpty() && !isCancelled()) listener?.onAudioChunk(sid, tail)
                     converted.toByteArray()
                 }

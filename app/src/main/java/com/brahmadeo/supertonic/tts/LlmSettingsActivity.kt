@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
 class LlmSettingsActivity : ComponentActivity() {
     enum class Section(val title: String) {
         LLM("Подготовка текста LLM"), MODELS("Модели LLM и ключи"), STRESS("Ударения и буква ё"),
-        VOICES("Мультиголосовая озвучка"), SOUND("Звук и паузы"), BUFFER("Упреждение и кэш"), READERS("Сторонние читалки");
+        VOICES("Мультиголосовая озвучка"), SOUND("Звук и паузы"), AUDIO("Обработка звука"), BUFFER("Упреждение и кэш"), READERS("Сторонние читалки");
         companion object { fun from(name: String?) = entries.firstOrNull { it.name == name } ?: LLM }
     }
     companion object {
@@ -69,10 +69,6 @@ class LlmSettingsActivity : ComponentActivity() {
                 val downloadStatus by LocalModelDownload.status.collectAsState()
                 val downloading by LocalModelDownload.downloading.collectAsState()
                 val pausePrefs = remember { getSharedPreferences("SupertonicPrefs", MODE_PRIVATE) }
-                var teacherReady by remember { mutableStateOf(com.brahmadeo.supertonic.tts.tera.TeraQuality.ready(this)) }
-                var teacherEnabled by remember { mutableStateOf(pausePrefs.getBoolean("tera_teacher",false) && teacherReady) }
-                var teacherBusy by remember { mutableStateOf(false) }
-                var teacherStatus by remember { mutableStateOf("") }
                 var npuEnabled by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, false)) }
                 var shortWordCap by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY, true)) }
                 var sileroIntonation by remember { mutableStateOf(pausePrefs.getBoolean("silero_intonation", true)) }
@@ -344,36 +340,14 @@ class LlmSettingsActivity : ComponentActivity() {
                                 levelVoices = it; pausePrefs.edit().putBoolean("voice_loudness_normalization", it).apply()
                                 com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
                             }
-                            Text("Одинаковый ориентир громкости для Silero, Tera и Shtorm. Усиление постоянно внутри фразы: ритм и паузы сохраняются.", style = MaterialTheme.typography.bodySmall)
+                            Text("Одинаковый ориентир громкости для Silero, Tera, Kokoro и Shtorm. Усиление постоянно внутри фразы: ритм и паузы сохраняются.", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("Иностранные фрагменты и голос для Readest — в пункте меню «Мультиязычная озвучка».", style = MaterialTheme.typography.bodySmall)
                         }
                         if (section == Section.SOUND) {
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
                             Text("Звук Tera",style=MaterialTheme.typography.titleMedium)
-                            Text("PCM 44,1 кГц, 16 бит. Быстрый distilled — по умолчанию. Teacher — альтернативный полный синтез, примерно в 2–3 раза медленнее; результат сравните на слух.",style=MaterialTheme.typography.bodySmall)
-                            Button(enabled=!teacherBusy && !teacherReady,onClick={
-                                teacherBusy=true
-                                scope.launch {
-                                    try {
-                                        withContext(Dispatchers.IO) {
-                                            com.brahmadeo.supertonic.tts.tera.TeraQuality.download(this@LlmSettingsActivity) {
-                                                teacherStatus="Скачивание Tera teacher: $it %"
-                                            }
-                                        }
-                                        teacherReady=true
-                                        teacherStatus="Tera teacher установлена"
-                                        com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
-                                    } catch(t: Exception) { teacherStatus="Ошибка: ${t.message}" }
-                                    finally { teacherBusy=false }
-                                }
-                            }) { Text(if(teacherReady) "Tera teacher установлена" else "Скачать Tera teacher · 257 МБ") }
-                            if(teacherStatus.isNotBlank()) Text(teacherStatus)
-                            if(teacherReady) Toggle("Tera teacher · экспериментальный режим",teacherEnabled) {
-                                teacherEnabled=it
-                                pausePrefs.edit().putBoolean("tera_teacher",it).apply()
-                            }
-                            Text("Оба варианта используют выбранный голос и подготовку LLM. Загружается только один вариант синтеза; при переключении кэш аудио очищается.",style=MaterialTheme.typography.bodySmall)
+                            Text("Быстрая или Teacher — выбор «Синтез Tera» на главном экране под стилем голоса.",style=MaterialTheme.typography.bodySmall)
                             Toggle("Не растягивать короткие реплики",shortWordCap) {
                                 shortWordCap=it
                                 pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY,it).apply()
@@ -429,6 +403,22 @@ class LlmSettingsActivity : ComponentActivity() {
                             sentencePauseOnly -> "Модель сама делает паузы на запятых. После точки, вопроса и восклицания добавляется только недостающая тишина до выбранной длины. Меньше — чтение плавнее; в читалках, которые присылают по одному предложению (KOReader, Readest), это и есть пауза между предложениями."
                             else -> "Работает также при выключенной LLM. Учитывает тишину, уже сгенерированную моделью, и добавляет только недостающую паузу."
                         }, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (section == Section.AUDIO) {
+                        Text("Фильтры применяются к готовому звуку всех русских моделей, до кэша. Каждый включается отдельно — переключите и послушайте: кэш звука сбрасывается, следующие фразы звучат уже с новой настройкой.", style = MaterialTheme.typography.bodySmall)
+                        var f_fade by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.SpeechFilters.enabled(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.SpeechFilters.FADE)) }
+                        Toggle("Сглаживание краёв фразы", f_fade) { f_fade = it; option(com.brahmadeo.supertonic.tts.utils.SpeechFilters.FADE, it) }
+                        Text("Убирает щелчок, когда фраза начинается или кончается не с тишины. Нарастание и затухание 5 мс — на слух не заметно. Нагрузка: практически нулевая (только 5 мс в начале и в конце фразы).", style = MaterialTheme.typography.bodySmall)
+                        var f_high_pass by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.SpeechFilters.enabled(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.SpeechFilters.HIGH_PASS)) }
+                        Toggle("Срез гула ниже 70 Гц", f_high_pass) { f_high_pass = it; option(com.brahmadeo.supertonic.tts.utils.SpeechFilters.HIGH_PASS, it) }
+                        Text("Убирает низкочастотный гул и смещение нуля, из-за которых голос звучит «бубняще» и щёлкает. Речь ниже 70 Гц почти не звучит. Нагрузка: 5 умножений на отсчёт — доли процента от работы синтеза, на батарее незаметно.", style = MaterialTheme.typography.bodySmall)
+                        var f_limiter by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.SpeechFilters.enabled(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.SpeechFilters.LIMITER)) }
+                        Toggle("Мягкий ограничитель", f_limiter) { f_limiter = it; option(com.brahmadeo.supertonic.tts.utils.SpeechFilters.LIMITER, it) }
+                        Text("Громкие пики плавно скругляются вместо жёсткой обрезки — без хрипа на ударных слогах (чаще у Tera). Тише 80% шкалы звук не меняется. Нагрузка: незаметная, одна функция на громкий отсчёт.", style = MaterialTheme.typography.bodySmall)
+                        var f_gate by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.SpeechFilters.enabled(this@LlmSettingsActivity, com.brahmadeo.supertonic.tts.utils.SpeechFilters.GATE)) }
+                        Toggle("Тишина в паузах · эксперимент", f_gate) { f_gate = it; option(com.brahmadeo.supertonic.tts.utils.SpeechFilters.GATE, it) }
+                        Text("Приглушает шипение и шум в паузах между словами на 15 дБ, речь не трогает. Может слегка смягчить очень тихие окончания слов — поэтому выключен по умолчанию. Нагрузка: незаметная, несколько операций на отсчёт.", style = MaterialTheme.typography.bodySmall)
+                        Text("Все четыре фильтра вместе — доли процента от вычислений самой модели (замер: минута звука обрабатывается примерно за 25 мс на компьютере, на телефоне — в несколько раз дольше, всё равно меньше секунды): на заряд батареи они заметно не влияют. Шипение и «плёночный» тембр, заложенные в самой модели (кодек Shtorm, сжатие Kokoro Q8, быстрый вокодер Tera), фильтром не убрать — для этого выберите полный пакет модели на главном экране (Kokoro: полная точность, Tera: Teacher).", style = MaterialTheme.typography.bodySmall)
                         }
                         if (section == Section.BUFFER) {
                         if (com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@LlmSettingsActivity)) {
