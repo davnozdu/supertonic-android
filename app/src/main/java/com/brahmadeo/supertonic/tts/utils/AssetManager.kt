@@ -50,7 +50,9 @@ object AssetManager {
     fun isKokoro(context: Context): Boolean = getModelType(context) == KOKORO_MODEL
     /** Model-picker entry; Kokoro's Q8 / full-precision package is a setting of the one Kokoro model. */
     fun modelChoice(context: Context): String = getModelType(context)
-    fun russianVoices(context: Context): List<String> = when {
+    fun russianVoices(context: Context): List<String> = HiddenVoices.filter(context, getModelType(context), allRussianVoices(context))
+    /** Every voice of the model, hidden ones included (see [HiddenVoices]). */
+    fun allRussianVoices(context: Context): List<String> = when {
         isKokoro(context) -> com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voices
         isPocket(context) -> com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(context)
         isSilero(context) -> com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(context)

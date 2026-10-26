@@ -43,7 +43,11 @@ object TeraVoiceLibrary {
     fun installed(context: Context): List<String> =
         runCatching { voices(context).filter { complete(context, it) }.map { PREFIX + it.id } }.getOrDefault(emptyList())
 
-    fun missing(context: Context): List<Voice> = runCatching { voices(context).filterNot { complete(context, it) } }.getOrDefault(emptyList())
+    /** Not downloaded and not removed by the user (a removed one comes back via «Вернуть скрытые голоса»). */
+    fun missing(context: Context): List<Voice> = runCatching {
+        val removed = com.brahmadeo.supertonic.tts.utils.HiddenVoices.hidden(context, AssetManager.TERA_MODEL)
+        voices(context).filterNot { complete(context, it) || PREFIX + it.id in removed }
+    }.getOrDefault(emptyList())
 
     /** Title from the manifest (loaded by the voice list before any label is asked for). */
     /** "m" / "f" from the manifest (pitch measured on the phone; Smooth Cassius by ear), null if unknown or not loaded. */

@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.viewModels
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.ButtonDefaults
@@ -489,6 +490,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val threadModel = AssetManager.getModelType(this@MainActivity)
+                    var voicesVersion by remember { mutableIntStateOf(0) }
                     var cpuThreads by remember(threadModel) { mutableStateOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(this@MainActivity, threadModel)) }
                     MainScreen(
                         modelType = threadModel,
@@ -507,6 +509,34 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onTeraVoicesChanged = { setupVoicesMap(viewModel.currentLang.value) },
+                        hiddenVoiceCount = remember(threadModel, voicesVersion) { com.brahmadeo.supertonic.tts.utils.HiddenVoices.hidden(this@MainActivity, threadModel).size },
+                        onRestoreHiddenVoices = {
+                            com.brahmadeo.supertonic.tts.utils.HiddenVoices.restore(this@MainActivity, threadModel)
+                            setupVoicesMap(viewModel.currentLang.value); voicesVersion++
+                            Toast.makeText(this@MainActivity, "Скрытые голоса возвращены", Toast.LENGTH_SHORT).show()
+                        },
+                        onVoiceRemove = { file ->
+                            val voice = file.removeSuffix(".json")
+                            val before = AssetManager.russianVoices(this@MainActivity)
+                            val result = com.brahmadeo.supertonic.tts.utils.HiddenVoices.remove(this@MainActivity, threadModel, voice, before)
+                            if (result == com.brahmadeo.supertonic.tts.utils.HiddenVoices.Result.LAST_VOICE) {
+                                Toast.makeText(this@MainActivity, "Это последний голос модели — его нельзя удалить", Toast.LENGTH_LONG).show()
+                            } else {
+                                // The removed voice was the selected one: the next voice of the list takes its place.
+                                if (viewModel.selectedVoiceFile.value.removeSuffix(".json") == voice) {
+                                    val next = before.firstOrNull { it != voice }
+                                    if (next != null) {
+                                        viewModel.selectedVoiceFile.value = "$next.json"
+                                        saveStringPref("selected_voice", "$next.json")
+                                        runCatching { com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.save(this@MainActivity,
+                                            com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR, next) }
+                                    }
+                                }
+                                setupVoicesMap(viewModel.currentLang.value); voicesVersion++
+                                Toast.makeText(this@MainActivity, if (result == com.brahmadeo.supertonic.tts.utils.HiddenVoices.Result.DELETED)
+                                    "Голос удалён" else "Голос скрыт; вернуть — кнопкой под списком", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         onModelSelectionClick = {
                             viewModel.selectedModel.value = AssetManager.modelChoice(this@MainActivity)
                             viewModel.showModelSelection.value = true
@@ -836,23 +866,23 @@ class MainActivity : ComponentActivity() {
     private fun setupVoicesMap(lang: String) {
         viewModel.voiceFiles.clear()
         if (AssetManager.isKokoro(this)) {
-            com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voices.forEach {
+            AssetManager.russianVoices(this).forEach {
                 viewModel.voiceFiles[com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.label(it)] = "$it.json"
             }
             return
         }
         if (AssetManager.isPocket(this)) {
-            com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(this).forEach {
+            AssetManager.russianVoices(this).forEach {
                 viewModel.voiceFiles["${it.replaceFirstChar { c -> c.uppercase() }} · Shtorm RU"]="$it.json"
             }
             return
         }
         if (AssetManager.isSilero(this)) {
-            com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(this).forEach { viewModel.voiceFiles[it] = "$it.json" }
+            AssetManager.russianVoices(this).forEach { viewModel.voiceFiles[it] = "$it.json" }
             return
         }
         if (AssetManager.isTera(this)) {
-            AssetManager.teraVoices(this).forEach { viewModel.voiceFiles[com.brahmadeo.supertonic.tts.tera.TeraVoices.label(it)] = "$it.json" }
+            AssetManager.russianVoices(this).forEach { viewModel.voiceFiles[com.brahmadeo.supertonic.tts.tera.TeraVoices.label(it)] = "$it.json" }
             return
         }
         val voiceResources = mapOf(

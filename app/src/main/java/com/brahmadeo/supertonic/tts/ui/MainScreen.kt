@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import java.util.Locale
 import kotlin.math.roundToInt
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -98,6 +99,10 @@ fun MainScreen(
     modelType: String = "",
     onPocketVoicesDownload: () -> Unit = {},
     onTeraVoicesChanged: () -> Unit = {},
+    /** Long press on a voice: delete it (imported/downloaded Tera voices) or hide it (built-in voices). */
+    onVoiceRemove: (String) -> Unit = {},
+    hiddenVoiceCount: Int = 0,
+    onRestoreHiddenVoices: () -> Unit = {},
     cpuThreads: Int = 4,
     maxCpuThreads: Int = 8,
     recommendedCpuThreads: Int = 4,
@@ -105,6 +110,7 @@ fun MainScreen(
     onCpuThreadsFinished: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var removeVoice by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -352,8 +358,23 @@ fun MainScreen(
                             label = stringResource(AppR.string.voice_style_label),
                             options = voices.keys.toList().sorted(),
                             selectedOption = voices.entries.find { it.value == selectedVoiceFile }?.key ?: "",
-                            onOptionSelected = { name -> onVoiceChange(voices[name] ?: "M1.json") }
+                            onOptionSelected = { name -> onVoiceChange(voices[name] ?: "M1.json") },
+                            onOptionLongPress = if (isRussianVoiceModel(modelType)) { name -> removeVoice = name } else null
                         )
+                        removeVoice?.let { name ->
+                            AlertDialog(
+                                onDismissRequest = { removeVoice = null },
+                                title = { Text("Удалить голос «$name»?") },
+                                text = { Text("Свой или скачанный голос удаляется с телефона (скачанный можно вернуть кнопкой «Скачать голоса Tera»). " +
+                                    "Встроенный голос модели скрывается из всех списков — главного, ролей и персонажей книг; его можно вернуть.") },
+                                confirmButton = { TextButton(onClick = { voices[name]?.let(onVoiceRemove); removeVoice = null }) { Text("Удалить") } },
+                                dismissButton = { TextButton(onClick = { removeVoice = null }) { Text("Отмена") } }
+                            )
+                        }
+                        Text("Долгое нажатие на голос в списке — удалить его.", style = MaterialTheme.typography.bodySmall)
+                        if (hiddenVoiceCount > 0) TextButton(onClick = onRestoreHiddenVoices, modifier = Modifier.fillMaxWidth()) {
+                            Text("Вернуть скрытые голоса · $hiddenVoiceCount")
+                        }
 
                         ModelPackageChoice(modelType)
 
@@ -590,13 +611,14 @@ fun SliderWithLabel(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun DropdownSelector(
     label: String,
     options: List<String>,
     selectedOption: String,
-    onOptionSelected: (String) -> Unit
+    onOptionSelected: (String) -> Unit,
+    onOptionLongPress: ((String) -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -620,12 +642,22 @@ fun DropdownSelector(
             onDismissRequest = { expanded = false }
         ) {
             options.forEach { option ->
-                DropdownMenuItem(
+                if (onOptionLongPress == null) DropdownMenuItem(
                     text = { Text(option) },
                     onClick = {
                         onOptionSelected(option)
                         expanded = false
                     }
+                ) else Text(
+                    option,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onClick = { onOptionSelected(option); expanded = false },
+                            onLongClick = { expanded = false; onOptionLongPress(option) }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
                 )
             }
         }
@@ -678,3 +710,9 @@ fun MainScreenPreview() {
         )
     }
 }
+
+/** The Russian models whose voices can be removed from the list (the old English Supertonic voice styles stay). */
+private fun isRussianVoiceModel(model: String) = model in setOf(
+    com.brahmadeo.supertonic.tts.utils.AssetManager.TERA_MODEL, com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_MODEL,
+    com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_CIS_MODEL, com.brahmadeo.supertonic.tts.utils.AssetManager.KOKORO_MODEL,
+    com.brahmadeo.supertonic.tts.utils.AssetManager.POCKET_MODEL)
