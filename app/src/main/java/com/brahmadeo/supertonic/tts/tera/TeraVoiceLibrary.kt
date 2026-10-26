@@ -46,8 +46,12 @@ object TeraVoiceLibrary {
     fun missing(context: Context): List<Voice> = runCatching { voices(context).filterNot { complete(context, it) } }.getOrDefault(emptyList())
 
     /** Title from the manifest (loaded by the voice list before any label is asked for). */
-    fun label(name: String): String =
-        "Tera+ · " + (cached?.firstOrNull { PREFIX + it.id == name }?.title ?: name.removePrefix(PREFIX).replace('_', ' '))
+    fun label(name: String, withGender: Boolean = true): String {
+        val v = cached?.firstOrNull { PREFIX + it.id == name }
+        // Gender measured on the phone (pitch); unknown ones get no mark rather than a guess.
+        val sex = if (!withGender) "" else when (v?.gender) { "m" -> " (муж)"; "f" -> " (жен)"; else -> "" }
+        return "Tera+ · " + (v?.title ?: name.removePrefix(PREFIX).replace('_', ' ')) + sex
+    }
 
     suspend fun download(context: Context, progress: (String, Float) -> Unit) = withContext(Dispatchers.IO) {
         lock.withLock {

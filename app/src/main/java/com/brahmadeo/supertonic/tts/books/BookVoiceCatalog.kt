@@ -39,7 +39,10 @@ object BookVoiceCatalog {
             "sveta" -> "Света"; "masha" -> "Маша"; "dima" -> "Дима"
             "aidar" -> "Айдар"; "eugene" -> "Евгений"; "kseniya" -> "Ксения"; "baya" -> "Бая"; "xenia" -> "Ксения (Xenia)"
             "ru_roman" -> "Роман"; "ru_alexandr" -> "Александр"; "ru_dmitriy" -> "Дмитрий"; "ru_bogdan" -> "Богдан"
-            else -> com.brahmadeo.supertonic.tts.tera.TeraVoices.label(ref.voice)
+            // The line below names the gender itself (also a changed one), so no "(муж)" from the library label.
+            else -> if (com.brahmadeo.supertonic.tts.tera.TeraVoiceLibrary.isLibrary(ref.voice))
+                com.brahmadeo.supertonic.tts.tera.TeraVoiceLibrary.label(ref.voice, withGender = false)
+                else com.brahmadeo.supertonic.tts.tera.TeraVoices.label(ref.voice)
         }
         val gender = when (sex) { "m" -> "мужской"; "f" -> "женский"; else -> "пол не определён" }
         return "${BookVoiceRef.models.getValue(ref.model)} · $voice · $gender"
