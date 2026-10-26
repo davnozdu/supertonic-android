@@ -47,6 +47,15 @@
    "dp_sha256": "d7289a69d2d25d1791b4ea26897d49d1e1b77175b21c0f907cc9c5241ea431c1"
   },
   {
+   "id": "smooth_cassius",
+   "title": "Smooth Cassius",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "bff254a674b92c82feb046aa53fd86bda2e24126fed7283da5f416e8f5165ea4",
+   "dp_size": 640,
+   "dp_sha256": "a9ca0b3c76a60be740ccef1d63290ee57384870679500580de8b842ad9e31ec9"
+  },
+  {
    "id": "thunder_boone",
    "title": "Thunder Boone",
    "gender": "m",
@@ -126,15 +135,6 @@
    "ttl_sha256": "2c3cd16010951630112303c0468fad6a850ce1776791a7c4079dd1934ccc4541",
    "dp_size": 640,
    "dp_sha256": "b43feb12f352ab5b3f174316d99ac15ce376f8b0d83f856c456126a5e0efa97b"
-  },
-  {
-   "id": "smooth_cassius",
-   "title": "Smooth Cassius",
-   "gender": "?",
-   "ttl_size": 51328,
-   "ttl_sha256": "bff254a674b92c82feb046aa53fd86bda2e24126fed7283da5f416e8f5165ea4",
-   "dp_size": 640,
-   "dp_sha256": "a9ca0b3c76a60be740ccef1d63290ee57384870679500580de8b842ad9e31ec9"
   }
  ]
 }

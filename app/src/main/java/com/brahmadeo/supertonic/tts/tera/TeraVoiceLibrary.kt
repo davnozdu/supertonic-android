@@ -46,6 +46,9 @@ object TeraVoiceLibrary {
     fun missing(context: Context): List<Voice> = runCatching { voices(context).filterNot { complete(context, it) } }.getOrDefault(emptyList())
 
     /** Title from the manifest (loaded by the voice list before any label is asked for). */
+    /** "m" / "f" from the manifest (pitch measured on the phone; Smooth Cassius by ear), null if unknown or not loaded. */
+    fun gender(name: String): String? = cached?.firstOrNull { PREFIX + it.id == name }?.gender?.takeIf { it == "m" || it == "f" }
+
     fun label(name: String, withGender: Boolean = true): String {
         val v = cached?.firstOrNull { PREFIX + it.id == name }
         // Gender measured on the phone (pitch); unknown ones get no mark rather than a guess.
