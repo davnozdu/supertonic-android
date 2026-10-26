@@ -100,7 +100,7 @@ class TeraEngine(private val root: File, context: Context,
         .bufferedReader(Charsets.UTF_8).use { it.readLines().toSet() }
 
     init {
-        require(sampler in setOf("sampler_distilled_cfg3_8step", "sampler_teacher_8step"))
+        require(sampler in setOf(TeraQuality.FAST, TeraQuality.TEACHER, TeraQuality.INT8)) { "Unknown Tera sampler: $sampler" }
         require(threads in 1..16)
         require(indexer.size == 65536)
         android.util.Log.i("TeraTTS", "Loading sampler=$sampler threads=$threads")

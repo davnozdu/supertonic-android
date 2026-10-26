@@ -44,6 +44,8 @@ object SupertonicTTS {
         }, TERA_IDLE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
     @Synchronized internal fun teraResident() = teraEngine != null
+    /** A Tera sampler that failed to open in this process: the default one is used instead until restart. */
+    @Volatile private var teraFailedSampler: String? = null
     private val sileroEngines = mutableMapOf<String, com.brahmadeo.supertonic.tts.silero.SileroEngine>()
     private var pocketEngine: com.brahmadeo.supertonic.tts.pocket.PocketEngine? = null
     private var kokoroEngine: com.brahmadeo.supertonic.tts.kokoro.KokoroEngine? = null
@@ -152,18 +154,24 @@ object SupertonicTTS {
             teraEngine = null
             return null
         }
-        val sampler=com.brahmadeo.supertonic.tts.tera.TeraQuality.selected(ctx)
+        val sampler=com.brahmadeo.supertonic.tts.tera.TeraQuality.selected(ctx).let {
+            if (it == teraFailedSampler) com.brahmadeo.supertonic.tts.tera.TeraQuality.FAST else it }
         teraEngine?.let {
             if(it.sampler==sampler && it.threads==com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(ctx) &&
                 it.npuRequested==com.brahmadeo.supertonic.tts.utils.Npu.enabled(ctx)) return it
             it.close()
             teraEngine=null
         }
+        val root = File(ctx.filesDir, "${AssetManager.MODEL_VERSION}/tera")
         return try {
-            TeraEngine(File(ctx.filesDir, "${AssetManager.MODEL_VERSION}/tera"), ctx,sampler).also { teraEngine = it }
+            TeraEngine(root, ctx,sampler).also { teraEngine = it }
         } catch (t: Throwable) {
-            Log.e("SupertonicTTS", "Failed to open TeraEngine", t)
-            null
+            Log.e("SupertonicTTS", "Failed to open TeraEngine sampler=$sampler", t)
+            // An optional sampler (int8, teacher) that does not open must not stop reading: the default one does.
+            teraFailedSampler = sampler
+            if (sampler == com.brahmadeo.supertonic.tts.tera.TeraQuality.FAST) null
+            else try { TeraEngine(root, ctx, com.brahmadeo.supertonic.tts.tera.TeraQuality.FAST).also { teraEngine = it } }
+            catch (t2: Throwable) { Log.e("SupertonicTTS", "Failed to open TeraEngine", t2); null }
         }
     }
 
