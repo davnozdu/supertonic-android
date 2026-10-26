@@ -14,6 +14,8 @@ import android.util.Log
  */
 /** Measured Kokoro/Silero speech at the default rate: about 55-70 ms per character. */
 private const val FILE_SPEECH_MS_PER_CHAR = 70L
+/** Highest SDK whose TTS binder protocol was checked against its framework.jar (Android 17: 26.10.2026). */
+private const val MAX_VERIFIED_SDK = 37
 
 class TtsQueueObserver(private val context: Context, private val delegate: IBinder) : Binder() {
     @Volatile private var lastFileChars = 0
@@ -59,13 +61,23 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
         musicCallbacks.values.forEach { it.detach() }; musicCallbacks.clear()
         readingOwners.clear()
     } }
+    /** The ITextToSpeechService / ITextToSpeechCallback transaction codes and argument order read below, checked in the
+     * phone's own framework.jar up to Android 17 (SDK 37). Before that the check stopped at 36 and on the Android 17 OTA the
+     * observer silently switched off: no background music, no LLM preparation ahead, no sleep timer for readers. */
+    private fun protocolKnown(): Boolean {
+        val known = Build.VERSION.SDK_INT in 24..MAX_VERIFIED_SDK
+        if (!known && !warned) { warned = true; Log.w("LlmPreparation", "TTS protocol of SDK ${Build.VERSION.SDK_INT} not verified: reader queue observation, background music and LLM preparation are off") }
+        return known
+    }
+    @Volatile private var warned = false
+
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
         if (code == FIRST_CALL_TRANSACTION && com.brahmadeo.supertonic.tts.service.CallInterruption.active()) {
             reply?.writeNoException(); reply?.writeInt(TextToSpeech.ERROR)
             return true
         }
         val position = data.dataPosition()
-        if(Build.VERSION.SDK_INT in 24..36 && code==FIRST_CALL_TRANSACTION+11) {
+        if(protocolKnown() && code==FIRST_CALL_TRANSACTION+11) {
             var rewritten: Parcel? = null
             try {
                 data.enforceInterface("android.speech.tts.ITextToSpeechService")
@@ -95,7 +107,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
         // synthesizeToFileDescriptor (KOReader's audiobook plugin): the app writes one sentence to a file, plays it
         // and only then asks for the next, so nothing is queued ahead and every sentence waited ~1.5 s for the cloud
         // LLM and the roles. Treated like a one-at-a-time reader (Readest): the dictionaries read it at once.
-        if (Build.VERSION.SDK_INT in 24..36 && code == FIRST_CALL_TRANSACTION + 1 && getCallingUid() != context.applicationInfo.uid) {
+        if (protocolKnown() && code == FIRST_CALL_TRANSACTION + 1 && getCallingUid() != context.applicationInfo.uid) {
             try {
                 data.enforceInterface("android.speech.tts.ITextToSpeechService")
                 val caller = data.readStrongBinder()
@@ -116,7 +128,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
         var musicToken: Long? = null
         var queuedText: String? = null
         var queuedParams: android.os.Bundle? = null
-        if (Build.VERSION.SDK_INT in 24..36 && (code == FIRST_CALL_TRANSACTION || code == FIRST_CALL_TRANSACTION + 5)) {
+        if (protocolKnown() && (code == FIRST_CALL_TRANSACTION || code == FIRST_CALL_TRANSACTION + 5)) {
             try {
                 data.enforceInterface("android.speech.tts.ITextToSpeechService")
                 val caller = data.readStrongBinder()

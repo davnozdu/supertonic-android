@@ -5,7 +5,7 @@ import android.os.IBinder
 import android.os.Parcel
 import android.util.Log
 
-/** AOSP callback protocol (SDK 24–36). Forward every callback with its original payload. */
+/** AOSP callback protocol (SDK 24–37, checked in Android 17 framework.jar). Forward every callback with its original payload. */
 class MusicTtsCallback(private val owner: IBinder, private val delegate: IBinder, private val onDeath: (MusicTtsCallback) -> Unit) : Binder(), IBinder.DeathRecipient {
     init { runCatching { owner.linkToDeath(this,0) } }
     override fun binderDied() { BackgroundMusic.stop(owner); onDeath(this) }
