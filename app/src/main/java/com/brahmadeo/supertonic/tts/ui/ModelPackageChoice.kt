@@ -91,8 +91,18 @@ private fun TeraSamplerChoice() {
             selectedOption = chosen,
             onOptionSelected = { choose(it) }
         )
+        if (chosen == int8 && int8Ready) {
+            var steps by remember { mutableStateOf(TeraQuality.steps(context)) }
+            val eight = "8 шагов · как задумано"; val six = "6 шагов · на ~20% меньше нагрузки"
+            DropdownSelector(
+                label = "Шаги синтеза",
+                options = listOf(eight, six),
+                selectedOption = if (steps == 6) six else eight,
+                onOptionSelected = { steps = if (it == six) 6 else 8; prefs.edit().putInt(TeraQuality.STEPS, steps).apply() }
+            )
+        }
         Text("Те же голоса. Быстрая — по умолчанию. Сжатая int8 — та же быстрая модель в 8 битах: 65 МБ, примерно в 3 раза меньше " +
-            "нагрузки на процессор, звук чуть отличается — сравните на слух. Teacher — полный синтез: чище и естественнее, но считает " +
+            "нагрузки на процессор, звук чуть отличается — сравните на слух; у неё можно выбрать 6 шагов вместо 8: ещё примерно на 20% меньше нагрузки, разборчивость та же, оттенки звучания другие. Teacher — полный синтез: чище и естественнее, но считает " +
             "в 2–3 раза дольше и сильнее грузит процессор.", style = MaterialTheme.typography.bodySmall)
         fun download(what: String) {
             busy = true

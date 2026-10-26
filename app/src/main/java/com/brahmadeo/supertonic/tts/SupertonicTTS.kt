@@ -54,7 +54,7 @@ object SupertonicTTS {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         // prefs.all copies the whole map; take one snapshot per key, not one per setting.
         val all=prefs.all
-        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_int8","tera_noise_scale","tera_lower_names","shtorm_temperature","clean_speed_max_"+AssetManager.getModelType(context),"tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
+        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_int8","tera_steps","tera_noise_scale","tera_lower_names","shtorm_temperature","clean_speed_max_"+AssetManager.getModelType(context),"tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
         val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
         val pocketSlow=AssetManager.isPocket(context) && com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowEnabled(context)
         return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,pocketSlow,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")

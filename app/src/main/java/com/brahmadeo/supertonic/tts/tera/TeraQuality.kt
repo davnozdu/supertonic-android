@@ -15,12 +15,16 @@ object TeraQuality {
     /** The distilled sampler with MatMul in int8 inside its Loop body: 65 MB, ~3x less CPU per phrase, slightly different
      * sound. Quantized exactly like the TeraTTS fork (github.com/9208499-ship-it/teratts-android, tools/quantize_tera2.py;
      * output bit-identical to theirs), but the Loop is kept instead of unrolled: 2.5k nodes instead of 20k, so the session
-     * opens in ~0.3 s instead of ~7–12 s. Built by tools/tera_int8/loop_int8.py. */
-    const val INT8="sampler_loop_int8"
-    private const val INT8_SIZE=65447786L
-    private const val INT8_SHA="50101128535530a307ae414ee21b4b8c6e76d51b2da1a36cd683d38592a1980f"
-    /** The unrolled build shipped in 5.0.5-beta22/23: slow to open, removed once the new one is fetched. */
-    private const val OLD_INT8="sampler_distilled_int8"
+     * opens in ~0.3 s instead of ~7–12 s. Its step count is an input ("steps": 8, or 6 for ~20% less CPU), so one file
+     * serves both. Built by tools/tera_int8/loop_int8.py + steps_input.py. */
+    const val INT8="sampler_loop_int8_steps"
+    private const val INT8_SIZE=65447897L
+    /** «Шаги синтеза» for the int8 sampler: 8 as the model was distilled, or 6. */
+    const val STEPS="tera_steps"
+    fun steps(context: Context)=if(context.getSharedPreferences("SupertonicPrefs",0).getInt(STEPS,8)==6) 6 else 8
+    private const val INT8_SHA="96ef6b6bab71f53c47a22d3d6f65b004f2ab1cba71c49a38b3bc774817c85d83"
+    /** Earlier int8 builds (5.0.5-beta22–26), removed once the current one is fetched. */
+    private val OLD_INT8=listOf("sampler_distilled_int8","sampler_loop_int8")
     private const val SIZE=256528347L
     private const val SHA="b38b6334cdc5fa228f260710a41082d52a581b29c1a474f87e2a0f70887258fb"
     private fun root(context: Context)=File(context.filesDir,"${AssetManager.MODEL_VERSION}/tera/models")
@@ -55,7 +59,7 @@ object TeraQuality {
             ResumableModelFile.fetch("https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1/$INT8.onnx",
                 File(root,"$INT8.onnx"),INT8_SIZE,INT8_SHA) { done,total -> progress((done*100/total).toInt()) }
             File(root,"int8.verified").writeText(INT8_SHA)
-            File(root,"$OLD_INT8.onnx").delete()
+            OLD_INT8.forEach { File(root,"$it.onnx").delete() }
         }
     }
 }

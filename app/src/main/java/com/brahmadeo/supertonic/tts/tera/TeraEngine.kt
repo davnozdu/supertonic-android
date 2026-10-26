@@ -276,7 +276,7 @@ class TeraEngine(private val root: File, context: Context,
             "latent_mask" to floatTensor(FloatArray(frames) { 1f }, 1, 1, frames.toLong()),
             "text_mask" to floatTensor(textMask, 1, 1, textLen),
             "guidance" to floatTensor(floatArrayOf(3f), 1)
-        ))
+        ) + if (sampler == TeraQuality.INT8) mapOf("steps" to longTensor(longArrayOf(TeraQuality.steps(appContext).toLong()), 1)) else emptyMap())
         if (SupertonicTTS.isCancelled()) return ByteArray(0)
         val maxSamples = (seconds * 44100).roundToInt()
         val output = java.io.ByteArrayOutputStream(min(maxSamples * 2, 1_000_000))

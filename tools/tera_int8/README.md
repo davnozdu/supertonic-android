@@ -11,3 +11,9 @@ sha256 `50101128535530a307ae414ee21b4b8c6e76d51b2da1a36cd683d38592a1980f`) is th
 quantization of the unrolled graph gives the same output bit for bit, but 20 350 nodes take ~7 s (Mac) / ~12 s (phone)
 just to open a session. Keeping the Loop gives 2 541 nodes: the session opens in ~0.3 s, a run is as fast
 (Mac, 2 threads, 120 frames: fp32 839 ms, int8 303 ms), latent SNR vs fp32 12.9 dB — compare by ear.
+
+`steps_input.py` turns the step count into an input (`steps`, int64 [1]) → `sampler_loop_int8_steps.onnx`
+(65 447 897 bytes, sha256 `96ef6b6bab71f53c47a22d3d6f65b004f2ab1cba71c49a38b3bc774817c85d83`): steps=8 gives exactly the
+fixed 8-step output, steps=6 exactly a 6-step graph. On the phone (2 threads, 5.8 s of audio): 8 steps 507 ms / CPU 670 ms,
+6 steps 408 ms / CPU 519 ms; Whisper 10/10 phrases for both; log-spectral distance 6 vs 8 ≈ 6 dB (different, not
+necessarily worse — listen).
