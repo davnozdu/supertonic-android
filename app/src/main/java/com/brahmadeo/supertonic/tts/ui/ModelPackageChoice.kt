@@ -91,7 +91,7 @@ private fun TeraSamplerChoice() {
             selectedOption = chosen,
             onOptionSelected = { choose(it) }
         )
-        Text("Те же голоса. Быстрая — по умолчанию. Сжатая int8 — та же быстрая модель в 8 битах: 72 МБ, примерно в 3–4 раза меньше " +
+        Text("Те же голоса. Быстрая — по умолчанию. Сжатая int8 — та же быстрая модель в 8 битах: 65 МБ, примерно в 3 раза меньше " +
             "нагрузки на процессор, звук чуть отличается — сравните на слух. Teacher — полный синтез: чище и естественнее, но считает " +
             "в 2–3 раза дольше и сильнее грузит процессор.", style = MaterialTheme.typography.bodySmall)
         fun download(what: String) {
@@ -106,7 +106,7 @@ private fun TeraSamplerChoice() {
                 finally { busy = false }
             }
         }
-        if (!int8Ready) OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = { download(int8) }) { Text("Скачать Tera int8 · 72 МБ") }
+        if (!int8Ready) OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = { download(int8) }) { Text("Скачать Tera int8 · 65 МБ") }
         if (!teacherReady) OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = { download(teacher) }) { Text("Скачать Tera teacher · 257 МБ") }
         if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
     }

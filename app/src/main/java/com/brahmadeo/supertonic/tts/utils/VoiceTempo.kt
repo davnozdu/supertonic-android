@@ -41,7 +41,9 @@ object VoiceTempo {
     private fun speechMs(ctx: Context, voice: String, rate: Int, measure: (String, String) -> ByteArray?): Long? {
         val prefs = ctx.getSharedPreferences(STORE, 0)
         val p = ctx.getSharedPreferences("SupertonicPrefs", 0)
-        val key = "$voice|${p.getBoolean("kokoro_full_precision", true)}|${p.getBoolean("tera_teacher", false)}|${p.getBoolean("tera_int8", false)}|${p.getFloat("tera_noise_scale", 1f)}|${p.getBoolean("shtorm_slow", false)}"
+        // Tera's tempo comes from its duration predictor: the sampler (fast / int8 / teacher) and its noise do not change
+        // it, so switching them must not re-measure every voice.
+        val key = "$voice|${p.getBoolean("kokoro_full_precision", true)}|${p.getBoolean("shtorm_slow", false)}"
         prefs.getLong(key, 0L).takeIf { it > 0 }?.let { return it }
         val pcm = runCatching { measure(voice, PHRASE) }.getOrNull() ?: return null
         val ms = speechDurationMs(pcm, rate).takeIf { it > 300 } ?: return null

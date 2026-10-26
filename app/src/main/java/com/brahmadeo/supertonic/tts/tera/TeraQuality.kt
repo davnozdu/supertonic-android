@@ -12,12 +12,15 @@ import kotlinx.coroutines.withContext
 object TeraQuality {
     const val FAST="sampler_distilled_cfg3_8step"
     const val TEACHER="sampler_teacher_8step"
-    /** The distilled sampler with its Loop unrolled and MatMul in int8: 72 MB, ~4x less CPU, slightly different sound.
-     * Built by tools/quantize_tera2.py of the TeraTTS fork (github.com/9208499-ship-it/teratts-android); our rebuild
-     * from the original is byte-identical to theirs. */
-    const val INT8="sampler_distilled_int8"
-    private const val INT8_SIZE=71835413L
-    private const val INT8_SHA="139209e76b0e0a8aff0e7f2eda0a9bf65f65265faafeca93cd2d5596e6e477db"
+    /** The distilled sampler with MatMul in int8 inside its Loop body: 65 MB, ~3x less CPU per phrase, slightly different
+     * sound. Quantized exactly like the TeraTTS fork (github.com/9208499-ship-it/teratts-android, tools/quantize_tera2.py;
+     * output bit-identical to theirs), but the Loop is kept instead of unrolled: 2.5k nodes instead of 20k, so the session
+     * opens in ~0.3 s instead of ~7–12 s. Built by tools/tera_int8/loop_int8.py. */
+    const val INT8="sampler_loop_int8"
+    private const val INT8_SIZE=65447786L
+    private const val INT8_SHA="50101128535530a307ae414ee21b4b8c6e76d51b2da1a36cd683d38592a1980f"
+    /** The unrolled build shipped in 5.0.5-beta22/23: slow to open, removed once the new one is fetched. */
+    private const val OLD_INT8="sampler_distilled_int8"
     private const val SIZE=256528347L
     private const val SHA="b38b6334cdc5fa228f260710a41082d52a581b29c1a474f87e2a0f70887258fb"
     private fun root(context: Context)=File(context.filesDir,"${AssetManager.MODEL_VERSION}/tera/models")
@@ -52,6 +55,7 @@ object TeraQuality {
             ResumableModelFile.fetch("https://github.com/davnozdu/supertonic-android/releases/download/russian-resources-v1/$INT8.onnx",
                 File(root,"$INT8.onnx"),INT8_SIZE,INT8_SHA) { done,total -> progress((done*100/total).toInt()) }
             File(root,"int8.verified").writeText(INT8_SHA)
+            File(root,"$OLD_INT8.onnx").delete()
         }
     }
 }
