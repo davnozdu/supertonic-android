@@ -23,7 +23,8 @@ class QuickReadActivity : ComponentActivity() {
     private var pasteRequested = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        text.value = savedInstanceState?.getString("text").orEmpty()
+        com.brahmadeo.supertonic.tts.utils.NoAutofill.apply(this)
+        text.value = com.brahmadeo.supertonic.tts.utils.TextHandoff.unwrap(savedInstanceState?.getString("text")).orEmpty()
         pasteRequested = savedInstanceState == null && intent.getBooleanExtra("paste", false)
         SleepTimer.initialize(this)
         setContent { SupertonicTheme {
@@ -78,5 +79,5 @@ class QuickReadActivity : ComponentActivity() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.let { text.value = it }
     }
-    override fun onSaveInstanceState(outState: Bundle) { outState.putString("text", text.value); super.onSaveInstanceState(outState) }
+    override fun onSaveInstanceState(outState: Bundle) { outState.putString("text", com.brahmadeo.supertonic.tts.utils.TextHandoff.wrap(text.value, "quick_read")); super.onSaveInstanceState(outState) }
 }

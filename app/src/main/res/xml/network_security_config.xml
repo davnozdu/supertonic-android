@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 7.0–7.1 does not know the roots that Hugging Face, GitHub and Let's Encrypt sites use
+     now ("Trust anchor for certification path not found" while downloading models), so the app
+     brings them besides the system ones. extra_roots.pem: 17 public roots (ISRG, DigiCert,
+     GlobalSign, Sectigo/USERTrust, Amazon, Google Trust Services), from the TeraTTS fork 1.6.5,
+     each checked against the macOS system root store. Cleartext stays allowed as before
+     (http articles, a local Ollama address): with this file usesCleartextTraffic is ignored. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/extra_roots" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

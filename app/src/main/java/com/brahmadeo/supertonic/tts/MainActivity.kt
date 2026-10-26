@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            val selectedText = result.data?.getStringExtra("selected_text")
+            val selectedText = com.brahmadeo.supertonic.tts.utils.TextHandoff.unwrap(result.data?.getStringExtra("selected_text"))
             if (!selectedText.isNullOrEmpty()) {
                 viewModel.inputText.value = selectedText
             }
@@ -176,6 +176,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        com.brahmadeo.supertonic.tts.utils.NoAutofill.apply(this)
 
         loadPreferences()
         checkNotificationPermission()
@@ -970,7 +971,7 @@ class MainActivity : ComponentActivity() {
 
     private fun launchPlaybackActivity(text: String, stylePath: String) {
         val intent = Intent(this, PlaybackActivity::class.java).apply {
-            putExtra(PlaybackActivity.EXTRA_TEXT, text)
+            putExtra(PlaybackActivity.EXTRA_TEXT, com.brahmadeo.supertonic.tts.utils.TextHandoff.wrap(text))
             putExtra(PlaybackActivity.EXTRA_VOICE_PATH, stylePath)
             putExtra(PlaybackActivity.EXTRA_SPEED, viewModel.currentSpeed.floatValue)
             putExtra(PlaybackActivity.EXTRA_STEPS, viewModel.currentSteps.intValue)

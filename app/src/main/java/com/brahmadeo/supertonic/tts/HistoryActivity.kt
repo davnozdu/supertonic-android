@@ -19,7 +19,7 @@ class HistoryActivity : ComponentActivity() {
                     onBackClick = { finish() }
                 ) { item ->
                     val resultIntent = Intent()
-                    resultIntent.putExtra("selected_text", item.text)
+                    resultIntent.putExtra("selected_text", com.brahmadeo.supertonic.tts.utils.TextHandoff.wrap(item.text, "history"))
                     setResult(RESULT_OK, resultIntent)
                     finish()
                 }

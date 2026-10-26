@@ -122,7 +122,7 @@ class PlaybackActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        currentText = intent.getStringExtra(EXTRA_TEXT) ?: ""
+        currentText = com.brahmadeo.supertonic.tts.utils.TextHandoff.unwrap(intent.getStringExtra(EXTRA_TEXT)) ?: ""
         currentVoicePath = intent.getStringExtra(EXTRA_VOICE_PATH) ?: ""
         currentSpeed = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
         currentSteps = intent.getIntExtra(EXTRA_STEPS, 5)
@@ -282,7 +282,7 @@ class PlaybackActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (!intent.getBooleanExtra("is_resume", false)) {
-            val text = intent.getStringExtra(EXTRA_TEXT) ?: return
+            val text = com.brahmadeo.supertonic.tts.utils.TextHandoff.unwrap(intent.getStringExtra(EXTRA_TEXT)) ?: return
             currentText = text
             currentVoicePath = intent.getStringExtra(EXTRA_VOICE_PATH).orEmpty()
             currentSpeed = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
