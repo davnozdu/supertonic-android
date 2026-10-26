@@ -113,8 +113,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 233
-        versionName "5.0.5-beta26"
+        versionCode 234
+        versionName "5.0.5-beta27"
         // The app is Russian whatever the system language: the default strings are Russian and the
         // older partial es/fr/ko/pt translations stay out of the APK (they mixed with Russian text).
         resourceConfigurations += ["ru"]
@@ -225,6 +225,9 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-extended'
     // Same ORT 1.26 API with the Qualcomm QNN execution provider (NPU) for arm64.
     implementation 'com.microsoft.onnxruntime:onnxruntime-android-qnn:1.26.0'
+    // ORT (even 1.29) pins QNN 2.42, built before the phone's Android 17 HTP drivers; after that OTA Kokoro on the NPU
+    // ran ~1.7x slower while the CPU path stayed the same. The QNN API is backward compatible: newer runtime libs.
+    implementation 'com.qualcomm.qti:qnn-runtime:2.51.0'
     onnxRuntime 'com.microsoft.onnxruntime:onnxruntime-android:1.26.0'
 
     // LiteRT (TensorFlow Lite rebrand) for running INT4 .tflite assets on Android.
