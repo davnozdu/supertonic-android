@@ -10,7 +10,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1] / 'app/src/main/assets/tera_styles'
 manifest = json.loads((root / 'manifest.json').read_text())
 expected = {(voice, part) for voice in manifest['voices'] for part in ('style_dp', 'style_ttl')}
-assert len(manifest['voices']) == 10 and len(expected) == 20
+assert len(manifest['voices']) == 4 and len(expected) == 8  # Russian references only since 5.0.5-beta32
 seen = set()
 for row in manifest['files']:
     pair = row['voice'], row['part']
@@ -27,4 +27,4 @@ for row in manifest['files']:
     assert len(payload) == math.prod(shape) * 4
     assert all(math.isfinite(x[0]) for x in struct.iter_unpack('<f', payload))
 assert seen == expected
-print('Tera: all 10 voices, 20 SHA-verified styles, correct shapes and finite samples')
+print('Tera: all 4 voices, 8 SHA-verified styles, correct shapes and finite samples')
