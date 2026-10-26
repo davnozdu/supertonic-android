@@ -97,6 +97,7 @@ fun MainScreen(
     showPocketVoicesDownload: Boolean = false,
     modelType: String = "",
     onPocketVoicesDownload: () -> Unit = {},
+    onTeraVoicesChanged: () -> Unit = {},
     cpuThreads: Int = 4,
     maxCpuThreads: Int = 8,
     recommendedCpuThreads: Int = 4,
@@ -355,6 +356,8 @@ fun MainScreen(
                         )
 
                         ModelPackageChoice(modelType)
+
+                        if (isTeraModel) TeraVoiceImport(onChanged = onTeraVoicesChanged)
 
                         if (!isTeraModel) Row(
                             verticalAlignment = Alignment.CenterVertically,

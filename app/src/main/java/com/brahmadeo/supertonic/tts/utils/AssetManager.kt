@@ -54,8 +54,10 @@ object AssetManager {
         isKokoro(context) -> com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.voices
         isPocket(context) -> com.brahmadeo.supertonic.tts.pocket.PocketVoices.installed(context)
         isSilero(context) -> com.brahmadeo.supertonic.tts.silero.SileroDownload.voices(context)
-        else -> TERA_VOICES
+        else -> teraVoices(context)
     }
+    /** Built-in Tera voices plus the user's imported ones. */
+    fun teraVoices(context: Context): List<String> = TERA_VOICES + com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.installed(context)
     fun isTera(context: Context): Boolean = getModelType(context) == TERA_MODEL
     fun isSilero(context: Context): Boolean = getModelType(context) in setOf(SILERO_MODEL, SILERO_CIS_MODEL)
     fun isRussianModel(context: Context): Boolean = isTera(context) || isSilero(context) || isPocket(context) || isKokoro(context)
@@ -72,7 +74,7 @@ object AssetManager {
         if (!isTera(context)) return File(base, "voice_styles/${File(selected).name}")
         com.brahmadeo.supertonic.tts.tera.TeraVoices.ensureInstalled(context)
         val voice = File(selected).name.removeSuffix(".json")
-            .takeIf { it in TERA_VOICES } ?: "ru_f1"
+            .takeIf { it in TERA_VOICES || (com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.isCustom(it) && it in com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.installed(context)) } ?: "ru_f1"
         return File(base, "tera/styles/$voice/style_ttl.npy")
     }
 

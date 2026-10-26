@@ -26,6 +26,8 @@ object BookVoiceAssign {
     /** "m", "f" or null when unknown (such a voice is never given to a character). */
     fun gender(voice: String): String? {
         val name = BookVoiceRef.parse(voice)?.voice ?: voice
+        // Imported Tera voices: the gender is whatever the user (or the file's metadata) said.
+        if (com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.isCustom(name)) return null
         return knownGenders[name] ?: when {
         Regex("(^|_)m\\d").containsMatchIn(name) -> "m"   // Tera: ru_m5
         Regex("(^|_)f\\d").containsMatchIn(name) -> "f"

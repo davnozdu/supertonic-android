@@ -505,6 +505,7 @@ class MainActivity : ComponentActivity() {
                                 finally { viewModel.isDownloading.value=false }
                             }
                         },
+                        onTeraVoicesChanged = { setupVoicesMap(viewModel.currentLang.value) },
                         onModelSelectionClick = {
                             viewModel.selectedModel.value = AssetManager.modelChoice(this@MainActivity)
                             viewModel.showModelSelection.value = true
@@ -850,7 +851,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (AssetManager.isTera(this)) {
-            AssetManager.TERA_VOICES.forEach { viewModel.voiceFiles[com.brahmadeo.supertonic.tts.tera.TeraVoices.label(it)] = "$it.json" }
+            AssetManager.teraVoices(this).forEach { viewModel.voiceFiles[com.brahmadeo.supertonic.tts.tera.TeraVoices.label(it)] = "$it.json" }
             return
         }
         val voiceResources = mapOf(
