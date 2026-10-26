@@ -5,13 +5,7 @@
     "ru_f1",
     "ru_f2",
     "ru_m1",
-    "ru_m5",
-    "eng_f3",
-    "eng_f4_whisper",
-    "eng_f5",
-    "eng_m2_whisper",
-    "eng_m3",
-    "eng_m4"
+    "ru_m5"
   ],
   "files": [
     {
@@ -61,78 +55,6 @@
       "part": "style_ttl",
       "size": 51328,
       "sha256": "6eccc64350dcc23a8e790eebd7abbec24b0055e6451d975deffa899885e26e99"
-    },
-    {
-      "voice": "eng_f3",
-      "part": "style_dp",
-      "size": 640,
-      "sha256": "8471b25d2db5281feebc6e03af5bfb413c647368d75cdd8cebc44be36def7948"
-    },
-    {
-      "voice": "eng_f3",
-      "part": "style_ttl",
-      "size": 51328,
-      "sha256": "95fdfe490f5b3d3cf699495309177c405a38a89707bc9c711f93dc083fe099b6"
-    },
-    {
-      "voice": "eng_f4_whisper",
-      "part": "style_dp",
-      "size": 640,
-      "sha256": "47031c5fbbea490cba67cfd82f1ffc8ee8ed64c68aa68260f13746c2174ffbfa"
-    },
-    {
-      "voice": "eng_f4_whisper",
-      "part": "style_ttl",
-      "size": 51328,
-      "sha256": "ae4a81c2459e4fccb6206b37c3bba518ac3e23fc91344b07516c5e6125257d59"
-    },
-    {
-      "voice": "eng_f5",
-      "part": "style_dp",
-      "size": 640,
-      "sha256": "9629dce9db38b4ab5163429c1eeb9a5771786e58e98e343ea6251bf93a9dfd60"
-    },
-    {
-      "voice": "eng_f5",
-      "part": "style_ttl",
-      "size": 51328,
-      "sha256": "b4cc8b6d271d6ee587b13af7bef8f0151821b24d6af546a1167fa885bd962496"
-    },
-    {
-      "voice": "eng_m2_whisper",
-      "part": "style_dp",
-      "size": 640,
-      "sha256": "1a2814cc92643cc102d438d0a70742bacbd01921a78cc0ff39b722ab78b2682c"
-    },
-    {
-      "voice": "eng_m2_whisper",
-      "part": "style_ttl",
-      "size": 51328,
-      "sha256": "e651551d547ca305256bc56062df24c2706308ffccfc5b8ad9735f057975f270"
-    },
-    {
-      "voice": "eng_m3",
-      "part": "style_dp",
-      "size": 640,
-      "sha256": "dbcc78e880d2e7c6a45f4bff464ee90c9ba17a2599c9d3cc3dea2c0abcb94524"
-    },
-    {
-      "voice": "eng_m3",
-      "part": "style_ttl",
-      "size": 51328,
-      "sha256": "f0ffd38329830d1556e1096d396c2a807626b9308eb12af84ea4733c712d8d01"
-    },
-    {
-      "voice": "eng_m4",
-      "part": "style_dp",
-      "size": 640,
-      "sha256": "526724e17a6d0d917c18db0bac6ac97af15ae63312375129ef294462fbbfc0a2"
-    },
-    {
-      "voice": "eng_m4",
-      "part": "style_ttl",
-      "size": 51328,
-      "sha256": "a8d5016c1aade83d2bdec1e3aa86d0e421ff9e2fb7a781637e64f8a0d8ef663e"
     }
   ]
 }

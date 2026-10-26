@@ -8,8 +8,8 @@ object BookVoiceAssign {
     private const val PROTAGONISTS = 3
     private val knownGenders = mapOf(
         // All ten Tera reference styles, including English references speaking Russian.
-        "ru_m1" to "m", "ru_m5" to "m", "eng_m2_whisper" to "m", "eng_m3" to "m", "eng_m4" to "m",
-        "ru_f1" to "f", "ru_f2" to "f", "eng_f3" to "f", "eng_f4_whisper" to "f", "eng_f5" to "f",
+        "ru_m1" to "m", "ru_m5" to "m",
+        "ru_f1" to "f", "ru_f2" to "f",
         "aidar" to "m", "eugene" to "m", "kseniya" to "f", "baya" to "f", "xenia" to "f",
         "ru_alexandr" to "m", "ru_bogdan" to "m", "ru_dmitriy" to "m", "ru_gamat" to "m", "ru_igor" to "m",
         "ru_marat" to "m", "ru_roman" to "m", "ru_safarhuja" to "m", "ru_eduard" to "m", "ru_miyau" to "m",

@@ -6,10 +6,11 @@ import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 
-/** All ten pinned reference styles are tiny enough to ship with the APK.
- * No model re-download or network is required when upgrading from four voices. */
+/** The four Russian reference styles ship with the APK (pinned in tera_styles/manifest.json). The six English
+ * references (eng_*) were removed at the user's request in 5.0.5-beta31; their folders are deleted on install and a
+ * reference to one falls back to ru_f1. */
 object TeraVoices {
-    val names = listOf("ru_f1", "ru_f2", "ru_m1", "ru_m5", "eng_f3", "eng_f4_whisper", "eng_f5", "eng_m2_whisper", "eng_m3", "eng_m4")
+    val names = listOf("ru_f1", "ru_f2", "ru_m1", "ru_m5")
     private data class Style(val voice: String, val part: String, val size: Long, val sha: String)
     private var checkedRoot: String? = null
     private var styles: List<Style>? = null
@@ -40,6 +41,8 @@ object TeraVoices {
             temporary.writeBytes(bytes)
             check(temporary.renameTo(target)) { "Не удалось установить стиль Tera" }
         }
+        // The removed English references: their folders go too (a selection of one falls back to ru_f1).
+        root.listFiles { f -> f.isDirectory && f.name.startsWith("eng_") }?.forEach { it.deleteRecursively() }
         checkedRoot = root.path
     }
     private fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }

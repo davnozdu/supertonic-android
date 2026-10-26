@@ -6,13 +6,13 @@ import org.junit.Test
 class BookModelVoicesTest {
     @Test fun everyBundledModelVoiceHasAnExplicitGender() {
         val models = mapOf(
-            "teratts_v2" to listOf("ru_f1","ru_f2","ru_m1","ru_m5","eng_f3","eng_f4_whisper","eng_f5","eng_m2_whisper","eng_m3","eng_m4"),
+            "teratts_v2" to listOf("ru_f1","ru_f2","ru_m1","ru_m5"),
             "silero_v5_5_ru" to listOf("aidar","baya","kseniya","eugene","xenia"),
             "silero_cis_ru" to listOf("ru_aigul","ru_albina","ru_alexandr","ru_alfia","ru_alfia2","ru_bogdan","ru_dmitriy","ru_ekaterina","ru_vika","ru_gamat","ru_igor","ru_karina","ru_kejilgan","ru_kermen","ru_marat","ru_miyau","ru_nurgul","ru_oksana","ru_onaoy","ru_ramilia","ru_roman","ru_safarhuja","ru_saida","ru_sibday","ru_zara","ru_zhadyra","ru_zhazira","ru_zinaida","ru_eduard"),
             "kokoro_ru_v2" to listOf("sveta","masha","dima"),
             "shtorm_pocket_ru" to listOf("alba","marius","javert","jean","fantine","cosette","eponine"))
         for ((model, names) in models) for (name in names) assertTrue(BookVoiceAssign.gender(BookVoiceRef(model, name).key) in listOf("m", "f"))
-        assertEquals(54, models.values.sumOf { it.size })
+        assertEquals(48, models.values.sumOf { it.size })
         for (name in listOf("ru_miyau", "ru_onaoy", "ru_sibday")) assertEquals("m", BookVoiceAssign.gender(name))
     }
     @Test fun voiceIdentityIncludesModelAndRejectsPaths() {
