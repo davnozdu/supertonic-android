@@ -17,6 +17,7 @@ import kotlinx.coroutines.*
 class BookPreparationService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wake: PowerManager.WakeLock? = null
+    private var keepAlive = false
     private var observer: Job? = null
     private var limit: Job? = null
     private var cancellation: com.brahmadeo.supertonic.tts.llm.LlmProviders.CloudCancellation? = null
@@ -32,6 +33,7 @@ class BookPreparationService : Service() {
         startForeground(4207, notification(BookPreparation.State(true, "Подготовка книги")))
         if (wake?.isHeld != true) wake = (getSystemService(POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyTTS:BookPreparation").apply { acquire(90 * 60 * 1000L) }
+        if (!keepAlive) { keepAlive = true; com.brahmadeo.supertonic.tts.utils.SilentKeepAlive.start() }
         if (observer == null) observer = scope.launch {
             BookPreparation.state.collect { state ->
                 if (state.running) manager.notify(4207, notification(state))
@@ -59,6 +61,7 @@ class BookPreparationService : Service() {
         cancellation?.cancel()
         scope.cancel()
         if (wake?.isHeld == true) wake?.release()
+        if (keepAlive) { keepAlive = false; com.brahmadeo.supertonic.tts.utils.SilentKeepAlive.stop() }
         wake = null
         super.onDestroy()
     }

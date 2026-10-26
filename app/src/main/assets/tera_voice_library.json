@@ -1,0 +1,140 @@
+{
+ "release": "tera-voices-v1",
+ "voices": [
+  {
+   "id": "captain_crag",
+   "title": "Captain Crag",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "53c29d0e4dacab979afc7ac0ab0bec5f9337df295e6bbe6581e1ec4c1ae5c98a",
+   "dp_size": 640,
+   "dp_sha256": "6802477e4d0d9347ccc9895b0fc3fb4622095b16a3b875e41a5d4df8dd5b9564"
+  },
+  {
+   "id": "grizzled_gus",
+   "title": "Grizzled Gus",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "17e0fa9fb7d438b370748ab256759c9792b5f9f729ea1937e9906ddda621e8f2",
+   "dp_size": 640,
+   "dp_sha256": "d00caf606737fe03df96e72ade9adcdcec43ca65692e24406a16ea9a300e35fb"
+  },
+  {
+   "id": "jazzy_julian",
+   "title": "Jazzy Julian",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "0c3d337ecbdec4cefab7701a9d53ad4b20c12a9b0215933ba3b35bbb4f007795",
+   "dp_size": 640,
+   "dp_sha256": "d0d75fec0cb3f7c3d870796ce930eeb2170c881862f623705cc059ff2dc20546"
+  },
+  {
+   "id": "midnight_cole",
+   "title": "Midnight Cole",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "dd1fa50e5a39cd6dfbe55872c18a94c90e6f2418cc614a306c6ec1755b06ba5e",
+   "dp_size": 640,
+   "dp_sha256": "b2f90acb4f3b601017ec9c674e8f868fc5ea087f54439e70410297cbb6011f8c"
+  },
+  {
+   "id": "rumble_mccoy",
+   "title": "Rumble McCoy",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "9fb38171dee943d9a1a06082c217861aef023388dc54e663ba501038e30d952d",
+   "dp_size": 640,
+   "dp_sha256": "d7289a69d2d25d1791b4ea26897d49d1e1b77175b21c0f907cc9c5241ea431c1"
+  },
+  {
+   "id": "thunder_boone",
+   "title": "Thunder Boone",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "8683c02074fb0031b2313d10c5459b2cb34938a7f4106f915eeb860378e3cea9",
+   "dp_size": 640,
+   "dp_sha256": "64c5ac3dae7cf3200b53a90ffa32f11e01090e3b137455a9a3c1cbbdd7acee9b"
+  },
+  {
+   "id": "velvet_vincent",
+   "title": "Velvet Vincent",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "c075a14ff3719f8731513e5f9f4016d47ca45961f94e6cf4df7d7c0e4a71784d",
+   "dp_size": 640,
+   "dp_sha256": "8566f0f5ed64e1b0a3aa647ec2bc4acd03eb9cd96a1c123374e90323750d6860"
+  },
+  {
+   "id": "rimsky",
+   "title": "Римский",
+   "gender": "m",
+   "ttl_size": 51328,
+   "ttl_sha256": "ad5ffe8924e1e4c3230554b279f80607ea093957073b7195b159b3de84274a50",
+   "dp_size": 640,
+   "dp_sha256": "b100fda8c66d7d048614a11f026df7d5f9dc809a7fe9498faf76e988f8307df3"
+  },
+  {
+   "id": "bright_birdie",
+   "title": "Bright Birdie",
+   "gender": "f",
+   "ttl_size": 51328,
+   "ttl_sha256": "2306d3aac9ca340f24ad800020418eca5f73cccad6aa691c219ab3e6581bd5b1",
+   "dp_size": 640,
+   "dp_sha256": "9c1b3ac96c97c8bf0aabfcdf96afccb0b094d0065a8f1d0a1d30acfe7b081d86"
+  },
+  {
+   "id": "clementine_june",
+   "title": "Clementine June",
+   "gender": "f",
+   "ttl_size": 51328,
+   "ttl_sha256": "8f56f3dbb18048990071b318aa51a8c11f73860492c222eb42ee1392e32d4b34",
+   "dp_size": 640,
+   "dp_sha256": "03991e8b7233f903f0765125d200d97b382b81ea43e56519bc0764a0f134de45"
+  },
+  {
+   "id": "foxglove_faye",
+   "title": "Foxglove Faye",
+   "gender": "f",
+   "ttl_size": 51328,
+   "ttl_sha256": "266c16280f9b5be03daf9cc8cd6db2d096896e5adb0968696ad5b9ddeb87c49d",
+   "dp_size": 640,
+   "dp_sha256": "56f4b75459bdf92badf6fe77dddc61f555ce65fbc527175c58aa75660eeb1c92"
+  },
+  {
+   "id": "lark_lucia",
+   "title": "Lark Lucia",
+   "gender": "f",
+   "ttl_size": 51328,
+   "ttl_sha256": "5d6287cd0500da7103f9fc56fae125589f2f0ce6bcddb8f285914f821daaedd6",
+   "dp_size": 640,
+   "dp_sha256": "8c9234b4ec681420ef9154cfe1f063cb197f7c8b35b6e6aca9abbd09d0da4033"
+  },
+  {
+   "id": "nightingale_nova",
+   "title": "Nightingale Nova",
+   "gender": "f",
+   "ttl_size": 51328,
+   "ttl_sha256": "989b070e131ad144c4fe3c2d90c9cdd6c10c935c95a5914247f9c68bc39e4b4e",
+   "dp_size": 640,
+   "dp_sha256": "cc4f2bffca09ae6c300499f6c68a09f4c84b6b6b00e880d7d7109e3cf7726e98"
+  },
+  {
+   "id": "sunny_sadie",
+   "title": "Sunny Sadie",
+   "gender": "f",
+   "ttl_size": 51328,
+   "ttl_sha256": "2c3cd16010951630112303c0468fad6a850ce1776791a7c4079dd1934ccc4541",
+   "dp_size": 640,
+   "dp_sha256": "b43feb12f352ab5b3f174316d99ac15ce376f8b0d83f856c456126a5e0efa97b"
+  },
+  {
+   "id": "smooth_cassius",
+   "title": "Smooth Cassius",
+   "gender": "?",
+   "ttl_size": 51328,
+   "ttl_sha256": "bff254a674b92c82feb046aa53fd86bda2e24126fed7283da5f416e8f5165ea4",
+   "dp_size": 640,
+   "dp_sha256": "a9ca0b3c76a60be740ccef1d63290ee57384870679500580de8b842ad9e31ec9"
+  }
+ ]
+}

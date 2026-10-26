@@ -22,7 +22,8 @@ object BookVoiceCatalog {
         val root = ctx.filesDir.canonicalFile
         val relative = file.relativeToOrNull(root)?.invariantSeparatorsPath ?: return null
         val ref = when {
-            relative.startsWith("${AssetManager.MODEL_VERSION}/tera/styles/") && file.name == "style_ttl.npy" -> BookVoiceRef(AssetManager.TERA_MODEL, file.parentFile!!.name)
+            (relative.startsWith("${AssetManager.MODEL_VERSION}/tera/styles/") || relative.startsWith("${AssetManager.MODEL_VERSION}/tera/library/styles/")) &&
+                file.name == "style_ttl.npy" -> BookVoiceRef(AssetManager.TERA_MODEL, file.parentFile!!.name)
             file.parentFile == File(root, "silero-v5_5_ru") -> BookVoiceRef(AssetManager.SILERO_MODEL, file.nameWithoutExtension)
             file.parentFile == File(root, "silero-cis_ru") -> BookVoiceRef(AssetManager.SILERO_CIS_MODEL, file.nameWithoutExtension)
             file.parentFile == File(root, "kokoro-ru-v2") -> BookVoiceRef(AssetManager.KOKORO_MODEL, file.nameWithoutExtension)

@@ -15,6 +15,7 @@ object TeraVoices {
     private var styles: List<Style>? = null
     fun label(name: String) = when {
         TeraCustomVoices.isCustom(name) -> TeraCustomVoices.label(name)
+        TeraVoiceLibrary.isLibrary(name) -> TeraVoiceLibrary.label(name)
         name.endsWith("_whisper") -> "$name · шёпот, русский текст"
         name.startsWith("eng_") -> "$name · английский образец, русский текст"
         else -> name

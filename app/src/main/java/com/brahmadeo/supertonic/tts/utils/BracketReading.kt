@@ -5,7 +5,7 @@ package com.brahmadeo.supertonic.tts.utils
  * Footnote marks («[1]», «(12)», «(*)») are never read; an unpaired bracket («1) пункт») is dropped. */
 object BracketReading {
     const val KEY = "bracket_reading"
-    enum class Mode { WORDS, PAUSE, OFF }
+    enum class Mode { WORDS, PAUSE, ASIDE, OFF }
     /** Set from the preference by [SpeechPreparationCache], which also clears the caches when it changes. */
     @Volatile var mode = Mode.WORDS
 
@@ -21,10 +21,36 @@ object BracketReading {
             val inner = (m.groups[1] ?: m.groups[2])!!.value.trim()
             if (inner.none { it.isLetterOrDigit() }) " " else when (mode) {
                 Mode.WORDS -> ", скобка открывается, $inner, скобка закрывается, "
+                // Kept as "(…)" for SupertonicTTS to voice as its own phrase; a short one ("(с)", "(ок)") stays inline.
+                Mode.ASIDE -> if (inner.count { it.isLetter() } >= ASIDE_MIN_LETTERS) " ($inner) " else " $inner "
                 else -> ", $inner, "
             }
         }
         return if (replaced == text) text else tidy(replaced)
+    }
+
+    const val ASIDE_MIN_LETTERS = 4
+    const val ASIDE_PAUSE_MS = 250
+    const val ASIDE_SPEED = 1.08f
+    const val ASIDE_GAIN = 0.85f
+    data class Segment(val text: String, val aside: Boolean)
+    private val asidePair = Regex("\\(([^()]+)\\)")
+
+    /** [Mode.ASIDE]: the text split into plain runs and asides, each aside voiced as its own phrase with a pause
+     * around it, slightly faster and quieter, the way a narrator reads a parenthesis. From the TeraTTS fork
+     * (github.com/9208499-ship-it/teratts-android, rust/src/tera.rs split_asides). */
+    fun asides(text: String): List<Segment> {
+        val result = mutableListOf<Segment>(); var at = 0
+        for (m in asidePair.findAll(text)) {
+            val inner = m.groupValues[1].trim()
+            if (inner.count { it.isLetter() } < ASIDE_MIN_LETTERS) continue
+            text.substring(at, m.range.first).trim().takeIf { it.any(Char::isLetterOrDigit) }?.let { result += Segment(it, false) }
+            result += Segment(inner, true)
+            at = m.range.last + 1
+        }
+        if (result.isEmpty()) return listOf(Segment(text, false))
+        text.substring(at).trim().takeIf { it.any(Char::isLetterOrDigit) }?.let { result += Segment(it, false) }
+        return result
     }
 
     /** Commas the replacement put next to existing punctuation or at the edges. */

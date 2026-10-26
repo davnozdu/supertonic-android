@@ -4,6 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TeraTextPreparationTest {
+    @Test fun capitalisedWordsInsideASentenceAreLowered() {
+        assertEquals("В системе т+ень-0 работал +анна.", TeraTextPreparation.lowerNames("В системе Т+ень-0 работал +Анна."))
+        // sentence starts keep the capital, also after quotes, dashes and a colon
+        assertEquals("Тень легла. «Тени» — сказал он: Тень.", TeraTextPreparation.lowerNames("Тень легла. «Тени» — сказал он: Тень."))
+        // abbreviations and Latin stay as they are
+        assertEquals("Он ушёл в МГУ и в Google.", TeraTextPreparation.lowerNames("Он ушёл в МГУ и в Google."))
+    }
     @Test fun llmOnlyPathConvertsMarkersWithoutAddingStressOrYo() {
         assertEquals("Потом светл+о, елка и все. Гот+ов?",TeraTextPreparation.explicitStress("Потом светло́, елка и все. Гот+ов?"))
         assertEquals("Берёза стоит.",TeraTextPreparation.explicitStress("Берёза стоит."))

@@ -18,6 +18,7 @@ import java.text.Normalizer
 import java.util.Random
 import java.util.zip.GZIPInputStream
 import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -227,7 +228,8 @@ class TeraEngine(private val root: File, context: Context,
         require(lang == "ru") { "TeraTTSv2 preset supports Russian only" }
         val (styleDp, styleTtl) = voice(stylePath)
         val punctuated = TeraTextPreparation.punctuation(text)
-        val stressed = if (skipDictionary) TeraTextPreparation.explicitStress(punctuated) else accentText(punctuated)
+        val accented = if (skipDictionary) TeraTextPreparation.explicitStress(punctuated) else accentText(punctuated)
+        val stressed = if (pausePrefs.getBoolean(LOWER_NAMES, true)) TeraTextPreparation.lowerNames(accented) else accented
         val prepared = Normalizer.normalize("<ru>${stressed}</ru>", Normalizer.Form.NFKD)
         val ids = tokenize(prepared)
         val durationIds = tokenize(prepared.replace("+", ""))
@@ -248,12 +250,18 @@ class TeraEngine(private val root: File, context: Context,
         ))
         val natural = TeraDurationCap.seconds(duration[0] * TeraVoices.durationScale(stylePath) / 1.05f, punctuated,
             pausePrefs.getBoolean(TeraDurationCap.KEY, true))
-        val seconds = natural / speed.coerceAtLeast(0.1f)
+        // Outside ~0.75…1.5x the model swallows syllables: it speaks at its limit, the rest is time-stretched.
+        val (modelSpeed, stretchRate) = TeraTimeStretch.splitSpeed(speed)
+        val stretching = TeraTimeStretch.needsStretch(stretchRate)
+        val seconds = natural / modelSpeed
         require(seconds.isFinite() && seconds > 0f)
         val frames = ceil(seconds * 44100 / 3072).toInt().coerceAtLeast(1)
         val noise = FloatArray(144 * frames)
         val random = Random(1234)
-        for (i in noise.indices) noise[i] = random.nextGaussian().toFloat()
+        // Stability <-> expressiveness: the spread of the starting noise (1.0 is the model's own; lower reads
+        // steadier, with fewer skipped or repeated words and a flatter intonation). From the TeraTTS fork 1.6.12.
+        val noiseScale = pausePrefs.getFloat(NOISE_SCALE, 1f).coerceIn(0.4f, 1f)
+        for (i in noise.indices) noise[i] = random.nextGaussian().toFloat() * noiseScale
         val samplerStarted = android.os.SystemClock.elapsedRealtime()
         val hybrid = npuSampler?.let { npuS ->
             try { npuS.sample(noise, frames, embedding, embeddingShape.last().toInt(), styleTtl)
@@ -273,6 +281,8 @@ class TeraEngine(private val root: File, context: Context,
         val maxSamples = (seconds * 44100).roundToInt()
         val output = java.io.ByteArrayOutputStream(min(maxSamples * 2, 1_000_000))
         var emitted = 0
+        var peak = 0f
+        val held = if (stretching) java.util.ArrayList<FloatArray>() else null
         val loudness = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.Stream(gain,
             pausePrefs.getBoolean("voice_loudness_normalization", true))
         for ((contextStart, start, end) in TeraVocoderChunks.plan(frames)) {
@@ -304,17 +314,40 @@ class TeraEngine(private val root: File, context: Context,
                 result ?: run("vocoder", mapOf("latent" to floatTensor(slice, 1, 144, count.toLong())))
             }
             val discard = (start - contextStart) * 3072
-            val samples = min(min((end - start) * 3072, wave.size - discard), maxSamples - emitted)
+            val available = min((end - start) * 3072, wave.size - discard)
+            val samples = min(available, maxSamples - emitted)
             if (samples <= 0) break
-            val pcm = loudness.pcm(wave.copyOfRange(discard, discard + samples))
+            val last = end == frames || emitted + samples >= maxSamples
+            val piece = if (!last) wave.copyOfRange(discard, discard + samples).also { peak = max(peak, TeraTimeStretch.peakRms(it)) } else {
+                // The phrase end: a final consonant still sounding at the predicted duration may run on (≤ 80 ms),
+                // then a 10 ms fade, so a cut inside sound does not click.
+                val chunk = wave.copyOfRange(discard, discard + available)
+                peak = max(peak, TeraTimeStretch.peakRms(chunk, 0, samples))
+                chunk.copyOf(samples + TeraTimeStretch.extension(chunk, samples, peak)).also { TeraTimeStretch.fadeOut(it) }
+            }
+            emitted += samples
+            if (held != null) held += piece else {
+                val pcm = loudness.pcm(piece)
+                output.write(pcm)
+                listener?.onAudioChunk(sessionId, pcm)
+            }
+            if (last) break
+        }
+        if (held != null && held.isNotEmpty()) {
+            val all = FloatArray(held.sumOf { it.size }); var at = 0
+            for (piece in held) { System.arraycopy(piece, 0, all, at, piece.size); at += piece.size }
+            val pcm = loudness.pcm(TeraTimeStretch.stretch(all, stretchRate))
             output.write(pcm)
             listener?.onAudioChunk(sessionId, pcm)
-            emitted += samples
         }
         return output.toByteArray()
     }
 
-    companion object { const val NPU_SAMPLER_STEPS = "tera_npu_sampler_steps" }
+    companion object {
+        const val NPU_SAMPLER_STEPS = "tera_npu_sampler_steps"
+        const val NOISE_SCALE = "tera_noise_scale"
+        const val LOWER_NAMES = "tera_lower_names"
+    }
 
     override fun close() {
         closed = true; npuBuilder.shutdownNow()

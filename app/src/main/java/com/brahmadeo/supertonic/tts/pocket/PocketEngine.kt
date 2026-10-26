@@ -8,7 +8,13 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),
-    val slow: Boolean = PocketDownload.slowEnabled(context)) : AutoCloseable {
+    val slow: Boolean = PocketDownload.slowEnabled(context),
+    /** Stability <-> expressiveness: the sampling temperature (0.3 so far; lower is steadier). */
+    val temperature: Float = temperature(context)) : AutoCloseable {
+    companion object {
+        const val TEMPERATURE = "shtorm_temperature"
+        fun temperature(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getFloat(TEMPERATURE, .3f).coerceIn(.1f, .8f)
+    }
     private val root=PocketDownload.modelDir(context, slow)
     private val prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", 0)
     private var native: NativePocketTts?=null
@@ -24,7 +30,7 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
     @Synchronized fun synthesize(text: String, voiceFile: String, speed: Float, gain: Float, listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
         used=android.os.SystemClock.elapsedRealtime()
         try {
-            val engine=native ?: NativePocketTts(root.path,root.path,"fp32",.3f,1,
+            val engine=native ?: NativePocketTts(root.path,root.path,"fp32",temperature,1,
                 threads,180,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads slow=$slow") }
             val output=ByteArrayOutputStream()
             val start=android.os.SystemClock.elapsedRealtime()
@@ -53,7 +59,8 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
                     output.write(bytes);listener?.onAudioChunk(sid,bytes)
                 }
                 if (chunk.trimEnd('"', '\'', '»', ')', ']').lastOrNull() in listOf('.', '!', '?', '…')) {
-                    val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(phrase.toByteArray(), 180, 24000)
+                    val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(phrase.toByteArray(),
+                        com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.endPauseMs(chunk, 180), 24000)
                     if (missing > 0) {
                         val silence = ByteArray(missing * 2)
                         output.write(silence); listener?.onAudioChunk(sid, silence)

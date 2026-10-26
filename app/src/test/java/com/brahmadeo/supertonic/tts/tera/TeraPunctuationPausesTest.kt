@@ -52,4 +52,14 @@ class TeraPunctuationPausesTest {
         assertEquals(listOf("По-прежнему светло -", "но холодно."),
             TeraPunctuationPauses.split("По-прежнему светло - но холодно.").map { it.text })
     }
+    @Test fun ellipsisPausesLongerThanAPeriod() {
+        val parts = TeraPunctuationPauses.split("Он ушёл... Она ждала… Потом всё стихло.", 180, 400)
+        assertEquals(listOf(520, 520, 400), parts.map { it.pauseMs })
+        assertEquals("Он ушёл...", parts[0].text)
+    }
+    @Test fun endPauseForAllModels() {
+        assertEquals(400, TeraPunctuationPauses.endPauseMs("Всё.", 400))
+        assertEquals(520, TeraPunctuationPauses.endPauseMs("Он ушёл...", 400))
+        assertEquals(520, TeraPunctuationPauses.endPauseMs("«Ну что ж…»", 400))
+    }
 }

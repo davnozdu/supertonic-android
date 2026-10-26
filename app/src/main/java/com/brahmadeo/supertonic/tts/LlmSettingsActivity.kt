@@ -352,7 +352,19 @@ class LlmSettingsActivity : ComponentActivity() {
                         if (section == Section.SOUND) {
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isTera(this@LlmSettingsActivity)) {
                             Text("Звук Tera",style=MaterialTheme.typography.titleMedium)
-                            Text("Быстрая или Teacher — выбор «Синтез Tera» на главном экране под стилем голоса.",style=MaterialTheme.typography.bodySmall)
+                            Text("Быстрая, сжатая int8 или Teacher — выбор «Синтез Tera» на главном экране под стилем голоса.",style=MaterialTheme.typography.bodySmall)
+                            var noiseScale by remember { mutableStateOf(pausePrefs.getFloat(com.brahmadeo.supertonic.tts.tera.TeraEngine.NOISE_SCALE, 1f)) }
+                            Text("Стабильность ↔ выразительность: ${"%.2f".format(noiseScale)}${if (noiseScale >= 0.995f) " (как у модели)" else ""}")
+                            Slider(value = noiseScale, valueRange = 0.4f..1f, steps = 11,
+                                onValueChange = { noiseScale = (Math.round(it * 20) / 20f).coerceIn(0.4f, 1f) },
+                                onValueChangeFinished = { pausePrefs.edit().putFloat(com.brahmadeo.supertonic.tts.tera.TeraEngine.NOISE_SCALE, noiseScale).apply() })
+                            Text("Разброс начального шума синтеза. 1.0 — как задумано моделью. Меньше — ровнее: реже пропускает и повторяет слова, но интонация площе (в форке TeraTTS по умолчанию 0.67). Сравните на слух. Нагрузку не меняет.",style=MaterialTheme.typography.bodySmall)
+                            var lowerNames by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.tera.TeraEngine.LOWER_NAMES, true)) }
+                            Toggle("Имена внутри предложения — строчными", lowerNames) {
+                                lowerNames = it
+                                pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraEngine.LOWER_NAMES, it).apply()
+                            }
+                            Text("Tera принимает слово с заглавной буквы за иностранное имя и читает «Тень» как «тэнь». Для модели такие слова пишутся строчными; ударения уже расставлены, первое слово предложения не меняется.",style=MaterialTheme.typography.bodySmall)
                             Toggle("Не растягивать короткие реплики",shortWordCap) {
                                 shortWordCap=it
                                 pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY,it).apply()
@@ -370,6 +382,15 @@ class LlmSettingsActivity : ComponentActivity() {
                                     else "Вокодер Tera выполняется на нейропроцессоре Snapdragon (FP16). Первый запуск компилирует модель несколько секунд. При ошибке чтение продолжается на процессоре.",
                                     style=MaterialTheme.typography.bodySmall)
                             }
+                        }
+                        if(com.brahmadeo.supertonic.tts.utils.AssetManager.isPocket(this@LlmSettingsActivity)) {
+                            Text("Звук Shtorm",style=MaterialTheme.typography.titleMedium)
+                            var temperature by remember { mutableStateOf(com.brahmadeo.supertonic.tts.pocket.PocketEngine.temperature(this@LlmSettingsActivity)) }
+                            Text("Стабильность ↔ выразительность: ${"%.2f".format(temperature)}${if (kotlin.math.abs(temperature - .3f) < .001f) " (по умолчанию)" else ""}")
+                            Slider(value = temperature, valueRange = 0.1f..0.8f, steps = 13,
+                                onValueChange = { temperature = (Math.round(it * 20) / 20f).coerceIn(.1f, .8f) },
+                                onValueChangeFinished = { pausePrefs.edit().putFloat(com.brahmadeo.supertonic.tts.pocket.PocketEngine.TEMPERATURE, temperature).apply() })
+                            Text("Температура выборки Shtorm. Меньше — ровнее и предсказуемее, больше — живее интонация, но чаще сбои и оговорки. Сравните на слух. Нагрузку не меняет.",style=MaterialTheme.typography.bodySmall)
                         }
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
                             Text("Звук Kokoro",style=MaterialTheme.typography.titleMedium)
@@ -421,6 +442,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             val bracketTitles = mapOf(
                                 com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.WORDS to "Словами",
                                 com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.PAUSE to "Паузой",
+                                com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.ASIDE to "Отдельной фразой",
                                 com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.OFF to "Не выделять")
                             var bracketMode by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.BracketReading.from(
                                 pausePrefs.getString(com.brahmadeo.supertonic.tts.utils.BracketReading.KEY, null))) }
@@ -431,6 +453,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             Text(when (bracketMode) {
                                 com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.WORDS -> "Текст в скобках читается со словами «скобка открывается … скобка закрывается»."
                                 com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.PAUSE -> "Текст в скобках выделяется паузами, как запятыми; слово «скобка» не произносится."
+                                com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.ASIDE -> "Пояснение в скобках читается как у чтеца: отдельной фразой, с паузой вокруг, чуть быстрее и тише. Короткие вставки вроде «(с)» читаются подряд. Если LLM уберёт скобки, фраза прочитается обычно."
                                 else -> "Скобки не выделяются: текст в них читается подряд с остальной фразой."
                             } + " Сноски вида [1] или (1) не читаются. Работает для всех моделей, с LLM и без неё.", style = MaterialTheme.typography.bodySmall)
                         }

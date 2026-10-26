@@ -19,6 +19,12 @@ object TeraPunctuationPauses {
             (token.length == 1 && token[0].isUpperCase() && text[next].isUpperCase())
     }
 
+    /** Pause owed at the end of [text] for every model: an ellipsis trails off a little longer than a period. */
+    fun endPauseMs(text: String, sentenceMs: Int): Int {
+        val t = text.trimEnd('"', '\'', '»', '”', ')', ']', ' ')
+        return if (t.endsWith('…') || t.endsWith("...")) sentenceMs * 13 / 10 else sentenceMs
+    }
+
     fun split(text: String, commaMs: Int = 180, sentenceMs: Int = 420, sentenceOnly: Boolean = false): List<Part> {
         val result = mutableListOf<Part>()
         var start = 0
@@ -35,7 +41,10 @@ object TeraPunctuationPauses {
                     text.substring(start, i).any { it.isLetterOrDigit() } -> commaMs + 40
                 c in ".!?…" -> {
                     // Keep dots inside abbreviations and dates intact.
-                    if (c == '.' && ((i + 1 < text.length && text[i + 1].isLetterOrDigit()) || abbreviationDot(text, i))) 0 else sentenceMs
+                    if (c == '.' && ((i + 1 < text.length && text[i + 1].isLetterOrDigit()) || abbreviationDot(text, i))) 0
+                    // An ellipsis trails off: a little longer than a period, as in reading aloud (TeraTTS fork: 0.65 vs 0.5 s).
+                    else if (c == '…' || text.startsWith("...", i)) sentenceMs * 13 / 10
+                    else sentenceMs
                 }
                 else -> 0
             }

@@ -30,4 +30,11 @@ class BracketReadingTest {
         assertEquals("1) пункт", BracketReading.apply("1) пункт", words))
         assertEquals("Как есть (текст)", BracketReading.apply("Как есть (текст)", BracketReading.Mode.OFF))
     }
+    @Test fun asideModeKeepsLongParenthesesAndSplitsThem() {
+        val text = BracketReading.apply("Он кивнул (как будто знал заранее) и ушёл [1]. Это (с) он.", BracketReading.Mode.ASIDE)
+        assertEquals("Он кивнул (как будто знал заранее) и ушёл. Это с он.", text)
+        val parts = BracketReading.asides(text)
+        assertEquals(listOf("Он кивнул" to false, "как будто знал заранее" to true, "и ушёл. Это с он." to false), parts.map { it.text to it.aside })
+        assertEquals(listOf(BracketReading.Segment("Без скобок.", false)), BracketReading.asides("Без скобок."))
+    }
 }

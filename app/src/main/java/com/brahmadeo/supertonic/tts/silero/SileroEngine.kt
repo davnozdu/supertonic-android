@@ -132,7 +132,8 @@ class SileroEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
             val level = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.scale(listOf(samples), gain,
                 prefs.getBoolean("voice_loudness_normalization", true))
             val base = com.brahmadeo.supertonic.tts.utils.SpeechLoudness.pcm(samples, level)
-            val endPause = if (pauses && source.trimEnd().lastOrNull() in listOf('.', '!', '?', '…')) prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900) else 0
+            val endPause = if (pauses && source.trimEnd().lastOrNull() in listOf('.', '!', '?', '…'))
+                com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.endPauseMs(source, prefs.getInt("tera_sentence_pause_ms",420).coerceIn(0,900)) else 0
             val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(base,endPause,48000)
             val bytes = if (missing > 0) base + ByteArray(missing*2) else base
             if (SupertonicTTS.isCancelled()) return ByteArray(0)

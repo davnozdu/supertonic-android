@@ -33,6 +33,25 @@ internal object TeraTextPreparation {
 
     fun explicitStress(text: String): String = acute.replace(text) { "+${it.groupValues[1]}" }
 
+    // A capitalised word (stress marks allowed): "Тень", "Т+ени", "+Анна"; not all-caps abbreviations.
+    private val titleWord = Regex("(?<![\\p{L}\\p{M}+])\\+?[А-ЯЁ][\\p{M}+]*[а-яё][а-яё\\p{M}+]*(?![\\p{L}\\p{M}+])")
+
+    /**
+     * "в системе Тень-0" → "в системе тень-0": inside a sentence Tera takes a capitalised word for a
+     * foreign name and reads "Тень" as "тэнь". Lower case reads right. The first word of a sentence keeps
+     * its capital (the model uses it to tell a sentence end from an abbreviation's dot). Applied after the
+     * stress marks, so name dictionaries and the LLM still see the capitals. From the TeraTTS fork 1.6.18.
+     */
+    fun lowerNames(text: String): String = titleWord.replace(text) { m ->
+        if (sentenceStart(text, m.range.first)) m.value else m.value.lowercase()
+    }
+
+    private fun sentenceStart(text: String, at: Int): Boolean {
+        var i = at - 1
+        while (i >= 0 && (text[i].isWhitespace() || text[i] in "«\"“„—–-(")) i--
+        return i < 0 || text[i] in ".!?…:\n"
+    }
+
     fun stress(text: String, lookup: (String) -> String?, yoWords: Map<String, String>,
                ambiguousStress: Set<String>, ambiguousYo: Set<String>): String {
         val manual = explicitStress(text)

@@ -48,9 +48,13 @@ class ModelDownloadService : Service() {
             .setOngoing(true).setContentIntent(open).setProgress(0,0,true).build())
         if(wake?.isHeld!=true) wake=(getSystemService(POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"Supertonic:ModelDownload").apply { acquire(10*60*1000L) }
+        if (!keepAlive) { keepAlive = true; SilentKeepAlive.start() }
         ModelDownloadForeground.started()
         return START_NOT_STICKY
     }
     override fun onTimeout(startId: Int, fgsType: Int) { stopSelf() }
-    override fun onDestroy() { if(wake?.isHeld==true) wake?.release();wake=null;super.onDestroy() }
+    private var keepAlive = false
+    override fun onDestroy() { if(wake?.isHeld==true) wake?.release();wake=null
+        if (keepAlive) { keepAlive = false; SilentKeepAlive.stop() }
+        super.onDestroy() }
 }

@@ -19,14 +19,20 @@ import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.books.BookVoiceRef
 import com.brahmadeo.supertonic.tts.books.VoiceGenderSettings
 import com.brahmadeo.supertonic.tts.tera.TeraCustomVoices
+import com.brahmadeo.supertonic.tts.tera.TeraVoiceLibrary
 import com.brahmadeo.supertonic.tts.utils.AssetManager
 import com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache
+import kotlinx.coroutines.launch
 
 /** Tera: the user's own voices from files (Supertonic .json or style_ttl.npy + style_dp.npy), and removing them. */
 @Composable
 fun TeraVoiceImport(onChanged: () -> Unit) {
     val context = LocalContext.current
     var custom by remember { mutableStateOf(TeraCustomVoices.installed(context)) }
+    var missing by remember { mutableStateOf(TeraVoiceLibrary.missing(context)) }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
         val message = try {
@@ -41,6 +47,26 @@ fun TeraVoiceImport(onChanged: () -> Unit) {
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (missing.isNotEmpty()) {
+            val mb = missing.sumOf { it.ttl + it.dp } / 1_000_000.0
+            OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+                busy = true
+                scope.launch {
+                    try {
+                        TeraVoiceLibrary.download(context) { s, p -> scope.launch { status = "$s · ${(p * 100).toInt()} %" } }
+                        status = "Голоса Tera скачаны"
+                        onChanged()
+                    } catch (e: Exception) {
+                        status = "Не удалось скачать: ${e.message ?: e.javaClass.simpleName}"
+                    } finally {
+                        missing = TeraVoiceLibrary.missing(context)
+                        busy = false
+                    }
+                }
+            }) { Text("Скачать голоса Tera · ${missing.size} шт., %.1f МБ".format(mb)) }
+            Text("Дополнительные голоса, проверенные на русском тексте. В списке — «Tera+ · …».", style = MaterialTheme.typography.bodySmall)
+        }
+        if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
             Text("Импортировать свой голос")
         }
