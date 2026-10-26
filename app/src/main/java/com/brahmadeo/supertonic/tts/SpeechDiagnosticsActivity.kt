@@ -33,14 +33,22 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
     }
     private fun endingsProbe() {
         val lines = File(cacheDir, "endings-probe.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() }
-        require(lines.size in 1..200)
+        require(lines.size in 1..400)
         val dir = File(cacheDir, "endings").apply { deleteRecursively(); mkdirs() }
         val ready = CompletableFuture<Int>()
         val tts = TextToSpeech(this, { ready.complete(it) }, packageName)
         try {
             check(ready.get(60, TimeUnit.SECONDS) == TextToSpeech.SUCCESS)
             check(tts.setLanguage(Locale("ru")) >= TextToSpeech.LANG_AVAILABLE)
-            for ((index, text) in lines.withIndex()) {
+            // "@model::voice" switches the voice for the following lines (trusted preview params: the selected model
+            // and voice stay as they are), "@" returns to the selected voice. Each line logs its wall time.
+            var voice: String? = null
+            for ((index, line) in lines.withIndex()) {
+                if (line.startsWith("@")) { voice = line.removePrefix("@").trim().ifEmpty { null }; continue }
+                val text = line
+                val params = if (voice == null) Bundle() else com.brahmadeo.supertonic.tts.llm.VoicePreview.params(this).apply {
+                    putString(packageName + ".book_voice", voice) }
+                val started = android.os.SystemClock.elapsedRealtime()
                 val id = "ending-$index"; val done = CompletableFuture<Unit>()
                 tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
@@ -48,9 +56,9 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     override fun onError(utteranceId: String?) { if (utteranceId == id) done.completeExceptionally(IllegalStateException(id)) }
                 })
                 val output = File(dir, "%03d.wav".format(index))
-                check(tts.synthesizeToFile(text, Bundle(), output, id) == TextToSpeech.SUCCESS)
+                check(tts.synthesizeToFile(text, params, output, id) == TextToSpeech.SUCCESS)
                 done.get(120, TimeUnit.SECONDS)
-                Log.i("SpeechCheck", "ENDING case=$index bytes=${output.length()}")
+                Log.i("SpeechCheck", "ENDING case=$index voice=${voice ?: "-"} ms=${android.os.SystemClock.elapsedRealtime() - started} bytes=${output.length()}")
             }
             Log.i("SpeechCheck", "ENDINGS DONE cases=${lines.size}")
         } finally { tts.shutdown() }
