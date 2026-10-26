@@ -45,12 +45,29 @@ object VoiceTempo {
         // it, so switching them must not re-measure every voice.
         val key = "$voice|${p.getBoolean("kokoro_full_precision", true)}|${p.getBoolean("shtorm_slow", false)}"
         prefs.getLong(key, 0L).takeIf { it > 0 }?.let { return it }
+        // Built-in and library voices come measured with the app: nothing to synthesize on the phone.
+        preset(ctx, voice, p)?.let { return it }
         val pcm = runCatching { measure(voice, PHRASE) }.getOrNull() ?: return null
         val ms = speechDurationMs(pcm, rate).takeIf { it > 300 } ?: return null
         prefs.edit().putLong(key, ms).apply()
         android.util.Log.i("VoiceTempo", "Measured ${File(voice).name} speech=${ms}ms")
         return ms
     }
+
+    @Volatile private var presets: Map<String, Long>? = null
+    /** assets/voice_tempo_presets.json: "path under filesDir|variant" → speech ms, measured on the phone with the app's
+     * own models (variant: Kokoro "full", Shtorm "slow", otherwise empty). */
+    private fun preset(ctx: Context, voice: String, p: android.content.SharedPreferences): Long? = runCatching {
+        val table = presets ?: org.json.JSONObject(ctx.assets.open("voice_tempo_presets.json").bufferedReader().use { it.readText() })
+            .getJSONObject("voices").let { o -> o.keys().asSequence().associateWith { o.getLong(it) } }.also { presets = it }
+        val rel = File(voice).canonicalFile.relativeToOrNull(ctx.filesDir.canonicalFile)?.invariantSeparatorsPath ?: return null
+        val variant = when {
+            rel.startsWith("kokoro-ru-v2/") -> if (p.getBoolean("kokoro_full_precision", true)) "full" else ""
+            rel.startsWith("shtorm-pocket-v2/") -> if (p.getBoolean("shtorm_slow", false)) "slow" else ""
+            else -> ""
+        }
+        table["$rel|$variant"]
+    }.getOrNull()
 
     /** Milliseconds from the first to the last frame within 40 dB of the loudest one (10 ms frames). */
     fun speechDurationMs(pcm: ByteArray, rate: Int): Long {
