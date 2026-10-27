@@ -44,6 +44,8 @@
         <activity android:name=".BooksActivity" android:exported="false" android:label="Книги с голосами персонажей" />
         <activity android:name=".SmartBookActivity" android:exported="false" android:label="Умная книга" />
         <activity android:name=".QuickReadActivity" android:exported="false" android:theme="@style/Theme.MyTTS.QuickRead" />
+        <activity android:name=".books.smart.ReaderReturnActivity" android:exported="false" android:excludeFromRecents="true"
+            android:noHistory="true" android:taskAffinity="" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity android:name=".asr.VoiceAskActivity" android:exported="false" android:theme="@style/Theme.MyTTS.QuickRead"
             android:excludeFromRecents="true" android:taskAffinity="" />
         <receiver android:name=".service.SleepTimerReceiver" android:exported="false" />

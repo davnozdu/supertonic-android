@@ -48,6 +48,8 @@ class VoiceAskActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setFinishOnTouchOutside(false)
+        // The dialog's own frame: only the rounded card is drawn (no dark or white corners around it).
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         setContent { SupertonicTheme { Surface(shape = MaterialTheme.shapes.large) {
             Column(Modifier.padding(24.dp).widthIn(min = 280.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Спросить о книге", style = MaterialTheme.typography.titleLarge)

@@ -208,7 +208,10 @@ class QuickReadActivity : ComponentActivity() {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (speaking) OutlinedButton(onClick = { service.stop(this@QuickReadActivity) }) { Text("Стоп") }
                 else OutlinedButton(onClick = { ReadingControls.pause(this@QuickReadActivity); service.listen(this@QuickReadActivity) }) { Text("Прослушать") }
-                Button(onClick = { service.resume(this@QuickReadActivity) }) { Text("Продолжить чтение") }
+                Button(onClick = {
+                    startActivity(android.content.Intent(this@QuickReadActivity, com.brahmadeo.supertonic.tts.books.smart.ReaderReturnActivity::class.java))
+                    finish()
+                }) { Text("Продолжить чтение") }
             }
         }
         HorizontalDivider()

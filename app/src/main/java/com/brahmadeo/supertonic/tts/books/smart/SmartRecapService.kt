@@ -95,7 +95,9 @@ class SmartRecapService : Service() {
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .apply { if (s.running) setProgress(s.total, s.done, s.total == 0) }
             .addAction(android.R.drawable.ic_media_pause, "Стоп", action(STOP, 5422))
-            .addAction(android.R.drawable.ic_media_play, "Продолжить чтение", action(RESUME, 5423)).build()
+            .addAction(android.R.drawable.ic_media_play, "Продолжить чтение", PendingIntent.getActivity(this, 5423,
+                Intent(this, ReaderReturnActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) { SmartRecap.cancel(); SmartSpeech.stop(); stopSelf() }

@@ -301,6 +301,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         // Another app's message over a reading (ForeignSpeech): read at once by the dictionaries, the reader paused.
         val foreignMessage = !voicePreview && ForeignSpeech.foreign(this, request.callerUid)
         if (!voicePreview) ForeignSpeech.note(request.callerUid)
+        if (!voicePreview && !foreignMessage) ReaderApp.note(this, request.callerUid)
         if (foreignMessage) ForeignSpeech.begin(this)
         val foreign = foreignMessage || (!voicePreview && ForeignSpeech.isAside(incomingText))
         // «Умная книга»: the place being read now (readers queue ahead, synthesis follows the voice).
