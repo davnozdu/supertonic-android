@@ -298,13 +298,18 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
         val incomingText = request.charSequenceText?.toString() ?: return
+        // Another app's message over a reading (ForeignSpeech): read at once by the dictionaries, the reader paused.
+        val foreignMessage = !voicePreview && ForeignSpeech.foreign(this, request.callerUid)
+        if (!voicePreview) ForeignSpeech.note(request.callerUid)
+        if (foreignMessage) ForeignSpeech.begin(this)
+        val foreign = foreignMessage || (!voicePreview && ForeignSpeech.isAside(incomingText))
         // «Умная книга»: the place being read now (readers queue ahead, synthesis follows the voice).
-        if (!voicePreview) com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.heard(this, request.callerUid, incomingText)
+        if (!voicePreview && !foreign) com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.heard(this, request.callerUid, incomingText)
         // KOReader hands over one sentence at a time; its plugin sent the pages ahead and their paragraphs were prepared
         // by the LLM (KoreaderAhead): the sentence is cut out of its prepared paragraph. Not prepared yet: dictionaries.
-        val aheadText = if (voicePreview) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
+        val aheadText = if (voicePreview || foreign) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
             ?: com.brahmadeo.supertonic.tts.llm.KoreaderAhead.sentence(this, incomingText)
-        val preparation = if (aheadText == null && !voicePreview) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
+        val preparation = if (aheadText == null && !voicePreview && !foreign) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
         // «Умная книга»: the retelling is stressed by Silero Stress alone (stress and ё), as the user chose; no LLM,
         // roles or music.
@@ -407,6 +412,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         var anyAudio = false
         var failedSentences = 0
         var firstAudioLogged = false
+        var deliveredBytes = 0L
+        var firstAudioAt = 0L
         runBlocking {
             val producer = launch(Dispatchers.IO) {
                 try {
@@ -444,7 +451,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             // Android requires audioAvailable on this synthesis thread.
             for (data in ttsChannel) {
                 if (stopped()) { success = false; ttsChannel.close(); break }
+                deliveredBytes += data.size
                 if (!firstAudioLogged) {
+                    firstAudioAt = android.os.SystemClock.elapsedRealtime()
                     firstAudioLogged = true
                     com.brahmadeo.supertonic.tts.utils.DiagLog.i("SupertonicTTS", "TTS first audio after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms")
                 }
@@ -472,6 +481,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         }
         Log.i("SupertonicTTS", "TTS request finished after ${android.os.SystemClock.elapsedRealtime() - requestStarted}ms, success=$success failedSentences=$failedSentences")
         if (success) callback.done() else callback.error()
+        if (foreignMessage) ForeignSpeech.end(deliveredBytes * 1000L / (SupertonicTTS.getAudioSampleRate() * 2L).coerceAtLeast(1L),
+            if (firstAudioAt > 0) firstAudioAt else android.os.SystemClock.elapsedRealtime())
         } finally { activeVoicePreview = false }
     }
 }

@@ -114,6 +114,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                 val text = if (data.readInt() != 0) TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(data)?.toString() else null
                 // No reading notification: the app plays the file itself, MyTTS's pause would not reach it.
                 if (caller != null && text != null) {
+                    com.brahmadeo.supertonic.tts.service.ForeignSpeech.note(getCallingUid())
                     if (LlmPreparation.directReader(context, caller, getCallingUid(), text, true)) LlmPreparation.cancel(caller)
                     // The reader never says when its file plays or pauses. With its lookahead this request comes as the
                     // previous sentence starts; without it, this sentence plays next. Cover the longer one plus the gap.
@@ -144,7 +145,15 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                         if (text != null) {
                             val params=if(data.readInt()!=0) android.os.Bundle.CREATOR.createFromParcel(data) else null
                             val utteranceId=data.readString()
-                            if (!VoicePreview.requested(context, params, getCallingUid())) {
+                            val foreign = com.brahmadeo.supertonic.tts.service.ForeignSpeech.foreign(context, getCallingUid())
+                            com.brahmadeo.supertonic.tts.service.ForeignSpeech.note(getCallingUid())
+                            // A message of another app over a reading (MacroDroid reading an SMS): the reader pauses for
+                            // it; the reading's own state (ahead audio, music, notification, LLM) is left as it is.
+                            // KOReader reads by files; a speak() of it is a short answer of its plugin, not the book.
+                            val aside = getCallingUid() == KoreaderAhead.readerUid
+                            if (aside) com.brahmadeo.supertonic.tts.service.ForeignSpeech.aside(text)
+                            if (foreign) com.brahmadeo.supertonic.tts.service.ForeignSpeech.begin(context)
+                            else if (!aside && !VoicePreview.requested(context, params, getCallingUid())) {
                                 com.brahmadeo.supertonic.tts.service.ReadingControls.externalStarted(context)
                                 readingOwners.add(caller)
                                 // A reader that sends one sentence at a time gets no LLM wait (see ReaderQueueStyle).
