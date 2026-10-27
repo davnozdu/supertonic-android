@@ -40,6 +40,7 @@
         <activity android:name=".MultilingualActivity" android:exported="false" android:label="Мультиязычная озвучка" />
         <activity android:name=".SleepTimerActivity" android:exported="false" android:label="Таймер сна" />
         <activity android:name=".BooksActivity" android:exported="false" android:label="Книги с голосами персонажей" />
+        <activity android:name=".SmartBookActivity" android:exported="false" android:label="Умная книга" />
         <activity android:name=".QuickReadActivity" android:exported="false" android:theme="@style/Theme.MyTTS.QuickRead" />
         <receiver android:name=".service.SleepTimerReceiver" android:exported="false" />
         <receiver android:name=".service.ReadingControlReceiver" android:exported="false" />

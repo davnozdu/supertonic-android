@@ -60,8 +60,9 @@ object BookPreparation {
     }
 
     @Volatile private var pendingSource: Source? = null
-    /** [replies]: also «Разметка реплик»; [repliesFor]: an already prepared book — only its replies are marked. */
-    @Synchronized fun start(context: Context, uri: Uri, source: Source, replies: Boolean = true, repliesFor: Long = -1): Boolean {
+    /** [replies]: also «Разметка реплик»; [repliesFor]: an already prepared book — only its replies are marked;
+     * [smart]: «Умная книга» — the text and short content of its sections go into the file. */
+    @Synchronized fun start(context: Context, uri: Uri, source: Source, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false): Boolean {
         if (job != null || mutable.value.running) return false
         val ctx = context.applicationContext
         ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -69,7 +70,7 @@ object BookPreparation {
         mutable.value = State(running = true, stage = "Копирование книги", startedAt = System.currentTimeMillis())
         try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, BookPreparationService::class.java)
-                .setData(uri).putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor))
+                .setData(uri).putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor).putExtra("smart", smart))
         } catch (t: Exception) {
             pendingSource = null; mutable.value = State(message = "Не удалось запустить фоновую подготовку; откройте MyTTS и повторите.")
             throw t
@@ -78,7 +79,7 @@ object BookPreparation {
     }
 
     /** Called by the foreground service, also when Android redelivers its intent after process death. */
-    @Synchronized internal fun execute(context: Context, uri: Uri, thinking: Boolean, replies: Boolean = true, repliesFor: Long = -1) {
+    @Synchronized internal fun execute(context: Context, uri: Uri, thinking: Boolean, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false) {
         if (job != null) return
         val ctx = context.applicationContext
         val source = pendingSource ?: try { source(ctx).withThinking(thinking) } catch (_: Exception) {
@@ -131,6 +132,12 @@ object BookPreparation {
                         marking = markReplies(plan, BookPackage.parse(json), folder, source, cancel, startedAt)
                         json = JSONObject(json).put("replies", marking.replies).toString()
                     }
+                    var smartSections = 0
+                    if (smart) {
+                        val text = smartText(plan, folder, source, cancel, startedAt)
+                        smartSections = text.summaries.size
+                        json = JSONObject(json).put("smart", text.toJson()).toString()
+                    }
                     require(json.toByteArray().size <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
                     val pkg = BookPackage.parse(json)
                     val characters = pkg.groups.indices.sumOf { pkg.groupCast(it).characters.size }
@@ -144,6 +151,7 @@ object BookPreparation {
                             "разделов ${plan.sections.size}, в «прочих» ${casts.flatten().sumOf { it.other.size }}. " +
                             (if (pipeline.notes.isNotEmpty()) pipeline.notes.joinToString("; ", postfix = ". ") else "") +
                             (marking?.let { "Реплики размечены: ${it.marked} абзацев${if (it.failed > 0) ", не удалось ${it.failed}" else ""}. " } ?: "") +
+                            (if (smart) "Умная книга: текст сохранён, краткое содержание разделов $smartSections. " else "") +
                             "Откройте исходную книгу в читалке — MyTTS узнает её по тексту.", bookId = id)
                     }
                 }
@@ -165,6 +173,34 @@ object BookPreparation {
     }
 
     @Synchronized internal fun cancellationScope() = cancellation
+
+    /** «Умная книга»: the book text and the short content of every section, one request at a time, without thinking.
+     * Each answer is cached by its prompt, so a stopped preparation continues where it was. */
+    private fun smartText(plan: BookPreparationPlan, folder: File, source: Source, cancel: LlmProviders.CloudCancellation,
+                          startedAt: Long): com.brahmadeo.supertonic.tts.books.smart.SmartText {
+        val text = com.brahmadeo.supertonic.tts.books.smart.SmartText.of(plan.title, plan.author, plan.sections.map { it.title },
+            plan.paragraphs.map { it.section to it.text })
+        val prompts = com.brahmadeo.supertonic.tts.books.smart.SmartPrompts
+        val summaries = HashMap<Int, String>()
+        val todo = text.sections.indices.filter { text.sectionText(it).isNotBlank() }
+        val plain = source.withThinking(false)
+        todo.forEachIndexed { done, section ->
+            mutable.value = State(true, "Умная книга: краткое содержание разделов", done, todo.size, startedAt = startedAt)
+            val whole = text.sectionText(section)
+            if (whole.length < prompts.TINY_SECTION) { summaries[section] = whole.replace('\n', ' '); return@forEachIndexed }
+            val parts = prompts.parts(whole)
+            summaries[section] = parts.mapIndexed { i, part ->
+                val prompt = prompts.section(text.sections[section].title, i, parts.size, part)
+                val file = File(folder, "smart.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.txt")
+                if (file.isFile && file.length() in 1..64 * 1024) file.readText()
+                else com.brahmadeo.supertonic.tts.books.smart.SmartRecap.request(plain, prompt, 3000, cancel).also { answer ->
+                    val tmp = File(folder, "${file.name}.tmp")
+                    try { tmp.writeText(answer); tmp.renameTo(file) } finally { tmp.delete() }
+                }
+            }.joinToString(" ")
+        }
+        return text.copy(summaries = summaries)
+    }
 
     @Synchronized fun stop() {
         if (!mutable.value.running) return

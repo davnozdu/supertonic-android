@@ -92,6 +92,7 @@ fun MainScreen(
     onBackgroundMusicClick: () -> Unit = {},
     onMultilingualClick: () -> Unit = {},
     onBooksClick: () -> Unit = {},
+    onSmartBookClick: () -> Unit = {},
     onArticleLinkClick: () -> Unit = {},
     onSleepTimerClick: () -> Unit = {},
     onModelSelectionClick: () -> Unit = {},
@@ -169,6 +170,10 @@ fun MainScreen(
                         DropdownMenuItem(
                             text = { Text("Книги с голосами персонажей") },
                             onClick = { showMenu = false; onBooksClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Умная книга") },
+                            onClick = { showMenu = false; onSmartBookClick() }
                         )
                         DropdownMenuItem(
                             text = { Text("Мультиязычная озвучка") },

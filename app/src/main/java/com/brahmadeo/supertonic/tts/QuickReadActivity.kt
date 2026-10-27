@@ -20,6 +20,7 @@ import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 /** Dialog activity rather than a draw-over-other-apps window: no overlay permission. */
 class QuickReadActivity : ComponentActivity() {
     private val text = mutableStateOf("")
+    private val smartSpeech by lazy { com.brahmadeo.supertonic.tts.books.smart.SmartSpeech(this) }
     private var pasteRequested = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +56,7 @@ class QuickReadActivity : ComponentActivity() {
                     TextButton(onClick = { ReadingControls.paragraph(this@QuickReadActivity, -1) }) { Text("← Абзац") }
                     TextButton(onClick = { ReadingControls.paragraph(this@QuickReadActivity, 1) }) { Text("Абзац →") }
                 }
+                SmartBookPanel()
                 TextButton(onClick = { timerExpanded = !timerExpanded }) { Text("Таймер сна · $timerStatus") }
                 if (timerExpanded) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -71,6 +73,90 @@ class QuickReadActivity : ComponentActivity() {
             } }
         } }
     }
+    /** «Умная книга»: the recognised book and «Ранее в книге» / «Эта глава» / «Чем закончится». */
+    @Composable private fun SmartBookPanel() {
+        val smart = com.brahmadeo.supertonic.tts.books.smart.SmartMatcher
+        if (!remember { smart.enabled(this) }) return
+        val recap = com.brahmadeo.supertonic.tts.books.smart.SmartRecap
+        val live by smart.position.collectAsState()
+        val state by recap.state.collectAsState()
+        val speaking by smartSpeech.speaking.collectAsState()
+        var place by remember { mutableStateOf<Pair<com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.Position, String>?>(null) }
+        var empty by remember { mutableStateOf(false) }
+        var confirmEnding by remember { mutableStateOf(false) }
+        var asked by remember { mutableStateOf(false) }
+        val ctx = this
+        LaunchedEffect(live) {
+            place = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                empty = com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.isEmpty(ctx)
+                smart.last(ctx)?.let { p ->
+                    val text = com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.text(ctx, p.key) ?: return@let null
+                    val section = text.sectionOf(p.paragraph)
+                    val percent = if (text.paragraphs > 0) p.paragraph * 100 / text.paragraphs else 0
+                    p to "«${text.title}» · ${text.sections[section].title.ifBlank { "раздел ${section + 1}" }} · прочитано около $percent %"
+                }
+            }
+        }
+        // A retelling asked for here is read aloud as soon as it is ready (when «Озвучивать сразу» is on).
+        LaunchedEffect(state.result) {
+            val result = state.result
+            if (asked && result != null) {
+                asked = false
+                if (getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getBoolean("smart_book_speak", true)) smartSpeech.speak(result)
+            }
+        }
+        fun ask(kind: com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind) {
+            val p = place?.first ?: return
+            smartSpeech.stop()
+            ReadingControls.pause(this) // the book waits while the retelling is made and read
+            asked = true
+            recap.start(this, kind, p)?.let { cached ->
+                asked = false
+                if (getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getBoolean("smart_book_speak", true)) smartSpeech.speak(cached)
+            }
+        }
+        HorizontalDivider()
+        Text("Умная книга", style = MaterialTheme.typography.titleMedium)
+        val current = place
+        if (current == null) {
+            Text(if (empty) "Книг пока нет: выберите папку с книгами в «Умной книге» или подготовьте книгу с галочкой «Умная книга»."
+                else "Книга не узнана. Начните чтение в читалке — MyTTS узнает книгу по тексту.", style = MaterialTheme.typography.bodySmall)
+            return
+        }
+        Text(current.second, style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.BEFORE) }) { Text("Ранее в книге") }
+            OutlinedButton(enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.CHAPTER) }) { Text("Эта глава") }
+        }
+        OutlinedButton(enabled = !state.running, onClick = { confirmEnding = true }) { Text("Чем закончится") }
+        if (confirmEnding) AlertDialog(onDismissRequest = { confirmEnding = false },
+            title = { Text("Чем закончится книга") },
+            text = { Text("Это спойлер: MyTTS перескажет финал книги. Продолжить?") },
+            confirmButton = { TextButton(onClick = { confirmEnding = false; ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.ENDING) }) { Text("Рассказать") } },
+            dismissButton = { TextButton(onClick = { confirmEnding = false }) { Text("Отмена") } })
+        if (state.running) {
+            Text(state.stage + if (state.total > 0) " · ${state.done}/${state.total}" else "", style = MaterialTheme.typography.bodySmall)
+            if (state.total > 0) LinearProgressIndicator(progress = { state.done.toFloat() / state.total }, modifier = Modifier.fillMaxWidth())
+            else LinearProgressIndicator(Modifier.fillMaxWidth())
+            OutlinedButton(onClick = { recap.cancel() }) { Text("Остановить") }
+        }
+        state.error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        state.result?.let { result ->
+            Text(state.kind?.title.orEmpty(), style = MaterialTheme.typography.labelLarge)
+            Text(com.brahmadeo.supertonic.tts.books.smart.SmartPrompts.display(result))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (speaking) OutlinedButton(onClick = { smartSpeech.stop() }) { Text("Стоп") }
+                else OutlinedButton(onClick = { ReadingControls.pause(this@QuickReadActivity); smartSpeech.speak(result) }) { Text("Прослушать") }
+                Button(onClick = { smartSpeech.stop(); recap.clear(); ReadingControls.play(this@QuickReadActivity) }) { Text("Продолжить чтение") }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        smartSpeech.close()
+        super.onDestroy()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus && pasteRequested) { pasteRequested = false; paste() }

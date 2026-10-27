@@ -124,6 +124,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         SleepTimer.initialize(this)
         ReadingControls.register(this, this, { queueObservers.forEach { it.stopForCall() } }, { queueObservers.forEach { it.stopForCall() } })
         com.brahmadeo.supertonic.tts.utils.LexiconManager.load(this)
+        com.brahmadeo.supertonic.tts.books.smart.SmartFolder.scanIfDue(this)
         com.brahmadeo.supertonic.tts.utils.AccentDictionaryManager.load(this)
         com.brahmadeo.supertonic.tts.utils.PunctuationPrefs.load(this)
         com.brahmadeo.supertonic.tts.utils.PlaybackPrefs.load(this)
@@ -297,6 +298,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
             }
         }
         val incomingText = request.charSequenceText?.toString() ?: return
+        // «Умная книга»: the place being read now (readers queue ahead, synthesis follows the voice).
+        if (!voicePreview) com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.heard(this, request.callerUid, incomingText)
         val aheadText = if (voicePreview) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
         val preparation = if (aheadText == null && !voicePreview) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)

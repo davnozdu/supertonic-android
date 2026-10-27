@@ -63,6 +63,7 @@ class BooksActivity : ComponentActivity() {
                 val prepPrefs = remember { getSharedPreferences("book_preparation", MODE_PRIVATE) }
                 var thinking by remember { mutableStateOf(prepPrefs.getBoolean("thinking", true)) }
                 var repliesOn by remember { mutableStateOf(prepPrefs.getBoolean("replies", true)) }
+                var smartOn by remember { mutableStateOf(prepPrefs.getBoolean("smart", false)) }
                 var repliesBook by remember { mutableStateOf<Long?>(null) }
                 val repliesPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     val id = repliesBook; repliesBook = null
@@ -98,11 +99,12 @@ class BooksActivity : ComponentActivity() {
                     text = { Text("${pendingSource!!.label}\n\nВ облако уйдёт список кандидатов с короткими примерами, а не вся книга. " +
                         "Режим размышления ${if (pendingSource!!.thinking) "включён" else "выключен"}. " +
                         (if (repliesOn) "Затем реплики будут размечены по голосам (абзацы с речью уходят в облако). " else "") +
+                        (if (smartOn) "Умная книга: текст каждого раздела уйдёт в облако для краткого содержания, текст книги сохранится в файле. " else "") +
                         "Подготовка может занять 10–15 минут и продолжится при выключенном экране.") },
                     confirmButton = { TextButton(onClick = {
                         val uri = pendingUri!!; val source = pendingSource!!
                         pendingUri = null; pendingSource = null
-                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn)) message = "Подготовка другой книги уже идёт." else allowBackground() }
+                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn, smart = smartOn)) message = "Подготовка другой книги уже идёт." else allowBackground() }
                         catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите книгу снова." }
                     }) { Text("Подготовить") } },
                     dismissButton = { TextButton(onClick = { pendingUri = null; pendingSource = null }) { Text("Отмена") } }
@@ -151,6 +153,17 @@ class BooksActivity : ComponentActivity() {
                                         repliesOn = it; prepPrefs.edit().putBoolean("replies", it).apply()
                                     })
                                 }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("Умная книга")
+                                        Text("Сохраняет текст книги в файле и делает краткое содержание каждого раздела. В панели быстрого " +
+                                            "чтения появятся «Ранее в книге», «Эта глава» и «Чем закончится». Добавляет по запросу на раздел " +
+                                            "(около 5–10 с каждый); файл книги станет больше на размер её текста.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked = smartOn, enabled = !preparation.running, onCheckedChange = {
+                                        smartOn = it; prepPrefs.edit().putBoolean("smart", it).apply()
+                                    })
+                                }
                                 Text("Обработка может занять 10–15 минут. Продолжается в фоне и при выключенном экране. " +
                                     "Запросы к LLM выполняются строго по одному.", style = MaterialTheme.typography.bodySmall)
                                 if (preparation.running) {
@@ -171,7 +184,7 @@ class BooksActivity : ComponentActivity() {
                             }
                         }
                         Text("Файл подготовленной книги (.mytts-book) содержит персонажей, их имена и пол по разделам и " +
-                            "отпечатки предложений — без текста книги. Им можно делиться. Во время чтения в любой читалке " +
+                            "отпечатки предложений; текст книги — только если включена «Умная книга». Им можно делиться. Во время чтения в любой читалке " +
                             "MyTTS узнаёт книгу и раздел по тексту и включает набор персонажей.")
                         val reading = remember(position, books) { position?.let { p ->
                             val pkg = runCatching { BookLibrary.get(this@BooksActivity, p.book) }.getOrNull()
@@ -420,7 +433,7 @@ class BooksActivity : ComponentActivity() {
     }
 
     private fun share(book: BookLibrary.Entry) {
-        val json = BookLibrary.json(this, book.id) ?: return
+        val json = BookLibrary.export(this, book.id) ?: return
         val dir = File(cacheDir, "books").apply { mkdirs() }
         val file = File(dir, book.title.replace(Regex("[^\\p{L}\\p{N}._-]+"), "_").take(80) + ".mytts-book")
         file.writeText(json)

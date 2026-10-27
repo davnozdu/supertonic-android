@@ -651,6 +651,7 @@ class MainActivity : ComponentActivity() {
                         onBackgroundMusicClick = { startActivity(Intent(this, BackgroundMusicActivity::class.java)) },
                         onMultilingualClick = { startActivity(Intent(this, MultilingualActivity::class.java)) },
                         onBooksClick = { startActivity(Intent(this, BooksActivity::class.java)) },
+                        onSmartBookClick = { startActivity(Intent(this, SmartBookActivity::class.java)) },
                         onArticleLinkClick = { viewModel.articleError.value = null; viewModel.showLinkDialog.value = true },
                         onSleepTimerClick = { startActivity(Intent(this, SleepTimerActivity::class.java)) },
                         onTtsSettingsClick = { openSystemTtsSettings() },

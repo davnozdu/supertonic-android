@@ -31,8 +31,14 @@ object BookLibrary {
         (helper ?: synchronized(this) { helper ?: Helper(context.applicationContext).also { helper = it } }).writableDatabase
 
     /** Imports (or replaces the same text: same content_sha256) a book; returns its id. */
-    @Synchronized fun import(context: Context, json: String): Long {
+    @Synchronized fun import(context: Context, file: String): Long {
+        // «Умная книга»: the book text travels in the file but is kept apart (SmartLibrary), not in every parse of the package.
+        var json = file
+        val smart = if (file.contains("\"smart\"")) org.json.JSONObject(file).let { o ->
+            o.optJSONObject("smart")?.also { o.remove("smart"); json = o.toString() }
+        } else null
         val pkg = BookPackage.parse(json)
+        val smartText = smart?.let { runCatching { com.brahmadeo.supertonic.tts.books.smart.SmartText.parse(it) }.getOrNull() }
         val db = db(context)
         db.beginTransaction()
         try {
@@ -58,12 +64,20 @@ object BookLibrary {
             }
             db.setTransactionSuccessful()
             packages[id] = pkg
+            // A text that cannot be saved does not undo the voices: the book is simply not «умная».
+            smartText?.let { runCatching { com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.add(context, pkg.contentSha256, it,
+                com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.PREPARED) } }
             return id
         } finally { db.endTransaction() }
     }
 
     @Synchronized fun remove(context: Context, id: Long) {
         val db = db(context)
+        // The text saved with this book («Умная книга») goes with it; a copy from the books folder stays.
+        contentSha(context, id)?.let { sha ->
+            val smart = com.brahmadeo.supertonic.tts.books.smart.SmartLibrary
+            if (smart.book(context, sha)?.source == smart.PREPARED) { smart.remove(context, sha); com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.forget(context, sha) }
+        }
         db.beginTransaction()
         try { removeLocked(db, id); db.setTransactionSuccessful() } finally { db.endTransaction() }
     }
@@ -108,6 +122,16 @@ object BookLibrary {
             start += CHUNK
         }
         return out.toString()
+    }
+
+    /** The file to share: as imported, with the text of «Умная книга» when it was saved with the book. */
+    fun export(context: Context, id: Long): String? {
+        val json = json(context, id) ?: return null
+        val sha = contentSha(context, id) ?: return json
+        val smart = com.brahmadeo.supertonic.tts.books.smart.SmartLibrary
+        if (smart.book(context, sha)?.source != smart.PREPARED) return json
+        val text = smart.text(context, sha) ?: return json
+        return org.json.JSONObject(json).put("smart", text.toJson()).toString()
     }
 
     fun get(context: Context, id: Long): BookPackage? = packages[id] ?: json(context, id)?.let { BookPackage.parse(it) }?.also { packages[id] = it }
