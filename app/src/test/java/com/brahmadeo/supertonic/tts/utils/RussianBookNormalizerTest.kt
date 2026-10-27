@@ -56,4 +56,13 @@ class RussianBookNormalizerTest {
         // A «* * *» separator stays.
         assertEquals("* * *", RussianBookNormalizer.normalize("* * *", expandNumbers = false, dates = false))
     }
+    @Test fun acronymsAreOneStressedWordWithEndings() {
+        assertEquals("эфэсбэ́ и кагэбэ́", RussianBookNormalizer.acronyms("ФСБ и КГБ"))
+        assertEquals("бэтээ́ром и эфэсбэ́шники смотрели тэвэ́-шоу", RussianBookNormalizer.acronyms("БТРом и ФСБшники смотрели ТВ-шоу"))
+        // one vowel at an edge of consonants is spelled too
+        assertEquals("эфэсо́ и акабэ́", RussianBookNormalizer.acronyms("ФСО и АКБ"))
+        // shouted ordinary words stay words
+        assertEquals("кто там? сто раз! что?", RussianBookNormalizer.acronyms("КТО ТАМ? СТО РАЗ! ЧТО?"))
+        assertEquals("нато и оон", RussianBookNormalizer.acronyms("НАТО и ООН"))
+    }
 }

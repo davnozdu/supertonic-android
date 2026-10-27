@@ -273,17 +273,35 @@ object RussianBookNormalizer {
      * the letter names as ONE word, stressed on the last syllable, as they are said (СССР -> эсэсэсэ́р, ФСБ -> эфэсбэ́):
      * written "эф-эс-бэ" the models read three words with breaks between them. Anything else (shouted КТО, ВСЁ, ДА,
      * headings) -> a word. */
-    fun acronyms(text: String): String = rx("(?<![\\p{L}])[А-ЯЁ]{2,8}(?![\\p{L}])").replace(text) { m ->
-        val a=m.value
-        spokenAcronyms[a]?.let { return@replace it }
-        val byLetters=a !in wordAcronyms && (a in letterAcronyms || a.none { it in vowelsUpper })
-        if (!byLetters) return@replace a.lowercase()
+    /** Ordinary words that a shouted line writes in capitals and the vowel-at-the-edge rule would otherwise spell. */
+    private val shoutedWords=setOf("КТО","ЧТО","ГДЕ","СТО","ТАК","ВОТ","ВОН","ТАМ","ТУТ","ЭТО","ЭТА","ЭТИ","ОНА","ОНИ","ОНО","ЕГО","ЕЁ","ЕЩЁ","ЕЩЕ",
+        "УЖЕ","ИЛИ","МНЕ","ТЫ","ВЫ","МЫ","ОН","ДА","НЕТ","СТОЙ","СТОП","ЖДИ","ИДИ","УРА","ОЙ","ЭЙ","АХ","ОХ","ВСЕ","ВСЁ","ДВА","ТРИ","РАЗ",
+        "ЧТОБ","КАК","ВСЕХ","ЛИШЬ","ТОТ","ТЕ","ТО","АГА","УГУ","ОКО","ЭХО","ИГО","АЛЛО","ДЯДЯ","ТЁТЯ")
+    /** Spelled: no vowel, listed, or one vowel at an edge of two or more consonants (ФСО, АКБ; after the fork). */
+    private fun spelledAcronym(a: String): Boolean {
+        if (a in wordAcronyms || a in shoutedWords) return false
+        if (a in letterAcronyms || a.none { it in vowelsUpper }) return true
+        val inner=when { a.first() in vowelsUpper -> a.drop(1); a.last() in vowelsUpper -> a.dropLast(1); else -> return false }
+        return inner.length >= 2 && inner.none { it in vowelsUpper || it in "ЪЬЙ" }
+    }
+    /** Letter names glued into one word, stressed on the last letter's vowel; [ending] follows the stressed name. */
+    private fun spellAcronym(a: String, ending: String = ""): String {
         val names=a.map { letterNames.getValue(it) }
         // "и краткое", "твёрдый знак" are several words: keep them apart rather than glue them.
-        if (names.any { ' ' in it }) names.joinToString(" ") else {
-            val word=names.joinToString("")
-            val last=word.indexOfLast { it in "аеёиоуыэюя" }
-            if (last < 0 || word[last]=='ё') word else word.substring(0, last+1)+"\u0301"+word.substring(last+1)
+        if (names.any { ' ' in it }) return names.joinToString(" ")+ending
+        val word=names.joinToString("")
+        val last=word.indexOfLast { it in "аеёиоуыэюя" }
+        return (if (last < 0 || word[last]=='ё') word else word.substring(0, last+1)+"\u0301"+word.substring(last+1))+ending
+    }
+    fun acronyms(text: String): String {
+        // With a case ending or suffix (after the fork's RussianCaps): БТРом -> бэтээ́ром, ФСБшники -> эфэсбэ́шники, ТВ-шоу.
+        val withTail=rx("(?<![\\p{L}])([А-ЯЁ]{2,5})(-?)([а-яё]{1,8})(?![\\p{L}])").replace(text) { m ->
+            val a=m.groupValues[1]
+            if (a !in spokenAcronyms && spelledAcronym(a)) spellAcronym(a, m.groupValues[2]+m.groupValues[3]) else m.value
+        }
+        return rx("(?<![\\p{L}])[А-ЯЁ]{2,8}(?![\\p{L}])").replace(withTail) { m ->
+            val a=m.value
+            spokenAcronyms[a] ?: if (spelledAcronym(a)) spellAcronym(a) else a.lowercase()
         }
     }
     /** [dates] = false leaves calendar dates and years to the caller (the LLM path expands them with spans). */
