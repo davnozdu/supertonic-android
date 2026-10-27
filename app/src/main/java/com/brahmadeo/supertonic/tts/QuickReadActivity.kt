@@ -20,7 +20,6 @@ import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 /** Dialog activity rather than a draw-over-other-apps window: no overlay permission. */
 class QuickReadActivity : ComponentActivity() {
     private val text = mutableStateOf("")
-    private val smartSpeech by lazy { com.brahmadeo.supertonic.tts.books.smart.SmartSpeech(this) }
     private var pasteRequested = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,11 +79,11 @@ class QuickReadActivity : ComponentActivity() {
         val recap = com.brahmadeo.supertonic.tts.books.smart.SmartRecap
         val live by smart.position.collectAsState()
         val state by recap.state.collectAsState()
-        val speaking by smartSpeech.speaking.collectAsState()
+        val speaking by com.brahmadeo.supertonic.tts.books.smart.SmartSpeech.speaking.collectAsState()
+        val service = com.brahmadeo.supertonic.tts.books.smart.SmartRecapService
         var place by remember { mutableStateOf<Pair<com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.Position, String>?>(null) }
         var empty by remember { mutableStateOf(false) }
         var confirmEnding by remember { mutableStateOf(false) }
-        var asked by remember { mutableStateOf(false) }
         // Opened by «Ранее в книге» of the notification: start it once the place is known.
         var fromNotification by remember { mutableStateOf(intent.getStringExtra("recap")) }
         val ctx = this
@@ -99,23 +98,13 @@ class QuickReadActivity : ComponentActivity() {
                 }
             }
         }
-        // A retelling asked for here is read aloud as soon as it is ready (when «Озвучивать сразу» is on).
-        LaunchedEffect(state.result) {
-            val result = state.result
-            if (asked && result != null) {
-                asked = false
-                if (getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getBoolean("smart_book_speak", true)) smartSpeech.speak(result)
-            }
-        }
+        // The retelling is made and read by a background service: the panel may be closed, the screen off.
         fun ask(kind: com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind) {
             val p = place?.first ?: return
-            smartSpeech.stop()
+            com.brahmadeo.supertonic.tts.books.smart.SmartSpeech.stop()
             ReadingControls.pause(this) // the book waits while the retelling is made and read
-            asked = true
-            recap.start(this, kind, p)?.let { cached ->
-                asked = false
-                if (getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getBoolean("smart_book_speak", true)) smartSpeech.speak(cached)
-            }
+            recap.start(this, kind, p)
+            service.follow(this, getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getBoolean("smart_book_speak", true))
         }
         LaunchedEffect(place) {
             val kind = fromNotification ?: return@LaunchedEffect
@@ -151,16 +140,11 @@ class QuickReadActivity : ComponentActivity() {
             Text(state.kind?.title.orEmpty(), style = MaterialTheme.typography.labelLarge)
             Text(com.brahmadeo.supertonic.tts.books.smart.SmartPrompts.display(result))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (speaking) OutlinedButton(onClick = { smartSpeech.stop() }) { Text("Стоп") }
-                else OutlinedButton(onClick = { ReadingControls.pause(this@QuickReadActivity); smartSpeech.speak(result) }) { Text("Прослушать") }
-                Button(onClick = { smartSpeech.stop(); recap.clear(); ReadingControls.play(this@QuickReadActivity) }) { Text("Продолжить чтение") }
+                if (speaking) OutlinedButton(onClick = { service.stop(this@QuickReadActivity) }) { Text("Стоп") }
+                else OutlinedButton(onClick = { ReadingControls.pause(this@QuickReadActivity); service.listen(this@QuickReadActivity) }) { Text("Прослушать") }
+                Button(onClick = { service.resume(this@QuickReadActivity) }) { Text("Продолжить чтение") }
             }
         }
-    }
-
-    override fun onDestroy() {
-        smartSpeech.close()
-        super.onDestroy()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
