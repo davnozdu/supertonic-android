@@ -124,7 +124,8 @@ object BackgroundMusic {
         handler.removeCallbacks(idleRelease)
         if (failedTrack == track) return
         if (player != null) {
-            if (prepared && !seeking) runCatching { updateVolume(); player?.start() }.onFailure { fail(track) }
+            // Every utterance refreshes the state (KOReader: several times a sentence); a playing track is left alone.
+            if (prepared && !seeking) runCatching { updateVolume(); if (player?.isPlaying != true) player?.start() }.onFailure { fail(track) }
             return
         }
         loadedSource = source
