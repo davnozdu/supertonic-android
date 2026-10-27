@@ -77,7 +77,7 @@ object SmartMatcher {
     }
 
     private fun save(ctx: Context, p: Position) {
-        val section = SmartLibrary.text(ctx, p.key)?.sectionOf(p.paragraph) ?: -1
+        val section = SmartLibrary.plain(ctx, p.key)?.sectionOf(p.paragraph) ?: -1
         val now = System.currentTimeMillis()
         if (savedSection == p.key to section && now - savedAt < SAVE_EVERY_MS) return
         savedSection = p.key to section; savedAt = now

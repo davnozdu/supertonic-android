@@ -14,6 +14,8 @@ import java.util.concurrent.TimeUnit
  * retelling window is open. A retelling is started by [SmartBookCommandActivity] (a foreground service needs it). */
 class SmartBookProvider : ContentProvider() {
     private val main = Handler(Looper.getMainLooper())
+    /** One at a time, in the order KOReader sent them. */
+    private val background = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "SmartBookProvider").apply { isDaemon = true } }
 
     override fun onCreate() = true
 
@@ -36,14 +38,20 @@ class SmartBookProvider : ContentProvider() {
             }
             // The pages KOReader is about to read aloud: prepared by the LLM ahead (KoreaderAhead).
             // arg: JSON {"text": the text from the place on, "sentences": [the exact sentences it will send]}.
+            // Only KOReader: the text goes to the user's cloud LLM, another app must not spend its quota. Queued in the
+            // background, so a page turn in KOReader never waits for it.
             "prepare" -> {
-                arg?.takeIf { it.isNotBlank() }?.let { raw ->
-                    runCatching {
-                        val o = org.json.JSONObject(raw)
-                        val list = o.optJSONArray("sentences")
-                        val sentences = if (list == null) emptyList() else (0 until list.length()).map { list.optString(it) }.filter { it.isNotBlank() }
-                        com.brahmadeo.supertonic.tts.llm.KoreaderAhead.readerUid = android.os.Binder.getCallingUid()
-                        com.brahmadeo.supertonic.tts.llm.KoreaderAhead.prepare(ctx, o.optString("text").take(60_000), sentences.take(600))
+                val uid = android.os.Binder.getCallingUid()
+                val reader = ctx.packageManager.getPackagesForUid(uid).orEmpty().any { it.startsWith("org.koreader") }
+                if (reader) arg?.takeIf { it.isNotBlank() }?.let { raw ->
+                    background.execute {
+                        runCatching {
+                            val o = org.json.JSONObject(raw)
+                            val list = o.optJSONArray("sentences")
+                            val sentences = if (list == null) emptyList() else (0 until list.length()).map { list.optString(it) }.filter { it.isNotBlank() }
+                            com.brahmadeo.supertonic.tts.llm.KoreaderAhead.readerUid = uid
+                            com.brahmadeo.supertonic.tts.llm.KoreaderAhead.prepare(ctx, o.optString("text").take(60_000), sentences.take(600))
+                        }
                     }
                 }
                 Bundle()

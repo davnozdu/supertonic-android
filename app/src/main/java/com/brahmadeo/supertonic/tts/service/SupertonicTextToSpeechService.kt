@@ -303,7 +303,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         // KOReader hands over one sentence at a time; its plugin sent the pages ahead and their paragraphs were prepared
         // by the LLM (KoreaderAhead): the sentence is cut out of its prepared paragraph. Not prepared yet: dictionaries.
         val aheadText = if (voicePreview) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
-            ?: com.brahmadeo.supertonic.tts.llm.KoreaderAhead.sentence(incomingText)
+            ?: com.brahmadeo.supertonic.tts.llm.KoreaderAhead.sentence(this, incomingText)
         val preparation = if (aheadText == null && !voicePreview) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
         // «Умная книга»: the retelling is stressed by Silero Stress alone (stress and ё), as the user chose; no LLM,

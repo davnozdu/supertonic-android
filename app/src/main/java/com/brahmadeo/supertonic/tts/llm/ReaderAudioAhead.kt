@@ -72,8 +72,10 @@ object ReaderAudioAhead {
             val parts = if (snapshot.singleVoice) listOf(prepared.text to style) else MultiVoiceSettings.parts(context, prepared.text, prepared.voicePlan, style)
             sentenceLoop@ for ((part, style) in parts) for (sentence in normalizer.splitIntoSentences(part, "ru", preservePunctuation = true)) {
                 if (obsolete()) break@sentenceLoop
+                val waitFrom = android.os.SystemClock.elapsedRealtime()
                 while (!SupertonicTTS.aheadCacheHasRoom()) {
-                    if (obsolete()) return
+                    // Nothing played for 5 min (the reader closed or paused): stop instead of waking every second.
+                    if (obsolete() || android.os.SystemClock.elapsedRealtime() - waitFrom > 300_000) return
                     SupertonicTTS.awaitAheadRoom()
                 }
                 val normalized = normalizer.normalize(sentence, "ru", skipStress = prepared.llmProcessed)

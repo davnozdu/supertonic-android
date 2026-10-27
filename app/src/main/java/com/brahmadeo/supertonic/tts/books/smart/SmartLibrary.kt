@@ -122,15 +122,18 @@ object SmartLibrary {
     fun book(context: Context, key: String): Book? = list(context).firstOrNull { it.key == key }
 
     /** The text of a book with its saved summaries; the last one read stays in memory. */
-    fun text(context: Context, key: String): SmartText? {
-        synchronized(this) { cached?.takeIf { it.first == key }?.let { return it.second.copy(summaries = summaries(context, key)) } }
+    fun text(context: Context, key: String): SmartText? = plain(context, key)?.let { it.copy(summaries = summaries(context, key)) }
+
+    /** The book's text without its summaries (no database read): for the place being read, every sentence. */
+    fun plain(context: Context, key: String): SmartText? {
+        synchronized(this) { cached?.takeIf { it.first == key }?.let { return it.second } }
         val file = file(context, key)
         if (!file.isFile) return null
         val text = runCatching {
             SmartText.parse(JSONObject(GZIPInputStream(file.inputStream().buffered()).bufferedReader(Charsets.UTF_8).use { it.readText() }))
         }.getOrNull() ?: return null
         synchronized(this) { cached = key to text }
-        return text.copy(summaries = summaries(context, key))
+        return text
     }
 
     fun summaries(context: Context, key: String): Map<Int, String> =

@@ -186,7 +186,10 @@ object LlmPreparation {
         synchronized(directTexts) { directTexts[text] = plan; while (directTexts.size > 32) directTexts.remove(directTexts.keys.first()) }
         return true
     }
-    fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500, retainForPlayback: Boolean = false): Result {
+    /** [resubmit]: false — an [id] no longer queued (evicted, cancelled) gives the dictionary result at once instead of a
+     * new request (KoreaderAhead: the paragraph is not wanted any more). */
+    fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500, retainForPlayback: Boolean = false,
+                      resubmit: Boolean = true): Result {
         synchronized(directTexts) { if (text in directTexts) directTexts.remove(text) else null }?.let { plan ->
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reader without a queue: dictionaries, no LLM wait chars=${text.length} voices=${plan.size}")
             return Result(text, "словарь", 0, true, "Читалка без очереди", voicePlan = plan, rolesReady = plan.isNotEmpty(), roleProvider = "local")
@@ -196,7 +199,7 @@ object LlmPreparation {
         val entry = synchronized(lock) {
             (if (id != null) entries[id] else entries.values.firstOrNull { it.text == text && !it.claimed }
                 ?: entries.values.firstOrNull { it.text == text })?.also { it.claimed = true }
-        } ?: submit(ctx, appCaller, text)?.let { token -> synchronized(lock) { entries[token]?.also { it.claimed = true } } }
+        } ?: (if (id != null && !resubmit) null else submit(ctx, appCaller, text)?.let { token -> synchronized(lock) { entries[token]?.also { it.claimed = true } } })
         if (entry == null) return Result(text,"словарь",0,true,"Текст не принят в очередь LLM")
         startWorker()
         return try {

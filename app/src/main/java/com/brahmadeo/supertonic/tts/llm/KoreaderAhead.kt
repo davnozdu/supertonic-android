@@ -17,7 +17,10 @@ import java.util.concurrent.Executors
 object KoreaderAhead {
     internal val caller = Any()
     private const val KEEP = 200
-    private class Prepared(val aligned: SentenceAlign.Aligned, val plan: List<VoiceRoleText>, val llm: Boolean, val generation: Long)
+    private class Prepared(val aligned: SentenceAlign.Aligned, val plan: List<VoiceRoleText>, val llm: Boolean, val generation: Long,
+                           val at: Long = android.os.SystemClock.elapsedRealtime())
+    /** A paragraph the LLM could not do is asked again after this long (a dropped connection is not for good). */
+    private const val RETRY_MS = 120_000L
     /** By the paragraph as the plugin sent it, oldest first. */
     private val prepared = LinkedHashMap<String, Prepared>()
     private val pending = HashSet<String>()
@@ -47,16 +50,22 @@ object KoreaderAhead {
         val generation = SpeechPreparationCache.generation
         val llm = LlmPreparation.enabled(ctx)
         val todo = synchronized(this) {
+            // The plugin sends the sentences from the one being read on: they replace the old list, so after a jump the
+            // audio of the place left is not made first.
+            upcoming.clear()
             var chars = 0
-            for (s in sentences) { if (chars > limit) break; chars += s.length; upcoming += s }
-            while (upcoming.size > 400) upcoming.remove(upcoming.first())
-            paragraphs.filter { p -> prepared[p]?.generation != generation && p !in pending }.also { pending += it }
+            for (s in sentences) { if (chars > limit || upcoming.size >= 400) break; chars += s.length; upcoming += s }
+            val now = android.os.SystemClock.elapsedRealtime()
+            paragraphs.filter { p ->
+                val old = prepared[p]
+                p !in pending && (old == null || old.generation != generation || (llm && !old.llm && now - old.at > RETRY_MS))
+            }.also { pending += it }
         }
         if (todo.isEmpty()) { worker.execute { feedAudio(ctx) }; return }
         val ids = todo.map { it to (if (llm) LlmPreparation.submit(ctx, caller, it) else null) }
         worker.execute {
             for ((paragraph, id) in ids) try {
-                val result = id?.let { LlmPreparation.prepareResult(ctx, paragraph, it, timeoutMs = 120_000) }
+                val result = id?.let { LlmPreparation.prepareResult(ctx, paragraph, it, timeoutMs = 120_000, resubmit = false) }
                 val aligned = result?.takeIf { !it.fallback }?.let { SentenceAlign.Aligned(paragraph, it.text) }
                 // No LLM answer (offline, LLM off) or a badly matched one: the dictionaries read this paragraph.
                 val good = aligned != null && aligned.matchedShare >= 0.7
@@ -114,5 +123,18 @@ object KoreaderAhead {
 
     /** The prepared form of a sentence the reader sends now (its audio was not made ahead): by the LLM, or by the
      * dictionaries with the voices guessed for its whole paragraph. Null: read as before (one sentence alone). */
-    internal fun sentence(text: String): PreparedSpeechText? = find(text)?.takeIf { it.llmProcessed || it.voicePlan.isNotEmpty() }
+    internal fun sentence(ctx: Context, text: String): PreparedSpeechText? =
+        find(text)?.takeIf { it.llmProcessed || it.voicePlan.isNotEmpty() } ?: pendingSentence(ctx, text)
+
+    /** A sentence whose paragraph is still with the LLM: read now by the dictionaries (voices guessed for its paragraph)
+     * instead of a request of its own for the same words and a wait of up to 1.5 s for it. */
+    private fun pendingSentence(ctx: Context, text: String): PreparedSpeechText? {
+        val paragraph = synchronized(this) { pending.toList() }.firstOrNull { text.trim().length > 1 && text.trim() in it } ?: return null
+        val aligned = SentenceAlign.Aligned(paragraph, paragraph)
+        val cut = aligned.cut(text)?.takeIf { it.text.isNotBlank() } ?: return null
+        val plan = if (LlmSettings.multiVoiceEnabled(ctx) && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx) &&
+            com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value == null)
+            runCatching { LocalSpeakers().plan(paragraph) }.getOrDefault(emptyList()) else emptyList()
+        return PreparedSpeechText(cut.text, false, SentenceAlign.clipPlan(paragraph, plan, cut))
+    }
 }

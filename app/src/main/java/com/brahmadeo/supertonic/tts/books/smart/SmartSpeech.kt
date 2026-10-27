@@ -29,6 +29,10 @@ object SmartSpeech {
     private var done = 0
     private var generation = 0
     private var finished = false
+    /** The engine connection goes a minute after the speech ended (a replay from KOReader has no service to end it). */
+    private val idleRelease = Runnable { if (!mutable.value) release() }
+    /** A pause left for long ends the retelling: no service and notification kept for nothing. */
+    private val pauseLimit = Runnable { if (paused) stop() }
 
     /** The whole text at once. Main thread only. */
     fun speak(context: Context, text: String) { begin(context); append(text); finish() }
@@ -36,6 +40,7 @@ object SmartSpeech {
     /** Main thread only. */
     fun begin(context: Context) {
         stop()
+        handler.removeCallbacks(idleRelease)
         val ctx = context.applicationContext.also { app = it }
         mutable.value = true
         if (client == null) client = TextToSpeech(ctx, { status -> handler.post {
@@ -66,6 +71,7 @@ object SmartSpeech {
     fun pause() {
         if (!mutable.value || paused) return
         paused = true
+        handler.postDelayed(pauseLimit, 15 * 60_000L)
         generation++ // the stopped utterances' callbacks are not this speech any more
         queued = done
         client?.stop()
@@ -75,12 +81,14 @@ object SmartSpeech {
     fun resume() {
         if (!mutable.value || !paused) return
         paused = false
+        handler.removeCallbacks(pauseLimit)
         com.brahmadeo.supertonic.tts.service.SleepTimer.manualResume()
         flush()
         ended()
     }
 
-    private fun ended() { if (finished && !paused && done >= chunks.size) mutable.value = false }
+    private fun ended() { if (finished && !paused && done >= chunks.size) { mutable.value = false; idleLater() } }
+    private fun idleLater() { handler.removeCallbacks(idleRelease); handler.postDelayed(idleRelease, 60_000L) }
 
     private fun flush() {
         val tts = client ?: return
@@ -110,8 +118,14 @@ object SmartSpeech {
         chunks.clear(); generation++; queued = 0; done = 0; finished = false; paused = false
         if (was) client?.stop()
         mutable.value = false
+        handler.removeCallbacks(pauseLimit)
+        idleLater()
     }
 
     /** When nothing is read any more: the engine connection is not kept. */
-    fun release() { stop(); client?.shutdown(); client = null; ready = false }
+    fun release() {
+        chunks.clear(); generation++; queued = 0; done = 0; finished = false; paused = false; mutable.value = false
+        handler.removeCallbacks(idleRelease); handler.removeCallbacks(pauseLimit)
+        client?.shutdown(); client = null; ready = false
+    }
 }
