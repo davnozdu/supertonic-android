@@ -15,7 +15,9 @@ import com.brahmadeo.supertonic.tts.QuickReadActivity
 import com.brahmadeo.supertonic.tts.R
 
 object ReadingControls {
-    private fun smartBook(ctx: Context) = com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.let { it.enabled(ctx) && it.position.value != null }
+    /** «Умная книга» is on and has books (from the folder or prepared): its button is in the notification. */
+    private fun smartBook(ctx: Context) = com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.enabled(ctx) &&
+        runCatching { !com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.isEmpty(ctx) }.getOrDefault(false)
     private val main = Handler(Looper.getMainLooper())
     private data class Controls(val pause: () -> Unit, val stop: () -> Unit, val play: () -> Unit, val paragraph: (Int) -> Unit)
     private val listeners = LinkedHashMap<Any, Controls>()
@@ -65,10 +67,7 @@ object ReadingControls {
     }
     fun panel(ctx: Context, paste: Boolean = false): PendingIntent = PendingIntent.getActivity(ctx, if(paste) 5412 else 5411,
         Intent(ctx, QuickReadActivity::class.java).putExtra("paste", paste), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    /** «Ранее в книге» right from the notification: the panel opens and starts the retelling. */
-    private fun recap(ctx: Context): PendingIntent = PendingIntent.getActivity(ctx, 5416,
-        Intent(ctx, QuickReadActivity::class.java).putExtra("recap", "BEFORE"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    /** A book was recognised: its button appears in the notification. */
+    /** Books were added or a book was recognised: the notification shows «Умная книга». */
     fun refresh(ctx: Context) { main.post { show(ctx) } }
     fun show(ctx: Context) {
         val manager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -77,12 +76,13 @@ object ReadingControls {
             Intent(ctx, ReadingControlReceiver::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         runCatching { manager.notify(5411, NotificationCompat.Builder(ctx, ReadingNotificationChannels.PANEL)
             .setSmallIcon(R.mipmap.ic_launcher).setContentTitle("MyTTS · быстрое чтение")
-            .setContentText("Текст или ссылка · управление чтением · таймер сна")
+            .setContentText(if (smartBook(ctx)) "Нажмите: умная книга · текст или ссылка · таймер сна" else "Текст или ссылка · управление чтением · таймер сна")
             .setContentIntent(panel(ctx)).setOnlyAlertOnce(true)
             .setOngoing(true).setAutoCancel(false).setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            // Three buttons fit: with a recognised «умная книга» its recap takes the place of «Вставить» (still in the panel).
-            .apply { if (smartBook(ctx)) addAction(android.R.drawable.ic_menu_recent_history, "Ранее в книге", recap(ctx))
+            // Three buttons fit: with «Умная книга» its button takes the place of «Вставить» (still in the panel). It opens
+            // the panel with «Ранее в книге» / «Эта глава» / «Чем закончится» and the choice of a book on top.
+            .apply { if (smartBook(ctx)) addAction(android.R.drawable.ic_menu_recent_history, "Умная книга", panel(ctx))
                 else addAction(android.R.drawable.ic_menu_edit, "Вставить", panel(ctx, true)) }
             // After a pause the same slot resumes: Moon+ gets a media Play key, MyTTS's own reading resumes.
             .apply { if (paused) addAction(android.R.drawable.ic_media_play, "Продолжить", command("play", 5415))

@@ -213,10 +213,15 @@ class LlmSettingsActivity : ComponentActivity() {
                         if (apinexBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         if (apinexStatus.isNotEmpty()) Text(apinexStatus)
                         Choice("Модель APInex", config.apinexModel, apinexModels, apinexRevision,
-                            format = { if (it == ApinexApi.DEFAULT_MODEL) "DeepSeek 4.1 Flash, бесплатно · $it" else it }) {
+                            format = { if (it == ApinexApi.DEFAULT_MODEL) "DeepSeek 4.1 Flash, бесплатно (качество ниже) · $it"
+                                else if (ApinexApi.free(it)) "$it · бесплатно (качество ниже)" else it }) {
                             config = config.copy(apinexModel = it); save()
                         }
                         Toggle("Размышление в APInex (медленнее)", config.apinexThinking) { config = config.copy(apinexThinking = it); save() }
+                        Text("Бесплатные модели (free/…) работают хуже, чем DeepSeek через Ollama или официальный API: на проверке " +
+                            "«Идиота» они почти не ставили ударения (их ставят словари MyTTS) и путали детали сюжета; free/glm-5.3-flash " +
+                            "ставит ударения, но часто неверные. Ответ за 3 с.", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error)
                         Text("Шлюз-посредник: текст уходит APInex, а от него — поставщику модели; их политика хранения данных не опубликована. " +
                             "Лимит запросов в минуту (бесплатный план — 15) MyTTS берёт из API APInex и сам выдерживает интервал. Для пересказа " +
                             "«Умной книги» этого хватает с запасом; при постоянной подготовке текста во время чтения часть абзацев может пойти по словарям. " +

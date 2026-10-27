@@ -100,6 +100,7 @@ object SmartFolder {
                     if (runCatching { read(ctx, f) }.onFailure { if (it is CancellationException) throw it }.getOrDefault(false)) added++ else failed++
                 }
                 prefs(ctx).edit().putLong(PREF_SCANNED, System.currentTimeMillis()).apply()
+                com.brahmadeo.supertonic.tts.service.ReadingControls.refresh(ctx) // «Умная книга» in the notification
                 val total = SmartLibrary.list(ctx).size
                 mutable.value = State(message = "Книг в «Умной книге»: $total. " + (if (added > 0) "Добавлено или обновлено: $added. " else "") +
                     (if (failed > 0) "Не удалось прочитать: $failed." else ""))
