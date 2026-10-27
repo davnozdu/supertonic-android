@@ -107,3 +107,15 @@ KOReader (путь к файлу через плагин) — позже.
 - beta14: SmartBookProvider (exported, authority <applicationId>.smartbook): call(state) → title/book/stage/text/error/running/speaking/paused; pause/resume/stop/replay. SmartSpeech.pause/resume — продолжение с прерванного куска. Окно пересказа рисует сам KOReader (TextViewer 70% высоты, mytts.lua showWindow), опрос раз в секунду только пока готовится/звучит. Запасной путь управления — extra control в SmartBookCommandActivity.
 - beta15: LLM для KOReader — мост call(prepare, текст страниц) → KoreaderAhead: абзацы через LlmPreparation (свой caller), результат выравнивается SentenceAlign (LCS слов, порог 70%); предложение KOReader в onSynthesizeText вырезается из подготовленного абзаца (PreparedSpeechText, роли clipPlan), иначе словари без ожидания. Плагин шлёт текущую+следующую страницу при старте чтения и на PageUpdate во время чтения.
 - beta16: звук вперёд для KOReader — плагин шлёт JSON {text ~12 страниц, sentences — точные предложения его разбора}; KoreaderAhead ограничивает «Упреждением» (aheadChars), готовит абзацы LLM (пакеты KOReader вдвое крупнее: 4800 знаков, облаку до 60 с, ролям 45 с — вдвое меньше запросов), абзацы без ответа LLM — словарями; затем ReaderAudioAhead.submitPrepared синтезирует звук каждого предложения в RAM-кэш с голосом и скоростью из запросов KOReader (observe по callerUid). При обрыве сети чтение идёт из буфера.
+
+## beta17 · TokenHarbor
+
+- Пятое облако TokenHarbor (`https://tokenharbor.ai/v1`, OpenAI-совместимый, `TokenHarborApi`), по умолчанию
+  `deepseek-v4.1-flash:free`, ключ зашифрован, модели из `/v1/models`, пометка «качество ниже» у `…:free`. Везде, где есть
+  облака: подготовка текста, роли, арбитр ударений, подготовка книг, пересказ (потоковый). Бесплатные модели включаются в
+  кабинете (иначе 403 `free_models_disabled`). Лимит бесплатного аккаунта 60/мин, 1800/ч — интервалы не выдерживаем.
+- Модель по умолчанию размышляет: без `"thinking":{"type":"disabled"}` весь лимит токенов уходил в рассуждение (25 с,
+  пустой ответ). `reasoning_effort:"none"` тоже работает, `reasoning.enabled=false` — нет. `response_format json_object` работает.
+- Проба «Эта глава» (Идиот, гл. III, 4,5 тыс. токенов): 6,8–6,9 с целиком, поток — первый текст 2,5 с, всё 8,7 с; сюжет без
+  ошибки «подал отцу» (у APInex free была).
+- NVIDIA build (`deepseek-ai/deepseek-v4.1-flash`): ключ рабочий, но модель не ответила за 5 мин — не подключали.

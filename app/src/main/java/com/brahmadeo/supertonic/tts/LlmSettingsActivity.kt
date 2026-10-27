@@ -65,6 +65,13 @@ class LlmSettingsActivity : ComponentActivity() {
                     val a = org.json.JSONArray(getSharedPreferences("llm_models", MODE_PRIVATE).getString("apinex", "[]"))
                     (0 until a.length()).map { a.getString(it) }
                 }.getOrDefault(emptyList())) }
+                var harborStatus by remember { mutableStateOf("") }
+                var harborRevision by remember { mutableIntStateOf(0) }
+                var harborBusy by remember { mutableStateOf(false) }
+                var harborModels by remember { mutableStateOf(runCatching {
+                    val a = org.json.JSONArray(getSharedPreferences("llm_models", MODE_PRIVATE).getString("tokenharbor", "[]"))
+                    (0 until a.length()).map { a.getString(it) }
+                }.getOrDefault(emptyList())) }
                 var ollamaRevision by remember { mutableIntStateOf(0) }
                 var geminiRevision by remember { mutableIntStateOf(0) }
                 var refreshing by remember { mutableStateOf<Boolean?>(null) }
@@ -192,7 +199,8 @@ class LlmSettingsActivity : ComponentActivity() {
                         Toggle("Размышление в DeepSeek (медленнее)", config.deepseekThinking) { config = config.copy(deepseekThinking = it); save() }
                         Text("По умолчанию DeepSeek 4.1 Flash, размышление выключено. Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
                         Toggle("В авторежиме сначала DeepSeek", config.preferDeepseek) { config = config.copy(preferDeepseek = it,
-                            preferGemini = if (it) false else config.preferGemini, preferApinex = if (it) false else config.preferApinex); save() }
+                            preferGemini = if (it) false else config.preferGemini, preferApinex = if (it) false else config.preferApinex,
+                            preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
                         HorizontalDivider()
                         Text("APInex", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.apinexKey, { config = config.copy(apinexKey = it) }, label = { Text("Ключ APInex (sk-apx…)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -227,7 +235,42 @@ class LlmSettingsActivity : ComponentActivity() {
                             "«Умной книги» этого хватает с запасом; при постоянной подготовке текста во время чтения часть абзацев может пойти по словарям. " +
                             "Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
                         Toggle("В авторежиме сначала APInex", config.preferApinex) { config = config.copy(preferApinex = it,
-                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek); save() }
+                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek,
+                            preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
+                        HorizontalDivider()
+                        Text("TokenHarbor", style = MaterialTheme.typography.titleLarge)
+                        OutlinedTextField(config.tokenharborKey, { config = config.copy(tokenharborKey = it) }, label = { Text("Ключ TokenHarbor (thk_…)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = {
+                            val snapshot = config
+                            busy = true; harborBusy = true; harborStatus = "Получение актуальных моделей…"
+                            scope.launch {
+                                try {
+                                    LlmSettings.save(this@LlmSettingsActivity, snapshot)
+                                    val models = withContext(Dispatchers.IO) { LlmProviders.models(snapshot, false, "tokenharbor") }
+                                    harborModels = models; harborRevision++
+                                    getSharedPreferences("llm_models", MODE_PRIVATE).edit().putString("tokenharbor", org.json.JSONArray(models).toString()).apply()
+                                    harborStatus = if (models.isEmpty()) "API не вернул доступных моделей" else "Получено моделей: ${models.size}. Выберите модель ниже."
+                                } catch (e: Exception) { harborStatus = "Не удалось получить модели: ${e.message?.take(160)}" }
+                                finally { busy = false; harborBusy = false }
+                            }
+                        }, enabled = !busy) { Text("Считать актуальные модели TokenHarbor") }
+                        if (harborBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (harborStatus.isNotEmpty()) Text(harborStatus)
+                        Choice("Модель TokenHarbor", config.tokenharborModel, harborModels, harborRevision,
+                            format = { if (it == TokenHarborApi.DEFAULT_MODEL) "DeepSeek 4.1 Flash, бесплатно (качество ниже) · $it"
+                                else if (TokenHarborApi.free(it)) "$it · бесплатно (качество ниже)" else it }) {
+                            config = config.copy(tokenharborModel = it); save()
+                        }
+                        Toggle("Размышление в TokenHarbor (медленнее)", config.tokenharborThinking) { config = config.copy(tokenharborThinking = it); save() }
+                        Text("Бесплатные модели (…:free) нужно один раз включить в кабинете tokenharbor.ai, иначе API отвечает 403. " +
+                            "На проверке «Идиота» бесплатная DeepSeek 4.1 Flash пересказала главу без ошибок сюжета за 7 с (первые слова — через 2,5 с), " +
+                            "но качество бесплатных моделей не гарантировано.", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error)
+                        Text("Шлюз-посредник: текст уходит TokenHarbor, а от него — поставщику модели. Бесплатный аккаунт — 60 запросов в минуту, " +
+                            "MyTTS столько не отправляет. Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("В авторежиме сначала TokenHarbor", config.preferTokenharbor) { config = config.copy(preferTokenharbor = it,
+                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek,
+                            preferApinex = if (it) false else config.preferApinex); save() }
                         HorizontalDivider()
                         Text("Gemini", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.geminiKey, { config = config.copy(geminiKey = it) }, label = { Text("Ключ Gemini API") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -244,7 +287,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             Text("Для этой модели API не предоставляет известной настройки размышления; тумблер к ней не применяется.", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("API может вернуть также модели звука и изображений. Для подготовки текста выберите текстовую LLM.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it, preferDeepseek = if (it) false else config.preferDeepseek, preferApinex = if (it) false else config.preferApinex); save() }
+                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it, preferDeepseek = if (it) false else config.preferDeepseek, preferApinex = if (it) false else config.preferApinex, preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Локальная Gemma 4 E2B", style = MaterialTheme.typography.titleLarge)

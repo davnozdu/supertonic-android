@@ -121,6 +121,11 @@ object LlmProviders {
             require(c.deepseekKey.isNotBlank()) { "Введите ключ DeepSeek" }
             return DeepSeekApi.models(http(DeepSeekApi.ENDPOINT + "/models", c.deepseekKey))
         }
+        if (provider == "tokenharbor") {
+            require(c.tokenharborKey.isNotBlank()) { "Введите ключ TokenHarbor" }
+            return DeepSeekApi.models(http(TokenHarborApi.ENDPOINT + "/models", c.tokenharborKey))
+                .sortedWith(compareBy<String> { it != TokenHarborApi.DEFAULT_MODEL }.thenBy { !TokenHarborApi.free(it) }.thenBy { it })
+        }
         if (provider == "apinex") {
             require(c.apinexKey.isNotBlank()) { "Введите ключ APInex" }
             return DeepSeekApi.models(http(ApinexApi.ENDPOINT + "/models", c.apinexKey))
@@ -178,7 +183,7 @@ object LlmProviders {
      * up to 40 items in one list DeepSeek miscounted ("изменено число ответов") and a whole batch lost its check. */
     fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean, stopped: () -> Boolean = { false }, provider: String = if (gemini) "gemini" else "ollama"): List<Int?> {
         val thinking = verifyThinkingOverride ?: false
-        lastVerifier = (if (provider == "apinex") c.apinexModel else if (provider == "deepseek") c.deepseekModel else if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
+        lastVerifier = (if (provider == "tokenharbor") c.tokenharborModel else if (provider == "apinex") c.apinexModel else if (provider == "deepseek") c.deepseekModel else if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
         val out = arrayOfNulls<Int>(items.size)
         for (from in items.indices step STRESS_CHECK_CHUNK) {
             // A cancelled batch or changed settings: no further judge requests.
@@ -238,7 +243,12 @@ object LlmProviders {
         cancellation?.check()
         val started = SystemClock.elapsedRealtime()
         fun remaining() = (deadlineMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)
-        return if (provider == "apinex") {
+        return if (provider == "tokenharbor") {
+            require(c.tokenharborKey.isNotBlank()) { "Введите ключ TokenHarbor" }
+            val body = DeepSeekApi.request(c.tokenharborModel, c.tokenharborThinking, system, prompt, tokens, temperature, effort)
+            DeepSeekApi.content(http(TokenHarborApi.ENDPOINT + "/chat/completions", c.tokenharborKey, body,
+                deadlineMs = remaining(), cancellation = cancellation))
+        } else if (provider == "apinex") {
             require(c.apinexKey.isNotBlank()) { "Введите ключ APInex" }
             val body = DeepSeekApi.request(c.apinexModel, c.apinexThinking, system, prompt, tokens, temperature, effort)
             ApinexApi.refresh { http(ApinexApi.ENDPOINT + "/balance", c.apinexKey, deadlineMs = minOf(5000L, remaining())) }
@@ -305,18 +315,19 @@ object LlmProviders {
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", system))
             .put(JSONObject().put("role", "user").put("content", prompt))
         when (provider) {
-            "apinex", "deepseek" -> {
+            "apinex", "deepseek", "tokenharbor" -> {
                 val apinex = provider == "apinex"
-                val key = if (apinex) c.apinexKey else c.deepseekKey
-                require(key.isNotBlank()) { if (apinex) "Введите ключ APInex" else "Введите ключ DeepSeek" }
-                val body = JSONObject().put("model", if (apinex) c.apinexModel else c.deepseekModel).put("stream", true)
+                val harbor = provider == "tokenharbor"
+                val key = if (apinex) c.apinexKey else if (harbor) c.tokenharborKey else c.deepseekKey
+                require(key.isNotBlank()) { if (apinex) "Введите ключ APInex" else if (harbor) "Введите ключ TokenHarbor" else "Введите ключ DeepSeek" }
+                val body = JSONObject().put("model", if (apinex) c.apinexModel else if (harbor) c.tokenharborModel else c.deepseekModel).put("stream", true)
                     .put("temperature", temperature).put("max_tokens", tokens)
                     .put("thinking", JSONObject().put("type", "disabled")).put("messages", messages)
                 if (apinex) {
                     ApinexApi.refresh { http(ApinexApi.ENDPOINT + "/balance", key, deadlineMs = minOf(5000L, remaining())) }
                     ApinexApi.acquire(remaining() - 2000) { cancellation.check() }
                 }
-                httpStream((if (apinex) ApinexApi.ENDPOINT else DeepSeekApi.ENDPOINT) + "/chat/completions", key, body, false, remaining(), cancellation) { line ->
+                httpStream((if (apinex) ApinexApi.ENDPOINT else if (harbor) TokenHarborApi.ENDPOINT else DeepSeekApi.ENDPOINT) + "/chat/completions", key, body, false, remaining(), cancellation) { line ->
                     val data = line.removePrefix("data:").trim()
                     if (line.startsWith("data:") && data != "[DONE]") JSONObject(data).optJSONArray("choices")?.optJSONObject(0)?.let { choice ->
                         piece(choice.optJSONObject("delta")?.optString("content").orEmpty())

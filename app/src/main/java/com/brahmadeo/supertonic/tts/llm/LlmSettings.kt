@@ -12,7 +12,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 enum class LlmMode(val title: String) {
     OFF("Выключено"), AUTO("Авто: облако → Gemma 4"), OLLAMA("Ollama Cloud"),
-    GEMINI("Gemini"), DEEPSEEK("DeepSeek"), APINEX("APInex"), LOCAL("Автономно: Gemma 4")
+    GEMINI("Gemini"), DEEPSEEK("DeepSeek"), APINEX("APInex"), TOKENHARBOR("TokenHarbor"), LOCAL("Автономно: Gemma 4")
 }
 
 data class LlmConfig(
@@ -31,6 +31,10 @@ data class LlmConfig(
     val apinexKey: String = "",
     val apinexThinking: Boolean = false,
     val preferApinex: Boolean = false,
+    val tokenharborModel: String = TokenHarborApi.DEFAULT_MODEL,
+    val tokenharborKey: String = "",
+    val tokenharborThinking: Boolean = false,
+    val preferTokenharbor: Boolean = false,
     val ollamaThinking: Boolean = false,
     val geminiThinking: Boolean = false,
     val localThinking: Boolean = false,
@@ -52,9 +56,10 @@ fun LlmConfig.cloudOrder(): List<String> = when (mode) {
     LlmMode.GEMINI -> listOf("gemini")
     LlmMode.DEEPSEEK -> listOf("deepseek")
     LlmMode.APINEX -> listOf("apinex")
+    LlmMode.TOKENHARBOR -> listOf("tokenharbor")
     LlmMode.AUTO -> {
-        val all = listOf("ollama", "gemini", "deepseek", "apinex")
-        val first = if (preferApinex) "apinex" else if (preferDeepseek) "deepseek" else if (preferGemini) "gemini" else "ollama"
+        val all = listOf("ollama", "gemini", "deepseek", "apinex", "tokenharbor")
+        val first = if (preferTokenharbor) "tokenharbor" else if (preferApinex) "apinex" else if (preferDeepseek) "deepseek" else if (preferGemini) "gemini" else "ollama"
         listOf(first) + (all - first)
     }
 }
@@ -65,12 +70,14 @@ fun LlmConfig.cloudReady(provider: String): Boolean = when (provider) {
     "gemini" -> geminiKey.isNotBlank() && geminiModel.isNotBlank()
     "deepseek" -> deepseekKey.isNotBlank() && deepseekModel.isNotBlank()
     "apinex" -> apinexKey.isNotBlank() && apinexModel.isNotBlank()
+    "tokenharbor" -> tokenharborKey.isNotBlank() && tokenharborModel.isNotBlank()
     else -> false
 }
 
 /** The same reasoning switch for every cloud provider. */
 fun LlmConfig.withCloudThinking(enabled: Boolean) =
-    copy(ollamaThinking = enabled, geminiThinking = enabled, deepseekThinking = enabled, apinexThinking = enabled)
+    copy(ollamaThinking = enabled, geminiThinking = enabled, deepseekThinking = enabled, apinexThinking = enabled,
+        tokenharborThinking = enabled)
 
 object LlmSettings {
     private const val PREFS = "llm_settings"
@@ -131,6 +138,10 @@ object LlmSettings {
             apinexKey = decrypt(p.getString("apinex_key", "")!!),
             apinexThinking = p.getBoolean("apinex_thinking", false),
             preferApinex = p.getBoolean("prefer_apinex", false),
+            tokenharborModel = p.getString("tokenharbor_model", TokenHarborApi.DEFAULT_MODEL)!!,
+            tokenharborKey = decrypt(p.getString("tokenharbor_key", "")!!),
+            tokenharborThinking = p.getBoolean("tokenharbor_thinking", false),
+            preferTokenharbor = p.getBoolean("prefer_tokenharbor", false),
             preferGemini = p.getBoolean("prefer_gemini", false), gpu = p.getBoolean("gpu", true),
             ollamaThinking = p.getBoolean("ollama_thinking", false),
             geminiThinking = p.getBoolean("gemini_thinking", false),
@@ -152,6 +163,8 @@ object LlmSettings {
             .putBoolean("deepseek_thinking", c.deepseekThinking).putBoolean("prefer_deepseek", c.preferDeepseek)
             .putString("apinex_model", c.apinexModel.trim()).putString("apinex_key", encrypt(c.apinexKey.trim()))
             .putBoolean("apinex_thinking", c.apinexThinking).putBoolean("prefer_apinex", c.preferApinex)
+            .putString("tokenharbor_model", c.tokenharborModel.trim()).putString("tokenharbor_key", encrypt(c.tokenharborKey.trim()))
+            .putBoolean("tokenharbor_thinking", c.tokenharborThinking).putBoolean("prefer_tokenharbor", c.preferTokenharbor)
             .putBoolean("prefer_gemini", c.preferGemini).putBoolean("gpu", c.gpu)
             .putBoolean("ollama_thinking", c.ollamaThinking)
             .putBoolean("gemini_thinking", c.geminiThinking)
