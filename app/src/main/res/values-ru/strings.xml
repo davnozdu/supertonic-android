@@ -254,4 +254,5 @@
     <string name="model_delete_silero_message">Удалить скачанную Silero v5.6? Модели Tera и Supertonic сохранятся.</string>
     <string name="download_intro_silero">Скачиваются готовые Android-файлы Silero v5.6: модель синтеза и вокодер, около 82 МБ. Конвертация не требуется.</string>
     <string name="download_silero_in_progress">Загрузка Silero v5.6</string>
+    <string name="shortcut_smart_book">Умная книга</string>
 </resources>

@@ -32,6 +32,8 @@ class SmartBookActivity : ComponentActivity() {
         setContent { SupertonicTheme {
             var enabled by remember { mutableStateOf(SmartMatcher.enabled(this)) }
             var speak by remember { mutableStateOf(prefs.getBoolean("smart_book_speak", true)) }
+            var prefetch by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.enabled(this)) }
+            var wifiOnly by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.wifiOnly(this)) }
             var folder by remember { mutableStateOf(SmartFolder.folder(this)) }
             var hours by remember { mutableStateOf(SmartFolder.hours(this)) }
             var unknown by remember { mutableStateOf(SmartFolder.scansUnknown(this)) }
@@ -61,6 +63,8 @@ class SmartBookActivity : ComponentActivity() {
                         "что случилось в текущей главе, «Чем закончится» — финал, если дочитывать не хочется. Кнопки — в панели " +
                         "быстрого чтения (уведомление MyTTS). Читалка не сообщает, какая книга открыта: MyTTS узнаёт книгу и место " +
                         "по тексту, который она присылает на озвучку.", style = MaterialTheme.typography.bodyMedium)
+                    Text("Всегда под рукой: плитка «Умная книга» в шторке быстрых настроек (шторка → карандаш → перетащите " +
+                        "плитку) и ярлык при долгом нажатии на иконку MyTTS.", style = MaterialTheme.typography.bodySmall)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Умная книга", Modifier.weight(1f).padding(end = 12.dp))
                         Switch(enabled, { enabled = it; prefs.edit().putBoolean(SmartMatcher.PREF_ENABLED, it).apply() })
@@ -71,6 +75,19 @@ class SmartBookActivity : ComponentActivity() {
                             Text("Голосом, выбранным в MyTTS. Иначе — только текст и кнопка «Прослушать».", style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(speak, { speak = it; prefs.edit().putBoolean("smart_book_speak", it).apply() })
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Готовить пересказ заранее")
+                            Text("Только во время чтения узнанной книги: краткое содержание уже прочитанных глав, не чаще одного " +
+                                "запроса в 10 минут. Тогда «Ранее в книге» — один запрос. Без чтения телефон ничего не делает.",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(prefetch, { prefetch = it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.PREF_ON, it).apply() })
+                    }
+                    if (prefetch) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Заранее — только по Wi-Fi", Modifier.weight(1f).padding(end = 12.dp))
+                        Switch(wifiOnly, { wifiOnly = it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.PREF_WIFI, it).apply() })
                     }
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

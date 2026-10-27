@@ -72,6 +72,8 @@ object SmartMatcher {
             if (newBook) com.brahmadeo.supertonic.tts.service.ReadingControls.refresh(ctx)
             save(ctx, current)
         }
+        // Reading is going on: the chapters already read may get their summaries now (rarely, see SmartPrefetch).
+        if (current != null) SmartPrefetch.reading(ctx, current)
     }
 
     private fun save(ctx: Context, p: Position) {

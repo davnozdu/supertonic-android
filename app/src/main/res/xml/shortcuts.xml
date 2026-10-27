@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Умная книга» on a long press of the MyTTS icon: the panel with «Ранее в книге» / «Эта глава» / «Чем закончится». -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="smart_book"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_smart_book"
+        android:shortcutLongLabel="@string/shortcut_smart_book">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.davnozdu.supertonic.tts.fork"
+            android:targetClass="com.brahmadeo.supertonic.tts.QuickReadActivity" />
+    </shortcut>
+</shortcuts>

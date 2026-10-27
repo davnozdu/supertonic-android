@@ -43,6 +43,8 @@ object SmartSpeech {
         pending = null
         // A paused reader blocks synthesis («Пауза» of the panel); the retelling is asked for while it is paused.
         com.brahmadeo.supertonic.tts.service.SleepTimer.manualResume()
+        // The speed chosen in MyTTS, not the system TTS rate (a reader's, often 2–2.5×: the retelling raced).
+        tts.setSpeechRate(ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getFloat("speed", 1f).coerceIn(0.5f, 2.5f))
         val chunks = SmartPrompts.speechChunks(text)
         val id = ++generation
         last = "smart-$id-${chunks.size - 1}"
