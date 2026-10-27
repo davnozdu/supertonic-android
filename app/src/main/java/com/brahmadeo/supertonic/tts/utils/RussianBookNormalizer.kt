@@ -267,12 +267,24 @@ object RussianBookNormalizer {
     /** Read by letters even though a vowel would allow a word. */
     private val letterAcronyms=setOf("ГИБДД","ЕГЭ","ОГЭ","ОГПУ","ЕС","ИИ","ИП","ООО","ОАО","ЗАО","ПАО","АО","АЭС","ЕАЭС","ОРВИ","ЭВМ","ВОВ","ЕГРЮЛ","УФСИН","ОБЖ","СНГ","ВЧК","ЧК","США","МГУ","ЦРУ","ВДНХ","ОКБ","ИТ","ПО","УК","ИНН","ОВД","ЕРЦ","СИ","ГПУ","ВГУ","ЛГУ","МВТУ","ПТУ","РСФСР","ОТК","РЖД","МФЦ","ЖКУ")
     private val vowelsUpper="АЕЁИОУЫЭЮЯ"
-    /** Russian capital abbreviations: by letters (СССР -> эс-эс-эс-эр, США -> эс-ша-а) or as a word (НАТО -> нато).
-     * Without a vowel or listed as spelled -> letters; anything else (shouted КТО, ВСЁ, ДА, headings) -> a word. */
+    /** Spoken forms that are not the plain letter names. */
+    private val spokenAcronyms=mapOf("США" to "сэшэа́","ЕГЭ" to "егэ́","ОГЭ" to "огэ́")
+    /** Russian capital abbreviations: by letters or as a word (НАТО -> нато). Without a vowel or listed as spelled ->
+     * the letter names as ONE word, stressed on the last syllable, as they are said (СССР -> эсэсэсэ́р, ФСБ -> эфэсбэ́):
+     * written "эф-эс-бэ" the models read three words with breaks between them. Anything else (shouted КТО, ВСЁ, ДА,
+     * headings) -> a word. */
     fun acronyms(text: String): String = rx("(?<![\\p{L}])[А-ЯЁ]{2,8}(?![\\p{L}])").replace(text) { m ->
         val a=m.value
+        spokenAcronyms[a]?.let { return@replace it }
         val byLetters=a !in wordAcronyms && (a in letterAcronyms || a.none { it in vowelsUpper })
-        if (byLetters) a.map { letterNames.getValue(it) }.joinToString("-") else a.lowercase()
+        if (!byLetters) return@replace a.lowercase()
+        val names=a.map { letterNames.getValue(it) }
+        // "и краткое", "твёрдый знак" are several words: keep them apart rather than glue them.
+        if (names.any { ' ' in it }) names.joinToString(" ") else {
+            val word=names.joinToString("")
+            val last=word.indexOfLast { it in "аеёиоуыэюя" }
+            if (last < 0 || word[last]=='ё') word else word.substring(0, last+1)+"\u0301"+word.substring(last+1)
+        }
     }
     /** [dates] = false leaves calendar dates and years to the caller (the LLM path expands them with spans). */
     fun normalize(text: String, expandNumbers: Boolean = true, dates: Boolean = true): String {
