@@ -303,7 +303,10 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val aheadText = if (voicePreview) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
         val preparation = if (aheadText == null && !voicePreview) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
-        val preserveMarks = llmProcessed || voicePreview
+        // «Умная книга»: the retelling keeps the cloud's stress marks, and the dictionaries mark the words it left without one
+        // (APInex's free model marks almost none); still no LLM, roles or music.
+        val recap = voicePreview && request.params?.getBoolean(packageName + ".smart_recap", false) == true
+        val preserveMarks = llmProcessed || (voicePreview && !recap)
         val rawText = aheadText?.text ?: preparation?.text ?: incomingText
         val traceId=com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(incomingText)
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "TTS trace source=$traceId prepared=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(rawText)} llm=$llmProcessed ahead=${aheadText!=null}")

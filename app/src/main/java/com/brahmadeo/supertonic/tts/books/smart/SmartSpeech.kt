@@ -47,7 +47,7 @@ object SmartSpeech {
         val id = ++generation
         last = "smart-$id-${chunks.size - 1}"
         chunks.forEachIndexed { i, chunk ->
-            if (tts.speak(chunk, TextToSpeech.QUEUE_ADD, VoicePreview.params(ctx), "smart-$id-$i") != TextToSpeech.SUCCESS) { stop(); return }
+            if (tts.speak(chunk, TextToSpeech.QUEUE_ADD, VoicePreview.params(ctx).apply { putBoolean(ctx.packageName + ".smart_recap", true) }, "smart-$id-$i") != TextToSpeech.SUCCESS) { stop(); return }
         }
     }
 
