@@ -177,25 +177,18 @@ object BookPreparation {
                           startedAt: Long): com.brahmadeo.supertonic.tts.books.smart.SmartText {
         val text = com.brahmadeo.supertonic.tts.books.smart.SmartText.of(plan.title, plan.author, plan.sections.map { it.title },
             plan.paragraphs.map { it.section to it.text })
-        val prompts = com.brahmadeo.supertonic.tts.books.smart.SmartPrompts
-        val summaries = HashMap<Int, String>()
-        val todo = text.sections.indices.filter { text.sectionText(it).isNotBlank() }
         val plain = source.withThinking(false)
-        todo.forEachIndexed { done, section ->
-            mutable.value = State(true, "Умная книга: краткое содержание разделов", done, todo.size, startedAt = startedAt)
-            val whole = text.sectionText(section)
-            if (whole.length < prompts.TINY_SECTION) { summaries[section] = whole.replace('\n', ' '); return@forEachIndexed }
-            val parts = prompts.parts(whole)
-            summaries[section] = parts.mapIndexed { i, part ->
-                val prompt = prompts.section(text.sections[section].title, i, parts.size, part)
+        val summaries = com.brahmadeo.supertonic.tts.books.smart.SmartPrompts.summarize(text, text.sections.indices.toList(), emptyMap(),
+            { prompt, tokens, multi ->
                 val file = File(folder, "smart.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.txt")
-                if (file.isFile && file.length() in 1..64 * 1024) file.readText()
-                else com.brahmadeo.supertonic.tts.books.smart.SmartRecap.request(plain, prompt, 3000, cancel).also { answer ->
+                if (file.isFile && file.length() in 1..512 * 1024) file.readText()
+                else com.brahmadeo.supertonic.tts.books.smart.SmartRecap.request(plain, prompt, tokens, cancel, multi).also { answer ->
                     val tmp = File(folder, "${file.name}.tmp")
                     try { tmp.writeText(answer); tmp.renameTo(file) } finally { tmp.delete() }
                 }
-            }.joinToString(" ")
-        }
+            },
+            { done, total -> mutable.value = State(true, "Умная книга: краткое содержание разделов", done, total, startedAt = startedAt) },
+            { _, _ -> })
         return text.copy(summaries = summaries)
     }
 

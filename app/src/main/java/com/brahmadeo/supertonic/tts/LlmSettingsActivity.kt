@@ -218,8 +218,8 @@ class LlmSettingsActivity : ComponentActivity() {
                         }
                         Toggle("Размышление в APInex (медленнее)", config.apinexThinking) { config = config.copy(apinexThinking = it); save() }
                         Text("Шлюз-посредник: текст уходит APInex, а от него — поставщику модели; их политика хранения данных не опубликована. " +
-                            "Бесплатные модели (free/…) — не больше 5 запросов в минуту: MyTTS сам выдерживает интервал. Для пересказа «Умной книги» " +
-                            "этого хватает, для постоянной подготовки текста при чтении — мало (часть абзацев пойдёт по словарям). " +
+                            "Лимит запросов в минуту (бесплатный план — 15) MyTTS берёт из API APInex и сам выдерживает интервал. Для пересказа " +
+                            "«Умной книги» этого хватает с запасом; при постоянной подготовке текста во время чтения часть абзацев может пойти по словарям. " +
                             "Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
                         Toggle("В авторежиме сначала APInex", config.preferApinex) { config = config.copy(preferApinex = it,
                             preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek); save() }

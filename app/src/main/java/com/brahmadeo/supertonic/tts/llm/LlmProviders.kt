@@ -239,7 +239,8 @@ object LlmProviders {
         return if (provider == "apinex") {
             require(c.apinexKey.isNotBlank()) { "Введите ключ APInex" }
             val body = DeepSeekApi.request(c.apinexModel, c.apinexThinking, system, prompt, tokens, temperature, effort)
-            ApinexApi.acquire(c.apinexModel, remaining() - 2000) { cancellation?.check() }
+            ApinexApi.refresh { http(ApinexApi.ENDPOINT + "/balance", c.apinexKey, deadlineMs = minOf(5000L, remaining())) }
+            ApinexApi.acquire(remaining() - 2000) { cancellation?.check() }
             DeepSeekApi.content(http(ApinexApi.ENDPOINT + "/chat/completions", c.apinexKey, body,
                 deadlineMs = remaining(), cancellation = cancellation))
         } else if (provider == "deepseek") {

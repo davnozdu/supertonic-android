@@ -63,4 +63,19 @@ class SmartTextTest {
         assertEquals("Первый абзац.", chunks.first())
         assertTrue(chunks.all { it.length <= 300 })
     }
+
+    /** Several sections per request; a section the model left out is asked alone; a tiny one costs nothing. */
+    @Test fun summariesArePacked() {
+        val long = "Слово ".repeat(400)
+        val text = SmartText.of("Т", "А", listOf("Титул", "I", "II", "III"),
+            listOf(0 to "Идиот", 1 to long + "один", 2 to long + "два", 3 to long + "три"))
+        val asked = mutableListOf<Boolean>()
+        val made = SmartPrompts.summarize(text, listOf(0, 1, 2, 3), emptyMap(), { prompt, _, multi ->
+            asked += multi
+            if (multi) "{\"summaries\": [{\"id\": 1, \"summary\": \"первая\"}, {\"id\": 3, \"summary\": \"третья\"}, {\"id\": 9, \"summary\": \"чужая\"}]}"
+            else { assertTrue(prompt.contains("два")); "вторая" }
+        }, { _, _ -> }, { _, _ -> })
+        assertEquals(listOf(true, false), asked)
+        assertEquals(mapOf(0 to "Идиот", 1 to "первая", 2 to "вторая", 3 to "третья"), made)
+    }
 }

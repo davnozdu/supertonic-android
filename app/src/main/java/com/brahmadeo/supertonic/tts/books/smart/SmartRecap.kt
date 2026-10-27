@@ -66,7 +66,7 @@ object SmartRecap {
                 }
                 Kind.CHAPTER -> {
                     val current = text.sectionText(section, paragraph)
-                    val previous = if (current.length < SmartPrompts.SHORT_CHAPTER && section > 0) summary(section - 1, 1, 1) else null
+                    val previous = if (current.length < SmartPrompts.SHORT_CHAPTER && section > 0) summary(section - 1) else null
                     stage("Пересказ", 0, 0)
                     ask(SmartPrompts.chapter(sec.title, SmartPrompts.tail(current), previous), 2500)
                 }
@@ -82,7 +82,8 @@ object SmartRecap {
         /** Summaries of [range], made where missing; joined in groups when too long for one request. */
         fun condensed(range: IntRange): String {
             val wanted = range.filter { text.sectionText(it).isNotBlank() }
-            val made = wanted.mapIndexed { i, s -> summary(s, i + 1, wanted.size) }
+            make(wanted)
+            val made = wanted.map { summaries.getValue(it) }
             var lines = wanted.map { text.sections[it].title }.zip(made).map { (t, s) -> "«$t»: $s" }
             while (lines.sumOf { it.length + 1 } > SmartPrompts.SUMMARIES_CHARS && lines.size > 1) {
                 val groups = mutableListOf<MutableList<String>>(mutableListOf())
@@ -98,20 +99,14 @@ object SmartRecap {
             return lines.joinToString("\n")
         }
 
-        fun summary(section: Int, index: Int, total: Int): String {
-            summaries[section]?.let { return it }
-            val title = text.sections[section].title
-            val whole = text.sectionText(section)
-            if (whole.length < SmartPrompts.TINY_SECTION) return whole.replace('\n', ' ').also { summaries[section] = it }
-            val parts = SmartPrompts.parts(whole)
-            val made = parts.mapIndexed { i, part ->
-                stage("Краткое содержание разделов", index - 1, total)
-                ask(SmartPrompts.section(title, i, parts.size, part), 3000)
-            }.joinToString(" ")
-            SmartLibrary.saveSummary(ctx, key, section, made)
-            summaries[section] = made
-            return made
+        /** Makes the missing summaries of [sections], several sections per request, and saves them. */
+        fun make(sections: List<Int>) {
+            summaries += SmartPrompts.summarize(text, sections, summaries, { prompt, tokens, multi -> request(source, prompt, tokens, cancel, multi) },
+                { done, total -> stage("Краткое содержание разделов", done, total) },
+                { section, summary -> SmartLibrary.saveSummary(ctx, key, section, summary) })
         }
+
+        fun summary(section: Int): String { make(listOf(section)); return summaries[section].orEmpty() }
 
         fun stage(name: String, done: Int, total: Int) { mutable.value = mutable.value.copy(stage = name, done = done, total = total) }
 
@@ -119,15 +114,17 @@ object SmartRecap {
     }
 
     /** One request without thinking: up to three attempts on network or server errors. */
-    internal fun request(source: BookPreparation.Source, prompt: String, tokens: Int, cancel: LlmProviders.CloudCancellation): String {
+    /** [multi]: a request of [SmartPrompts.several]; its raw JSON answer is returned. */
+    internal fun request(source: BookPreparation.Source, prompt: String, tokens: Int, cancel: LlmProviders.CloudCancellation, multi: Boolean = false): String {
         var delay = 3000L
         var last: Exception? = null
         for (attempt in 1..3) {
             cancel.check()
             try {
-                val raw = LlmProviders.cloudRequest(source.config, prompt, SmartPrompts.SYSTEM, SmartPrompts.schema, source.gemini,
+                val raw = LlmProviders.cloudRequest(source.config, prompt, if (multi) SmartPrompts.SYSTEM_SEVERAL else SmartPrompts.SYSTEM,
+                    if (multi) SmartPrompts.severalSchema else SmartPrompts.schema, source.gemini,
                     tokens = tokens, deadlineMs = 3 * 60 * 1000L, cancellation = cancel, provider = source.provider, temperature = 0.3)
-                SmartPrompts.answer(raw)?.let { return it }
+                if (multi) { if (raw.contains("\"summaries\"")) return raw } else SmartPrompts.answer(raw)?.let { return it }
                 last = IllegalStateException("LLM вернула ответ не в формате JSON")
             } catch (e: CancellationException) { throw e
             } catch (e: LlmProviders.CloudOutputLimitException) { last = e
