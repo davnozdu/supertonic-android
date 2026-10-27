@@ -85,6 +85,8 @@ class QuickReadActivity : ComponentActivity() {
         var empty by remember { mutableStateOf(false) }
         var confirmEnding by remember { mutableStateOf(false) }
         var asked by remember { mutableStateOf(false) }
+        // Opened by «Ранее в книге» of the notification: start it once the place is known.
+        var fromNotification by remember { mutableStateOf(intent.getStringExtra("recap")) }
         val ctx = this
         LaunchedEffect(live) {
             place = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -114,6 +116,10 @@ class QuickReadActivity : ComponentActivity() {
                 asked = false
                 if (getSharedPreferences("SupertonicPrefs", MODE_PRIVATE).getBoolean("smart_book_speak", true)) smartSpeech.speak(cached)
             }
+        }
+        LaunchedEffect(place) {
+            val kind = fromNotification ?: return@LaunchedEffect
+            if (place != null) { fromNotification = null; ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.valueOf(kind)) }
         }
         HorizontalDivider()
         Text("Умная книга", style = MaterialTheme.typography.titleMedium)

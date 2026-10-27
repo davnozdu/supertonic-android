@@ -68,6 +68,7 @@ object SmartFolder {
         job = scope.launch {
             var added = 0; var failed = 0
             try {
+                SmartLibrary.sweep(ctx)
                 val files = list(ctx, tree)
                 val known = SmartLibrary.list(ctx).filter { it.source == SmartLibrary.FOLDER }
                 val byUri = known.associateBy { it.uri }
@@ -127,7 +128,12 @@ object SmartFolder {
             if (book.paragraphs.isEmpty()) return false
             val text = SmartText.of(book.title.ifBlank { f.name.substringBeforeLast('.') }, book.author, book.sections.map { it.title },
                 book.paragraphs.map { it.section to it.text })
-            SmartLibrary.add(ctx, SmartText.contentKey(book.paragraphs.map { it.text }), text, SmartLibrary.FOLDER, f.uri.toString(), f.size, f.modified)
+            val key = SmartText.contentKey(book.paragraphs.map { it.text })
+            // A changed file is another text (another key): its old entry goes.
+            for (old in SmartLibrary.list(ctx)) if (old.source == SmartLibrary.FOLDER && old.uri == f.uri.toString() && old.key != key) {
+                SmartLibrary.remove(ctx, old.key); SmartMatcher.forget(ctx, old.key)
+            }
+            SmartLibrary.add(ctx, key, text, SmartLibrary.FOLDER, f.uri.toString(), f.size, f.modified)
             return true
         } finally { temp.delete() }
     }

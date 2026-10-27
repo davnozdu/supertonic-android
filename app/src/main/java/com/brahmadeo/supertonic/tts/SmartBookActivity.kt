@@ -37,9 +37,11 @@ class SmartBookActivity : ComponentActivity() {
             var books by remember { mutableStateOf<List<SmartLibrary.Book>>(emptyList()) }
             var summaries by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
             var source by remember { mutableStateOf("") }
+            var bytes by remember { mutableStateOf(0L) }
             LaunchedEffect(scan.running, folder) {
                 withContext(Dispatchers.IO) {
                     books = SmartLibrary.list(this@SmartBookActivity)
+                    bytes = SmartLibrary.bytes(this@SmartBookActivity)
                     summaries = books.associate { it.key to SmartLibrary.summaries(this@SmartBookActivity, it.key).size }
                     source = runCatching { BookPreparation.source(this@SmartBookActivity).label }.getOrDefault("Облако не настроено — откройте «Модели LLM и ключи»")
                 }
@@ -96,6 +98,8 @@ class SmartBookActivity : ComponentActivity() {
                     val saved = remember { SmartMatcher.last(this@SmartBookActivity) }
                     val reading = live ?: saved
                     Text(if (books.isEmpty()) "Книг пока нет." else "Книг: ${books.size}", style = MaterialTheme.typography.titleMedium)
+                    Text("Занято: %.1f МБ. Книга, удалённая из папки или из «Книг с голосами персонажей», удаляется отсюда вместе с текстом и кратким содержанием."
+                        .format(bytes / 1048576.0), style = MaterialTheme.typography.bodySmall)
                     for (b in books) {
                         val now = reading?.key == b.key
                         Column {

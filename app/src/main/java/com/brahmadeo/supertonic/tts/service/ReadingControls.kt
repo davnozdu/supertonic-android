@@ -15,6 +15,7 @@ import com.brahmadeo.supertonic.tts.QuickReadActivity
 import com.brahmadeo.supertonic.tts.R
 
 object ReadingControls {
+    private fun smartBook(ctx: Context) = com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.let { it.enabled(ctx) && it.position.value != null }
     private val main = Handler(Looper.getMainLooper())
     private data class Controls(val pause: () -> Unit, val stop: () -> Unit, val play: () -> Unit, val paragraph: (Int) -> Unit)
     private val listeners = LinkedHashMap<Any, Controls>()
@@ -64,6 +65,11 @@ object ReadingControls {
     }
     fun panel(ctx: Context, paste: Boolean = false): PendingIntent = PendingIntent.getActivity(ctx, if(paste) 5412 else 5411,
         Intent(ctx, QuickReadActivity::class.java).putExtra("paste", paste), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    /** «Ранее в книге» right from the notification: the panel opens and starts the retelling. */
+    private fun recap(ctx: Context): PendingIntent = PendingIntent.getActivity(ctx, 5416,
+        Intent(ctx, QuickReadActivity::class.java).putExtra("recap", "BEFORE"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    /** A book was recognised: its button appears in the notification. */
+    fun refresh(ctx: Context) { main.post { show(ctx) } }
     fun show(ctx: Context) {
         val manager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         ReadingNotificationChannels.create(manager, ReadingNotificationChannels.PANEL, "quick_read", "Быстрое чтение")
@@ -75,7 +81,9 @@ object ReadingControls {
             .setContentIntent(panel(ctx)).setOnlyAlertOnce(true)
             .setOngoing(true).setAutoCancel(false).setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(android.R.drawable.ic_menu_edit, "Вставить", panel(ctx, true))
+            // Three buttons fit: with a recognised «умная книга» its recap takes the place of «Вставить» (still in the panel).
+            .apply { if (smartBook(ctx)) addAction(android.R.drawable.ic_menu_recent_history, "Ранее в книге", recap(ctx))
+                else addAction(android.R.drawable.ic_menu_edit, "Вставить", panel(ctx, true)) }
             // After a pause the same slot resumes: Moon+ gets a media Play key, MyTTS's own reading resumes.
             .apply { if (paused) addAction(android.R.drawable.ic_media_play, "Продолжить", command("play", 5415))
                 else addAction(android.R.drawable.ic_media_pause, "Пауза", command("pause", 5413)) }

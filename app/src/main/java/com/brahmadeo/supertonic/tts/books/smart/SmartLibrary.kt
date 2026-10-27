@@ -89,12 +89,29 @@ object SmartLibrary {
         db.beginTransaction()
         try {
             db.delete("prints", "key=?", arrayOf(key)); db.delete("summaries", "key=?", arrayOf(key)); db.delete("books", "key=?", arrayOf(key))
+            // Sentences shared with another book are not tied to either; dropped with the book, so they never pile up
+            // (the remaining books lose a few repeated sentences out of thousands).
+            db.delete("prints", "key=''", null)
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         file(context, key).delete()
+        // The file never shrinks after deletes by itself.
+        runCatching { db.execSQL("VACUUM") }
         synchronized(this) { if (cached?.first == key) cached = null }
         count = -1
     }
+
+    /** Text files without a book (a write cut off by the process dying) and leftover temporary files. */
+    @Synchronized fun sweep(context: Context) {
+        val keys = list(context).map { it.key }.toSet()
+        File(context.noBackupFilesDir, "smart").listFiles()?.forEach { f ->
+            if (f.name.endsWith(".tmp") || f.name.removeSuffix(".json.gz") !in keys) f.delete()
+        }
+    }
+
+    /** Space taken: the index and the texts. */
+    fun bytes(context: Context): Long = File(context.noBackupFilesDir, "smart_books.db").length() +
+        (File(context.noBackupFilesDir, "smart").listFiles()?.sumOf { it.length() } ?: 0L)
 
     fun list(context: Context): List<Book> = db(context).rawQuery(
         "SELECT key, title, author, source, uri, size, modified, sections, paragraphs FROM books ORDER BY title", null).use { c ->

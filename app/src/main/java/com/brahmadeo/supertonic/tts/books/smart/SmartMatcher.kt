@@ -47,7 +47,9 @@ object SmartMatcher {
             if (s.streak >= CONFIRM) { current = Position(hit.key, hit.paragraph, System.currentTimeMillis()); s.candidate = null; s.streak = 0 }
         }
         if (current != null && current != mutable.value) {
+            val newBook = mutable.value?.key != current.key
             mutable.value = current
+            if (newBook) com.brahmadeo.supertonic.tts.service.ReadingControls.refresh(ctx)
             save(ctx, current)
         }
     }
