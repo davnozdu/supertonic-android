@@ -78,4 +78,15 @@ class SmartTextTest {
         assertEquals(listOf(true, false), asked)
         assertEquals(mapOf(0 to "Идиот", 1 to "первая", 2 to "вторая", 3 to "третья"), made)
     }
+
+    /** A streamed retelling goes to the speech in whole sentences, never a half one. */
+    @Test fun streamedSentences() {
+        val text = "Князь Мышкин приехал в Петербург ранним утром. Генерал принял его в кабинете. Потом приш"
+        val first = SmartPrompts.sentenceEnd(text, 0, 30)
+        assertEquals("Князь Мышкин приехал в Петербург ранним утром. Генерал принял его в кабинете.", text.substring(0, first))
+        assertEquals(first, SmartPrompts.sentenceEnd(text, first, 30)) // the rest is not finished yet
+        assertEquals(0, SmartPrompts.sentenceEnd("Коротко. Ещё", 0, 30))  // too short a piece: wait for more
+        val quoted = "Он сказал: «Довольно с меня этих разговоров, князь!» И вышел."
+        assertEquals(quoted.indexOf("»") + 1, SmartPrompts.sentenceEnd(quoted, 0, 30))
+    }
 }

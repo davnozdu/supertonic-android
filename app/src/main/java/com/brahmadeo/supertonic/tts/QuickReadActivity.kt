@@ -153,8 +153,9 @@ class QuickReadActivity : ComponentActivity() {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.CHAPTER) }) { Text("Эта глава") }
-            OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { confirmEnding = true }) { Text("Чем закончится") }
+            OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.WHO) }) { Text("Кто есть кто") }
         }
+        OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !state.running, onClick = { confirmEnding = true }) { Text("Чем закончится") }
         if (confirmEnding) AlertDialog(onDismissRequest = { confirmEnding = false },
             title = { Text("Чем закончится книга") },
             text = { Text("Это спойлер: MyTTS перескажет финал книги. Продолжить?") },
@@ -164,7 +165,10 @@ class QuickReadActivity : ComponentActivity() {
             Text(state.stage + if (state.total > 0) " · ${state.done}/${state.total}" else "", style = MaterialTheme.typography.bodySmall)
             if (state.total > 0) LinearProgressIndicator(progress = { state.done.toFloat() / state.total }, modifier = Modifier.fillMaxWidth())
             else LinearProgressIndicator(Modifier.fillMaxWidth())
-            OutlinedButton(onClick = { recap.cancel() }) { Text("Остановить") }
+            // The retelling as it is written (it is already being read aloud).
+            if (state.partial.isNotBlank() && !state.partial.trimStart().startsWith("{"))
+                Text(com.brahmadeo.supertonic.tts.books.smart.SmartPrompts.display(state.partial))
+            OutlinedButton(onClick = { recap.cancel(); com.brahmadeo.supertonic.tts.books.smart.SmartRecapService.stop(this@QuickReadActivity) }) { Text("Остановить") }
         }
         state.error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         state.result?.let { result ->

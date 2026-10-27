@@ -23,6 +23,19 @@ object SmartPrompts {
     private const val JSON = "Ответ — только JSON {\"summary\": \"…\"}."
     /** System of [several]: the same rules, another answer. */
     val SYSTEM_SEVERAL = SYSTEM.substringBefore(" Верни только JSON") + " Верни только JSON {\"summaries\": […]}."
+    /** System of a streamed retelling: plain text, read aloud as it comes. */
+    val SYSTEM_PLAIN = SYSTEM.substringBefore(" Верни только JSON") + " Ответ — только сам пересказ, без кавычек, заголовков и пояснений."
+    /** The same prompt for a streamed plain-text answer. */
+    fun plain(prompt: String) = prompt.replace(" $JSON", " Ответ — только сам пересказ, без кавычек, заголовков и пояснений.")
+
+    /** «Кто есть кто»: the main characters met so far, from what has been read. */
+    fun who(summaries: String, section: String, current: String, names: List<String>) =
+        (if (summaries.isNotBlank()) "Краткое содержание прочитанных разделов:\n$summaries\n\n" else "") +
+        "Текущий раздел «$section», прочитан до этого места:\n$current\n\n" +
+        (if (names.isNotEmpty()) "Имена персонажей книги (не все уже появились): ${names.joinToString(", ")}.\n\n" else "") +
+        "Слушатель запутался в героях. Назови главных персонажей, которые уже появились в прочитанном (до восьми), и про каждого " +
+        "одной фразой: кто он и как связан с другими на этот момент. Только то, что есть выше: ни слова о том, что будет дальше, " +
+        "не называй тех, кто ещё не появился. Связный текст, каждый герой — отдельное предложение. $SPEECH"
 
     /** The final answer is read aloud by MyTTS as it is. Placed last: after a long text the model followed it only there. */
     private const val SPEECH = "Требования к ответу (он будет прочитан вслух синтезатором речи): связный текст без списков, " +
@@ -192,6 +205,24 @@ object SmartPrompts {
             if (current.isNotEmpty()) out += current.toString()
         }
         return out
+    }
+
+    /** End of the last finished sentence of a streamed [text] after [from], or [from] while none is finished. At least
+     * [minChars] at once, so the speech gets whole sentences rather than a word at a time; a line break ends a piece. */
+    fun sentenceEnd(text: String, from: Int, minChars: Int = 60): Int {
+        var end = from
+        var i = from
+        while (i < text.length) {
+            val c = text[i]
+            val boundary = (c in ".!?…" && (i + 1 < text.length && (text[i + 1].isWhitespace() || text[i + 1] in "»\")"))) || c == '\n'
+            if (boundary) {
+                var j = i + 1
+                while (j < text.length && text[j] in "»\")") j++
+                if (j < text.length && (j - from >= minChars || c == '\n')) end = j
+            }
+            i++
+        }
+        return end
     }
 
     /** For the screen: without stress marks. */

@@ -290,6 +290,115 @@ object LlmProviders {
             response.getJSONObject("message").getString("content")
         }
     }
+    /** A plain-text answer streamed as it is written: [onText] gets each new piece, the whole text is returned. For a
+     * retelling read aloud as it comes («Умная книга»): the first sentence plays in about a second instead of after
+     * the whole answer (3–5 s). Thinking is off. */
+    internal fun cloudStream(c: LlmConfig, prompt: String, system: String, provider: String, tokens: Int, deadlineMs: Long,
+                             cancellation: CloudCancellation, temperature: Double = 0.3, onText: (String) -> Unit): String {
+        cancellation.check()
+        val started = SystemClock.elapsedRealtime()
+        fun remaining() = (deadlineMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)
+        val out = StringBuilder()
+        fun piece(text: String) { if (text.isNotEmpty()) { out.append(text); onText(text) } }
+        val messages = JSONArray().put(JSONObject().put("role", "system").put("content", system))
+            .put(JSONObject().put("role", "user").put("content", prompt))
+        when (provider) {
+            "apinex", "deepseek" -> {
+                val apinex = provider == "apinex"
+                val key = if (apinex) c.apinexKey else c.deepseekKey
+                require(key.isNotBlank()) { if (apinex) "Введите ключ APInex" else "Введите ключ DeepSeek" }
+                val body = JSONObject().put("model", if (apinex) c.apinexModel else c.deepseekModel).put("stream", true)
+                    .put("temperature", temperature).put("max_tokens", tokens)
+                    .put("thinking", JSONObject().put("type", "disabled")).put("messages", messages)
+                if (apinex) {
+                    ApinexApi.refresh { http(ApinexApi.ENDPOINT + "/balance", key, deadlineMs = minOf(5000L, remaining())) }
+                    ApinexApi.acquire(remaining() - 2000) { cancellation.check() }
+                }
+                httpStream((if (apinex) ApinexApi.ENDPOINT else DeepSeekApi.ENDPOINT) + "/chat/completions", key, body, false, remaining(), cancellation) { line ->
+                    val data = line.removePrefix("data:").trim()
+                    if (line.startsWith("data:") && data != "[DONE]") JSONObject(data).optJSONArray("choices")?.optJSONObject(0)?.let { choice ->
+                        piece(choice.optJSONObject("delta")?.optString("content").orEmpty())
+                        if (choice.optString("finish_reason") == "length") throw CloudOutputLimitException()
+                    }
+                }
+            }
+            "gemini" -> {
+                require(c.geminiKey.isNotBlank() && c.geminiModel.matches(Regex("[A-Za-z0-9._-]+"))) { "Выберите модель Gemini и укажите ключ" }
+                val generationConfig = JSONObject().put("temperature", temperature).put("maxOutputTokens", tokens)
+                ThinkingPolicy.gemini(c.geminiModel, false)?.let {
+                    generationConfig.put("thinkingConfig", JSONObject().put(it.field, it.value).put("includeThoughts", false))
+                }
+                val body = JSONObject().put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
+                    .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
+                    .put("generationConfig", generationConfig)
+                httpStream("https://generativelanguage.googleapis.com/v1beta/models/${c.geminiModel}:streamGenerateContent?alt=sse",
+                    c.geminiKey, body, true, remaining(), cancellation) { line ->
+                    if (!line.startsWith("data:")) return@httpStream
+                    val candidate = JSONObject(line.removePrefix("data:").trim()).optJSONArray("candidates")?.optJSONObject(0) ?: return@httpStream
+                    val parts = candidate.optJSONObject("content")?.optJSONArray("parts")
+                    if (parts != null) for (i in 0 until parts.length()) parts.optJSONObject(i)?.takeIf { !it.optBoolean("thought") }?.let { piece(it.optString("text")) }
+                    if (candidate.optString("finishReason") == "MAX_TOKENS") throw CloudOutputLimitException()
+                }
+            }
+            else -> {
+                require(c.ollamaModel.isNotBlank()) { "Выберите модель Ollama" }
+                val controls = thinkingControls[c.ollamaEndpoint + "/" + c.ollamaModel] ?: emptyList()
+                val body = JSONObject().put("model", c.ollamaModel).put("stream", true)
+                    .put("think", ThinkingPolicy.ollama(controls, false, c.ollamaModel, null))
+                    .put("options", JSONObject().put("temperature", temperature).put("num_predict", tokens)).put("messages", messages)
+                httpStream(c.ollamaEndpoint.trimEnd('/') + "/api/chat", c.ollamaKey, body, false, remaining(), cancellation) { line ->
+                    if (line.isBlank()) return@httpStream
+                    val o = JSONObject(line)
+                    piece(o.optJSONObject("message")?.optString("content").orEmpty())
+                    if (o.optString("done_reason") == "length") throw CloudOutputLimitException()
+                }
+            }
+        }
+        cancellation.check()
+        return out.toString()
+    }
+
+    /** Like [http], but the reply is read line by line as it arrives (server-sent events / NDJSON). */
+    private fun httpStream(url: String, key: String, body: JSONObject, gemini: Boolean, deadlineMs: Long,
+                           cancellation: CloudCancellation, line: (String) -> Unit) {
+        cancellation.check()
+        require(URL(url).protocol == "https") { "Нужен HTTPS адрес" }
+        val connection = URL(url).openConnection() as HttpURLConnection
+        val expired = java.util.concurrent.atomic.AtomicBoolean()
+        val watchdog = timer.schedule({ expired.set(true); runCatching { connection.disconnect() } }, deadlineMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        try {
+            cancellation.attach(connection)
+            connection.connectTimeout = minOf(6000L, deadlineMs).coerceAtLeast(1).toInt()
+            // Pieces come every few hundred ms; a minute of silence means the stream is dead.
+            connection.readTimeout = minOf(60_000L, deadlineMs).coerceAtLeast(1).toInt()
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("Accept", "text/event-stream, application/x-ndjson, application/json")
+            connection.setRequestProperty("User-Agent", "Supertonic-Android")
+            val credential = key.trim()
+            if (credential.isNotBlank()) connection.setRequestProperty(if (gemini) "x-goog-api-key" else "Authorization", if (gemini) credential else "Bearer $credential")
+            connection.requestMethod = "POST"; connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { it.write(body.toString().toByteArray()) }
+            val code = connection.responseCode
+            require(code in 200..299) { when (code) {
+                401, 403 -> "API HTTP $code: сервер отказал в доступе; проверьте ключ и разрешения аккаунта"
+                429 -> "API HTTP 429: лимит запросов; повторите позже"
+                else -> "API HTTP $code"
+            } }
+            var size = 0
+            connection.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                for (text in lines) {
+                    cancellation.check()
+                    size += text.length
+                    require(size <= 512 * 1024) { "Слишком большой ответ" }
+                    line(text)
+                }
+            }
+            cancellation.check()
+            check(!expired.get()) { "LLM превышен лимит запроса" }
+        } finally { watchdog.cancel(false); cancellation.detach(connection); connection.disconnect() }
+    }
+
     internal class CloudOutputLimitException : IllegalStateException("LLM исчерпала лимит ответа")
     fun voiceRoles(context: Context, c: LlmConfig, texts: List<String>, preceding: String, provider: String, deadlineMs: Long = 8000,
                    book: com.brahmadeo.supertonic.tts.books.BookContext? = null): List<List<VoiceRoleText>?> {

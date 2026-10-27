@@ -24,6 +24,28 @@ class SmartRecapService : Service() {
     private var watcher: Job? = null
     /** The result being waited for is read aloud when it comes. */
     private var speakNext = false
+    /** A streamed retelling is being read: [spoken] characters of it are handed to the speech already. */
+    private var streaming = false
+    private var spoken = 0
+
+    /** Reads the retelling sentence by sentence while it is written; the rest (or the whole) when it is done. */
+    private fun follow(s: SmartRecap.State) {
+        if (s.running) {
+            // A JSON answer (a model ignoring «plain text») is read only when it is done and unwrapped.
+            if (s.partial.isBlank() || s.partial.trimStart().startsWith("{")) return
+            if (!streaming) { SmartSpeech.begin(this); streaming = true; spoken = 0 }
+            val end = SmartPrompts.sentenceEnd(s.partial, spoken)
+            if (end > spoken) { SmartSpeech.append(s.partial.substring(spoken, end)); spoken = end }
+            return
+        }
+        speakNext = false
+        if (streaming) {
+            streaming = false
+            if (s.result == null) { SmartSpeech.stop(); return }
+            s.partial.drop(spoken).takeIf { it.isNotBlank() }?.let { SmartSpeech.append(it) }
+            SmartSpeech.finish()
+        } else s.result?.let { SmartSpeech.speak(this, it) }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -37,6 +59,7 @@ class SmartRecapService : Service() {
             LISTEN -> SmartRecap.state.value.result?.let { SmartSpeech.speak(this, it) }
             WAIT -> {
                 speakNext = intent.getBooleanExtra("speak", true)
+                streaming = false; spoken = 0
                 // An answer made before for this place is already there (the state may not change, so no new emission).
                 val s = SmartRecap.state.value
                 if (speakNext && !s.running && s.result != null) { speakNext = false; SmartSpeech.speak(this, s.result) }
@@ -44,8 +67,8 @@ class SmartRecapService : Service() {
             }
         }
         if (watcher == null) watcher = scope.launch {
-            combine(SmartRecap.state, SmartSpeech.speaking) { s, speaking -> s to speaking }.collect { (s, speaking) ->
-                if (speakNext && !s.running && s.result != null) { speakNext = false; SmartSpeech.speak(this@SmartRecapService, s.result) }
+            combine(SmartRecap.state, SmartSpeech.speaking) { s, speaking -> s to speaking }.collect { (s, _) ->
+                if (speakNext) follow(s)
                 // Done: no retelling is made or read. A text-only result stays in the panel, not in this service.
                 if (!s.running && !SmartSpeech.speaking.value && !speakNext) stopSelf()
                 else getSystemService(NotificationManager::class.java).notify(ID, notification())
