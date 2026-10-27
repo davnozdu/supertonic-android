@@ -37,10 +37,11 @@ object SmartPrompts {
         "одной фразой: кто он и как связан с другими на этот момент. Только то, что есть выше: ни слова о том, что будет дальше, " +
         "не называй тех, кто ещё не появился. Связный текст, каждый герой — отдельное предложение. $SPEECH"
 
-    /** The final answer is read aloud by MyTTS as it is. Placed last: after a long text the model followed it only there. */
+    /** The final answer is read aloud by MyTTS. Placed last: after a long text the model followed it only there.
+     * No stress marks: the model's marks were wrong on names (Ро́гожин, И́волгин) and stuck, since the dictionaries keep
+     * a given mark; MyTTS stresses the retelling itself, as it reads a book without an LLM (and a shorter answer is faster). */
     private const val SPEECH = "Требования к ответу (он будет прочитан вслух синтезатором речи): связный текст без списков, " +
-        "заголовков и разметки; ставь знак ударения U+0301 сразу после ударной гласной в КАЖДОМ слове из двух и более слогов, " +
-        "включая имена и фамилии (например: Кня́зь Мы́шкин прие́хал в Петербу́рг); пиши букву ё; числа пиши словами. $JSON"
+        "заголовков и разметки; знаки ударения не ставь; пиши букву ё; числа пиши словами. $JSON"
 
     /** The answer of [several]. */
     val severalSchema: JSONObject = JSONObject("{\"type\":\"object\",\"required\":[\"summaries\"],\"properties\":{\"summaries\":" +

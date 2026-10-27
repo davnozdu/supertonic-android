@@ -47,7 +47,10 @@ object SmartSpeech {
     /** Main thread only. */
     fun append(text: String) {
         if (!mutable.value) return
-        pending += SmartPrompts.speechChunks(text)
+        // Stress is MyTTS's own, as in a book read without an LLM: any mark the model still put goes; names this book has
+        // already been read with keep that stress (NameStress, learned while reading); the dictionaries mark the rest.
+        val plain = text.replace("́", "")
+        pending += SmartPrompts.speechChunks(runCatching { com.brahmadeo.supertonic.tts.llm.NameStress.fill(plain) }.getOrDefault(plain))
         flush()
     }
 
