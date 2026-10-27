@@ -34,6 +34,13 @@ class SmartBookProvider : ContentProvider() {
                     putInt("paused", if (SmartSpeech.paused) 1 else 0)
                 }
             }
+            // The pages KOReader is about to read aloud: prepared by the LLM ahead (KoreaderAhead).
+            "prepare" -> {
+                arg?.takeIf { it.isNotBlank() }?.let { text ->
+                    runCatching { com.brahmadeo.supertonic.tts.llm.KoreaderAhead.prepare(ctx, text.take(12_000)) }
+                }
+                Bundle()
+            }
             "pause", "resume", "stop", "replay" -> {
                 onMain {
                     when (method) {
