@@ -18,6 +18,13 @@ class SmartBookCommandActivity : Activity() {
     }
 
     private fun handle(intent: Intent) {
+        // The plugin's window controls the speech this way when it cannot reach SmartBookProvider.
+        when (intent.getStringExtra("control")) {
+            "pause" -> return SmartSpeech.pause()
+            "resume" -> return SmartSpeech.resume()
+            "stop" -> { SmartRecap.cancel(); return SmartSpeech.stop() }
+            "replay" -> return SmartRecap.state.value.result?.let { SmartSpeech.speak(this, it) } ?: Unit
+        }
         if (!SmartMatcher.enabled(this)) return toast("«Умная книга» выключена в MyTTS.")
         val text = intent.getStringExtra("text").orEmpty().take(MAX_TEXT)
         val kind = intent.getStringExtra("kind")?.let { k -> SmartRecap.Kind.entries.firstOrNull { it.name == k } }
@@ -36,7 +43,9 @@ class SmartBookCommandActivity : Activity() {
         SmartSpeech.stop()
         SmartRecap.start(this, kind, place)
         SmartRecapService.follow(this, speak)
-        // Read aloud: the reader stays on screen. Text only: the panel shows it.
+        // The plugin draws its own window with the text and the controls («window»); otherwise MyTTS's panel shows the text
+        // when it is not read aloud.
+        if (intent.getStringExtra("window") == "1") return
         if (!speak) startActivity(Intent(this, QuickReadActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         else toast("MyTTS: ${kind.title}…")
     }

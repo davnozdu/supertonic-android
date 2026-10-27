@@ -52,6 +52,8 @@
         <!-- «Умная книга» commands from the KOReader plugin (audiobook.koplugin): invisible, finishes at once. -->
         <activity android:name=".books.smart.SmartBookCommandActivity" android:exported="true" android:excludeFromRecents="true"
             android:noHistory="true" android:taskAffinity="" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- The KOReader plugin's retelling window: state and pause / resume / stop of the speech (ContentResolver.call). -->
+        <provider android:name=".books.smart.SmartBookProvider" android:authorities="${applicationId}.smartbook" android:exported="true" />
         <service android:name=".books.smart.SmartBookTileService" android:exported="true" android:label="Умная книга"
             android:icon="@android:drawable/ic_menu_recent_history" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
