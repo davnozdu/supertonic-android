@@ -78,6 +78,15 @@ class LocalSpeakersTest {
         assertEquals("A=Я молчу и смотрю на него.", show(s.plan("Я молчу и смотрю на него.")))
     }
 
+    @Test fun aDashInsideAReplyIsNoRemark() {
+        // «Идиот»: the reply goes on after «, — не знаю»; only a dash followed by a remark is the author's.
+        val s = LocalSpeakers()
+        assertEquals("M=— Почему именно вам хотел я всё это рассказать, и вам одной, — не знаю; может быть, потому что любил.",
+            show(s.plan("— Почему именно вам хотел я всё это рассказать, и вам одной, — не знаю; может быть, потому что любил.")))
+        assertEquals("M=— О, нет, | A=— задумчиво продолжал князь, | M=— я почти всё молчал.",
+            show(LocalSpeakers().plan("— О, нет, — задумчиво продолжал князь, — я почти всё молчал.")))
+    }
+
     @Test fun quotesAndPlainTextKeepTheTextIntact() {
         val s = LocalSpeakers()
         assertEquals("M=«Иду!» | A=— крикнул он.", show(s.plan("«Иду!» — крикнул он.")))

@@ -8,7 +8,8 @@ import java.util.concurrent.Executors
  * sends through SmartBookProvider («prepare») the text from the place being read on (up to «Упреждение», the same
  * limit as Moon+'s queue) and the exact sentences it will send. Their paragraphs are prepared in the background by the
  * same LLM chain as Moon+'s (stress with its check, ё, punctuation, numbers, voices) in bigger, slower batches (half the
- * requests); a paragraph the LLM cannot do (no connection, LLM off) is read by the dictionaries. Each sentence then gets
+ * requests); a paragraph the LLM cannot do (no connection, LLM off) is read by the dictionaries, its voices guessed on
+ * the phone for the whole paragraph ([LocalSpeakers]: a sentence alone loses the reply it continues). Each sentence then gets
  * its audio made ahead into the RAM cache ([ReaderAudioAhead.submitPrepared]) with the voice and rate of the reader's
  * own requests: when it comes, it plays at once, and reading goes on through a dropped connection while the buffer
  * lasts. A sentence not ready yet is still read at once (dictionaries): no pause is ever added. Everything is in RAM
@@ -24,6 +25,7 @@ object KoreaderAhead {
     private val upcoming = LinkedHashSet<String>()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "KoreaderAhead").apply { isDaemon = true } }
     private val cyrillic = Regex("[А-Яа-яЁё]")
+    private val speakers = LocalSpeakers()
     /** The reader app (its requests teach the voice and the rate the ahead audio must have to be found in the cache). */
     @Volatile var readerUid = -1
     @Volatile private var readerVoice: String? = null
@@ -59,12 +61,20 @@ object KoreaderAhead {
                 // No LLM answer (offline, LLM off) or a badly matched one: the dictionaries read this paragraph.
                 val good = aligned != null && aligned.matchedShare >= 0.7
                 store(paragraph, if (good) Prepared(aligned!!, result!!.voicePlan, true, generation)
-                    else Prepared(SentenceAlign.Aligned(paragraph, paragraph), emptyList(), false, generation))
+                    else Prepared(SentenceAlign.Aligned(paragraph, paragraph), localVoices(ctx, paragraph), false, generation))
                 feedAudio(ctx)
             } catch (_: Exception) {
             } finally { synchronized(this) { pending -= paragraph } }
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("KoreaderAhead", "Prepared paragraphs=${ids.size} upcoming=${synchronized(this) { upcoming.size }}")
         }
+    }
+
+    /** Voices of a paragraph read without the LLM, guessed for the whole paragraph. A prepared book being read keeps its
+     * own reply marking (the reader's sentences find it), so nothing is guessed then. */
+    private fun localVoices(ctx: Context, paragraph: String): List<VoiceRoleText> {
+        if (!LlmSettings.multiVoiceEnabled(ctx) || !com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)) return emptyList()
+        if (com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value != null) return emptyList()
+        return runCatching { speakers.plan(paragraph) }.getOrDefault(emptyList())
     }
 
     private fun store(paragraph: String, p: Prepared) = synchronized(this) {
@@ -97,12 +107,12 @@ object KoreaderAhead {
         for (p in candidates) {
             val cut = p.aligned.cut(text) ?: continue
             if (cut.text.isBlank()) continue
-            return PreparedSpeechText(cut.text, p.llm, if (p.llm) SentenceAlign.clipPlan(p.aligned.prepared, p.plan, cut) else emptyList())
+            return PreparedSpeechText(cut.text, p.llm, SentenceAlign.clipPlan(p.aligned.prepared, p.plan, cut))
         }
         return null
     }
 
-    /** The LLM-prepared form of a sentence the reader sends now (its audio was not made ahead), or null: then it is read
-     * by the dictionaries with the voices guessed on the phone, as before. */
-    internal fun sentence(text: String): PreparedSpeechText? = find(text)?.takeIf { it.llmProcessed }
+    /** The prepared form of a sentence the reader sends now (its audio was not made ahead): by the LLM, or by the
+     * dictionaries with the voices guessed for its whole paragraph. Null: read as before (one sentence alone). */
+    internal fun sentence(text: String): PreparedSpeechText? = find(text)?.takeIf { it.llmProcessed || it.voicePlan.isNotEmpty() }
 }

@@ -75,6 +75,7 @@ class LocalSpeakers {
         var start = 0; var speech = true
         for (m in turn.findAll(text)) {
             if (m.range.first <= start) continue
+            if (speech && !looksLikeRemark(text.substring(m.range.last + 1), cast)) continue
             out += text.substring(start, m.range.first) to speech
             start = m.range.first; speech = !speech
         }
