@@ -35,9 +35,16 @@ class SmartBookProvider : ContentProvider() {
                 }
             }
             // The pages KOReader is about to read aloud: prepared by the LLM ahead (KoreaderAhead).
+            // arg: JSON {"text": the text from the place on, "sentences": [the exact sentences it will send]}.
             "prepare" -> {
-                arg?.takeIf { it.isNotBlank() }?.let { text ->
-                    runCatching { com.brahmadeo.supertonic.tts.llm.KoreaderAhead.prepare(ctx, text.take(12_000)) }
+                arg?.takeIf { it.isNotBlank() }?.let { raw ->
+                    runCatching {
+                        val o = org.json.JSONObject(raw)
+                        val list = o.optJSONArray("sentences")
+                        val sentences = if (list == null) emptyList() else (0 until list.length()).map { list.optString(it) }.filter { it.isNotBlank() }
+                        com.brahmadeo.supertonic.tts.llm.KoreaderAhead.readerUid = android.os.Binder.getCallingUid()
+                        com.brahmadeo.supertonic.tts.llm.KoreaderAhead.prepare(ctx, o.optString("text").take(60_000), sentences.take(600))
+                    }
                 }
                 Bundle()
             }

@@ -340,6 +340,8 @@ object LlmPreparation {
             return initial to recovered
         } finally { release(entry) }
     }
+    /** The batch being processed is KOReader's ahead text: longer deadlines (the worker is single-threaded). */
+    @Volatile private var slowBatch = false
     private fun startWorker() {
         if (!running.compareAndSet(false, true)) return
         executor.execute {
@@ -351,15 +353,21 @@ object LlmPreparation {
                     // ~2400 chars return in ~5-8 s; 4000-char batches exceeded the cloud deadline
                     // on the device and put the provider into cooldown.
                     val batchLimit = if (config.mode == LlmMode.LOCAL) 1000 else 2400
+                    var bulk = false
                     val batch = synchronized(lock) {
                         val first = entries.values.firstOrNull { !it.processing && !it.future.isDone } ?: return@execute
+                        // KOReader's pages prepared ahead: nobody waits for them, so twice the text per request and
+                        // a longer cloud deadline — half the requests to the provider.
+                        bulk = first.caller === KoreaderAhead.caller && config.mode != LlmMode.LOCAL
+                        val limit = if (bulk) batchLimit * 2 else batchLimit
                         var count = 0
                         // One batch = one book section: its characters go into the role request.
                         entries.values.filter { it.caller == first.caller && it.book == first.book && !it.processing && !it.future.isDone }
-                            .takeWhile { count += it.text.length; count <= batchLimit || count == it.text.length }
+                            .takeWhile { count += it.text.length; count <= limit || count == it.text.length }
                             .onEach { it.processing = true }
                     }
                     activeBatch = batch
+                    slowBatch = bulk
                     val preceding = roleContext.get(batch.first().caller)
                     val book = if (config.multiVoice) com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, batch.first().book) else null
                     val results = try { process(ctx, config, batch.map { it.input }, batchEpoch,
@@ -461,7 +469,7 @@ object LlmPreparation {
         val key = RoleKey(c, preceding, texts, book?.key)
         val now = SystemClock.elapsedRealtime()
         val deadline = now + 18_000
-        val cloudDeadline = now + 9_000
+        val cloudDeadline = now + if (slowBatch) 45_000 else 9_000
         val cached = synchronized(roleCache) { roleCache[key] }?.takeIf {
             it.routing.providers.all { p -> p == roleProviders(c).firstOrNull() } || (!recovering && now - it.time < 30_000)
         }
@@ -686,7 +694,7 @@ object LlmPreparation {
                 } else {
                     // The names dictionary first: on the same name it wins over what this book has learned.
                     val outputs=LlmProviders.cloud(c,requestTexts,provider=="gemini",if (c.stress) ((if (com.brahmadeo.supertonic.tts.utils.StressOptions.names(ctx)) com.brahmadeo.supertonic.tts.utils.RussianNames.hint(ctx, requestTexts) else emptyList()) +
-                        NameStress.hint(requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList(), provider = provider)
+                        NameStress.hint(requestTexts)).distinctBy { it.replace("\u0301", "").lowercase() }.take(60) else emptyList(), provider = provider, slow = slowBatch)
                     if (expectedEpoch != epoch || cancelled()) break // No judge requests for a cancelled batch.
                     val (checked, opinions) = if (c.stress && com.brahmadeo.supertonic.tts.utils.StressOptions.dictionaries(ctx)) stressVote(ctx,c,outputs,requestTexts,provider,bookNames) { expectedEpoch != epoch || cancelled() } else outputs to null
                     batchOpinions = opinions; batchRaw = outputs

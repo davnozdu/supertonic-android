@@ -321,6 +321,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val unusualSpaces=com.brahmadeo.supertonic.tts.utils.BookTextSpacing.unusualSpaceCount(rawText)
         if(unusualSpaces>0) Log.i("SupertonicTTS","Book typography separators=$unusualSpaces; word boundaries preserved")
         val effectiveSpeed = (request.speechRate / 100.0f).coerceIn(0.5f, 2.5f)
+        // KOReader's plugin reads ahead through MyTTS: its audio must be made with this voice and rate to be found.
+        if (!voicePreview && request.callerUid == com.brahmadeo.supertonic.tts.llm.KoreaderAhead.readerUid)
+            com.brahmadeo.supertonic.tts.llm.KoreaderAhead.observe(request.voiceName, effectiveSpeed)
         callback.start(SupertonicTTS.getAudioSampleRate(), android.media.AudioFormat.ENCODING_PCM_16BIT, 1)
 
         val requestedVoice = request.voiceName

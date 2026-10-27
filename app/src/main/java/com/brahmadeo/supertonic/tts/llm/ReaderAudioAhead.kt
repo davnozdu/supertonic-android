@@ -100,6 +100,30 @@ object ReaderAudioAhead {
         val rate=(params?.takeIf { it.containsKey("rate") }?.getInt("rate",defaultRate) ?: defaultRate)/100f
         enqueue(ctx, text, requestedVoice, rate, com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.single(voiceName))
     }
+    /** A sentence a reader will send later, already prepared (KOReader: cut out of a paragraph its plugin sent ahead).
+     * Its audio is made now with the voice and rate of the reader's own requests, into the RAM cache; when the sentence
+     * comes, [takePrepared] gives the prepared text and the synthesis finds the audio ready — the reading also goes on
+     * through a dropped connection while the buffer lasts. No LLM request here. */
+    @Synchronized internal fun submitPrepared(ctx: Context, text: String, prepared: PreparedSpeechText, voiceName: String?, rate: Float) {
+        if (!AssetManager.isRussianModel(ctx) || text.length > 6000 || text.isBlank()) return
+        val owner = SpeechTextTrace.fingerprint(text)
+        if (owner in snapshots && owner !in delivered) return
+        delivered.remove(owner)
+        val prefs = ctx.getSharedPreferences("SupertonicPrefs", 0)
+        val requestedVoice = voiceName?.substringAfter("-supertonic-", "")?.takeIf { it.isNotEmpty() }?.plus(".json")
+        val voice = requestedVoice ?: prefs.getString("selected_voice", "ru_f1.json")!!
+        val snapshot = Snapshot(text, AssetManager.getModelType(ctx), voice, rate.coerceIn(.5f, 2.5f), prefs.getInt("diffusion_steps", 5),
+            epoch.get(), com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation, requestedVoice,
+            com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.single(voiceName))
+        snapshots[owner] = snapshot
+        while (snapshots.size > 256) snapshots.remove(snapshots.keys.first())
+        preparedTexts.put(preparedTexts.token(), text, prepared.text, prepared.llmProcessed, prepared.voicePlan)
+        if (queuedChars.get() + text.length > 192000) return
+        queuedChars.addAndGet(text.length)
+        val context = ctx.applicationContext
+        val task = AheadTask(text.length) { synthesizeAhead(context, snapshot, prepared) }
+        try { worker.execute(task) } catch (_: java.util.concurrent.RejectedExecutionException) { task.release() }
+    }
     /** Settings changed mid-reading: redo the reader's undelivered queue with the new settings
      * instead of dropping it (each paragraph would otherwise wait for the LLM deadline and
      * synthesize on demand until the reader queues new text). Call after LLM invalidation. */

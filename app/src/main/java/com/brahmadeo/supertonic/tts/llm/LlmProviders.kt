@@ -150,9 +150,11 @@ object LlmProviders {
         }
         return result.distinct().sorted()
     }
-    fun cloud(c: LlmConfig, texts: List<String>, gemini: Boolean, names: List<String> = emptyList(), provider: String = if (gemini) "gemini" else "ollama"): List<String> {
+    /** [slow]: text prepared ahead (KOReader), nobody waits — bigger batches get the time they need. */
+    fun cloud(c: LlmConfig, texts: List<String>, gemini: Boolean, names: List<String> = emptyList(), provider: String = if (gemini) "gemini" else "ollama",
+              slow: Boolean = false): List<String> {
         // Output length (stress marks included) grows with input; a fixed 12 s cut off large batches.
-        val deadline = (8000L + texts.sumOf { it.length } * 4L).coerceIn(12000L, 25000L)
+        val deadline = (8000L + texts.sumOf { it.length } * 4L).coerceIn(12000L, if (slow) 60_000L else 25000L)
         val request = JSONObject().put("count", texts.size).put("texts", JSONArray(texts))
         if (names.isNotEmpty()) request.put("names", JSONArray(names))
         return parse(cloudRequest(c, request.toString(), instruction(c), schema(), gemini, deadlineMs = deadline, provider = provider), texts.size)
