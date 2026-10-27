@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -141,9 +144,9 @@ class QuickReadActivity : ComponentActivity() {
                 // Empty field: the microphone (the question by voice); typed: send.
                 if (question.isBlank()) IconButton(enabled = !state.running, onClick = {
                     startActivity(android.content.Intent(this, com.brahmadeo.supertonic.tts.asr.VoiceAskActivity::class.java))
-                }) { Icon(androidx.compose.material.icons.Icons.Filled.Mic, contentDescription = "Спросить голосом") }
+                }) { Icon(Icons.Filled.Mic, contentDescription = "Спросить голосом") }
                 else IconButton(enabled = !state.running, onClick = { askQuestion(question) }) {
-                    Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send, contentDescription = "Спросить")
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Спросить")
                 }
             })
         if (current == null) Text(if (empty) "Книг пока нет: выберите папку с книгами в меню MyTTS → «Умная книга» или подготовьте книгу с галочкой «Умная книга»."
