@@ -43,7 +43,11 @@ object SentenceAlign {
         fun cut(sentence: String): Cut? {
             val words = tokens(sentence).map { it.bare }
             if (words.isEmpty() || words.size > source.size) return null
-            val at = (0..source.size - words.size).firstOrNull { s -> words.indices.all { source[s + it].bare == words[it] } } ?: return null
+            val places = (0..source.size - words.size).filter { s -> words.indices.all { source[s + it].bare == words[it] } }
+            // The same words twice in a paragraph («Мое сердечное пожелание» and later «…мое сердечное пожелание!»): the
+            // place spelled exactly like the sentence (capitals, punctuation), else the first.
+            val at = places.firstOrNull { s -> places.size > 1 && sentence.contains(original.substring(source[s].start, source[s + words.size - 1].end)) }
+                ?: places.firstOrNull() ?: return null
             val last = at + words.size - 1
             val inside = (at..last).filter { map[it] >= 0 }
             // Numbers spelled out (one word → several) leave some words unmatched; most must match.
