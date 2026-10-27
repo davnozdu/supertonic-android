@@ -146,11 +146,15 @@ class QuickReadActivity : ComponentActivity() {
             }
         }
         if (current == null) { HorizontalDivider(); return }
+        // Two equal buttons per row: the labels wrap on a narrow phone instead of pushing one off the screen.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.BEFORE) }) { Text("Ранее в книге") }
-            OutlinedButton(enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.CHAPTER) }) { Text("Эта глава") }
+            OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.BEFORE) }) { Text("Ранее в книге") }
+            OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.PREVIOUS) }) { Text("Предыдущая глава") }
         }
-        OutlinedButton(enabled = !state.running, onClick = { confirmEnding = true }) { Text("Чем закончится") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.CHAPTER) }) { Text("Эта глава") }
+            OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { confirmEnding = true }) { Text("Чем закончится") }
+        }
         if (confirmEnding) AlertDialog(onDismissRequest = { confirmEnding = false },
             title = { Text("Чем закончится книга") },
             text = { Text("Это спойлер: MyTTS перескажет финал книги. Продолжить?") },

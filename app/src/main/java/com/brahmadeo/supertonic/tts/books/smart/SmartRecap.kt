@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /** «Ранее в книге», «Эта глава», «Чем закончится» by the cloud LLM chosen in the settings, without thinking.
  * Section summaries are made once, one request at a time, and saved; the final answer is kept per place. */
 object SmartRecap {
-    enum class Kind(val title: String) { BEFORE("Ранее в книге"), CHAPTER("Эта глава"), ENDING("Чем закончится") }
+    enum class Kind(val title: String) { BEFORE("Ранее в книге"), PREVIOUS("Предыдущая глава"), CHAPTER("Эта глава"), ENDING("Чем закончится") }
     data class State(val running: Boolean = false, val kind: Kind? = null, val stage: String = "", val done: Int = 0, val total: Int = 0,
                      val result: String? = null, val error: String? = null, val book: String = "")
 
@@ -63,6 +63,13 @@ object SmartRecap {
                     val listing = condensed(0 until section)
                     stage("Пересказ", 0, 0)
                     ask(SmartPrompts.before(listing, sec.title, SmartPrompts.tail(text.sectionText(section, paragraph))), 3000)
+                }
+                Kind.PREVIOUS -> {
+                    // The whole chapter before this one, from its own text (more detail than its stored summary).
+                    val previous = (section - 1 downTo 0).firstOrNull { text.sectionText(it).isNotBlank() }
+                        ?: throw IllegalStateException("Текст книги: это первая глава, предыдущей нет")
+                    stage("Пересказ", 0, 0)
+                    ask(SmartPrompts.previous(text.sections[previous].title, SmartPrompts.tail(text.sectionText(previous))), 2500)
                 }
                 Kind.CHAPTER -> {
                     val current = text.sectionText(section, paragraph)
