@@ -26,8 +26,12 @@ object SmartMatcher {
 
     fun enabled(context: Context) = context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(PREF_ENABLED, true)
 
+    /** The text a reader had synthesised last («объясни последнюю фразу»). Only in memory. */
+    @Volatile var lastHeard = ""; private set
+
     /** Called for every text the engine synthesises for a reader; the lookup runs off the synthesis thread. */
     fun heard(context: Context, caller: Int, text: String) {
+        lastHeard = text.take(1000)
         val ctx = context.applicationContext
         executor.execute { runCatching { feed(ctx, caller, text) } }
     }

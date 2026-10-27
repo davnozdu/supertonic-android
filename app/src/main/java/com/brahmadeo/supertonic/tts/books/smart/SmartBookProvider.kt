@@ -34,6 +34,7 @@ class SmartBookProvider : ContentProvider() {
                     putInt("running", if (s.running) 1 else 0)
                     putInt("speaking", if (SmartSpeech.speaking.value) 1 else 0)
                     putInt("paused", if (SmartSpeech.paused) 1 else 0)
+                    putInt("questions", if (SmartRecap.questions(ctx)) 1 else 0)
                 }
             }
             // The pages KOReader is about to read aloud: prepared by the LLM ahead (KoreaderAhead).

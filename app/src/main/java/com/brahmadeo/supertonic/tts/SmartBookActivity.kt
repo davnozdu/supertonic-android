@@ -32,6 +32,8 @@ class SmartBookActivity : ComponentActivity() {
         setContent { SupertonicTheme {
             var enabled by remember { mutableStateOf(SmartMatcher.enabled(this)) }
             var speak by remember { mutableStateOf(prefs.getBoolean("smart_book_speak", true)) }
+            var questions by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.questions(this)) }
+            var answerSpeak by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.answerSpoken(this)) }
             var prefetch by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.enabled(this)) }
             var wifiOnly by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.wifiOnly(this)) }
             var folder by remember { mutableStateOf(SmartFolder.folder(this)) }
@@ -75,6 +77,22 @@ class SmartBookActivity : ComponentActivity() {
                             Text("Голосом, выбранным в MyTTS. Иначе — только текст и кнопка «Прослушать».", style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(speak, { speak = it; prefs.edit().putBoolean("smart_book_speak", it).apply() })
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Вопросы о книге")
+                            Text("Поле «Спросить о книге» в панели быстрого чтения и в окне «Умной книги» KOReader. Ответ — по " +
+                                "прочитанному (без спойлеров) облачной LLM, один запрос на вопрос.",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(questions, { questions = it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.PREF_QUESTIONS, it).apply() })
+                    }
+                    if (questions) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Озвучивать ответ")
+                            Text("Голосом, выбранным в MyTTS. Иначе ответ только показывается.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(answerSpeak, { answerSpeak = it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.PREF_ANSWER_SPEAK, it).apply() })
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f).padding(end = 12.dp)) {

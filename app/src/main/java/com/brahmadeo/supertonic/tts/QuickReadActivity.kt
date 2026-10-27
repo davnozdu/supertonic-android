@@ -156,6 +156,20 @@ class QuickReadActivity : ComponentActivity() {
             OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.WHO) }) { Text("Кто есть кто") }
         }
         OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !state.running, onClick = { confirmEnding = true }) { Text("Чем закончится") }
+        // «Спросить о книге»: the listener's own question, answered from what has been read (no spoilers). Only when on.
+        val questionsOn = remember { com.brahmadeo.supertonic.tts.books.smart.SmartRecap.questions(this) }
+        var question by remember { mutableStateOf("") }
+        fun askQuestion(q: String) {
+            if (q.isBlank()) return
+            com.brahmadeo.supertonic.tts.books.smart.SmartSpeech.stop()
+            ReadingControls.pause(this)
+            if (recap.ask(this, q, current.first, "", smart.lastHeard))
+                service.follow(this, recap.answerSpoken(this))
+        }
+        if (questionsOn) OutlinedTextField(question, { question = it.take(500) }, modifier = Modifier.fillMaxWidth(), enabled = !state.running,
+            label = { Text("Спросить о книге") }, placeholder = { Text("Например: почему героиня злится?") },
+            trailingIcon = { TextButton(enabled = !state.running && question.isNotBlank(), onClick = { askQuestion(question) }) { Text("Спросить") } })
+
         if (confirmEnding) AlertDialog(onDismissRequest = { confirmEnding = false },
             title = { Text("Чем закончится книга") },
             text = { Text("Это спойлер: MyTTS перескажет финал книги. Продолжить?") },

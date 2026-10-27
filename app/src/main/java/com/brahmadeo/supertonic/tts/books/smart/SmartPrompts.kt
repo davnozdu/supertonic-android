@@ -37,6 +37,18 @@ object SmartPrompts {
         "одной фразой: кто он и как связан с другими на этот момент. Только то, что есть выше: ни слова о том, что будет дальше, " +
         "не называй тех, кто ещё не появился. Связный текст, каждый герой — отдельное предложение. $SPEECH"
 
+    /** «Спросить о книге»: the listener's own question about what has been read. [last]: the sentence heard last («объясни
+     * последнюю фразу»). Only what is given: the model must not answer from what it knows of the book (spoilers). */
+    fun ask(summaries: String, section: String, current: String, last: String, names: List<String>, question: String) =
+        (if (summaries.isNotBlank()) "Краткое содержание прочитанных разделов:\n$summaries\n\n" else "") +
+        (if (current.isNotBlank()) "Текущий раздел «$section», прочитан до этого места:\n$current\n\n" else "") +
+        (if (last.isNotBlank()) "Последняя прозвучавшая фраза: «$last»\n\n" else "") +
+        (if (names.isNotEmpty()) "Имена персонажей книги (не все уже появились): ${names.joinToString(", ")}.\n\n" else "") +
+        "Вопрос слушателя: «${question.trim().take(500)}»\n\n" +
+        "Ответь на вопрос по прочитанному выше: кратко, три–шесть предложений, простыми словами. Если в прочитанном ответа нет, " +
+        "так и скажи, не выдумывай. Ни слова о том, что будет дальше в книге. Если спрашивают о фразе или слове — объясни смысл, " +
+        "контекст и устаревшие слова. $SPEECH"
+
     /** The final answer is read aloud by MyTTS. Placed last: after a long text the model followed it only there.
      * No stress marks: the model's marks were wrong on names (Ро́гожин, И́волгин) and stuck, since the dictionaries keep
      * a given mark; MyTTS stresses the retelling itself, as it reads a book without an LLM (and a shorter answer is faster). */

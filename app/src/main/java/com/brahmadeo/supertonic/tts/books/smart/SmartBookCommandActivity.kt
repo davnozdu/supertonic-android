@@ -10,7 +10,8 @@ import com.brahmadeo.supertonic.tts.QuickReadActivity
  * text (it finds the book and the place exactly, by its sentences), and optionally a retelling to make. The reader stays
  * on screen; the retelling is made and read by [SmartRecapService]. Nothing runs between such commands.
  * Extras: «text» — the current page, «path» — the book file, «kind» — BEFORE / PREVIOUS / CHAPTER / WHO / ENDING, or none
- * to only remember the place (a book closed or the reader put in the background). */
+ * to only remember the place (a book closed or the reader put in the background); «question» (with «sentence», the one
+ * heard last) — «Спросить о книге», answered also for a book MyTTS does not know, from the page. */
 class SmartBookCommandActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,6 +30,17 @@ class SmartBookCommandActivity : Activity() {
         val text = intent.getStringExtra("text").orEmpty().take(MAX_TEXT)
         val kind = intent.getStringExtra("kind")?.let { k -> SmartRecap.Kind.entries.firstOrNull { it.name == k } }
         val place = SmartMatcher.locate(this, text)
+        val question = intent.getStringExtra("question")?.trim().orEmpty()
+        if (question.isNotEmpty()) {
+            if (!SmartRecap.questions(this)) return toast("Вопросы о книге выключены: MyTTS → «Умная книга» → «Вопросы о книге».")
+            if (place != null) SmartMatcher.choose(this, place)
+            val speak = SmartRecap.answerSpoken(this)
+            SmartSpeech.stop()
+            val last = intent.getStringExtra("sentence").orEmpty().ifBlank { SmartMatcher.lastHeard }
+            if (SmartRecap.ask(this, question, place, text, last)) SmartRecapService.follow(this, speak)
+            if (intent.getStringExtra("window") != "1") toast("MyTTS: ${SmartRecap.Kind.ASK.title}…")
+            return
+        }
         if (place == null) {
             // Maybe a book just put into the folder: the next command will find it.
             SmartFolder.scanForUnknown(this)

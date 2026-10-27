@@ -11,11 +11,19 @@ import kotlinx.coroutines.flow.asStateFlow
  * Section summaries are made once, one request at a time, and saved; the final answer is kept per place. */
 object SmartRecap {
     enum class Kind(val title: String) {
-        BEFORE("Ранее в книге"), PREVIOUS("Предыдущая глава"), CHAPTER("Эта глава"), WHO("Кто есть кто"), ENDING("Чем закончится")
+        BEFORE("Ранее в книге"), PREVIOUS("Предыдущая глава"), CHAPTER("Эта глава"), WHO("Кто есть кто"), ENDING("Чем закончится"),
+        ASK("Вопрос о книге")
     }
     /** [partial]: the retelling as far as it has come (streamed), read aloud sentence by sentence before it ends. */
     data class State(val running: Boolean = false, val kind: Kind? = null, val stage: String = "", val done: Int = 0, val total: Int = 0,
                      val result: String? = null, val error: String? = null, val book: String = "", val partial: String = "")
+
+    /** «Вопросы о книге» (off by default; a switch in «Умная книга»). */
+    const val PREF_QUESTIONS = "smart_book_questions"
+    fun questions(context: Context) = context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(PREF_QUESTIONS, false)
+    /** «Озвучивать ответ»: the answer to a question read aloud (on), or only shown. */
+    const val PREF_ANSWER_SPEAK = "smart_book_answer_speak"
+    fun answerSpoken(context: Context) = context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(PREF_ANSWER_SPEAK, true)
 
     /** Places this many paragraphs apart share an answer: a step further in the book asks nothing again. */
     private const val BUCKET = 10
@@ -62,6 +70,32 @@ object SmartRecap {
         return null
     }
 
+    /** «Спросить о книге»: [question] about the place being read. [position]: the recognised book (its text before the place
+     * and the summaries already made), or null — then only [page] (the page the reader sent) is the context. [last]: the
+     * sentence heard last. One request, streamed and read aloud; never cached (the same question may mean another thing). */
+    @Synchronized fun ask(context: Context, question: String, position: SmartMatcher.Position?, page: String, last: String): Boolean {
+        if (job?.isActive == true || question.isBlank()) return false
+        val ctx = context.applicationContext
+        val cancel = LlmProviders.CloudCancellation().also { cancellation = it }
+        mutable.value = State(true, Kind.ASK, "Подготовка")
+        job = scope.launch {
+            try {
+                val text = position?.let { SmartLibrary.text(ctx, it.key) }
+                val source = BookPreparation.source(ctx).withThinking(false)
+                mutable.value = mutable.value.copy(book = text?.title.orEmpty())
+                val work = Work(ctx, position?.key.orEmpty(), text ?: SmartText("", "", emptyList()), source, cancel)
+                val result = work.answer(question, if (text != null) position?.paragraph else null, page, last)
+                mutable.value = State(kind = Kind.ASK, result = result, book = text?.title.orEmpty(), partial = mutable.value.partial)
+            } catch (_: CancellationException) {
+                mutable.value = State(kind = Kind.ASK, error = "Остановлено.")
+            } catch (t: Exception) {
+                val stopped = runCatching { cancel.check() }.isFailure
+                mutable.value = State(kind = Kind.ASK, error = if (stopped) "Остановлено." else safeError(t))
+            } finally { synchronized(this@SmartRecap) { job = null; cancellation = null } }
+        }
+        return true
+    }
+
     @Synchronized fun cancel() { cancellation?.cancel(); job?.cancel() }
     fun clear() { if (!mutable.value.running) mutable.value = State() }
 
@@ -102,6 +136,7 @@ object SmartRecap {
                     stage("Пересказ", 0, 0)
                     speech(SmartPrompts.chapter(sec.title, SmartPrompts.tail(current), previous), 2500)
                 }
+                Kind.ASK -> throw IllegalStateException("Вопрос задаётся через ask()")
                 Kind.ENDING -> {
                     val last = text.sections.indices.last { text.sectionText(it).isNotBlank() }
                     val listing = condensed(0 until last)
@@ -109,6 +144,23 @@ object SmartRecap {
                     speech(SmartPrompts.ending(listing, text.sections[last].title, SmartPrompts.tail(text.sectionText(last))), 3000)
                 }
             }
+        }
+
+        /** A question: the summaries already made (none made now — one request, an answer in seconds), the chapter read
+         * so far (or the reader's page), the last sentence and the cast. */
+        fun answer(question: String, paragraph: Int?, page: String, last: String): String {
+            val section = paragraph?.let { text.sectionOf(it) }
+            val listing = if (section == null) "" else (0 until section).mapNotNull { i ->
+                summaries[i]?.let { "«${text.sections[i].title}»: $it" }
+            }.joinToString("\n").takeLast(SmartPrompts.SUMMARIES_CHARS / 3)
+            val current = if (section != null) SmartPrompts.tail(text.sectionText(section, paragraph), 20_000) else page.takeLast(12_000)
+            val names = if (key.isBlank()) emptyList() else runCatching {
+                com.brahmadeo.supertonic.tts.books.BookLibrary.contentShas(ctx).entries.firstOrNull { it.value == key }?.key
+                    ?.let { com.brahmadeo.supertonic.tts.books.BookLibrary.get(ctx, it) }
+                    ?.casts?.flatMap { c -> c.characters.map { it.name } }?.distinct()?.take(40)
+            }.getOrNull().orEmpty()
+            stage("Ответ", 0, 0)
+            return speech(SmartPrompts.ask(listing, section?.let { text.sections[it].title }.orEmpty(), current, last.take(1000), names, question), 1500)
         }
 
         /** Summaries of [range], made where missing; joined in groups when too long for one request. */
