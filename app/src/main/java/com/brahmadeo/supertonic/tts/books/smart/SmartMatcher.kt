@@ -32,10 +32,30 @@ object SmartMatcher {
         executor.execute { runCatching { feed(ctx, caller, text) } }
     }
 
+    /** Texts in a row with sentences and no hit: an unknown book is being read. */
+    private const val UNKNOWN_AFTER = 6
+    @Volatile private var misses = 0
+    @Volatile private var dueCheckedAt = 0L
+    /** A reading session ends after a break this long; an unknown book is looked for once per session (a book read
+     * from elsewhere would otherwise list the folder again and again). */
+    private const val SESSION_GAP_MS = 10 * 60 * 1000L
+    @Volatile private var heardAt = 0L
+    @Volatile private var unknownChecked = false
+
     private fun feed(ctx: Context, caller: Int, text: String) {
-        if (!enabled(ctx) || SmartLibrary.isEmpty(ctx)) return
-        val hits = SmartLibrary.lookup(ctx, BookFingerprint.sentences(text))
-        if (hits.isEmpty()) return
+        if (!enabled(ctx)) return
+        val now = System.currentTimeMillis()
+        if (now - heardAt > SESSION_GAP_MS) unknownChecked = false
+        heardAt = now
+        if (now - dueCheckedAt > 60_000) { dueCheckedAt = now; SmartFolder.scanIfDue(ctx) }
+        val hashes = BookFingerprint.sentences(text)
+        if (hashes.isEmpty()) return
+        val hits = if (SmartLibrary.isEmpty(ctx)) emptyList() else SmartLibrary.lookup(ctx, hashes)
+        if (hits.isEmpty()) {
+            if (++misses >= UNKNOWN_AFTER && !unknownChecked) { misses = 0; unknownChecked = true; SmartFolder.scanForUnknown(ctx) }
+            return
+        }
+        misses = 0
         val s = states.getOrPut(caller) { State() }
         var current = mutable.value ?: last(ctx)
         for (hit in hits) {
@@ -61,6 +81,14 @@ object SmartMatcher {
         savedSection = p.key to section; savedAt = now
         ctx.getSharedPreferences("smart_book", Context.MODE_PRIVATE).edit()
             .putString("key", p.key).putInt("paragraph", p.paragraph).putLong("at", p.at).apply()
+    }
+
+    /** A place chosen by hand (the book was not recognised yet, or the listener means another chapter). */
+    fun choose(context: Context, p: Position) {
+        val ctx = context.applicationContext
+        mutable.value = p
+        com.brahmadeo.supertonic.tts.service.ReadingControls.refresh(ctx)
+        executor.execute { runCatching { savedAt = 0; save(ctx, p) } }
     }
 
     /** The place read last: in memory, else as saved before the app was restarted. */

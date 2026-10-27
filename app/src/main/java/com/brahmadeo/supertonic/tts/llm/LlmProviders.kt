@@ -121,6 +121,11 @@ object LlmProviders {
             require(c.deepseekKey.isNotBlank()) { "Введите ключ DeepSeek" }
             return DeepSeekApi.models(http(DeepSeekApi.ENDPOINT + "/models", c.deepseekKey))
         }
+        if (provider == "apinex") {
+            require(c.apinexKey.isNotBlank()) { "Введите ключ APInex" }
+            return DeepSeekApi.models(http(ApinexApi.ENDPOINT + "/models", c.apinexKey))
+                .sortedWith(compareBy<String> { it != ApinexApi.DEFAULT_MODEL }.thenBy { !ApinexApi.free(it) }.thenBy { it })
+        }
         if (!gemini) {
             // Ollama Cloud publishes its catalogue without authentication. A key
             // rejected for inference must not prevent viewing available models.
@@ -171,14 +176,14 @@ object LlmProviders {
      * up to 40 items in one list DeepSeek miscounted ("изменено число ответов") and a whole batch lost its check. */
     fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean, stopped: () -> Boolean = { false }, provider: String = if (gemini) "gemini" else "ollama"): List<Int?> {
         val thinking = verifyThinkingOverride ?: false
-        lastVerifier = (if (provider == "deepseek") c.deepseekModel else if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
+        lastVerifier = (if (provider == "apinex") c.apinexModel else if (provider == "deepseek") c.deepseekModel else if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
         val out = arrayOfNulls<Int>(items.size)
         for (from in items.indices step STRESS_CHECK_CHUNK) {
             // A cancelled batch or changed settings: no further judge requests.
             if (stopped()) throw java.util.concurrent.CancellationException("Проверка ударений отменена")
             val chunk = items.subList(from, minOf(items.size, from + STRESS_CHECK_CHUNK))
             val judgeStarted = SystemClock.elapsedRealtime()
-            val answer = cloudRequest(c.copy(ollamaThinking = thinking, geminiThinking = thinking, deepseekThinking = thinking), stressItems(chunk),
+            val answer = cloudRequest(c.withCloudThinking(thinking), stressItems(chunk),
                 STRESS_CHECK, stressCheckSchema(), gemini,
                 tokens = 64 + chunk.size * 16 + (if (thinking) 4096 else 0),
                 // ~5 s cut Gemini judges off mid-answer (IOException: Canceled); the check runs ahead of playback.
@@ -231,7 +236,13 @@ object LlmProviders {
         cancellation?.check()
         val started = SystemClock.elapsedRealtime()
         fun remaining() = (deadlineMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)
-        return if (provider == "deepseek") {
+        return if (provider == "apinex") {
+            require(c.apinexKey.isNotBlank()) { "Введите ключ APInex" }
+            val body = DeepSeekApi.request(c.apinexModel, c.apinexThinking, system, prompt, tokens, temperature, effort)
+            ApinexApi.acquire(c.apinexModel, remaining() - 2000) { cancellation?.check() }
+            DeepSeekApi.content(http(ApinexApi.ENDPOINT + "/chat/completions", c.apinexKey, body,
+                deadlineMs = remaining(), cancellation = cancellation))
+        } else if (provider == "deepseek") {
             require(c.deepseekKey.isNotBlank()) { "Введите ключ DeepSeek" }
             val body = DeepSeekApi.request(c.deepseekModel, c.deepseekThinking, system, prompt, tokens, temperature, effort)
             DeepSeekApi.content(http(DeepSeekApi.ENDPOINT + "/chat/completions", c.deepseekKey, body,

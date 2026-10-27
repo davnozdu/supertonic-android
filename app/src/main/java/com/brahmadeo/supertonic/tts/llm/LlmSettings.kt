@@ -12,7 +12,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 enum class LlmMode(val title: String) {
     OFF("Выключено"), AUTO("Авто: облако → Gemma 4"), OLLAMA("Ollama Cloud"),
-    GEMINI("Gemini"), DEEPSEEK("DeepSeek"), LOCAL("Автономно: Gemma 4")
+    GEMINI("Gemini"), DEEPSEEK("DeepSeek"), APINEX("APInex"), LOCAL("Автономно: Gemma 4")
 }
 
 data class LlmConfig(
@@ -27,6 +27,10 @@ data class LlmConfig(
     val deepseekKey: String = "",
     val deepseekThinking: Boolean = false,
     val preferDeepseek: Boolean = false,
+    val apinexModel: String = ApinexApi.DEFAULT_MODEL,
+    val apinexKey: String = "",
+    val apinexThinking: Boolean = false,
+    val preferApinex: Boolean = false,
     val ollamaThinking: Boolean = false,
     val geminiThinking: Boolean = false,
     val localThinking: Boolean = false,
@@ -40,6 +44,33 @@ data class LlmConfig(
     /** First-person narration: the narrator's own lines («— сказал я») are read by the author's voice. */
     val firstPerson: Boolean = false
 )
+
+/** Cloud providers in the order they are tried: the chosen one, or in AUTO the preferred one first. */
+fun LlmConfig.cloudOrder(): List<String> = when (mode) {
+    LlmMode.OFF, LlmMode.LOCAL -> emptyList()
+    LlmMode.OLLAMA -> listOf("ollama")
+    LlmMode.GEMINI -> listOf("gemini")
+    LlmMode.DEEPSEEK -> listOf("deepseek")
+    LlmMode.APINEX -> listOf("apinex")
+    LlmMode.AUTO -> {
+        val all = listOf("ollama", "gemini", "deepseek", "apinex")
+        val first = if (preferApinex) "apinex" else if (preferDeepseek) "deepseek" else if (preferGemini) "gemini" else "ollama"
+        listOf(first) + (all - first)
+    }
+}
+
+/** A cloud provider with what it needs (model, key). Network is checked separately. */
+fun LlmConfig.cloudReady(provider: String): Boolean = when (provider) {
+    "ollama" -> ollamaModel.isNotBlank()
+    "gemini" -> geminiKey.isNotBlank() && geminiModel.isNotBlank()
+    "deepseek" -> deepseekKey.isNotBlank() && deepseekModel.isNotBlank()
+    "apinex" -> apinexKey.isNotBlank() && apinexModel.isNotBlank()
+    else -> false
+}
+
+/** The same reasoning switch for every cloud provider. */
+fun LlmConfig.withCloudThinking(enabled: Boolean) =
+    copy(ollamaThinking = enabled, geminiThinking = enabled, deepseekThinking = enabled, apinexThinking = enabled)
 
 object LlmSettings {
     private const val PREFS = "llm_settings"
@@ -96,6 +127,10 @@ object LlmSettings {
             deepseekKey = decrypt(p.getString("deepseek_key", "")!!),
             deepseekThinking = p.getBoolean("deepseek_thinking", false),
             preferDeepseek = p.getBoolean("prefer_deepseek", false),
+            apinexModel = p.getString("apinex_model", ApinexApi.DEFAULT_MODEL)!!,
+            apinexKey = decrypt(p.getString("apinex_key", "")!!),
+            apinexThinking = p.getBoolean("apinex_thinking", false),
+            preferApinex = p.getBoolean("prefer_apinex", false),
             preferGemini = p.getBoolean("prefer_gemini", false), gpu = p.getBoolean("gpu", true),
             ollamaThinking = p.getBoolean("ollama_thinking", false),
             geminiThinking = p.getBoolean("gemini_thinking", false),
@@ -115,6 +150,8 @@ object LlmSettings {
             .putString("ollama_key", encrypt(c.ollamaKey.trim())).putString("gemini_key", encrypt(c.geminiKey.trim()))
             .putString("deepseek_model", c.deepseekModel.trim()).putString("deepseek_key", encrypt(c.deepseekKey.trim()))
             .putBoolean("deepseek_thinking", c.deepseekThinking).putBoolean("prefer_deepseek", c.preferDeepseek)
+            .putString("apinex_model", c.apinexModel.trim()).putString("apinex_key", encrypt(c.apinexKey.trim()))
+            .putBoolean("apinex_thinking", c.apinexThinking).putBoolean("prefer_apinex", c.preferApinex)
             .putBoolean("prefer_gemini", c.preferGemini).putBoolean("gpu", c.gpu)
             .putBoolean("ollama_thinking", c.ollamaThinking)
             .putBoolean("gemini_thinking", c.geminiThinking)

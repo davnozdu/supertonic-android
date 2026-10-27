@@ -19,7 +19,13 @@ object SmartFolder {
     private const val PREF_SCANNED = "smart_book_scanned"
     private const val MAX_FILES = 3000
     private const val MAX_DEPTH = 6
-    private const val RESCAN_MS = 12 * 60 * 60 * 1000L
+    const val PREF_HOURS = "smart_book_rescan_hours"
+    const val PREF_UNKNOWN = "smart_book_rescan_unknown"
+    /** Choices of the interval, hours; 0 — only by hand and for an unknown book. */
+    val HOURS = listOf(0, 1, 3, 6, 12, 24)
+    private const val DEFAULT_HOURS = 6
+    /** An unknown book being read is looked for in the folder at most this often. */
+    private const val UNKNOWN_MIN_MS = 5 * 60 * 1000L
 
     data class State(val running: Boolean = false, val done: Int = 0, val total: Int = 0, val current: String = "", val message: String = "")
     private val mutable = MutableStateFlow(State())
@@ -51,11 +57,23 @@ object SmartFolder {
         }
     }
 
-    /** At most twice a day, when the engine starts: picks up new books without opening the settings. */
+    fun hours(context: Context) = prefs(context).getInt(PREF_HOURS, DEFAULT_HOURS)
+    fun scansUnknown(context: Context) = prefs(context).getBoolean(PREF_UNKNOWN, true)
+
+    /** When the engine starts and while reading: the folder is read again after the chosen interval. Only a listing
+     * when nothing changed: unchanged files are not opened. */
     fun scanIfDue(context: Context) {
         val ctx = context.applicationContext
-        if (folder(ctx) == null || !SmartMatcher.enabled(ctx)) return
-        if (System.currentTimeMillis() - prefs(ctx).getLong(PREF_SCANNED, 0) >= RESCAN_MS) scan(ctx)
+        val hours = hours(ctx)
+        if (hours <= 0 || folder(ctx) == null || !SmartMatcher.enabled(ctx)) return
+        if (System.currentTimeMillis() - prefs(ctx).getLong(PREF_SCANNED, 0) >= hours * 3_600_000L) scan(ctx)
+    }
+
+    /** A book being read is not in the library: it may have just been put into the folder. */
+    fun scanForUnknown(context: Context) {
+        val ctx = context.applicationContext
+        if (!scansUnknown(ctx) || folder(ctx) == null) return
+        if (System.currentTimeMillis() - prefs(ctx).getLong(PREF_SCANNED, 0) >= UNKNOWN_MIN_MS) scan(ctx)
     }
 
     @Synchronized fun cancel() { job?.cancel() }

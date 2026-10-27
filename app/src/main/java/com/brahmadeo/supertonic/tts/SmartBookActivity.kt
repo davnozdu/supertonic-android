@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -32,6 +33,8 @@ class SmartBookActivity : ComponentActivity() {
             var enabled by remember { mutableStateOf(SmartMatcher.enabled(this)) }
             var speak by remember { mutableStateOf(prefs.getBoolean("smart_book_speak", true)) }
             var folder by remember { mutableStateOf(SmartFolder.folder(this)) }
+            var hours by remember { mutableStateOf(SmartFolder.hours(this)) }
+            var unknown by remember { mutableStateOf(SmartFolder.scansUnknown(this)) }
             val scan by SmartFolder.state.collectAsState()
             val live by SmartMatcher.position.collectAsState()
             var books by remember { mutableStateOf<List<SmartLibrary.Book>>(emptyList()) }
@@ -73,8 +76,24 @@ class SmartBookActivity : ComponentActivity() {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Папка с книгами", style = MaterialTheme.typography.titleLarge)
                             Text("EPUB · FB2 · FB2.ZIP, включая вложенные папки. Книги читаются на телефоне без LLM: главы, текст и " +
-                                "отпечатки предложений. Новые книги добавляются при открытии этого экрана и сами раз в 12 часов.",
+                                "отпечатки предложений. Папка проверяется при открытии этого экрана, по расписанию ниже и когда читается " +
+                                "незнакомая книга. Проверка идёт только во время чтения (без фоновых пробуждений) и без новых книг — это лишь список " +
+                                "файлов; книга читается один раз, когда она новая или изменилась.",
                                 style = MaterialTheme.typography.bodySmall)
+                            Text("Проверять папку", style = MaterialTheme.typography.bodyMedium)
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                for (h in SmartFolder.HOURS) FilterChip(selected = hours == h, onClick = {
+                                    hours = h; prefs.edit().putInt(SmartFolder.PREF_HOURS, h).apply()
+                                }, label = { Text(if (h == 0) "Вручную" else "$h ч") })
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text("Искать новую книгу сразу")
+                                    Text("Если в читалке открыта книга, которой нет в списке, папка проверяется сразу — один раз за сеанс чтения.",
+                                        style = MaterialTheme.typography.bodySmall)
+                                }
+                                Switch(unknown, { unknown = it; prefs.edit().putBoolean(SmartFolder.PREF_UNKNOWN, it).apply() })
+                            }
                             Text(folder?.let { "Папка: " + (it.lastPathSegment?.substringAfter(':')?.ifBlank { "корень" } ?: it.toString()) } ?: "Папка не выбрана")
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(enabled = !scan.running, onClick = { picker.launch(null) }) { Text(if (folder == null) "Выбрать папку" else "Другая папка") }

@@ -438,8 +438,7 @@ object LlmPreparation {
         LlmMode.LOCAL -> listOf("local")
         LlmMode.OLLAMA -> listOf("ollama", "local")
         LlmMode.GEMINI -> listOf("gemini", "local")
-        LlmMode.DEEPSEEK -> listOf("deepseek", "local")
-        LlmMode.AUTO -> (if (c.preferDeepseek) listOf("deepseek", "ollama", "gemini") else if (c.preferGemini) listOf("gemini", "ollama", "deepseek") else listOf("ollama", "gemini", "deepseek")) + "local"
+        LlmMode.DEEPSEEK, LlmMode.APINEX, LlmMode.AUTO -> c.cloudOrder() + "local"
     }
     private fun needsRoleRecovery(c: LlmConfig, results: List<Result>): Boolean =
         c.multiVoice && c.mode !in listOf(LlmMode.OFF, LlmMode.LOCAL) && results.any {
@@ -476,9 +475,7 @@ object LlmPreparation {
                     (ignoreCooldown || now >= (roleCooldown[provider] ?: 0L)) &&
                     when (provider) {
                         "local" -> LocalModelDownload.activeReady(ctx)
-                        "deepseek" -> connected(ctx) && c.deepseekModel.isNotBlank() && c.deepseekKey.isNotBlank()
-                        "gemini" -> connected(ctx) && c.geminiModel.isNotBlank() && c.geminiKey.isNotBlank()
-                        else -> connected(ctx) && c.ollamaModel.isNotBlank()
+                        else -> connected(ctx) && c.cloudReady(provider)
                     }
             }, request = { provider, parts, before ->
                 check(expectedEpoch == epoch && !cancelled())
@@ -582,16 +579,13 @@ object LlmPreparation {
             LlmMode.LOCAL -> listOf("local")
             LlmMode.OLLAMA -> listOf("ollama", "local")
             LlmMode.GEMINI -> listOf("gemini", "local")
-            LlmMode.DEEPSEEK -> listOf("deepseek", "local")
-            LlmMode.AUTO -> (if (c.preferDeepseek) listOf("deepseek", "ollama", "gemini") else if (c.preferGemini) listOf("gemini", "ollama", "deepseek") else listOf("ollama", "gemini", "deepseek")) + "local"
+            LlmMode.DEEPSEEK, LlmMode.APINEX, LlmMode.AUTO -> c.cloudOrder() + "local"
         }
         for (provider in providers) {
             if (results.any { it != null } && results.any { it == null }) beforeRetry(results.toList())
             if (expectedEpoch != epoch || cancelled()) break
             if (provider != "local" && !connected(ctx)) continue
-            if (provider == "deepseek" && (c.deepseekKey.isBlank() || c.deepseekModel.isBlank())) continue
-            if (provider == "ollama" && c.ollamaModel.isBlank()) continue
-            if (provider == "gemini" && (c.geminiKey.isBlank() || c.geminiModel.isBlank())) continue
+            if (provider != "local" && !c.cloudReady(provider)) continue
             if (provider == "local" && !LocalModelDownload.activeReady(ctx)) continue
             // A cloud already accepted almost the whole batch: a 30-50 s Gemma retry of the last
             // few fragments would block the single worker and push later paragraphs to the

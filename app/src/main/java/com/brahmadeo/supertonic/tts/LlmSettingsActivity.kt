@@ -58,6 +58,13 @@ class LlmSettingsActivity : ComponentActivity() {
                     (0 until a.length()).map { a.getString(it) }
                 }.getOrDefault(emptyList())) }
                 var geminiStatus by remember { mutableStateOf("") }
+                var apinexStatus by remember { mutableStateOf("") }
+                var apinexRevision by remember { mutableIntStateOf(0) }
+                var apinexBusy by remember { mutableStateOf(false) }
+                var apinexModels by remember { mutableStateOf(runCatching {
+                    val a = org.json.JSONArray(getSharedPreferences("llm_models", MODE_PRIVATE).getString("apinex", "[]"))
+                    (0 until a.length()).map { a.getString(it) }
+                }.getOrDefault(emptyList())) }
                 var ollamaRevision by remember { mutableIntStateOf(0) }
                 var geminiRevision by remember { mutableIntStateOf(0) }
                 var refreshing by remember { mutableStateOf<Boolean?>(null) }
@@ -184,7 +191,38 @@ class LlmSettingsActivity : ComponentActivity() {
                         }
                         Toggle("Размышление в DeepSeek (медленнее)", config.deepseekThinking) { config = config.copy(deepseekThinking = it); save() }
                         Text("По умолчанию DeepSeek 4.1 Flash, размышление выключено. Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала DeepSeek", config.preferDeepseek) { config = config.copy(preferDeepseek = it, preferGemini = if (it) false else config.preferGemini); save() }
+                        Toggle("В авторежиме сначала DeepSeek", config.preferDeepseek) { config = config.copy(preferDeepseek = it,
+                            preferGemini = if (it) false else config.preferGemini, preferApinex = if (it) false else config.preferApinex); save() }
+                        HorizontalDivider()
+                        Text("APInex", style = MaterialTheme.typography.titleLarge)
+                        OutlinedTextField(config.apinexKey, { config = config.copy(apinexKey = it) }, label = { Text("Ключ APInex (sk-apx…)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = {
+                            val snapshot = config
+                            busy = true; apinexBusy = true; apinexStatus = "Получение актуальных моделей…"
+                            scope.launch {
+                                try {
+                                    LlmSettings.save(this@LlmSettingsActivity, snapshot)
+                                    val models = withContext(Dispatchers.IO) { LlmProviders.models(snapshot, false, "apinex") }
+                                    apinexModels = models; apinexRevision++
+                                    getSharedPreferences("llm_models", MODE_PRIVATE).edit().putString("apinex", org.json.JSONArray(models).toString()).apply()
+                                    apinexStatus = if (models.isEmpty()) "API не вернул доступных моделей" else "Получено моделей: ${models.size}. Выберите модель ниже."
+                                } catch (e: Exception) { apinexStatus = "Не удалось получить модели: ${e.message?.take(160)}" }
+                                finally { busy = false; apinexBusy = false }
+                            }
+                        }, enabled = !busy) { Text("Считать актуальные модели APInex") }
+                        if (apinexBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (apinexStatus.isNotEmpty()) Text(apinexStatus)
+                        Choice("Модель APInex", config.apinexModel, apinexModels, apinexRevision,
+                            format = { if (it == ApinexApi.DEFAULT_MODEL) "DeepSeek 4.1 Flash, бесплатно · $it" else it }) {
+                            config = config.copy(apinexModel = it); save()
+                        }
+                        Toggle("Размышление в APInex (медленнее)", config.apinexThinking) { config = config.copy(apinexThinking = it); save() }
+                        Text("Шлюз-посредник: текст уходит APInex, а от него — поставщику модели; их политика хранения данных не опубликована. " +
+                            "Бесплатные модели (free/…) — не больше 5 запросов в минуту: MyTTS сам выдерживает интервал. Для пересказа «Умной книги» " +
+                            "этого хватает, для постоянной подготовки текста при чтении — мало (часть абзацев пойдёт по словарям). " +
+                            "Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
+                        Toggle("В авторежиме сначала APInex", config.preferApinex) { config = config.copy(preferApinex = it,
+                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek); save() }
                         HorizontalDivider()
                         Text("Gemini", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.geminiKey, { config = config.copy(geminiKey = it) }, label = { Text("Ключ Gemini API") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -201,7 +239,7 @@ class LlmSettingsActivity : ComponentActivity() {
                             Text("Для этой модели API не предоставляет известной настройки размышления; тумблер к ней не применяется.", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("API может вернуть также модели звука и изображений. Для подготовки текста выберите текстовую LLM.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it, preferDeepseek = if (it) false else config.preferDeepseek); save() }
+                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it, preferDeepseek = if (it) false else config.preferDeepseek, preferApinex = if (it) false else config.preferApinex); save() }
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Локальная Gemma 4 E2B", style = MaterialTheme.typography.titleLarge)

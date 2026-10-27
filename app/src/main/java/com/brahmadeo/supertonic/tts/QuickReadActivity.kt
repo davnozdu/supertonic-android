@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.brahmadeo.supertonic.tts.service.ReadingControls
 import com.brahmadeo.supertonic.tts.service.SleepTimer
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
+import kotlinx.coroutines.launch
 
 /** Dialog activity rather than a draw-over-other-apps window: no overlay permission. */
 class QuickReadActivity : ComponentActivity() {
@@ -33,6 +34,7 @@ class QuickReadActivity : ComponentActivity() {
             val timerStatus by SleepTimer.status.collectAsState()
             Surface { Column(Modifier.heightIn(max = 600.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Быстрое чтение · MyTTS", style = MaterialTheme.typography.titleLarge)
+                SmartBookPanel()
                 OutlinedTextField(value = text.value, onValueChange = { text.value = it },
                     label = { Text("Текст или ссылка на статью") }, modifier = Modifier.fillMaxWidth(), maxLines = 5,
                     isError = text.value.length > com.brahmadeo.supertonic.tts.article.ArticleExtractor.MAX_TEXT,
@@ -55,7 +57,6 @@ class QuickReadActivity : ComponentActivity() {
                     TextButton(onClick = { ReadingControls.paragraph(this@QuickReadActivity, -1) }) { Text("← Абзац") }
                     TextButton(onClick = { ReadingControls.paragraph(this@QuickReadActivity, 1) }) { Text("Абзац →") }
                 }
-                SmartBookPanel()
                 TextButton(onClick = { timerExpanded = !timerExpanded }) { Text("Таймер сна · $timerStatus") }
                 if (timerExpanded) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -84,6 +85,12 @@ class QuickReadActivity : ComponentActivity() {
         var place by remember { mutableStateOf<Pair<com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.Position, String>?>(null) }
         var empty by remember { mutableStateOf(false) }
         var confirmEnding by remember { mutableStateOf(false) }
+        // Choosing the book and chapter by hand: (key, title) of the books, then the chapters of the chosen one.
+        var choosing by remember { mutableStateOf(false) }
+        var books by remember { mutableStateOf<List<com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.Book>>(emptyList()) }
+        var chosen by remember { mutableStateOf<com.brahmadeo.supertonic.tts.books.smart.SmartText?>(null) }
+        var chosenKey by remember { mutableStateOf("") }
+        val scope = rememberCoroutineScope()
         // Opened by «Ранее в книге» of the notification: start it once the place is known.
         var fromNotification by remember { mutableStateOf(intent.getStringExtra("recap")) }
         val ctx = this
@@ -110,15 +117,35 @@ class QuickReadActivity : ComponentActivity() {
             val kind = fromNotification ?: return@LaunchedEffect
             if (place != null) { fromNotification = null; ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.valueOf(kind)) }
         }
-        HorizontalDivider()
         Text("Умная книга", style = MaterialTheme.typography.titleMedium)
         val current = place
-        if (current == null) {
-            Text(if (empty) "Книг пока нет: выберите папку с книгами в «Умной книге» или подготовьте книгу с галочкой «Умная книга»."
-                else "Книга не узнана. Начните чтение в читалке — MyTTS узнает книгу по тексту.", style = MaterialTheme.typography.bodySmall)
-            return
+        if (current == null) Text(if (empty) "Книг пока нет: выберите папку с книгами в меню MyTTS → «Умная книга» или подготовьте книгу с галочкой «Умная книга»."
+            else "Книга ещё не узнана: MyTTS узнаёт её через пару абзацев чтения. Или выберите книгу и главу вручную.", style = MaterialTheme.typography.bodySmall)
+        else Text(current.second, style = MaterialTheme.typography.bodySmall)
+        if (!empty) TextButton(onClick = {
+            choosing = !choosing; chosen = null
+            if (choosing) scope.launch { books = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.list(ctx) } }
+        }) { Text(if (choosing) "Скрыть выбор книги" else if (current == null) "Выбрать книгу и главу" else "Другая книга или глава") }
+        if (choosing) {
+            val text = chosen
+            if (text == null) for (b in books) TextButton(onClick = {
+                scope.launch {
+                    chosen = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.brahmadeo.supertonic.tts.books.smart.SmartLibrary.text(ctx, b.key) }
+                    chosenKey = b.key
+                }
+            }) { Text(b.title + if (b.author.isNotBlank()) " · ${b.author}" else "") }
+            else {
+                Text("«${text.title}»: с какой главы вы продолжаете?", style = MaterialTheme.typography.bodySmall)
+                text.sections.forEachIndexed { i, sec ->
+                    if (sec.paragraphs.isNotEmpty()) TextButton(onClick = {
+                        choosing = false; chosen = null
+                        smart.choose(ctx, com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.Position(chosenKey, text.starts[i], System.currentTimeMillis()))
+                    }) { Text(sec.title.ifBlank { "Раздел ${i + 1}" }) }
+                }
+            }
         }
-        Text(current.second, style = MaterialTheme.typography.bodySmall)
+        if (current == null) { HorizontalDivider(); return }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.BEFORE) }) { Text("Ранее в книге") }
             OutlinedButton(enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.CHAPTER) }) { Text("Эта глава") }
@@ -145,6 +172,7 @@ class QuickReadActivity : ComponentActivity() {
                 Button(onClick = { service.resume(this@QuickReadActivity) }) { Text("Продолжить чтение") }
             }
         }
+        HorizontalDivider()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
