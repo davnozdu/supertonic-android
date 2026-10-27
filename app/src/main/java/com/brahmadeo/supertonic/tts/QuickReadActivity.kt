@@ -119,6 +119,29 @@ class QuickReadActivity : ComponentActivity() {
         }
         Text("Умная книга", style = MaterialTheme.typography.titleMedium)
         val current = place
+        // «Спросить о книге» first, one compact line: the listener's own question, answered from what has been read
+        // (no spoilers; a book not recognised yet is asked about by the place read last). Only when on.
+        val questionsOn = remember { com.brahmadeo.supertonic.tts.books.smart.SmartRecap.questions(this) }
+        var question by remember { mutableStateOf("") }
+        fun askQuestion(q: String) {
+            if (q.isBlank()) return
+            com.brahmadeo.supertonic.tts.books.smart.SmartSpeech.stop()
+            ReadingControls.pause(this)
+            if (recap.ask(this, q, current?.first, smart.lastHeard, smart.lastHeard)) {
+                question = ""
+                service.follow(this, recap.answerSpoken(this))
+            }
+        }
+        if (questionsOn) OutlinedTextField(question, { question = it.take(500) }, modifier = Modifier.fillMaxWidth(),
+            enabled = !state.running, singleLine = true, textStyle = MaterialTheme.typography.bodyMedium,
+            placeholder = { Text("Спросить о книге", style = MaterialTheme.typography.bodyMedium) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { askQuestion(question) }),
+            trailingIcon = {
+                IconButton(enabled = !state.running && question.isNotBlank(), onClick = { askQuestion(question) }) {
+                    Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send, contentDescription = "Спросить")
+                }
+            })
         if (current == null) Text(if (empty) "Книг пока нет: выберите папку с книгами в меню MyTTS → «Умная книга» или подготовьте книгу с галочкой «Умная книга»."
             else "Книга ещё не узнана: MyTTS узнаёт её через пару абзацев чтения. Или выберите книгу и главу вручную.", style = MaterialTheme.typography.bodySmall)
         else Text(current.second, style = MaterialTheme.typography.bodySmall)
@@ -156,19 +179,6 @@ class QuickReadActivity : ComponentActivity() {
             OutlinedButton(modifier = Modifier.weight(1f), enabled = !state.running, onClick = { ask(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.Kind.WHO) }) { Text("Кто есть кто") }
         }
         OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !state.running, onClick = { confirmEnding = true }) { Text("Чем закончится") }
-        // «Спросить о книге»: the listener's own question, answered from what has been read (no spoilers). Only when on.
-        val questionsOn = remember { com.brahmadeo.supertonic.tts.books.smart.SmartRecap.questions(this) }
-        var question by remember { mutableStateOf("") }
-        fun askQuestion(q: String) {
-            if (q.isBlank()) return
-            com.brahmadeo.supertonic.tts.books.smart.SmartSpeech.stop()
-            ReadingControls.pause(this)
-            if (recap.ask(this, q, current.first, "", smart.lastHeard))
-                service.follow(this, recap.answerSpoken(this))
-        }
-        if (questionsOn) OutlinedTextField(question, { question = it.take(500) }, modifier = Modifier.fillMaxWidth(), enabled = !state.running,
-            label = { Text("Спросить о книге") }, placeholder = { Text("Например: почему героиня злится?") },
-            trailingIcon = { TextButton(enabled = !state.running && question.isNotBlank(), onClick = { askQuestion(question) }) { Text("Спросить") } })
 
         if (confirmEnding) AlertDialog(onDismissRequest = { confirmEnding = false },
             title = { Text("Чем закончится книга") },
