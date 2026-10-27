@@ -85,6 +85,15 @@ object SmartMatcher {
             .putString("key", p.key).putInt("paragraph", p.paragraph).putLong("at", p.at).apply()
     }
 
+    /** The book and place of a page of text a reader plugin sent: the book most of its sentences point to, at the last of
+     * its paragraphs there (the page has been read). Null when no book has these sentences. */
+    fun locate(context: Context, text: String): Position? {
+        if (text.isBlank() || SmartLibrary.isEmpty(context)) return null
+        val hits = SmartLibrary.lookup(context, BookFingerprint.sentences(text))
+        val key = hits.groupingBy { it.key }.eachCount().maxByOrNull { it.value }?.key ?: return null
+        return Position(key, hits.filter { it.key == key }.maxOf { it.paragraph }, System.currentTimeMillis())
+    }
+
     /** A place chosen by hand (the book was not recognised yet, or the listener means another chapter). */
     fun choose(context: Context, p: Position) {
         val ctx = context.applicationContext

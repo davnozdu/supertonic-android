@@ -49,6 +49,9 @@
         <service android:name=".utils.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".books.prepare.BookPreparationService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <service android:name=".books.smart.SmartRecapService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <!-- «Умная книга» commands from the KOReader plugin (audiobook.koplugin): invisible, finishes at once. -->
+        <activity android:name=".books.smart.SmartBookCommandActivity" android:exported="true" android:excludeFromRecents="true"
+            android:noHistory="true" android:taskAffinity="" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <service android:name=".books.smart.SmartBookTileService" android:exported="true" android:label="Умная книга"
             android:icon="@android:drawable/ic_menu_recent_history" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
