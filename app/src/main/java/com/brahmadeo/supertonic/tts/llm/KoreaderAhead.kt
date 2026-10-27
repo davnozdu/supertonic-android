@@ -26,7 +26,11 @@ object KoreaderAhead {
     private val pending = HashSet<String>()
     /** Sentences the plugin will send, in order, whose audio is not made yet. */
     private val upcoming = LinkedHashSet<String>()
+    /** Sentences whose audio was asked for ahead, until the plugin's list no longer has them. */
+    private val submitted = LinkedHashSet<String>()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "KoreaderAhead").apply { isDaemon = true } }
+    /** Audio ahead is queued here, not behind [worker]'s wait for the LLM (up to minutes): a page turn starts it at once. */
+    private val audio = Executors.newSingleThreadExecutor { Thread(it, "KoreaderAheadAudio").apply { isDaemon = true } }
     private val cyrillic = Regex("[А-Яа-яЁё]")
     private val speakers = LocalSpeakers()
     /** The reader app (its requests teach the voice and the rate the ahead audio must have to be found in the cache). */
@@ -55,13 +59,17 @@ object KoreaderAhead {
             upcoming.clear()
             var chars = 0
             for (s in sentences) { if (chars > limit || upcoming.size >= 400) break; chars += s.length; upcoming += s }
+            // Read already or left behind: their ahead audio goes.
+            val gone = submitted.filter { it !in upcoming }
+            submitted.removeAll(gone.toSet())
+            if (gone.isNotEmpty()) audio.execute { ReaderAudioAhead.drop(gone) }
             val now = android.os.SystemClock.elapsedRealtime()
             paragraphs.filter { p ->
                 val old = prepared[p]
                 p !in pending && (old == null || old.generation != generation || (llm && !old.llm && now - old.at > RETRY_MS))
             }.also { pending += it }
         }
-        if (todo.isEmpty()) { worker.execute { feedAudio(ctx) }; return }
+        if (todo.isEmpty()) { audio.execute { feedAudio(ctx) }; return }
         val ids = todo.map { it to (if (llm) LlmPreparation.submit(ctx, caller, it) else null) }
         worker.execute {
             for ((paragraph, id) in ids) try {
@@ -71,7 +79,7 @@ object KoreaderAhead {
                 val good = aligned != null && aligned.matchedShare >= 0.7
                 store(paragraph, if (good) Prepared(aligned!!, result!!.voicePlan, true, generation)
                     else Prepared(SentenceAlign.Aligned(paragraph, paragraph), localVoices(ctx, paragraph), false, generation))
-                feedAudio(ctx)
+                audio.execute { feedAudio(ctx) }
             } catch (_: Exception) {
             } finally { synchronized(this) { pending -= paragraph } }
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("KoreaderAhead", "Prepared paragraphs=${ids.size} upcoming=${synchronized(this) { upcoming.size }}")
@@ -105,7 +113,7 @@ object KoreaderAhead {
                 synchronized(this) { upcoming.remove(next) }
                 continue
             }
-            synchronized(this) { upcoming.remove(next) }
+            synchronized(this) { upcoming.remove(next); submitted += next; while (submitted.size > 600) submitted.remove(submitted.first()) }
             runCatching { ReaderAudioAhead.submitPrepared(ctx, next, ready, readerVoice, readerRate) }
         }
     }

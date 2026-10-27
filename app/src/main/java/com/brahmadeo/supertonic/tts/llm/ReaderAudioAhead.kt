@@ -126,6 +126,17 @@ object ReaderAudioAhead {
         val task = AheadTask(text.length) { synthesizeAhead(context, snapshot, prepared) }
         try { worker.execute(task) } catch (_: java.util.concurrent.RejectedExecutionException) { task.release() }
     }
+    /** Sentences made ahead that will not be asked for any more (KOReader read past them or left the place): their
+     * queued work is skipped and their audio stops counting against the ahead limit. Without this, audio of a page left
+     * (or of a sentence its reader sent spelled a little differently) filled the 5 minutes ahead and nothing new was made. */
+    @Synchronized internal fun drop(texts: Collection<String>) {
+        for (text in texts) {
+            val owner = SpeechTextTrace.fingerprint(text)
+            if (snapshots.remove(owner) == null) continue
+            preparedTexts.takePrepared(text)
+            SupertonicTTS.releaseAheadCache(owner)
+        }
+    }
     /** Settings changed mid-reading: redo the reader's undelivered queue with the new settings
      * instead of dropping it (each paragraph would otherwise wait for the LLM deadline and
      * synthesize on demand until the reader queues new text). Call after LLM invalidation. */
