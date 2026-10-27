@@ -67,6 +67,13 @@ object ReadingControls {
     }
     fun panel(ctx: Context, paste: Boolean = false): PendingIntent = PendingIntent.getActivity(ctx, if(paste) 5412 else 5411,
         Intent(ctx, QuickReadActivity::class.java).putExtra("paste", paste), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    /** «Уведомление с управлением всегда»: a swiped-away panel notification is shown again. */
+    const val ALWAYS_KEY = "reading_panel_always"
+    fun dismissed(ctx: Context) {
+        if (!ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(ALWAYS_KEY, true)) return
+        // After the swipe animation, or the shade drops the new one with it.
+        main.postDelayed({ show(ctx.applicationContext) }, 600)
+    }
     /** Books were added or a book was recognised: the notification shows «Умная книга». */
     fun refresh(ctx: Context) { main.post { show(ctx) } }
     fun show(ctx: Context) {
@@ -78,6 +85,8 @@ object ReadingControls {
             .setSmallIcon(R.mipmap.ic_launcher).setContentTitle("MyTTS · быстрое чтение")
             .setContentText(if (smartBook(ctx)) "Нажмите: умная книга · текст или ссылка · таймер сна" else "Текст или ссылка · управление чтением · таймер сна")
             .setContentIntent(panel(ctx)).setOnlyAlertOnce(true)
+            // Android 14+ lets the user swipe away even an ongoing notification: it comes back (see ALWAYS_KEY).
+            .setDeleteIntent(command("dismissed", 5417))
             .setOngoing(true).setAutoCancel(false).setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             // Three buttons fit: with «Умная книга» its button takes the place of «Вставить» (still in the panel). It opens
@@ -95,5 +104,6 @@ class ReadingControlReceiver : BroadcastReceiver() {
         if (intent.action == "stop") ReadingControls.stop(context)
         else if (intent.action == "pause") ReadingControls.pause(context)
         else if (intent.action == "play") ReadingControls.play(context)
+        else if (intent.action == "dismissed") ReadingControls.dismissed(context)
     }
 }

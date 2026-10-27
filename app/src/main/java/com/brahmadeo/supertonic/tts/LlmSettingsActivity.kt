@@ -545,6 +545,10 @@ class LlmSettingsActivity : ComponentActivity() {
                         }
                         if (section == Section.READERS) {
                         Text("Moon+ Reader и другие читалки, которые задают только язык, получают мультиязычную озвучку сами.")
+                        var panelAlways by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.service.ReadingControls.ALWAYS_KEY, true)) }
+                        Toggle("Уведомление с управлением всегда", panelAlways) { panelAlways = it; option(com.brahmadeo.supertonic.tts.service.ReadingControls.ALWAYS_KEY, it) }
+                        Text("Смахнутое уведомление «MyTTS · быстрое чтение» сразу появляется снова: управление чтением и «Умная книга» " +
+                            "всегда под рукой. Батарею не тратит.", style = MaterialTheme.typography.bodySmall)
                         var direct by remember { mutableStateOf(pausePrefs.getBoolean(LlmPreparation.DIRECT_KEY, true)) }
                         Toggle("Не ждать LLM в читалках без очереди", direct) { direct = it; option(LlmPreparation.DIRECT_KEY, it) }
                         Text("Readest и KOReader отдают текст по одному предложению и присылают следующее только после окончания предыдущего, поэтому подготовить его заранее нельзя. Включено: такие предложения читаются сразу, без пауз: ударения и ё ставят словари (по настройкам «Ударения и буква ё»), голоса по ролям определяются по ремаркам («— ответила она», «— сказал Рогожин») и персонажам подготовленной книги. Выключено: каждое предложение ждёт LLM (лучше ударения и пунктуация, но пауза 0,5–1,5 с). Moon+ ставит текст в очередь и всегда готовится через LLM.",

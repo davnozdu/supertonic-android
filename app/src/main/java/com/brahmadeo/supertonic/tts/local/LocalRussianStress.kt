@@ -100,8 +100,9 @@ object LocalRussianStress {
         load(ctx); lastUsed = android.os.SystemClock.elapsedRealtime()
         data!!.getJSONObject("homodict").has(word.lowercase().replace("\u0301", "").replace("+", ""))
     }.getOrDefault(true)
-    @Synchronized fun apply(ctx: Context, text: String): String {
-        if (!LocalRussianAssets.ready(ctx) || !com.brahmadeo.supertonic.tts.utils.StressOptions.silero(ctx)) return text
+    /** [force]: even with «Silero Stress» switched off (a «Умная книга» retelling is always stressed by it). */
+    @Synchronized fun apply(ctx: Context, text: String, force: Boolean = false): String {
+        if (!LocalRussianAssets.ready(ctx) || (!force && !com.brahmadeo.supertonic.tts.utils.StressOptions.silero(ctx))) return text
         cache[text]?.let { return it }
         val started = android.os.SystemClock.elapsedRealtime()
         lastUsed = started

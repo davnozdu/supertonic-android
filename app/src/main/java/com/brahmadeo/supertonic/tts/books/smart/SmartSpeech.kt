@@ -47,10 +47,9 @@ object SmartSpeech {
     /** Main thread only. */
     fun append(text: String) {
         if (!mutable.value) return
-        // Stress is MyTTS's own, as in a book read without an LLM: any mark the model still put goes; names this book has
-        // already been read with keep that stress (NameStress, learned while reading); the dictionaries mark the rest.
-        val plain = text.replace("́", "")
-        pending += SmartPrompts.speechChunks(runCatching { com.brahmadeo.supertonic.tts.llm.NameStress.fill(plain) }.getOrDefault(plain))
+        // Stress and ё are Silero's (the engine stresses a «smart_recap» request with Silero Stress alone): any mark the
+        // model still put goes, so a wrong one («Ро́гожин») cannot stick.
+        pending += SmartPrompts.speechChunks(text.replace("́", ""))
         flush()
     }
 

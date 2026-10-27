@@ -303,8 +303,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         val aheadText = if (voicePreview) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
         val preparation = if (aheadText == null && !voicePreview) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
-        // «Умная книга»: the retelling keeps the cloud's stress marks, and the dictionaries mark the words it left without one
-        // (APInex's free model marks almost none); still no LLM, roles or music.
+        // «Умная книга»: the retelling is stressed by Silero Stress alone (stress and ё), as the user chose; no LLM,
+        // roles or music.
         val recap = voicePreview && request.params?.getBoolean(packageName + ".smart_recap", false) == true
         val preserveMarks = llmProcessed || (voicePreview && !recap)
         val rawText = aheadText?.text ?: preparation?.text ?: incomingText
@@ -414,7 +414,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                         // "* * *", a lone quote or dash: nothing to voice. Never let it end the utterance.
                         if (sentence.none { it.isLetterOrDigit() }) continue
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
-                        val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=preserveMarks)
+                        val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=preserveMarks, sileroOnly=recap)
                         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$preserveMarks model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
                         val result = SupertonicTTS.generateAudio(
                             normalizedText, requestedLang, sentenceStyle, effectiveSpeed, 0.0f,

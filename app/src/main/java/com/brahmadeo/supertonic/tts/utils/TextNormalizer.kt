@@ -311,13 +311,15 @@ class TextNormalizer {
         }
     }
 
-    fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false, skipStress: Boolean = false): String {
+    /** [sileroOnly]: stress and ё by Silero Stress alone, whatever the stress settings (a «Умная книга» retelling). */
+    fun normalize(text: String, lang: String = "en", isAdvancedEnabled: Boolean = false, skipStress: Boolean = false,
+                  sileroOnly: Boolean = false): String {
         val lowerLang = lang.lowercase()
         if (lowerLang.startsWith("ru")) {
             val preprocessed = RussianBookNormalizer.normalize(text, expandNumbers = false)
             val parts = com.brahmadeo.supertonic.tts.foreign.ForeignText.split(preprocessed)
             if (parts.any { it.foreign }) return parts.joinToString("") { part ->
-                if (part.foreign) part.text else normalize(part.text, lang, isAdvancedEnabled, skipStress)
+                if (part.foreign) part.text else normalize(part.text, lang, isAdvancedEnabled, skipStress, sileroOnly)
             }
         }
 
@@ -339,7 +341,10 @@ class TextNormalizer {
             var t = if (skipStress) inputText else LexiconManager.apply(inputText)
             if (lowerLang.startsWith("ru")) {
                 t = RussianBookNormalizer.normalize(t)
-                if (!skipStress) {
+                if (sileroOnly) {
+                    // «Умная книга»: the retelling is stressed by Silero Stress alone (its accentor, homographs and ё).
+                    context?.let { t = com.brahmadeo.supertonic.tts.local.LocalRussianStress.apply(it, t, force = true) }
+                } else if (!skipStress) {
                     // Without an LLM only the dictionaries' ё applies (Silero's table; names with their own switch).
                     val restoreYo = context?.let { StressOptions.yoSilero(it) } ?: true
                     if (context?.let { StressOptions.names(it) } == true)
