@@ -138,7 +138,11 @@ class QuickReadActivity : ComponentActivity() {
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { askQuestion(question) }),
             trailingIcon = {
-                IconButton(enabled = !state.running && question.isNotBlank(), onClick = { askQuestion(question) }) {
+                // Empty field: the microphone (the question by voice); typed: send.
+                if (question.isBlank()) IconButton(enabled = !state.running, onClick = {
+                    startActivity(android.content.Intent(this, com.brahmadeo.supertonic.tts.asr.VoiceAskActivity::class.java))
+                }) { Icon(androidx.compose.material.icons.Icons.Filled.Mic, contentDescription = "Спросить голосом") }
+                else IconButton(enabled = !state.running, onClick = { askQuestion(question) }) {
                     Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send, contentDescription = "Спросить")
                 }
             })

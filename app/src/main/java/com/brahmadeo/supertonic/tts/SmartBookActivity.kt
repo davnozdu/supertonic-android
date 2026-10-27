@@ -21,6 +21,7 @@ import com.brahmadeo.supertonic.tts.books.smart.SmartLibrary
 import com.brahmadeo.supertonic.tts.books.smart.SmartMatcher
 import com.brahmadeo.supertonic.tts.ui.theme.SupertonicTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** «Умная книга»: the switch, the books folder (read without any LLM) and the books MyTTS can retell. */
@@ -34,6 +35,11 @@ class SmartBookActivity : ComponentActivity() {
             var speak by remember { mutableStateOf(prefs.getBoolean("smart_book_speak", true)) }
             var questions by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.questions(this)) }
             var answerSpeak by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.answerSpoken(this)) }
+            val asr = com.brahmadeo.supertonic.tts.asr.GigaAm
+            var asrReady by remember { mutableStateOf(asr.ready(this)) }
+            var asrProgress by remember { mutableStateOf<Float?>(null) }
+            var asrError by remember { mutableStateOf("") }
+            val asrScope = rememberCoroutineScope()
             var prefetch by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.enabled(this)) }
             var wifiOnly by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.smart.SmartPrefetch.wifiOnly(this)) }
             var folder by remember { mutableStateOf(SmartFolder.folder(this)) }
@@ -93,6 +99,29 @@ class SmartBookActivity : ComponentActivity() {
                             Text("Голосом, выбранным в MyTTS. Иначе ответ только показывается.", style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(answerSpeak, { answerSpeak = it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.books.smart.SmartRecap.PREF_ANSWER_SPEAK, it).apply() })
+                    }
+                    // «Голосовой ввод»: the microphone in «Спросить о книге»; the recognition model only on request.
+                    if (questions) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Голосовой ввод")
+                        Text("Значок микрофона в поле «Спросить о книге». Речь распознаётся на телефоне моделью GigaAM-v3 " +
+                            "(Сбер, лицензия MIT), без отправки звука в интернет; модель ≈${asr.SIZE_MB} МБ скачивается один раз. " +
+                            "Микрофон включается только по нажатию.", style = MaterialTheme.typography.bodySmall)
+                        val p = asrProgress
+                        when {
+                            p != null -> { LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth()); Text("Загрузка ${(p * 100).toInt()} %", style = MaterialTheme.typography.bodySmall) }
+                            asrReady -> OutlinedButton(onClick = { asr.delete(this@SmartBookActivity); asrReady = false }) { Text("Удалить модель распознавания") }
+                            else -> Button(onClick = {
+                                asrError = ""; asrProgress = 0f
+                                asrScope.launch {
+                                    try {
+                                        withContext(Dispatchers.IO) { asr.download(this@SmartBookActivity) { done, total -> asrProgress = done.toFloat() / total } }
+                                        asrReady = true
+                                    } catch (e: Exception) { asrError = e.message?.take(160) ?: "Ошибка загрузки" }
+                                    finally { asrProgress = null }
+                                }
+                            }) { Text("Скачать модель (≈${asr.SIZE_MB} МБ)") }
+                        }
+                        if (asrError.isNotEmpty()) Text(asrError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f).padding(end = 12.dp)) {

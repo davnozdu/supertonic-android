@@ -177,3 +177,13 @@ KOReader (путь к файлу через плагин) — позже.
   предложение, иначе `SmartMatcher.lastHeard`), имена персонажей `.mytts-book`. Без названия и автора; ответ потоковый.
 - Голосовой ввод — следующим шагом: GigaAM-v3 e2e_ctc int8 (istupakov/gigaam-v3-onnx @322c3b29, MIT, 224 893 347 Б,
   sha 2e3fcb7a…). `asr/GigaAmFeatures` уже сверен с эталоном (лог-мел max |Δ| 8e-4, текст совпал).
+
+## beta25 · голосовой вопрос (GigaAM-v3)
+
+- `asr/GigaAm`: istupakov/gigaam-v3-onnx @322c3b29 `v3_e2e_ctc.int8.onnx` (224 893 347 Б, sha 2e3fcb7a…) + vocab (2007 Б,
+  sha 142de757…) в no_backup/asr/gigaam-v3, только по кнопке «Скачать модель» в «Умная книга» → «Голосовой ввод»; ORT 4 потока,
+  выгрузка через 2 мин. `GigaAmFeatures` — лог-мел как torchaudio (сверено: max |Δ| 8e-4), greedy CTC.
+- `asr/VoiceAskActivity`: окно поверх читалки, AudioRecord VOICE_RECOGNITION 16 кГц, автостоп после 1,2 с тишины (порог —
+  шум первых 300 мс ×3), максимум 20 с, без речи 7 с — ошибка; звук только в памяти; затем `SmartRecap.ask`. RECORD_AUDIO
+  спрашивается при первом нажатии. Микрофон — в поле «Спросить о книге» (пустое поле), из KOReader — «🎤 Голосом» (extras voice=1).
+- Скорость распознавания на телефоне не замерена.

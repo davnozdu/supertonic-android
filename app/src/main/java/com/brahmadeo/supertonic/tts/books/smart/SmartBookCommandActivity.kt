@@ -30,6 +30,13 @@ class SmartBookCommandActivity : Activity() {
         val text = intent.getStringExtra("text").orEmpty().take(MAX_TEXT)
         val kind = intent.getStringExtra("kind")?.let { k -> SmartRecap.Kind.entries.firstOrNull { it.name == k } }
         val place = SmartMatcher.locate(this, text)
+        // The question by voice: MyTTS's listening window over the reader (it asks by itself once recognised).
+        if (intent.getStringExtra("voice") == "1") {
+            startActivity(Intent(this, com.brahmadeo.supertonic.tts.asr.VoiceAskActivity::class.java)
+                .putExtra("text", text).putExtra("sentence", intent.getStringExtra("sentence").orEmpty())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
         val question = intent.getStringExtra("question")?.trim().orEmpty()
         if (question.isNotEmpty()) {
             if (!SmartRecap.questions(this)) return toast("Вопросы о книге выключены: MyTTS → «Умная книга» → «Вопросы о книге».")
