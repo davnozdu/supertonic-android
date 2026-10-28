@@ -73,12 +73,12 @@ object AmbienceBook {
     }
 
     /** Copies the clip of [job] from the shared bank into the book (true when the book already has it now). */
-    private fun adoptFromBank(context: Context, dir: File, job: Job): Boolean {
+    private fun adoptFromBank(context: Context, dir: File, job: Job, salt: Int = 0): Boolean {
         if (!job.id.startsWith("k_")) return false
         if (!SoundBank.on(context)) return false
         val target = File(dir, job.file)
         if (target.isFile && target.length() > 0L) return true
-        val source = SoundBank.find(context, job.id.removePrefix("k_"), job.prompt) ?: return false
+        val source = SoundBank.find(context, job.id.removePrefix("k_"), job.prompt, salt) ?: return false
         return runCatching { source.copyTo(target, overwrite = true); true }
             .onFailure { Log.w("Ambience", "bank copy ${job.id}: ${it.javaClass.simpleName}") }
             .getOrDefault(false)
@@ -143,7 +143,7 @@ object AmbienceBook {
         var reused = 0
         val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
             .filter { job ->
-                if (job.music || !adoptFromBank(context, dir, job)) return@filter true
+                if (job.music || !adoptFromBank(context, dir, job, sha.hashCode())) return@filter true
                 manifest0.put(job.id, job.recipe)
                 reused++
                 false

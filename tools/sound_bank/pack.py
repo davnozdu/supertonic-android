@@ -20,6 +20,13 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SOUNDS = REPO / "tools" / "sound_bank" / "sounds.json"
 VERSION = "1"
+# Где лежат файлы: GitHub допускает до 1000 вложений на релиз, поэтому варианты разложены по двум релизам.
+RELEASES = {
+    "": "sound-bank-v1",
+    "_2": "sound-bank-v1",
+    "_3": "sound-bank-v1-more",
+}
+BASE = "https://github.com/davnozdu/supertonic-android/releases/download"
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -40,22 +47,38 @@ def main() -> int:
     spec = json.loads(SOUNDS.read_text())
     made, missing = [], []
     for s in spec["sounds"]:
-        clip = src / f"{s['key']}.m4a"
-        if not clip.is_file() or clip.stat().st_size == 0:
-            missing.append(s["key"])
+        key = s["key"]
+        variants = []
+        for suffix in ("", "_2", "_3"):
+            clip = src / f"{key}{suffix}.m4a"
+            if not clip.is_file() or clip.stat().st_size == 0:
+                if suffix == "":
+                    break
+                continue
+            dst = out / clip.name
+            if not dst.is_file() or dst.stat().st_size != clip.stat().st_size:
+                dst.write_bytes(clip.read_bytes())
+            release = RELEASES.get(suffix, "sound-bank-v1")
+            variants.append({
+                "file": clip.name,
+                "bytes": dst.stat().st_size,
+                "sha256": sha256(dst),
+                "url": f"{BASE}/{release}/{clip.name}",
+            })
+        if not variants:
+            missing.append(key)
             continue
-        dst = out / clip.name
-        if not dst.is_file() or dst.stat().st_size != clip.stat().st_size:
-            dst.write_bytes(clip.read_bytes())
+        base = variants[0]
         made.append({
-            "key": s["key"],
+            "key": key,
             "hint": s.get("hint") or "",
             "prompt": s["prompt"],
-            "file": clip.name,
+            "file": base["file"],
             "seconds": s.get("seconds", 8),
             "seed": s.get("seed", 0),
-            "bytes": dst.stat().st_size,
-            "sha256": sha256(dst),
+            "bytes": base["bytes"],
+            "sha256": base["sha256"],
+            "variants": variants,
         })
     manifest = {
         "version": VERSION,

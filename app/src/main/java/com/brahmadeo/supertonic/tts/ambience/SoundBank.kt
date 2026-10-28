@@ -18,9 +18,14 @@ object SoundBank {
     private const val FORMAT = "m4a"
     private const val MAX_CLIP = 4L * 1024 * 1024
 
-    /** [file]: имя клипа в папке базы; [sha]: контрольная сумма из manifest; [prompt]: английское описание звука
-     * (по нему ищется тот же звук, если модель назвала вид по-другому). */
-    data class Entry(val file: String, val sha: String, val prompt: String)
+    /** Один из вариантов клипа вида: разные seed, чтобы частый звук не повторялся одинаково. */
+    data class Variant(val file: String, val sha: String, val url: String)
+
+    /** [file]: основной клип; [sha]: его контрольная сумма; [prompt]: английское описание звука (по нему ищется
+     * тот же звук, если модель назвала вид по-другому); [variants]: два-три варианта на выбор. */
+    data class Entry(val file: String, val sha: String, val prompt: String, val variants: List<Variant> = emptyList()) {
+        fun all(): List<Variant> = variants.ifEmpty { listOf(Variant(file, sha, "$BASE/$file")) }
+    }
 
     private var cache: Map<String, Entry>? = null
 
@@ -44,7 +49,15 @@ object SoundBank {
             (0 until sounds.length()).mapNotNull { i ->
                 val s = sounds.optJSONObject(i) ?: return@mapNotNull null
                 val key = s.optString("key").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                key to Entry(s.optString("file").ifEmpty { "$key.$FORMAT" }, s.optString("sha256"), s.optString("prompt"))
+                val file = s.optString("file").ifEmpty { "$key.$FORMAT" }
+                val variants = s.optJSONArray("variants")?.let { a ->
+                    (0 until a.length()).mapNotNull { i ->
+                        val v = a.optJSONObject(i) ?: return@mapNotNull null
+                        val name = v.optString("file")
+                        if (name.isEmpty()) null else Variant(name, v.optString("sha256"), v.optString("url").ifEmpty { "$BASE/$name" })
+                    }
+                }.orEmpty()
+                key to Entry(file, s.optString("sha256"), s.optString("prompt"), variants)
             }.toMap()
         }.getOrElse { emptyMap() }
         cache = parsed
@@ -72,20 +85,23 @@ object SoundBank {
     }
 
     /** Клип вида [kind] из базы: уже скачанный или скачанный сейчас (null — нет в базе или нет сети). */
-    fun clip(context: Context, kind: String): File? {
+    fun clip(context: Context, kind: String, salt: Int = 0): File? {
         // Своя (и импортированная) часть базы: файл уже на телефоне.
         local(context)[kind]?.let { name -> File(dir(context), name).takeIf { it.isFile && it.length() > 0L } }?.let { return it }
         val entry = manifest(context)[kind] ?: return null
-        val target = File(dir(context), entry.file)
-        if (target.isFile && target.length() > 0L) return target
-        return download(context, kind, entry)
+        val variants = entry.all()
+        // Вариант выбирается по виду и книге: одно и то же действие в разных книгах звучит по-разному,
+        // а внутри книги — одинаково (один клип на вид).
+        val pick = variants[Math.floorMod(kind.hashCode() * 31 + salt, variants.size)]
+        File(dir(context), pick.file).takeIf { it.isFile && it.length() > 0L }?.let { return it }
+        return download(context, pick)
     }
 
     /** Клип по виду, а если такого вида в базе нет — по смыслу описания: слова описания сравниваются со словами
      * описаний базы (не меньше двух третей общих, ничья — не угадываем). Так книга не платит генерацией за то же
      * самое действие, названное иначе. */
-    fun find(context: Context, kind: String, prompt: String): File? {
-        clip(context, kind)?.let { return it }
+    fun find(context: Context, kind: String, prompt: String, salt: Int = 0): File? {
+        clip(context, kind, salt)?.let { return it }
         val words = tokens("$kind $prompt")
         if (words.isEmpty()) return null
         val scored = manifest(context).asSequence().mapNotNull { (key, entry) ->
@@ -98,7 +114,7 @@ object SoundBank {
         val best = scored.firstOrNull() ?: return null
         if (best.second < 0.6f) return null
         if (scored.count { it.second == best.second } > 1) return null
-        return clip(context, best.first)
+        return clip(context, best.first, salt)
     }
 
     /** Кладёт клип книги в базу (база растёт) — его возьмут следующие книги. */
@@ -123,7 +139,11 @@ object SoundBank {
         var done = 0
         for ((kind, entry) in list) {
             progress(done, list.size, kind)
-            if (File(dir(context), entry.file).let { it.isFile && it.length() > 0L } || download(context, kind, entry) != null) done++
+            for (variant in entry.all()) {
+                if (File(dir(context), variant.file).let { it.isFile && it.length() > 0L }) continue
+                download(context, variant)
+            }
+            if (File(dir(context), entry.file).isFile) done++
         }
         progress(done, list.size, "")
         return done
@@ -193,13 +213,13 @@ object SoundBank {
         return added to skipped
     }
 
-    private fun download(context: Context, kind: String, entry: Entry): File? {
-        val bytes = fetch("$BASE/${entry.file}", MAX_CLIP) ?: return null
-        if (entry.sha.isNotEmpty() && sha256(bytes) != entry.sha) {
-            Log.w("SoundBank", "${entry.file}: sha256 не совпал, клип не взят")
+    private fun download(context: Context, variant: Variant): File? {
+        val bytes = fetch(variant.url, MAX_CLIP) ?: return null
+        if (variant.sha.isNotEmpty() && sha256(bytes) != variant.sha) {
+            Log.w("SoundBank", "${variant.file}: sha256 не совпал, клип не взят")
             return null
         }
-        val target = File(dir(context), entry.file)
+        val target = File(dir(context), variant.file)
         return runCatching { target.writeBytes(bytes); target }
             .onFailure { Log.w("SoundBank", "save ${entry.file}: ${it.javaClass.simpleName}") }
             .getOrNull()
