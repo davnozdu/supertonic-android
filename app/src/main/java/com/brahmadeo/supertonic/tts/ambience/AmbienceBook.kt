@@ -78,7 +78,7 @@ object AmbienceBook {
         if (!SoundBank.on(context)) return false
         val target = File(dir, job.file)
         if (target.isFile && target.length() > 0L) return true
-        val source = SoundBank.clip(context, job.id.removePrefix("k_")) ?: return false
+        val source = SoundBank.find(context, job.id.removePrefix("k_"), job.prompt) ?: return false
         return runCatching { source.copyTo(target, overwrite = true); true }
             .onFailure { Log.w("Ambience", "bank copy ${job.id}: ${it.javaClass.simpleName}") }
             .getOrDefault(false)

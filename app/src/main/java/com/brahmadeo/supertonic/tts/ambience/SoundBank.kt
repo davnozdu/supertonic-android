@@ -108,6 +108,28 @@ object SoundBank {
     }
 
 
+
+    /** Клип по виду, а если такого вида в базе нет — по смыслу описания: слова промпта сравниваются со словами
+     * описаний базы (не меньше двух третей общих). Так книга не платит генерацией за другое имя того же звука. */
+    fun find(context: Context, kind: String, prompt: String): File? {
+        clip(context, kind)?.let { return it }
+        val words = tokens(prompt)
+        if (words.isEmpty()) return null
+        var best: String? = null; var bestScore = 0f
+        for ((key, value) in manifest(context)) {
+            val other = tokens(value.first.removeSuffix(".$FORMAT").replace('_', ' '))
+            if (other.isEmpty()) continue
+            val score = words.count { it in other }.toFloat() / maxOf(words.size, other.size)
+            if (score > bestScore) { bestScore = score; best = key }
+        }
+        return best?.takeIf { bestScore >= 0.66f }?.let { clip(context, it) }
+    }
+
+    private fun tokens(text: String): Set<String> = text.lowercase()
+        .split(Regex("[^a-z0-9]+")).filter { it.length > 2 && it !in STOP }.toSet()
+
+    private val STOP = setOf("the", "and", "with", "for", "from", "into", "onto", "some", "very", "then", "that", "this")
+
     /** «Выгрузить базу»: все клипы базы одним zip (manifest.json + <вид>.m4a) в выбранный пользователем файл. */
     fun export(context: Context, out: java.io.OutputStream): Int {
         val dir = dir(context)

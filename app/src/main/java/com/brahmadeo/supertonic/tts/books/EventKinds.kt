@@ -420,6 +420,70 @@ object EventKinds {
     /** A key of the list that names a real sound (not [OTHER], which means «no idea»). */
     fun proper(key: String?): Boolean = key != null && key != OTHER && byKey.containsKey(key)
 
+
+    /** Слова, которыми модель называет одно и то же действие по-разному: приводятся к одной основе. */
+    private val WORDS = mapOf(
+        "opening" to "open", "opened" to "open", "opens" to "open",
+        "closing" to "close", "closed" to "close", "closes" to "close", "shutting" to "close", "shut" to "close",
+        "slamming" to "slam", "slams" to "slam", "slammed" to "slam", "banging" to "slam", "banged" to "slam",
+        "creaking" to "creak", "creaks" to "creak", "squeak" to "creak", "squeaking" to "creak",
+        "knocking" to "knock", "knocks" to "knock", "rapped" to "knock", "rapping" to "knock",
+        "footstep" to "footsteps", "step" to "footsteps", "steps" to "footsteps", "walking" to "footsteps",
+        "walk" to "footsteps", "striding" to "footsteps",
+        "laughing" to "laugh", "laughter" to "laugh", "laughs" to "laugh", "giggling" to "giggle",
+        "rustling" to "rustle", "rustles" to "rustle", "shuffling" to "rustle",
+        "ringing" to "ring", "rings" to "ring", "bells" to "bell",
+        "pouring" to "pour", "pours" to "pour",
+        "splashing" to "splash", "splashes" to "splash",
+        "breaking" to "break", "breaks" to "break", "shattering" to "break", "shatter" to "break",
+        "singing" to "sing", "sings" to "sing", "sung" to "sing",
+        "crying" to "cry", "cries" to "cry", "weeping" to "cry", "weep" to "cry", "sobbing" to "sob",
+        "whispering" to "whisper", "whispers" to "whisper",
+        "sighing" to "sigh", "sighs" to "sigh",
+        "shouting" to "shout", "shouts" to "shout", "yell" to "shout", "yelling" to "shout",
+        "screaming" to "scream", "screams" to "scream",
+        "ticking" to "tick", "ticking" to "clock", "chiming" to "strike", "striking" to "strike",
+        "hooves" to "hoof", "hoof" to "hoof", "galloping" to "gallop",
+        "typing" to "type", "clicking" to "click", "clicks" to "click",
+        "dripping" to "drip", "drips" to "drip",
+        "falling" to "fall", "falls" to "fall", "drop" to "fall", "dropped" to "fall",
+        "gunshot" to "gunshot", "shot" to "gunshot", "shooting" to "gunshot",
+        "jingling" to "jingle", "jingles" to "jingle", "jingle" to "jingle",
+        "crackling" to "crackle", "crackles" to "crackle", "rumbling" to "rumble",
+    )
+
+    /** Канонический вид ключа: слова в нижнем регистре, синонимы сведены, порядок не важен.
+     * «open_door», «door_opening», «door_open» → одно и то же. */
+    fun canon(key: String): String = key.lowercase()
+        .split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+        .map { WORDS[it] ?: it }.sorted().joinToString("_")
+
+    private val byCanon: Map<String, Kind> by lazy { ALL.filter { it.key != OTHER }.associateBy { canon(it.key) } }
+
+    /** Вид по названию, как его написала модель: точное совпадение, затем порядок слов и синонимы, затем
+     * пересечение слов (не меньше двух третей). null — такого вида в списке нет. */
+    fun resolve(raw: String?): String? {
+        val text = raw?.trim()?.lowercase() ?: return null
+        if (text.isEmpty()) return null
+        byKey[text]?.let { if (it.key != OTHER) return it.key }
+        byCanon[canon(text)]?.let { return it.key }
+        val words = canon(text).split('_').filter { it.isNotEmpty() }.toSet()
+        if (words.isEmpty()) return null
+        val scored = ALL.asSequence().filter { it.key != OTHER }.mapNotNull { kind ->
+            val other = canon(kind.key).split('_').filter { it.isNotEmpty() }.toSet()
+            if (other.isEmpty()) return@mapNotNull null
+            val common = words.count { it in other }
+            // Одно название целиком входит в другое («hooves» в «horse_hooves») — это тот же звук.
+            val score = if (common == minOf(words.size, other.size)) 1f else common.toFloat() / maxOf(words.size, other.size)
+            kind to score
+        }.sortedByDescending { it.second }.toList()
+        val best = scored.firstOrNull() ?: return null
+        if (best.second < 0.66f) return null
+        // Ничья между разными видами («door») — не угадываем: пусть решает второй проход.
+        if (scored.count { it.second == best.second } > 1) return null
+        return best.first.key
+    }
+
     /** The whole list for the prompt: «door_open — дверь открывается; …» (one line, the model copies a key exactly). */
     fun promptList(): String = ALL.joinToString("; ") { "${it.key} — ${it.hint}" }
 }
