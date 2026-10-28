@@ -35,7 +35,7 @@ object VoiceRoom {
 
     /** The room of [text] in the book being read (its scene's acoustics), the previous one for a piece without a hit,
      * null outdoors, outside scenes or with the switch off. */
-    fun forText(context: Context, text: String): Room? {
+    fun forText(context: Context, text: String, dialogue: Boolean = true): Room? {
         if (!enabled(context)) return null
         val book = BookMatcher.recognised.value?.book ?: return null.also { last = null }
         val scenes = runCatching { BookLibrary.scenes(context, book) }.getOrNull() ?: return null
@@ -45,8 +45,8 @@ object VoiceRoom {
             SceneIndex.Unknown -> last
         }
         // The verbose trace shows which room the voice gets (logged when it changes).
-        AmbienceScenes.trace(context, "voice room ${room?.name ?: "dry"}")
-        return room
+        AmbienceScenes.trace(context, "voice room ${room?.name ?: "dry"}${if (dialogue) " (line)" else " (author: dry)"}")
+        return room.takeIf { dialogue }
     }
 
     /** Streaming reverb of 16-bit little-endian mono PCM at [rate]. */

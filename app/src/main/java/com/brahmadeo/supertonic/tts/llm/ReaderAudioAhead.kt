@@ -69,8 +69,8 @@ object ReaderAudioAhead {
         try {
             val normalizer = TextNormalizer()
             val style = AssetManager.voiceFile(context, snapshot.voice).path
-            val parts = if (snapshot.singleVoice) listOf(prepared.text to style) else MultiVoiceSettings.parts(context, prepared.text, prepared.voicePlan, style)
-            sentenceLoop@ for ((part, style) in parts) for (sentence in normalizer.splitIntoSentences(part, "ru", preservePunctuation = true)) {
+            val parts = if (snapshot.singleVoice) listOf(MultiVoiceSettings.Route(prepared.text, style, false)) else MultiVoiceSettings.routes(context, prepared.text, prepared.voicePlan, style)
+            sentenceLoop@ for ((part, style, line) in parts) for (sentence in normalizer.splitIntoSentences(part, "ru", preservePunctuation = true)) {
                 if (obsolete()) break@sentenceLoop
                 val waitFrom = android.os.SystemClock.elapsedRealtime()
                 while (!SupertonicTTS.aheadCacheHasRoom()) {
@@ -80,8 +80,8 @@ object ReaderAudioAhead {
                 }
                 val normalized = normalizer.normalize(sentence, "ru", skipStress = prepared.llmProcessed)
                 if (obsolete()) break@sentenceLoop
-                val pcm = SupertonicTTS.generateAudio(normalized, "ru", style, snapshot.rate, 0f, snapshot.steps, 2.5f,
-                    preparationGeneration = snapshot.cacheGeneration, skipDictionary = prepared.llmProcessed, aheadOwner = owner)
+                val pcm = SupertonicTTS.asDialogue(line) { SupertonicTTS.generateAudio(normalized, "ru", style, snapshot.rate, 0f, snapshot.steps, 2.5f,
+                    preparationGeneration = snapshot.cacheGeneration, skipDictionary = prepared.llmProcessed, aheadOwner = owner) }
                 if (isDelivered(owner)) SupertonicTTS.releaseAheadCache(owner)
                 if (pcm != null) com.brahmadeo.supertonic.tts.utils.DiagLog.i("ReaderAhead", "Prepared ahead PCM chars=${normalized.length} bytes=${pcm.size} ${SupertonicTTS.audioCacheStatus()}")
             }

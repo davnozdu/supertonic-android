@@ -332,6 +332,10 @@ object SupertonicTTS {
         return prefs.getInt("tera_sentence_pause_ms", 420).coerceIn(0, 900)
     }
 
+    /** «Акустика помещения» only on characters' lines: the synthesis paths mark them for the call on this thread. */
+    private val dialogue = ThreadLocal<Boolean>()
+    fun <T> asDialogue(on: Boolean, block: () -> T): T { val was = dialogue.get(); dialogue.set(on); try { return block() } finally { dialogue.set(was) } }
+
     fun generateAudio(text: String, lang: String, stylePath: String, speed: Float = 1.0f, bufferDuration: Float = 0.0f, steps: Int = 5, gain: Float = 1.0f, listener: ProgressListener? = null, preparationGeneration: Long? = null, skipDictionary: Boolean = false, aheadOwner: String? = null): ByteArray? {
         // «Скобки → отдельной фразой»: a parenthesis is its own phrase, with a pause around it, a little faster and quieter.
         if (com.brahmadeo.supertonic.tts.utils.BracketReading.mode == com.brahmadeo.supertonic.tts.utils.BracketReading.Mode.ASIDE && text.contains('(')) {
@@ -407,7 +411,9 @@ object SupertonicTTS {
     private fun generateAudioLocked(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean, aheadOwner: String?): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
         // «Акустика помещения»: the room of this text's scene (null: dry), part of the cached audio.
-        val room = routeContext(stylePath)?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.forText(it, text) }
+        // The room follows every text (it keeps the scene), but only a character's line sounds in it: the author,
+        // the narrator and «я» stay the same voice everywhere.
+        val room = routeContext(stylePath)?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.forText(it, text, dialogue.get() == true) }
         val cacheKey = routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() + "\u0000room=" + (room?.let { r -> r.name + ":" + com.brahmadeo.supertonic.tts.ambience.VoiceRoom.strength(it) } ?: "") }
         if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val sid = sessionIdCounter.incrementAndGet()

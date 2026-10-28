@@ -453,18 +453,18 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             val preparedSentence = preparation.text
                             val llmProcessed = !preparation.fallback
                             if (SupertonicTTS.isCancelled() || !isActive) break@itemLoop
-                            val voiceParts = com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.parts(this@PlaybackService,
+                            val voiceParts = com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.routes(this@PlaybackService,
                                 preparedSentence, preparation.voicePlan, curStyle)
                             var result: ByteArray? = null
-                            for ((part, partStyle) in voiceParts) {
+                            for ((part, partStyle, line) in voiceParts) {
                                 if (SupertonicTTS.isCancelled() || !isActive) break
                                 val normalizedText = textNormalizer.normalize(part, curLang, isAdvancedEnabled, skipStress=llmProcessed)
 
                                 // Every voice streams into the same bounded playback channel.
-                                result = SupertonicTTS.generateAudio(
+                                result = SupertonicTTS.asDialogue(line) { SupertonicTTS.generateAudio(
                                     normalizedText, curLang, partStyle, curSpeed, 0.0f, curSteps,
                                     VOLUME_BOOST_FACTOR, listener, skipDictionary=llmProcessed
-                                )
+                                ) }
                                 if (result == null) break
                             }
 

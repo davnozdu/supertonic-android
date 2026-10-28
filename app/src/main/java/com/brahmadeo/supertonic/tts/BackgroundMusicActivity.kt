@@ -341,8 +341,9 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("Акустика помещения для голоса",Modifier.weight(1f))
                             Switch(checked=room,enabled=!busy,onCheckedChange={ room=it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,it).apply() })
                         }
-                        Text("Реверберация голоса по месту сцены: на улице сухо, в комнате коротко, в соборе гулко, в подвале, туннеле " +
-                            "и ущелье — с отражённым эхом. Для книг с локациями, подготовленных в этой версии или новее (туннели — с этой). " +
+                        Text("Реверберация реплик персонажей по месту сцены: на улице сухо, в комнате коротко, в соборе гулко, в подвале, " +
+                            "туннеле и ущелье — с отражённым эхом. Голос автора и рассказчика (в том числе от «я») всегда без эха; нужна " +
+                            "мультиголосовая озвучка, которая отличает реплики. Для книг с локациями, подготовленных в этой версии или новее (туннели — с этой). " +
                             "Заранее озвученные фразы пересоздаются.",style=MaterialTheme.typography.bodySmall)
                         if (room) {
                             Text("Сила эха и реверберации: $roomStrength %",style=MaterialTheme.typography.titleMedium)

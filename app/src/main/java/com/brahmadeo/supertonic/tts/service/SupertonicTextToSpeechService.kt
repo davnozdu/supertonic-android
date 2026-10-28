@@ -418,22 +418,22 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         runBlocking {
             val producer = launch(Dispatchers.IO) {
                 try {
-                    val parts = if (voicePreview || com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.single(requestedVoice)) listOf(rawText to stylePath) else com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.parts(this@SupertonicTextToSpeechService,
+                    val parts = if (voicePreview || com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.single(requestedVoice)) listOf(com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.Route(rawText, stylePath, false)) else com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.routes(this@SupertonicTextToSpeechService,
                         rawText, aheadText?.voicePlan ?: preparation?.voicePlan.orEmpty(), stylePath)
-                    val sentences = parts.flatMap { (part, style) -> textNormalizer.splitIntoSentences(
-                        part, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
-                    ).map { it to style } }
-                    for ((sentence, sentenceStyle) in sentences) {
+                    val sentences = parts.flatMap { route -> textNormalizer.splitIntoSentences(
+                        route.text, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
+                    ).map { Triple(it, route.style, route.dialogue) } }
+                    for ((sentence, sentenceStyle, line) in sentences) {
                         if (stopped()) { success = false; break }
                         // "* * *", a lone quote or dash: nothing to voice. Never let it end the utterance.
                         if (sentence.none { it.isLetterOrDigit() }) continue
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
                         val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=preserveMarks, sileroOnly=recap)
                         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$preserveMarks model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
-                        val result = SupertonicTTS.generateAudio(
+                        val result = SupertonicTTS.asDialogue(line) { SupertonicTTS.generateAudio(
                             normalizedText, requestedLang, sentenceStyle, effectiveSpeed, 0.0f,
                             steps, VOLUME_BOOST_FACTOR, streamingListener, skipDictionary=preserveMarks
-                        )
+                        ) }
                         if (stopped()) { success = false; break }
                         // One failed sentence must not drop the rest of the paragraph: the reader
                         // would treat the error as done and jump ahead (swallowed ending + jump).
