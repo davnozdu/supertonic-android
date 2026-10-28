@@ -45,9 +45,10 @@ object GeneratedMusic {
         val npu = if (seconds == 30) AmbienceModel.npuDit(context, music = true) else null
         val pcm = try {
             Sa3Generator(AmbienceModel.root(context), 4, npu, "dit_music_w8a8.tflite")
-                .generate(prompt, seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm
+                .generate(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.prompt(prompt), seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm
         } finally { npu?.close() }
         progress("Сохранение")
+        if (com.brahmadeo.supertonic.tts.ambience.MusicEnhance.enabled(context)) com.brahmadeo.supertonic.tts.ambience.MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
         Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, Loudness.MUSIC_LUFS)
         val loop = loop(pcm, (LOOP_FADE_S * Sa3Generator.SAMPLE_RATE).toInt())
         val id = System.currentTimeMillis().toString()

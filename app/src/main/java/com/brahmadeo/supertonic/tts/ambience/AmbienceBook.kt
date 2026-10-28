@@ -60,7 +60,7 @@ object AmbienceBook {
         }
         val music = if (!AmbienceSettings.moodMusic(context.getSharedPreferences("SupertonicPrefs", 0))) emptyList()
             else scenes.moods.moods.flatMap { m -> (0 until MUSIC_VARIANTS).map { k ->
-                Job("${m.id}_$k.m4a", m.music, SECONDS, m.music.hashCode().toLong() * 31 + k, m.id, m.music, "музыка: ${m.name}", music = true)
+                Job("${m.id}_$k.m4a", MusicEnhance.prompt(m.music), SECONDS, m.music.hashCode().toLong() * 31 + k, m.id, m.music, "музыка: ${m.name}", music = true)
             } }
         return places + events + chapter + music
     }
@@ -128,6 +128,7 @@ object AmbienceBook {
                     musicMode = job.music
                 }
                 val pcm = generator!!.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
+                if (job.music && MusicEnhance.enabled(context)) MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
                 val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
                 AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
                 manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
