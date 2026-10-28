@@ -44,7 +44,7 @@ object GeneratedMusic {
         progress("Создание музыки (${seconds} с)")
         val npu = if (seconds == 30) AmbienceModel.npuDit(context, music = true) else null
         val pcm = try {
-            Sa3Generator(AmbienceModel.root(context), 4, npu, "dit_music_w8a8.tflite")
+            AmbienceModel.musicGenerator(context, 4, npu)
                 .generate(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.prompt(prompt), seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm
         } finally { npu?.close() }
         progress("Сохранение")

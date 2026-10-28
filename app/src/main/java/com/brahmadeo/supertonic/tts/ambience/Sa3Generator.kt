@@ -20,7 +20,11 @@ import kotlin.math.roundToInt
  * length sharing weights; the XNNPACK weight cache next to each file keeps that sharing (flat RAM). */
 class Sa3Generator(private val dir: File, private val threads: Int = 4, private val npuDit: NpuDit? = null,
                    /** The DiT on the CPU: sound effects (dit_w8a8) or music (dit_music_w8a8). */
-                   private val ditFile: String = "dit_w8a8.tflite") {
+                   private val ditFile: String = "dit_w8a8.tflite",
+                   /** The DiT's rung lengths (the small and the medium models differ). */
+                   private val ditRungs: IntArray = SMALL_RUNGS,
+                   /** SAME-S (dec_w8a8) or SAME-L (dec_l_w8a8): the same latents. */
+                   private val decFile: String = "dec_w8a8.tflite") {
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
      * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
@@ -104,7 +108,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
 
     private fun sample(hidden: FloatArray, mask: FloatArray, length: Int, seconds: Float, seed: Long, cancelled: () -> Boolean): FloatArray {
         npuDit?.takeIf { it.length == length }?.let { dit -> return pingpong(length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) } }
-        val rung = DIT_RUNGS.first { it >= length }
+        val rung = ditRungs.first { it >= length }
         val sig = "s$rung"
         return model(ditFile, cache = true).use { m ->
             val buffers = (0..6).associate { "args_$it" to m.createInputBuffer("args_$it", sig) }
@@ -170,7 +174,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
         val rung = candidates.minWithOrNull(compareBy<Triple<Int, Int, Int>> { it.first }.thenBy { it.second })?.third
             ?: DEC_RUNGS.first { it >= even }
         val out = FloatArray(even * SAMPLES_PER_LATENT * 2)
-        model("dec_w8a8.tflite", cache = true).use { m ->
+        model(decFile, cache = true).use { m ->
             val sig = "s$rung"
             val input = m.createInputBuffers(sig); val output = m.createOutputBuffers(sig)
             try {
@@ -214,7 +218,8 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
         private const val MEM = 64
         private const val TRIM = 16
         private const val STEPS = 8
-        private val DIT_RUNGS = intArrayOf(8, 48, 96, 192, 416, 704, 1056, 1292)
+        val SMALL_RUNGS = intArrayOf(8, 48, 96, 192, 416, 704, 1056, 1292)
+        val MEDIUM_RUNGS = intArrayOf(8, 48, 96, 192, 416, 704, 1056, 1496, 2040, 2824, 3536, 4096)
         private val DEC_RUNGS = intArrayOf(2, 4, 8, 12, 16, 32, 64, 128, 256)
 
         /** LogSNR-shifted pingpong schedule from 1 to 0 (anchor −6.2, end 2.0), first point exactly 1. */

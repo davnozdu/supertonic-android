@@ -44,12 +44,44 @@ object AmbienceModel {
         Asset("music_dit_L323_main.onnx", 923_780_604L, "b76f554f3f66c9b82307a352c72a6a3db5fb116fac057e6aee3b747a2be1408b"),
         Asset("music_dit_pre.onnx", 21_792_854L, "4cb8277b82ce3569323543f10360803addca880b6d706e8095cc64403966e168"),
     )
-    private const val MUSIC_MARKER = "verified-ambience-sa3-v1-music"
-    private const val MUSIC_NPU_MARKER = "verified-ambience-sa3-v1-music-npu"
-    private const val MUSIC_NPU_CACHE = "sa3-music-L323-b76f554f"
-    fun musicBytes() = MUSIC_ASSETS.sumOf { it.size }
-    fun musicReady(context: Context) = ready(context) && complete(context, MUSIC_ASSETS, MUSIC_MARKER)
-    fun musicNpuReady(context: Context) = musicReady(context) && complete(context, MUSIC_NPU_ASSETS, MUSIC_NPU_MARKER)
+    /** Stable Audio 3 Medium (1.4 B, music only): clearer timbre, ~2.4× the CPU of the small one; same T5 and latents. */
+    val MEDIUM_ASSETS = listOf(
+        Asset("dit_medium_w8a8.tflite", 1_667_708_664L, "e60ea3a8b530de93ee7f1fd7b4426597006dbcde7bce45750d39c439f4ef9602"),
+    )
+    val MEDIUM_NPU_ASSETS = listOf<Asset>()
+    /** SAME-L decoder (the same latents as SAME-S): more detail, ~+30 % of the generation time. */
+    val LARGE_DECODER = listOf(
+        Asset("dec_l_w8a8.tflite", 515_381_432L, "53dbca41ec9620257834bda4f3008a2cd5072afba564b84906f8ffdfca2647e7"),
+    )
+    const val MUSIC_MODEL_KEY = "music_model"
+    const val LARGE_DECODER_KEY = "music_decoder_large"
+    private const val LARGE_DECODER_MARKER = "verified-ambience-sa3-v1-dec-l"
+
+    /** One music model: its CPU DiT (rung signatures), its NPU graphs (30 s) and their compiled-cache names. */
+    class Music(val id: String, val title: String, val ditFile: String, val rungs: IntArray, val assets: List<Asset>, val marker: String,
+                val npuAssets: List<Asset>, val npuMarker: String, val npuMain: String, val npuPre: String, val npuCache: String, val family: String)
+    val SMALL_MUSIC = Music("small", "Малая", "dit_music_w8a8.tflite", Sa3Generator.SMALL_RUNGS, MUSIC_ASSETS, "verified-ambience-sa3-v1-music",
+        MUSIC_NPU_ASSETS, "verified-ambience-sa3-v1-music-npu", "music_dit_L323_main.onnx", "music_dit_pre.onnx", "sa3-music-L323-b76f554f", "sa3-music")
+    val MEDIUM_MUSIC = Music("medium", "Средняя", "dit_medium_w8a8.tflite", Sa3Generator.MEDIUM_RUNGS, MEDIUM_ASSETS, "verified-ambience-sa3-v1-medium",
+        MEDIUM_NPU_ASSETS, "verified-ambience-sa3-v1-medium-npu", "medium_dit_L323_main.onnx", "medium_dit_pre.onnx", "sa3-medium-L323", "sa3-medium")
+    private fun prefs(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0)
+    /** The chosen music model (pref [MUSIC_MODEL_KEY], the small one by default). */
+    fun music(context: Context) = if (prefs(context).getString(MUSIC_MODEL_KEY, "small") == "medium") MEDIUM_MUSIC else SMALL_MUSIC
+    fun largeDecoderWanted(context: Context) = prefs(context).getBoolean(LARGE_DECODER_KEY, false)
+    fun largeDecoderReady(context: Context) = complete(context, LARGE_DECODER, LARGE_DECODER_MARKER)
+    /** The decoder for music: SAME-L when switched on and downloaded, else SAME-S. */
+    fun musicDecoder(context: Context) = if (largeDecoderWanted(context) && largeDecoderReady(context)) "dec_l_w8a8.tflite" else "dec_w8a8.tflite"
+    fun musicBytes(context: Context) = music(context).assets.sumOf { it.size } + (if (largeDecoderWanted(context)) LARGE_DECODER.sumOf { it.size } else 0L)
+    fun musicNpuBytes(context: Context) = music(context).npuAssets.sumOf { it.size }
+    fun musicReady(context: Context) = ready(context) && music(context).let { complete(context, it.assets, it.marker) } &&
+        (!largeDecoderWanted(context) || largeDecoderReady(context))
+    /** False while a model has no NPU graphs (the CPU makes its music then). */
+    fun musicNpuReady(context: Context) = musicReady(context) && music(context).let { it.npuAssets.isNotEmpty() && complete(context, it.npuAssets, it.npuMarker) }
+    private fun musicNpuMissing(context: Context) = music(context).npuAssets.isNotEmpty() && !musicNpuReady(context)
+    /** A generator for music with the chosen model and decoder. */
+    fun musicGenerator(context: Context, threads: Int, npu: Sa3Generator.NpuDit?) = music(context).let {
+        Sa3Generator(root(context), threads, npu, it.ditFile, it.rungs, musicDecoder(context))
+    }
     private fun musicWanted(context: Context) = AmbienceSettings.moodMusic(context.getSharedPreferences("SupertonicPrefs", 0))
 
     const val NPU_LENGTH = 323
@@ -106,8 +138,7 @@ object AmbienceModel {
                 require(supported()) { "Генератор фоновых звуков требует ARM64" }
                 if (!ready(context)) fetch(context, ASSETS, MARKER, "Звуки", progress)
                 if (npuWanted(context) && !npuReady(context)) fetch(context, NPU_ASSETS, NPU_MARKER, "Звуки · NPU", progress)
-                if (musicWanted(context) && !musicReady(context)) fetch(context, MUSIC_ASSETS, MUSIC_MARKER, "Музыка", progress)
-                if (musicWanted(context) && npuWanted(context) && !musicNpuReady(context)) fetch(context, MUSIC_NPU_ASSETS, MUSIC_NPU_MARKER, "Музыка · NPU", progress)
+                if (musicWanted(context)) fetchMusic(context, progress)
                 progress("Генератор звуков установлен", 1f)
             } }
         }
@@ -118,16 +149,23 @@ object AmbienceModel {
             withContext(Dispatchers.IO) { lock.withLock {
                 require(supported()) { "Генератор музыки требует ARM64" }
                 if (!ready(context)) fetch(context, ASSETS, MARKER, "Звуки", progress)
-                if (!musicReady(context)) fetch(context, MUSIC_ASSETS, MUSIC_MARKER, "Музыка", progress)
-                if (npuWanted(context) && !musicNpuReady(context)) fetch(context, MUSIC_NPU_ASSETS, MUSIC_NPU_MARKER, "Музыка · NPU", progress)
+                fetchMusic(context, progress)
                 progress("Модель музыки установлена", 1f)
             } }
         }
 
+    /** The chosen music model, the large decoder when switched on, the NPU graphs when the NPU is on. */
+    private suspend fun fetchMusic(context: Context, progress: (String, Float) -> Unit) {
+        val m = music(context)
+        if (!complete(context, m.assets, m.marker)) fetch(context, m.assets, m.marker, "Музыка · ${m.title.lowercase()}", progress)
+        if (largeDecoderWanted(context) && !largeDecoderReady(context)) fetch(context, LARGE_DECODER, LARGE_DECODER_MARKER, "Большой декодер", progress)
+        if (npuWanted(context) && musicNpuMissing(context)) fetch(context, m.npuAssets, m.npuMarker, "Музыка · NPU", progress)
+    }
+
     /** Deletes the model, the NPU graphs and their compiled HTP cache. */
     suspend fun remove(context: Context) = withContext(Dispatchers.IO) { lock.withLock {
         root(context).deleteRecursively()
-        File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("sa3-dit-") || it.name.startsWith("sa3-music-") }?.forEach { it.delete() }
+        File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("sa3-dit-") || it.name.startsWith("sa3-music-") || it.name.startsWith("sa3-medium-") }?.forEach { it.delete() }
     } }
     fun installedBytes(context: Context) = root(context).walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
@@ -136,11 +174,12 @@ object AmbienceModel {
     fun npuDit(context: Context, music: Boolean = false): Sa3Generator.NpuDit? {
         if (!npuWanted(context) || !(if (music) musicNpuReady(context) else npuReady(context))) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
-        val (main, pre, cache) = if (music) Triple("music_dit_L323_main.onnx", "music_dit_pre.onnx", MUSIC_NPU_CACHE)
-            else Triple("dit_L323_main.onnx", "dit_pre.onnx", NPU_CACHE)
+        val m = music(context)
+        val (main, pre, cache) = if (music) Triple(m.npuMain, m.npuPre, m.npuCache) else Triple("dit_L323_main.onnx", "dit_pre.onnx", NPU_CACHE)
+        val family = if (music) m.family else "sa3-dit"
         return try {
             // family: older compiled graphs (~0.9 GB each) are deleted, not only older runtimes of this one.
-            val session = Npu.session(context, env, File(root(context), main), emptyMap(), cache, family = if (music) "sa3-music" else "sa3-dit")
+            val session = Npu.session(context, env, File(root(context), main), emptyMap(), cache, family = family)
             Log.i("Ambience", "NPU session ready (music=$music), PSS ${android.os.Debug.getPss() / 1024} MB")
             val preSession = try { env.createSession(File(root(context), pre).path, ai.onnxruntime.OrtSession.SessionOptions()) }
                 catch (e: Throwable) { session.close(); throw e }

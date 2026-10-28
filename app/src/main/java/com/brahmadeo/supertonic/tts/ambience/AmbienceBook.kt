@@ -124,7 +124,7 @@ object AmbienceBook {
                 if (musicMode != job.music) {
                     npu?.close()
                     npu = AmbienceModel.npuDit(context, music = job.music)
-                    generator = Sa3Generator(AmbienceModel.root(context), threads, npu, if (job.music) "dit_music_w8a8.tflite" else "dit_w8a8.tflite")
+                    generator = if (job.music) AmbienceModel.musicGenerator(context, threads, npu) else Sa3Generator(AmbienceModel.root(context), threads, npu)
                     musicMode = job.music
                 }
                 val pcm = generator!!.generate(job.prompt, job.seconds, job.seed, cancelled).pcm

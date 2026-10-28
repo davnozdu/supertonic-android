@@ -57,6 +57,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var musicText by remember { mutableStateOf("") }
                 var musicSeconds by remember { mutableIntStateOf(60) }
                 var enhance by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.enabled(this)) }
+                var musicModel by remember { mutableStateOf(AmbienceModel.music(this).id) }
+                var largeDecoder by remember { mutableStateOf(AmbienceModel.largeDecoderWanted(this)) }
                 val creating by com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.collectAsState()
                 LaunchedEffect(creating.running) { if (!creating.running) generated = GeneratedMusic.list(this@BackgroundMusicActivity) }
                 /** Long press on a track: «Удалить?» (title, action). */
@@ -188,6 +190,23 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 RadioButton(selected=selected=="gen:${g.id}",enabled=!busy,onClick={select("gen:${g.id}")})
                             }
                         }
+                        Text("Модель музыки",style=MaterialTheme.typography.titleMedium)
+                        for (m in listOf(AmbienceModel.SMALL_MUSIC, AmbienceModel.MEDIUM_MUSIC)) {
+                            Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                                RadioButton(selected=musicModel==m.id,enabled=!creating.running,onClick={
+                                    musicModel=m.id; prefs.edit().putString(AmbienceModel.MUSIC_MODEL_KEY,m.id).apply() })
+                                Text("${m.title} · ${m.assets.sumOf { it.size }/1048576} МБ")
+                            }
+                        }
+                        Text("Средняя (1,4 млрд параметров) звучит чище и естественнее, но создаёт музыку примерно в 2,5 раза дольше " +
+                            "и требует до ~3,5 ГБ памяти при создании. Действует на новые треки и музыку по настроению; скачивается при первом создании.",
+                            style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Большой декодер звука",Modifier.weight(1f))
+                            Switch(checked=largeDecoder,enabled=!creating.running,onCheckedChange={ largeDecoder=it; prefs.edit().putBoolean(AmbienceModel.LARGE_DECODER_KEY,it).apply() })
+                        }
+                        Text("Точнее восстанавливает звук (немного больше верхов и деталей), +${AmbienceModel.LARGE_DECODER.sumOf { it.size }/1048576} МБ " +
+                            "и примерно на треть дольше. Работает с обеими моделями.",style=MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Улучшать звук музыки",Modifier.weight(1f))
                             Switch(checked=enhance,onCheckedChange={ enhance=it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.KEY,it).apply() })
@@ -204,7 +223,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                             }
                         }
                         Text("30 с — быстрее всего (на NPU, если он включён), 60 и 120 с — на процессоре, до минуты. " +
-                            "Первый раз скачивается модель музыки (${AmbienceModel.musicBytes()/1048576} МБ, с NPU ещё ~900 МБ).",style=MaterialTheme.typography.bodySmall)
+                            "Первый раз скачивается выбранная модель музыки (${AmbienceModel.musicBytes(this@BackgroundMusicActivity)/1048576} МБ, с NPU — ещё графы для него).",style=MaterialTheme.typography.bodySmall)
                         if (creating.running && creating.book == null) {
                             Text(creating.place.ifEmpty { "Создание музыки" })
                             LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -250,7 +269,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                         }
                         Text("Вместо одного трека по кругу — музыка, созданная под книгу: нейросеть сама называет настроения (мрачное, " +
                             "тревожное ожидание, светлая грусть…) и описывает музыку под эпоху; на каждое настроение 2 фрагмента. Звучит там, " +
-                            "где нет сцены с локацией, если фоновая музыка включена, на её громкости. Модель музыки — ещё ${AmbienceModel.musicBytes()/1048576} МБ " +
+                            "где нет сцены с локацией, если фоновая музыка включена, на её громкости. Модель музыки — ещё ${AmbienceModel.musicBytes(this@BackgroundMusicActivity)/1048576} МБ " +
                             "(и NPU-граф, если включён NPU); недостающая музыка создаётся кнопкой в карточке книги.",style=MaterialTheme.typography.bodySmall)
                         if (moodMusic) Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
                             RadioButton(selected=!moodByChapter,onClick={ moodByChapter=false; prefs.edit().putString(AmbienceSettings.MOOD_SCOPE,"scene").apply() })
