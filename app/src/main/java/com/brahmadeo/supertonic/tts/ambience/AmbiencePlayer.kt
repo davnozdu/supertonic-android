@@ -166,6 +166,11 @@ internal object AmbiencePlayer {
             pending.remove(run)
             // Reading paused or stopped in between: the moment is gone.
             if (!playing || masterTarget == 0f) return@Runnable
+            // An event is still sounding: the next one is skipped, two sounds never overlap (the voice is what matters).
+            if (shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil) {
+                AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous")
+                return@Runnable
+            }
             try {
                 val p = MediaPlayer()
                 p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
@@ -173,6 +178,7 @@ internal object AmbiencePlayer {
                 val v = Voice(p, Scene(file.name, file.name, listOf(file)), 0, tameable = false)
                 p.setVolume(volume, volume)
                 shots += v
+                shotUntil = android.os.SystemClock.elapsedRealtime() + p.duration.toLong()
                 p.setOnCompletionListener { handler.post { shots.remove(v); v.release() } }
                 p.start()
             } catch (e: Exception) { AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}") }
@@ -181,12 +187,16 @@ internal object AmbiencePlayer {
         handler.postDelayed(run, delayMs.coerceIn(0, 20_000))
     }
     private val shots = ArrayList<Voice>()
+    /** Когда закончится звучащий сейчас звук события: следующий ранее этого не начинается. */
+    private var shotUntil = 0L
     private val pending = ArrayList<Runnable>()
+
 
     /** Pause, stop: the events and chapter sounds still waiting are dropped and the sounding ones stop. Main thread. */
     private fun cancelShots() {
         pending.forEach { handler.removeCallbacks(it) }; pending.clear()
         shots.forEach { runCatching { it.player.setVolume(0f, 0f) }; it.release() }; shots.clear()
+        shotUntil = 0L
     }
 
     /** Any other variant at random: the events come at no fixed interval and the loop never repeats the same way. */
