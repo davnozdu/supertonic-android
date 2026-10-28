@@ -20,7 +20,14 @@ internal object AmbiencePlayer {
     private const val TICK_MS = 50L
     private val handler = Handler(Looper.getMainLooper())
 
+    /** Headroom above the music-level clips: +10 dB through the platform LoudnessEnhancer (it limits, so no
+     * clipping); the old full volume is now ~30 %. */
+    private const val BOOST_MB = 1000
     private class Voice(val player: MediaPlayer, val scene: Scene, val clip: Int) {
+        val boost: android.media.audiofx.LoudnessEnhancer? = runCatching {
+            android.media.audiofx.LoudnessEnhancer(player.audioSessionId).apply { setTargetGain(BOOST_MB); enabled = true }
+        }.getOrNull()
+        fun release() { runCatching { boost?.release() }; runCatching { player.release() } }
         var level = 0f            // 0..1 of the scene volume
         var target = 1f
         var fadeMs = CROSSFADE_MS
@@ -80,7 +87,7 @@ internal object AmbiencePlayer {
 
     fun release() {
         handler.removeCallbacks(tick); pausing = false
-        voices.forEach { runCatching { it.player.release() } }
+        voices.forEach { it.release() }
         voices.clear(); scene = null; playing = false
     }
 
@@ -95,7 +102,7 @@ internal object AmbiencePlayer {
             p.prepare()
             p.setVolume(0f, 0f)
             val v = Voice(p, target, clip % target.files.size).apply { this.fadeMs = fadeMs }
-            p.setOnCompletionListener { mp -> handler.post { voices.remove(v); runCatching { mp.release() } } }
+            p.setOnCompletionListener { handler.post { voices.remove(v); v.release() } }
             voices += v
             if (playing) p.start()
         } catch (e: Exception) {
@@ -112,7 +119,7 @@ internal object AmbiencePlayer {
             v.level = if (v.level < v.target) minOf(v.target, v.level + step) else maxOf(v.target, v.level - step)
             val gain = kotlin.math.sqrt(v.level) * volume // equal power: a crossfade of two sounds keeps the loudness
             runCatching { v.player.setVolume(gain, gain) }
-            if (v.target == 0f && v.level == 0f) { voices.remove(v); runCatching { v.player.release() } ; continue }
+            if (v.target == 0f && v.level == 0f) { voices.remove(v); v.release(); continue }
             // Before the clip ends the next variant fades in over it.
             val current = scene
             if (!v.next && v.target > 0f && current != null && v.scene.key == current.key) {

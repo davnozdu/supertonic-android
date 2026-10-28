@@ -157,7 +157,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Slider(value=ambienceVolume.toFloat(),onValueChange={ ambienceVolume=it.roundToInt() },
                             onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.VOLUME,ambienceVolume).apply() },
                             valueRange=0f..100f,steps=99)
-                        Text("По умолчанию 5 %. Громкость речи не изменяется.",style=MaterialTheme.typography.bodySmall)
+                        Text("По умолчанию 30 %. Громкость речи не изменяется.",style=MaterialTheme.typography.bodySmall)
                         if(com.brahmadeo.supertonic.tts.utils.Npu.supported(this@BackgroundMusicActivity)) {
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                                 Text("Генерация на NPU · эксперимент",Modifier.weight(1f))
