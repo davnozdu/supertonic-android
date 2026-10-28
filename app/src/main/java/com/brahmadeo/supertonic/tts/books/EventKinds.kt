@@ -68,6 +68,8 @@ object EventKinds {
         Kind("thunder", "гром", "a distant thunder roll, low and long"),
         Kind("rain", "дождь", "rain drumming on a windowsill"),
         Kind("wind", "ветер", "a gust of wind rattling a window frame"),
+        Kind("leaves", "шелест листвы, кусты, трава", "leaves and bushes rustling in a light wind"),
+        Kind("grass", "шаги по траве, сено", "dry grass and hay rustling underfoot"),
         Kind("dog", "собака лает", "a dog barking twice somewhere close"),
         Kind("cat", "кошка", "a cat meowing briefly"),
         Kind("bird", "птицы, воробьи", "birds fluttering up from a bush"),

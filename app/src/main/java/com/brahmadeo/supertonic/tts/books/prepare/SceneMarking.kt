@@ -31,11 +31,11 @@ internal object SceneMarking {
     const val DEFAULT_DENSITY = 2
     private fun eventRule(density: Int) = when (density.coerceIn(1, 3)) {
         1 -> "События — только прямо названные звуки: выстрел, гром, хлопнула дверь, разбилось стекло; примерно одно " +
-            "на 1200–1500 знаков, а то, о чём только говорят, не событие"
+            "на 800–1000 знаков, а то, о чём только говорят, не событие"
         2 -> "События — названные звуки и заметные действия героев: шаги, дверь, налили воду, посуда, сели, взяли " +
-            "бумаги; в среднем одно на 600–800 знаков"
+            "бумаги; в среднем одно на 250–350 знаков"
         else -> "События — всё слышимое: названные звуки, действия героев и то, что они делают с предметами (бумаги, " +
-            "деньги, дверь, посуда, книга); в среднем одно на 300–400 знаков, в абзаце с действием — хотя бы одно"
+            "деньги, дверь, посуда, книга, листва); в среднем одно на 100–150 знаков, в абзаце с действием — 1–2 события"
     }
     private val ACOUSTICS = setOf("outdoor", "room", "large_room", "hall", "bathroom", "vehicle", "cave", "tunnel")
 
@@ -46,6 +46,8 @@ internal object SceneMarking {
     fun prompt(numbered: List<String>, first: Int, before: String, previous: String?, known: List<Pair<String, String>>,
                moods: List<Pair<String, String>> = emptyList(), density: Int = DEFAULT_DENSITY) = buildString {
         appendLine("Определи, где и в какой обстановке происходит действие в каждом абзаце, — для фонового звука сцены.")
+        appendLine("Все описания звука для генератора — СТРОГО ПО-АНГЛИЙСКИ (sound у обстановки, accents и sound у событий):")
+        appendLine("генератор понимает только английский. По-русски — только place, mood и цитаты из текста.")
         appendLine("Верни список сцен в порядке текста: from — номер первого абзаца сцены;")
         appendLine("place — короткое название обстановки по-русски: место и, если от этого меняется звук, время суток, погода или")
         appendLine("оживлённость (1–5 слов: «купе поезда», «трактир, вечер», «улица, дождь», «лес, раннее утро», «пустой дом, ночь»);")
@@ -151,13 +153,31 @@ internal object SceneMarking {
     }
 
     private fun key(place: String) = place.trim().lowercase().replace('ё', 'е').replace(Regex("\\s+"), " ")
+    /** The music prompt of a mood («Музыка по настроению») is checked as before — that part works and is not touched. */
     private val ascii = Regex("^[\\x20-\\x7E]{8,300}$")
-    private val accent = Regex("^[\\x20-\\x7E]{6,200}$")
+    /** The generator understands English only: every description of a sound must be ASCII with English words in it (a
+     * Cyrillic or symbol-only answer would otherwise pass as "a sound"). */
+    private fun english(text: String, min: Int, max: Int): Boolean {
+        val t = text.trim()
+        if (t.length !in min..max) return false
+        if (!t.all { it in ' '..'~' }) return false
+        return t.count { it in 'a'..'z' || it in 'A'..'Z' } >= 8
+    }
+
+    /** A description for the generator: as it came when it is English, else a translation (null when that fails too). */
+    private fun forGenerator(text: String, min: Int, max: Int, translate: (String) -> String?): String? {
+        val clean = text.trim()
+        if (english(clean, min, max)) return clean
+        val translated = runCatching { translate(clean) }.getOrNull()?.trim() ?: return null
+        return translated.takeIf { english(it, min, max) }
+    }
 
     /** Runs the batches through [ask] (sequentially: every answer feeds the known places of the next prompt). */
     /** [sectionIds]: the book's section ids by section number (for the per-chapter mood). */
     fun mark(paragraphs: List<EpubBook.Paragraph>, ask: (String) -> String, progress: (Int, Int) -> Unit = { _, _ -> },
-             check: () -> Unit = {}, sectionIds: List<String> = emptyList(), density: Int = DEFAULT_DENSITY): Result {
+             check: () -> Unit = {}, sectionIds: List<String> = emptyList(), density: Int = DEFAULT_DENSITY,
+             /** Translates a description the model wrote in another language (the generator knows English only). */
+             translate: (String) -> String? = { null }): Result {
         val batches = batches(paragraphs)
         val placeOf = arrayOfNulls<String>(paragraphs.size)
         val sounds = LinkedHashMap<String, Pair<String, String>>() // key -> (name, sound)
@@ -195,10 +215,10 @@ internal object SceneMarking {
                 val from = s.optInt("from", -1) - 1
                 if (from !in batch.first()..batch.last()) continue
                 val place = s.optString("place").takeIf { !s.isNull("place") && it.isNotBlank() && it.length <= 80 }
-                val sound = s.optString("sound").takeIf { !s.isNull("sound") && ascii.matches(it.trim()) }?.trim()
+                val sound = s.optString("sound").takeIf { !s.isNull("sound") }?.let { forGenerator(it, 8, 300, translate) }
                 val placeKey = if (place != null && sound != null) key(place).also { k ->
                     sounds.putIfAbsent(k, place.trim() to sound)
-                    val accents = s.optJSONArray("accents")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).trim().takeIf { t -> accent.matches(t) } } }.orEmpty()
+                    val accents = s.optJSONArray("accents")?.let { a -> (0 until a.length()).mapNotNull { forGenerator(a.optString(it), 6, 200, translate) } }.orEmpty()
                     if (accents.isNotEmpty()) accentsOf.putIfAbsent(k, accents.take(4))
                     s.optString("acoustics").takeIf { !s.isNull("acoustics") && it in ACOUSTICS }?.let { acousticsOf.putIfAbsent(k, it) }
                 } else null
@@ -226,7 +246,7 @@ internal object SceneMarking {
                 if (quoteWords.isEmpty() ||
                     com.brahmadeo.supertonic.tts.books.EventIndex.anchorStart(
                         com.brahmadeo.supertonic.tts.books.ReplyIndex.words(paragraphs[at].text), quoteWords) == null) { dropped++; continue }
-                val sound = given.takeIf { accent.matches(it) } ?: com.brahmadeo.supertonic.tts.books.EventKinds.sound(kind)
+                val sound = given.takeIf { it.isNotEmpty() }?.let { forGenerator(it, 6, 200, translate) } ?: com.brahmadeo.supertonic.tts.books.EventKinds.sound(kind)
                 if (sound == null) { dropped++; continue }
                 val soundKey = kind ?: "s:" + sound.lowercase()
                 val number = eventSounds[soundKey] ?: if (eventList.size < MAX_EVENTS) eventList.size.also {

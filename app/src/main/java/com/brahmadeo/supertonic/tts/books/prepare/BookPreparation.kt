@@ -267,7 +267,10 @@ object BookPreparation {
                            startedAt: Long): SceneMarking.Result =
         SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, SceneMarking.INSTRUCTION, SceneMarking.schema(), null, source, cancel) },
             { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check, plan.sections.map { it.id },
-            ctx.getSharedPreferences("SupertonicPrefs", 0).getInt(SceneMarking.EVENTS_DENSITY, SceneMarking.DEFAULT_DENSITY))
+            ctx.getSharedPreferences("SupertonicPrefs", 0).getInt(SceneMarking.EVENTS_DENSITY, SceneMarking.DEFAULT_DENSITY),
+            // The generator knows English only: a description the model wrote in Russian (or another language) is
+            // translated by the configured cloud (Gemma 4 as the fallback), exactly like «Своя музыка».
+            translate = { text -> runCatching { com.brahmadeo.supertonic.tts.ambience.MusicPrompt.english(ctx, text) }.getOrNull() })
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */

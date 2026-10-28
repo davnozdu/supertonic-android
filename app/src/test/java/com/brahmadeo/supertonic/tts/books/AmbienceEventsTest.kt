@@ -94,6 +94,23 @@ class AmbienceEventsTest {
         assertEquals("a door closing with a soft thud", result.index.events.events.single().sound)
     }
 
+    @Test fun everyKindHasAnEnglishDescription() {
+        for (kind in EventKinds.ALL) {
+            assertTrue("${kind.key}: ${kind.sound}", kind.sound.all { it in ' '..'~' })
+            assertTrue("${kind.key}: ${kind.sound}", kind.sound.count { it in 'a'..'z' || it in 'A'..'Z' } >= 8)
+        }
+        assertEquals(EventKinds.ALL.size, EventKinds.ALL.map { it.key }.toSet().size)
+    }
+
+    @Test fun russianDescriptionsNeverReachTheGenerator() {
+        val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"тихая гостиная с часами"}],
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"door_close","sound":"тихо закрылась дверь"}]}"""
+        val result = SceneMarking.mark(paragraphs, { ans })
+        assertEquals(0, result.index.locations.size) // no English description — the place plays the music
+        assertEquals(1, result.events)
+        assertEquals("a door closing with a soft thud", result.index.events.events.single().sound)
+    }
+
     @Test fun everyAccentGetsItsOwnVariant() {
         val location = SceneIndex.Location("l1", "купе", "train interior, wheel clacking", 12,
             listOf("a whistle blows twice", "brakes squeal and steam hisses", "a conductor's steps", "a door sliding"))
