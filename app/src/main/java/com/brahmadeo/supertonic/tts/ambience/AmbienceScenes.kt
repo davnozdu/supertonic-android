@@ -85,16 +85,23 @@ internal object AmbienceScenes {
     private var lastLine = ""
     fun trace(context: Context, line: String) {
         if (!com.brahmadeo.supertonic.tts.utils.DiagLog.verbose) return
-        val text = synchronized(lines) {
+        synchronized(lines) {
             // Every queued sentence tags its scene: a repeat of the last line is skipped, so the decisions stay visible.
             if (line == lastLine) return
             lastLine = line
             lines.addLast("${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.ROOT).format(java.util.Date())} $line")
             while (lines.size > 600) lines.removeFirst()
-            lines.joinToString("\n")
+            if (writePending) return
+            writePending = true
         }
-        runCatching { java.io.File(context.cacheDir, "ambience-trace.txt").writeText(text + "\n") }
+        // At most one write in 2 s (≤ ~40 KB, replaced, never grows): no flash write per sentence.
+        traceHandler.postDelayed({
+            val text = synchronized(lines) { writePending = false; lines.joinToString("\n") }
+            runCatching { java.io.File(context.cacheDir, "ambience-trace.txt").writeText(text + "\n") }
+        }, 2000)
     }
+    private var writePending = false
+    private val traceHandler by lazy { android.os.Handler(android.os.HandlerThread("ambience-trace").apply { start() }.looper) }
 
     fun forget(owner: Any) = synchronized(states) { states.remove(owner); Unit }
 }
