@@ -23,20 +23,27 @@ internal object SceneMarking {
     fun schema() = JSONObject("""{"type":"object","properties":{"scenes":{"type":"array","items":{"type":"object","properties":{"from":{"type":"integer"},"place":{"type":["string","null"]},"sound":{"type":["string","null"]}},"required":["from","place","sound"],"additionalProperties":false}}},"required":["scenes"],"additionalProperties":false}""")
 
     fun prompt(numbered: List<String>, first: Int, before: String, previous: String?, known: List<Pair<String, String>>) = buildString {
-        appendLine("Определи, где происходит действие в каждом абзаце. Верни список сцен в порядке текста: from — номер первого абзаца сцены,")
-        appendLine("place — короткое название места по-русски (1–4 слова, например «купе поезда», «гостиная», «улица», «трактир», «лес»),")
-        appendLine("sound — описание фонового звука этого места по-английски для генератора звуков: 6–20 слов, только окружение")
-        appendLine("(например \"Inside a moving passenger train, rhythmic wheel clacking on rails, low rumble\"), без музыки, без речи и голосов по отдельности, без имён.")
+        appendLine("Определи, где и в какой обстановке происходит действие в каждом абзаце, — для фонового звука сцены.")
+        appendLine("Верни список сцен в порядке текста: from — номер первого абзаца сцены;")
+        appendLine("place — короткое название обстановки по-русски: место и, если от этого меняется звук, время суток, погода или")
+        appendLine("оживлённость (1–5 слов: «купе поезда», «трактир, вечер», «улица, дождь», «лес, раннее утро», «пустой дом, ночь»);")
+        appendLine("sound — описание фонового звука этой обстановки по-английски для генератора звуков, 8–25 слов: что слышно вокруг")
+        appendLine("с учётом времени суток, погоды, людей и того, что за окном или стеной. Примеры: вечер дома у огня — \"crackling fireplace, ")
+        appendLine("ticking clock, quiet cozy room, faint wind outside\"; раннее утро в деревне — \"early morning birdsong, distant rooster, ")
+        appendLine("light breeze in leaves\"; бар — \"busy bar, murmur of indistinct conversations, clinking glasses\"; каюта — \"ship cabin, ")
+        appendLine("water lapping against the hull, creaking wood\". Без музыки, без отдельных разборчивых голосов и речи, без имён.")
         appendLine("Правила:")
-        appendLine("- Первая сцена всегда начинается с абзаца $first. Если действие продолжается там же, где в предыдущем тексте, повтори то место.")
-        appendLine("- Новая сцена только при смене места. Одно и то же место — то же название и тот же sound, что в списке известных мест.")
+        appendLine("- Первая сцена всегда начинается с абзаца $first. Если действие продолжается там же, где в предыдущем тексте, повтори ту обстановку.")
+        appendLine("- Новая сцена — при смене места, а также времени суток, погоды или оживлённости, если от этого заметно меняется звук.")
+        appendLine("- Та же обстановка — то же название и тот же sound, что в списке известных.")
+        appendLine("- Обстановку бери из текста и здравого смысла: ночь — тише, утро — птицы, вечер дома — огонь и уют, улица города — шум.")
         appendLine("- place и sound = null, если места действия нет или оно неясно: рассуждения, воспоминания без обстановки, авторские отступления, краткий пересказ событий.")
         appendLine("- Место — физическая обстановка, где находятся персонажи сейчас, а не то, о чём они говорят.")
         if (known.isNotEmpty()) {
-            appendLine("Известные места этой книги (используй те же названия и sound):")
+            appendLine("Известные обстановки этой книги (для той же используй то же название и sound):")
             known.takeLast(MAX_KNOWN).forEach { (place, sound) -> appendLine("- $place — $sound") }
         }
-        appendLine("Место в предыдущем тексте: ${previous ?: "нет"}")
+        appendLine("Обстановка в предыдущем тексте: ${previous ?: "нет"}")
         if (before.isNotBlank()) { appendLine("Предыдущий текст (для связности):"); appendLine(before) }
         appendLine("Абзацы:")
         numbered.forEach { appendLine(it) }
@@ -68,7 +75,7 @@ internal object SceneMarking {
     }
 
     private fun key(place: String) = place.trim().lowercase().replace('ё', 'е').replace(Regex("\\s+"), " ")
-    private val ascii = Regex("^[\\x20-\\x7E]{8,240}$")
+    private val ascii = Regex("^[\\x20-\\x7E]{8,300}$")
 
     /** Runs the batches through [ask] (sequentially: every answer feeds the known places of the next prompt). */
     fun mark(paragraphs: List<EpubBook.Paragraph>, ask: (String) -> String, progress: (Int, Int) -> Unit = { _, _ -> },
@@ -97,7 +104,7 @@ internal object SceneMarking {
                 val s = answer.optJSONObject(k) ?: continue
                 val from = s.optInt("from", -1) - 1
                 if (from !in batch.first()..batch.last()) continue
-                val place = s.optString("place").takeIf { !s.isNull("place") && it.isNotBlank() && it.length <= 60 }
+                val place = s.optString("place").takeIf { !s.isNull("place") && it.isNotBlank() && it.length <= 80 }
                 val sound = s.optString("sound").takeIf { !s.isNull("sound") && ascii.matches(it.trim()) }?.trim()
                 val placeKey = if (place != null && sound != null) key(place).also { sounds.putIfAbsent(it, place.trim() to sound) } else null
                 starts[from] = placeKey
@@ -117,8 +124,13 @@ internal object SceneMarking {
             SceneIndex.Location("l${i + 1}", name, sound, counts.getValue(k))
         }
         val number = chosen.withIndex().associate { it.value to it.index }
+        // A setting left out (one paragraph, or beyond the limit) takes the sound of the same place in another
+        // condition («дом судьи, вечер» → «дом судьи, день»), the most-read one; only places with no sound at all play music.
+        fun base(k: String) = k.substringBefore(',').trim()
+        val byBase = chosen.groupBy(::base).mapValues { (_, keys) -> number.getValue(keys.first()) }
+        fun locationOf(k: String?) = k?.let { number[it] ?: byBase[base(it)] }
         val builder = SceneIndex.Companion.Builder(locations)
-        for ((i, p) in paragraphs.withIndex()) builder.add(p.text, placeOf[i]?.let { number[it] })
+        for ((i, p) in paragraphs.withIndex()) builder.add(p.text, locationOf(placeOf[i]))
         return Result(builder.build(), marked, failed, placeOf.map { k -> k?.let { sounds[it]?.first } })
     }
 }
