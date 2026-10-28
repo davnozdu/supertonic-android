@@ -134,6 +134,7 @@ internal object AmbiencePlayer {
 
     /** Reading paused or stopped: a quick fade, then everything holds where it is. */
     fun pause() {
+        cancelShots()
         if (!playing) return
         masterTarget = 0f
         schedule()
@@ -149,7 +150,7 @@ internal object AmbiencePlayer {
 
     fun release() {
         handler.removeCallbacks(tick)
-        shots.forEach { it.release() }; shots.clear()
+        cancelShots()
         voices.forEach { it.release() }
         voices.clear(); scene = null; playing = false; master = 0f; masterTarget = 0f
     }
@@ -157,7 +158,11 @@ internal object AmbiencePlayer {
     /** A one-shot sound (an event, the chapter transition) over the background after [delayMs], through the same
      * taming and headroom as the scene sounds, at the scene volume; released when it ends. */
     fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float) {
-        handler.postDelayed({
+        lateinit var run: Runnable
+        run = Runnable {
+            pending.remove(run)
+            // Reading paused or stopped in between: the moment is gone.
+            if (!playing || masterTarget == 0f) return@Runnable
             try {
                 val p = MediaPlayer()
                 p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
@@ -168,9 +173,18 @@ internal object AmbiencePlayer {
                 p.setOnCompletionListener { handler.post { shots.remove(v); v.release() } }
                 p.start()
             } catch (e: Exception) { AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}") }
-        }, delayMs.coerceIn(0, 20_000))
+        }
+        pending += run
+        handler.postDelayed(run, delayMs.coerceIn(0, 20_000))
     }
     private val shots = ArrayList<Voice>()
+    private val pending = ArrayList<Runnable>()
+
+    /** Pause, stop: the events and chapter sounds still waiting are dropped and the sounding ones stop. Main thread. */
+    private fun cancelShots() {
+        pending.forEach { handler.removeCallbacks(it) }; pending.clear()
+        shots.forEach { runCatching { it.player.setVolume(0f, 0f) }; it.release() }; shots.clear()
+    }
 
     /** Any other variant at random: the events come at no fixed interval and the loop never repeats the same way. */
     private fun nextClip(scene: Scene, current: Int): Int {
