@@ -113,8 +113,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 271
-        versionName "5.0.6-beta27"
+        versionCode 272
+        versionName "5.0.6-beta28"
         // The app is Russian whatever the system language: the default strings are Russian and the
         // older partial es/fr/ko/pt translations stay out of the APK (they mixed with Russian text).
         resourceConfigurations += ["ru"]
@@ -230,10 +230,9 @@ dependencies {
     implementation 'com.qualcomm.qti:qnn-runtime:2.51.0'
     onnxRuntime 'com.microsoft.onnxruntime:onnxruntime-android:1.26.0'
 
-    // LiteRT (TensorFlow Lite rebrand) for running INT4 .tflite assets on Android.
-    // Iteration 1: only verify the AAR drops into the build cleanly alongside ORT.
-    // Pipeline integration arrives in a later iteration.
-    implementation 'com.google.ai.edge.litert:litert:2.1.5'
+    // LiteRT (TensorFlow Lite rebrand): Interpreter for the Supertonic-3 .tflite assets, and CompiledModel (≥2.2,
+    // multi-signature "rung" graphs + XNNPACK weight cache) for the Stable Audio 3 ambience generator.
+    implementation 'com.google.ai.edge.litert:litert:2.3.0'
     implementation 'com.google.ai.edge.litertlm:litertlm-android:0.17.1'
     implementation 'org.pytorch:pytorch_android_lite:2.1.0'
     implementation 'com.facebook.soloader:soloader:0.10.5'

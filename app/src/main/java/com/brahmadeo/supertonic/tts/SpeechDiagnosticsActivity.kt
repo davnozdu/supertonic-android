@@ -99,6 +99,11 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     finally { running.set(false) }
                     return@withContext
                 }
+                // Read-only: Stable Audio 3 ambience generation into cache/ambience/*.wav, downloads the model if missing.
+                if (intent.getBooleanExtra("ambienceProbe", false)) {
+                    try { com.brahmadeo.supertonic.tts.ambience.AmbienceProbe.run(this@SpeechDiagnosticsActivity, intent) } finally { running.set(false) }
+                    return@withContext
+                }
                 if (intent.getBooleanExtra("npuProbe", false)) {
                     try { com.brahmadeo.supertonic.tts.kokoro.NpuProbe.run(this@SpeechDiagnosticsActivity) } finally { running.set(false) }
                     return@withContext
