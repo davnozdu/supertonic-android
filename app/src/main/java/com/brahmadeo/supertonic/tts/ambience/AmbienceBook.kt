@@ -72,6 +72,17 @@ object AmbienceBook {
         return places + events + chapter + music
     }
 
+    /** Copies the clip of [job] from the shared bank into the book (true when the book already has it now). */
+    private fun adoptFromBank(context: Context, dir: File, job: Job): Boolean {
+        if (!job.id.startsWith("k_")) return false
+        val target = File(dir, job.file)
+        if (target.isFile && target.length() > 0L) return true
+        val source = SoundBank.clip(context, job.id.removePrefix("k_")) ?: return false
+        return runCatching { source.copyTo(target, overwrite = true); true }
+            .onFailure { Log.w("Ambience", "bank copy ${job.id}: ${it.javaClass.simpleName}") }
+            .getOrDefault(false)
+    }
+
     /** l3_0.m4a -> l3; m2_1.m4a -> m2; e5.m4a -> e5; k_door_slam.m4a -> k_door_slam (a clip of a kind of action). */
     private fun idOf(file: File) = when {
         file.name.startsWith("k_") -> file.name.substringBeforeLast('.')
@@ -125,9 +136,22 @@ object AmbienceBook {
                                progress: (Int, Int, String) -> Unit, cancelled: () -> Boolean) {
         require(AmbienceModel.ready(context)) { "Скачайте генератор фоновых звуков в разделе «Фоновая музыка»" }
         // Music without its model (not downloaded yet) waits for it; the sounds are made now.
-        val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
-        if (todo.isEmpty()) return
         val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
+        // «База звуков» first: a clip already made for another book is copied and nothing is generated for it.
+        val manifest0 = readManifest(context, sha)
+        var reused = 0
+        val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
+            .filter { job ->
+                if (job.music || !adoptFromBank(context, dir, job)) return@filter true
+                manifest0.put(job.id, job.recipe)
+                reused++
+                false
+            }
+        if (reused > 0) {
+            manifest(context, sha).writeText(manifest0.toString())
+            Log.i("Ambience", "$reused sounds taken from the bank, no generation")
+        }
+        if (todo.isEmpty()) return
         // One NPU session at a time: the sounds first, then the music (each ~0.9 GB of HTP context).
         val ordered = todo.sortedBy { it.music }
         var npu: Sa3Generator.NpuDit? = null
@@ -149,6 +173,8 @@ object AmbienceBook {
                 if (job.music && MusicEnhance.enabled(context)) MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
                 val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
                 AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
+                // The bank grows: a sound made for this book is reused by the next one for free.
+                if (!job.music && job.id.startsWith("k_")) SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file))
                 manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
                 manifest(context, sha).writeText(manifest.toString())
                 Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS}, music=${job.music})")

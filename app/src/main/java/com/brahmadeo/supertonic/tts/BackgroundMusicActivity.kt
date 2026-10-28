@@ -326,6 +326,32 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 "из текста; повтор одного и того же действия новых звуков не требует — клип делается один раз на вид " +
                                 "действия.", style=MaterialTheme.typography.bodySmall)
                         }
+                        // «База готовых звуков»: клипы событий, сделанные один раз для всех книг (фон локаций в неё
+                        // не входит — он делается на телефоне). Скачанная база экономит генерацию: книга берёт готовое.
+                        var bankCount by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)) }
+                        var bankBusy by remember { mutableStateOf(false) }
+                        var bankNote by remember { mutableStateOf("") }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("База готовых звуков событий",Modifier.weight(1f))
+                            Text(if (bankCount > 0) "$bankCount клипов" else "не скачана",style=MaterialTheme.typography.bodyMedium)
+                        }
+                        Text("Готовые клипы событий на все книги: двери, бумаги, шаги, вода, посуда, животные, голоса, эмоции — " +
+                            "8 секунд каждый. Приложение берёт из базы только то, что нужно книге, и качает эти файлы по одному " +
+                            "(архива нет, распаковывать нечего). Чего в базе нет, создаётся для книги один раз и остаётся в базе " +
+                            "для следующих книг. Фон локаций в базу не входит — он делается на телефоне.",
+                            style=MaterialTheme.typography.bodySmall)
+                        Button(enabled=!bankBusy,onClick={
+                            bankBusy=true; bankNote=""
+                            scope.launch {
+                                val n=runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.brahmadeo.supertonic.tts.ambience.SoundBank.downloadAll(this@BackgroundMusicActivity) } }
+                                bankBusy=false
+                                bankCount=com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)
+                                bankNote=n.fold({ "Скачано: $it клипов" }, { "Не удалось: ${it.message ?: it.javaClass.simpleName}" })
+                            }
+                        }) { Text(if (bankBusy) "Скачивание…" else if (bankCount > 0) "Обновить список базы" else "Скачать список базы") }
+                        if (bankNote.isNotEmpty()) Text(bankNote,style=MaterialTheme.typography.bodySmall)
+
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Музыка по настроению",Modifier.weight(1f))
                             Switch(checked=moodMusic,enabled=!busy,onCheckedChange={ moodMusic=it; prefs.edit().putBoolean(AmbienceSettings.MOOD_MUSIC,it).apply() })
