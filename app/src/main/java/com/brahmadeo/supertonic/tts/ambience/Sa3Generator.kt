@@ -18,7 +18,23 @@ import kotlin.math.roundToInt
  * (cfg 1, 8-step rectified-flow pingpong). The three graphs load one after another and close straight away,
  * so only one of them is resident at a time. The DiT and the decoder are "rung" files: one signature per fixed
  * length sharing weights; the XNNPACK weight cache next to each file keeps that sharing (flat RAM). */
-class Sa3Generator(private val dir: File, private val threads: Int = 4) {
+class Sa3Generator(private val dir: File, private val threads: Int = 4, private val npuDit: NpuDit? = null) {
+    /** DiT on the NPU (ORT QNN): a static-length ONNX graph, used when the clip has exactly [length] latents. */
+    class NpuDit(val session: ai.onnxruntime.OrtSession, val length: Int) {
+        fun velocity(x: FloatArray, t: Float, hidden: FloatArray, mask: FloatArray, seconds: Float): FloatArray {
+            val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+            fun tensor(data: FloatArray, vararg shape: Long) = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(data), shape)
+            val inputs = mapOf("x" to tensor(x, 1, LATENT_CH.toLong(), length.toLong()), "t" to tensor(floatArrayOf(t), 1),
+                "t5_hidden" to tensor(hidden, 1, COND_TOKENS.toLong(), COND_DIM.toLong()), "t5_mask" to tensor(mask, 1, COND_TOKENS.toLong()),
+                "seconds_total" to tensor(floatArrayOf(seconds), 1), "local_add_cond" to tensor(FloatArray(257 * length), 1, 257, length.toLong()))
+            try {
+                return com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
+                    session.run(inputs).use { r -> val o = r[0] as ai.onnxruntime.OnnxTensor; FloatArray(LATENT_CH * length).also { o.floatBuffer.get(it) } }
+                }
+            } finally { inputs.values.forEach { it.close() } }
+        }
+    }
+
     data class Stage(val name: String, val wallMs: Long, val cpuMs: Long)
     class Result(val pcm: FloatArray, val stages: List<Stage>) // interleaved stereo, 44.1 kHz
 
@@ -46,7 +62,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4) {
             cpuOptions = CompiledModel.CpuOptions(threads, null, if (cache) File(dir, "$name.xnnwc").path else null)
         })
 
-    private fun encodeText(prompt: String): Pair<FloatArray, FloatArray> {
+    fun encodeText(prompt: String): Pair<FloatArray, FloatArray> {
         val tokens = Sa3Tokenizer(File(dir, "tokenizer.model")).encode(prompt).take(COND_TOKENS)
         val ids = IntArray(COND_TOKENS); val mask = IntArray(COND_TOKENS)
         tokens.forEachIndexed { i, id -> ids[i] = id; mask[i] = 1 }
@@ -63,6 +79,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4) {
     }
 
     private fun sample(hidden: FloatArray, mask: FloatArray, length: Int, seconds: Float, seed: Long, cancelled: () -> Boolean): FloatArray {
+        npuDit?.takeIf { it.length == length }?.let { dit -> return pingpong(length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) } }
         val rung = DIT_RUNGS.first { it >= length }
         val sig = "s$rung"
         return model("dit_w8a8.tflite", cache = true).use { m ->
@@ -103,6 +120,20 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4) {
                 x
             } finally { (buffers.values + out + gIn + gOut).forEach(TensorBuffer::close) }
         }
+    }
+
+    /** Rectified-flow pingpong over a velocity function on unpadded [256, length] latents. */
+    private fun pingpong(length: Int, seed: Long, cancelled: () -> Boolean, velocity: (FloatArray, Float) -> FloatArray): FloatArray {
+        val sigmas = schedule(); val rng = Random(seed)
+        var x = FloatArray(LATENT_CH * length) { rng.nextGaussian().toFloat() }
+        for (i in 0 until STEPS) {
+            if (cancelled()) throw InterruptedException("cancelled")
+            val tc = sigmas[i]; val tn = sigmas[i + 1]
+            val v = velocity(x, tc)
+            val renoise = i < STEPS - 1 && tn > 0f
+            x = FloatArray(x.size) { k -> val d = x[k] - tc * v[k]; if (renoise) (1 - tn) * d + tn * rng.nextGaussian().toFloat() else d }
+        }
+        return x
     }
 
     /** SAME-S decode on rungs: one exact window when the length is a rung, else lossless overlapped tiles
@@ -153,9 +184,9 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4) {
         const val SAMPLE_RATE = 44100
         const val MAX_SECONDS = 120f
         private const val SAMPLES_PER_LATENT = 4096
-        private const val COND_TOKENS = 256
-        private const val COND_DIM = 768
-        private const val LATENT_CH = 256
+        const val COND_TOKENS = 256
+        const val COND_DIM = 768
+        const val LATENT_CH = 256
         private const val MEM = 64
         private const val TRIM = 16
         private const val STEPS = 8
