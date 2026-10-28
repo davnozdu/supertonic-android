@@ -18,28 +18,37 @@ object SoundBank {
     private const val FORMAT = "m4a"
     private const val MAX_CLIP = 4L * 1024 * 1024
 
+    /** [file]: имя клипа в папке базы; [sha]: контрольная сумма из manifest; [prompt]: английское описание звука
+     * (по нему ищется тот же звук, если модель назвала вид по-другому). */
+    data class Entry(val file: String, val sha: String, val prompt: String)
+
+    private var cache: Map<String, Entry>? = null
+
     fun dir(context: Context): File = File(context.filesDir, "sound-bank")
 
     /** Тумблер «Брать готовые звуки из базы» (по умолчанию включён). */
     fun on(context: Context): Boolean =
         AmbienceSettings.soundBank(context.getSharedPreferences("SupertonicPrefs", 0))
 
-    /** Список базы: вид действия -> (файл, sha256). Кэшируется в files/sound-bank/manifest.json. */
-    fun manifest(context: Context, refresh: Boolean = false): Map<String, Pair<String, String>> {
+    /** Список базы: вид действия -> клип. Кэшируется в files/sound-bank/manifest.json и в памяти. */
+    @Synchronized
+    fun manifest(context: Context, refresh: Boolean = false): Map<String, Entry> {
+        if (!refresh) cache?.let { return it }
         val file = File(dir(context), "manifest.json")
         if (!file.isFile || refresh) {
             val text = fetch("$BASE/manifest.json", 8L * 1024 * 1024)
             if (text != null) runCatching { dir(context).mkdirs(); file.writeText(String(text, Charsets.UTF_8)) }
         }
-        if (!file.isFile) return emptyMap()
-        return runCatching {
+        val parsed = if (!file.isFile) emptyMap() else runCatching {
             val sounds = JSONObject(file.readText()).optJSONArray("sounds") ?: return emptyMap()
             (0 until sounds.length()).mapNotNull { i ->
                 val s = sounds.optJSONObject(i) ?: return@mapNotNull null
                 val key = s.optString("key").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                key to (s.optString("file").ifEmpty { "$key.$FORMAT" } to s.optString("sha256"))
+                key to Entry(s.optString("file").ifEmpty { "$key.$FORMAT" }, s.optString("sha256"), s.optString("prompt"))
             }.toMap()
         }.getOrElse { emptyMap() }
+        cache = parsed
+        return parsed
     }
 
     fun size(context: Context): Int = (manifest(context).keys + local(context).keys).size
@@ -65,18 +74,31 @@ object SoundBank {
     /** Клип вида [kind] из базы: уже скачанный или скачанный сейчас (null — нет в базе или нет сети). */
     fun clip(context: Context, kind: String): File? {
         // Своя (и импортированная) часть базы: файл уже на телефоне.
-        local(context)[kind]?.let { file -> File(dir(context), file).takeIf { it.isFile && it.length() > 0L } }?.let { return it }
-        val (file, sha) = manifest(context)[kind] ?: return null
-        val target = File(dir(context), file)
+        local(context)[kind]?.let { name -> File(dir(context), name).takeIf { it.isFile && it.length() > 0L } }?.let { return it }
+        val entry = manifest(context)[kind] ?: return null
+        val target = File(dir(context), entry.file)
         if (target.isFile && target.length() > 0L) return target
-        val bytes = fetch("$BASE/$file", MAX_CLIP) ?: return null
-        if (sha.isNotEmpty() && sha256(bytes) != sha) {
-            Log.w("SoundBank", "$file: sha256 не совпал, клип не взят")
-            return null
-        }
-        return runCatching { target.writeBytes(bytes); target }
-            .onFailure { Log.w("SoundBank", "save $file: ${it.javaClass.simpleName}") }
-            .getOrNull()
+        return download(context, kind, entry)
+    }
+
+    /** Клип по виду, а если такого вида в базе нет — по смыслу описания: слова описания сравниваются со словами
+     * описаний базы (не меньше двух третей общих, ничья — не угадываем). Так книга не платит генерацией за то же
+     * самое действие, названное иначе. */
+    fun find(context: Context, kind: String, prompt: String): File? {
+        clip(context, kind)?.let { return it }
+        val words = tokens("$kind $prompt")
+        if (words.isEmpty()) return null
+        val scored = manifest(context).asSequence().mapNotNull { (key, entry) ->
+            val other = tokens("$key ${entry.prompt}")
+            if (other.isEmpty()) return@mapNotNull null
+            val common = words.count { it in other }
+            val score = if (common == minOf(words.size, other.size)) 1f else common.toFloat() / maxOf(words.size, other.size)
+            key to score
+        }.sortedByDescending { it.second }.toList()
+        val best = scored.firstOrNull() ?: return null
+        if (best.second < 0.6f) return null
+        if (scored.count { it.second == best.second } > 1) return null
+        return clip(context, best.first)
     }
 
     /** Кладёт клип книги в базу (база растёт) — его возьмут следующие книги. */
@@ -99,36 +121,13 @@ object SoundBank {
     fun downloadAll(context: Context, progress: (Int, Int, String) -> Unit = { _, _, _ -> }): Int {
         val list = manifest(context, refresh = true)
         var done = 0
-        for ((kind, _) in list) {
+        for ((kind, entry) in list) {
             progress(done, list.size, kind)
-            if (clip(context, kind) != null) done++
+            if (File(dir(context), entry.file).let { it.isFile && it.length() > 0L } || download(context, kind, entry) != null) done++
         }
         progress(done, list.size, "")
         return done
     }
-
-
-
-    /** Клип по виду, а если такого вида в базе нет — по смыслу описания: слова промпта сравниваются со словами
-     * описаний базы (не меньше двух третей общих). Так книга не платит генерацией за другое имя того же звука. */
-    fun find(context: Context, kind: String, prompt: String): File? {
-        clip(context, kind)?.let { return it }
-        val words = tokens(prompt)
-        if (words.isEmpty()) return null
-        var best: String? = null; var bestScore = 0f
-        for ((key, value) in manifest(context)) {
-            val other = tokens(value.first.removeSuffix(".$FORMAT").replace('_', ' '))
-            if (other.isEmpty()) continue
-            val score = words.count { it in other }.toFloat() / maxOf(words.size, other.size)
-            if (score > bestScore) { bestScore = score; best = key }
-        }
-        return best?.takeIf { bestScore >= 0.66f }?.let { clip(context, it) }
-    }
-
-    private fun tokens(text: String): Set<String> = text.lowercase()
-        .split(Regex("[^a-z0-9]+")).filter { it.length > 2 && it !in STOP }.toSet()
-
-    private val STOP = setOf("the", "and", "with", "for", "from", "into", "onto", "some", "very", "then", "that", "this")
 
     /** «Выгрузить базу»: все клипы базы одним zip (manifest.json + <вид>.m4a) в выбранный пользователем файл. */
     fun export(context: Context, out: java.io.OutputStream): Int {
@@ -140,8 +139,9 @@ object SoundBank {
             for (clip in clips) {
                 val key = clip.name.removeSuffix(".$FORMAT")
                 val bytes = clip.readBytes()
+                val prompt = manifest(context)[key]?.prompt.orEmpty()
                 sounds.put(JSONObject().put("key", key).put("file", clip.name).put("bytes", clip.length())
-                    .put("sha256", sha256(bytes)).put("seconds", 8))
+                    .put("sha256", sha256(bytes)).put("prompt", prompt).put("seconds", 8))
                 z.putNextEntry(java.util.zip.ZipEntry(clip.name))
                 z.write(bytes)
                 z.closeEntry()
@@ -176,15 +176,33 @@ object SoundBank {
                     val same = target.isFile && target.length() == bytes.size.toLong() && sha256(target.readBytes()) == sha256(bytes)
                     if (same) skipped++
                     else if (!replace && target.isFile) skipped++      // другой звук того же вида — не затираем
-                    else { target.writeBytes(bytes); local.put(key, JSONObject().put("file", name).put("custom", true)); added++ }
+                    else {
+                        target.writeBytes(bytes)
+                        val known = com.brahmadeo.supertonic.tts.books.EventKinds.ALL.any { it.key == key }
+                        local.put(key, JSONObject().put("file", name).put("custom", !known))
+                        added++
+                    }
                 }
                 z.closeEntry()
                 entry = z.nextEntry
             }
         }
         File(dir, "index-local.json").writeText(local.toString())
+        cache = null
         Log.i("SoundBank", "import: +$added, skipped $skipped, replace=$replace")
         return added to skipped
+    }
+
+    private fun download(context: Context, kind: String, entry: Entry): File? {
+        val bytes = fetch("$BASE/${entry.file}", MAX_CLIP) ?: return null
+        if (entry.sha.isNotEmpty() && sha256(bytes) != entry.sha) {
+            Log.w("SoundBank", "${entry.file}: sha256 не совпал, клип не взят")
+            return null
+        }
+        val target = File(dir(context), entry.file)
+        return runCatching { target.writeBytes(bytes); target }
+            .onFailure { Log.w("SoundBank", "save ${entry.file}: ${it.javaClass.simpleName}") }
+            .getOrNull()
     }
 
     private fun fetch(url: String, limit: Long): ByteArray? = runCatching {
@@ -199,6 +217,11 @@ object SoundBank {
             connection.inputStream.use { it.readBytes() }
         } finally { connection.disconnect() }
     }.getOrNull()
+
+    private fun tokens(text: String): Set<String> = text.lowercase()
+        .split(Regex("[^a-z0-9]+")).filter { it.length > 2 && it !in STOP }.toSet()
+
+    private val STOP = setOf("the", "and", "with", "for", "from", "into", "onto", "some", "very", "then", "that", "this")
 
     private fun sha256(bytes: ByteArray): String =
         java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

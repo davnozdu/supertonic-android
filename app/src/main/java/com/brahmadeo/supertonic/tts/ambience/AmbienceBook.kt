@@ -177,7 +177,7 @@ object AmbienceBook {
                 // The bank grows: a sound made for this book is reused by the next one for free.
                 if (!job.music && job.id.startsWith("k_") && SoundBank.on(context))
                     SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file),
-                        custom = job.id.removePrefix("k_") !in com.brahmadeo.supertonic.tts.books.EventKinds.ALL.map { it.key })
+                        custom = !com.brahmadeo.supertonic.tts.books.EventKinds.known(job.id.removePrefix("k_")))
                 manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
                 manifest(context, sha).writeText(manifest.toString())
                 Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS}, music=${job.music})")
