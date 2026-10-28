@@ -32,7 +32,9 @@ internal object AmbienceScenes {
                 com.brahmadeo.supertonic.tts.books.SceneIndex.Unknown -> { trace(context, "book=${position.book} unknown keep=${state.scene?.key}"); return@runCatching state.scene }
             }
             val sha = BookLibrary.contentSha(context, position.book) ?: return@runCatching null
-            val files = BookFiles.sounds(context, sha, location.id)
+            // The first N variants (the setting may have been lowered after more were made).
+            val n = AmbienceBook.variants(context, scenes.locations.size)
+            val files = BookFiles.sounds(context, sha, location.id).filter { it.name.substringAfter('_').substringBefore('.').toIntOrNull()?.let { k -> k < n } == true }
             trace(context, "book=${position.book} at=${location.id} files=${files.size}")
             AmbiencePlayer.Scene("$sha/${location.id}", location.name, files).takeIf { files.isNotEmpty() }.also { state.scene = it }
         }.getOrElse { trace(context, "error ${it.javaClass.simpleName}"); null }

@@ -20,18 +20,50 @@ internal object AmbiencePlayer {
     private const val TICK_MS = 50L
     private val handler = Handler(Looper.getMainLooper())
 
-    /** Headroom above the music-level clips: +10 dB through the platform LoudnessEnhancer (it limits, so no
-     * clipping); the old full volume is now ~30 %. */
+    /** Headroom above the music-level clips (+10 dB) and «Сглаживать резкие звуки»: on Android 9+ one
+     * DynamicsProcessing per player — a compressor that keeps the events (a whistle, a burst of laughter) near the
+     * steady background, its make-up gain, then a limiter; older systems get the platform LoudnessEnhancer (+10 dB). */
+    private const val BOOST_DB = 10f
     private const val BOOST_MB = 1000
+    @Volatile var tame = true
+        set(value) { if (field != value) { field = value; handler.post { voices.forEach { it.applyTame() } } } }
+
     private class Voice(val player: MediaPlayer, val scene: Scene, val clip: Int) {
-        val boost: android.media.audiofx.LoudnessEnhancer? = runCatching {
+        private val dynamics: Any? = if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.create(player.audioSessionId) else null
+        private val boost: android.media.audiofx.LoudnessEnhancer? = if (dynamics != null) null else runCatching {
             android.media.audiofx.LoudnessEnhancer(player.audioSessionId).apply { setTargetGain(BOOST_MB); enabled = true }
         }.getOrNull()
-        fun release() { runCatching { boost?.release() }; runCatching { player.release() } }
+        fun applyTame() { if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.configure(dynamics) }
+        fun release() {
+            runCatching { (dynamics as? android.media.audiofx.AudioEffect)?.release() }
+            runCatching { boost?.release() }; runCatching { player.release() }
+        }
         var level = 0f            // 0..1 of the scene volume
         var target = 1f
         var fadeMs = CROSSFADE_MS
         var next = false          // the following clip was already started
+    }
+
+    @androidx.annotation.RequiresApi(28)
+    private object Dynamics {
+        /** The player's DynamicsProcessing, or null when the system has none for it (then: LoudnessEnhancer). */
+        fun create(session: Int): Any? = runCatching {
+            val config = android.media.audiofx.DynamicsProcessing.Config.Builder(
+                android.media.audiofx.DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION, 2, false, 0, true, 1, false, 0, true).build()
+            android.media.audiofx.DynamicsProcessing(0, session, config).also { configure(it); it.enabled = true }
+        }.getOrNull()
+
+        /** Clips are at −14 LUFS (steady background ≈ −17 dBFS RMS). Taming: above −14 dBFS 4:1 (attack 5 ms, release
+         * 400 ms), so an event 12 dB over the background comes out ~3 dB over it; off: no compression. Then +10 dB
+         * and a −1 dBFS limiter (no clipping, no clicks). */
+        fun configure(effect: Any?) {
+            val d = effect as? android.media.audiofx.DynamicsProcessing ?: return
+            runCatching {
+                val band = android.media.audiofx.DynamicsProcessing.MbcBand(true, 20000f, 5f, 400f, if (tame) 4f else 1f, -14f, 6f, -90f, 1f, 0f, BOOST_DB)
+                val limiter = android.media.audiofx.DynamicsProcessing.Limiter(true, true, 0, 1f, 60f, 10f, -1f, 0f)
+                for (ch in 0..1) { d.setMbcBandByChannelIndex(ch, 0, band); d.setLimiterByChannelIndex(ch, limiter) }
+            }
+        }
     }
 
     private val voices = ArrayList<Voice>()
@@ -82,6 +114,12 @@ internal object AmbiencePlayer {
         voices.clear(); scene = null; playing = false; master = 0f; masterTarget = 0f
     }
 
+    /** Any other variant at random: the events come at no fixed interval and the loop never repeats the same way. */
+    private fun nextClip(scene: Scene, current: Int): Int {
+        val n = scene.files.size
+        return if (n <= 1) current else (current + 1 + kotlin.random.Random.nextInt(n - 1)) % n
+    }
+
     /** Equal power (sqrt): a crossfade of two sounds keeps the loudness. */
     private fun applyGain(v: Voice) { val g = kotlin.math.sqrt(v.level) * master * volume; runCatching { v.player.setVolume(g, g) } }
 
@@ -120,7 +158,7 @@ internal object AmbiencePlayer {
             val current = scene
             if (masterTarget > 0f && !v.next && v.target > 0f && current != null && v.scene.key == current.key) {
                 val left = runCatching { v.player.duration - v.player.currentPosition }.getOrDefault(Int.MAX_VALUE)
-                if (left in 1..CROSSFADE_MS) { v.next = true; v.target = 0f; v.fadeMs = CROSSFADE_MS; start(current, v.clip + 1, CROSSFADE_MS) }
+                if (left in 1..CROSSFADE_MS) { v.next = true; v.target = 0f; v.fadeMs = CROSSFADE_MS; start(current, nextClip(current, v.clip), CROSSFADE_MS) }
             }
         }
         if (masterTarget == 0f && master == 0f) {

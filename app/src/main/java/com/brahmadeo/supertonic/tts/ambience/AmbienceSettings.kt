@@ -11,6 +11,16 @@ object AmbienceSettings {
     const val DEFAULT_VOLUME = 30
     private const val MUSIC = "background_music_enabled"
 
+    /** Sound variants per scene (2–8, default 3): steady background, then one with each of the place's events, again
+     * with new seeds; played in a random order. */
+    const val VARIANTS = "ambience_variants"
+    const val DEFAULT_VARIANTS = 3
+    /** «Сглаживать резкие звуки»: a compressor keeps the events (a whistle) close to the background level. */
+    const val TAME = "ambience_tame"
+
+    fun variants(prefs: SharedPreferences) = prefs.getInt(VARIANTS, DEFAULT_VARIANTS).coerceIn(2, 8)
+    fun tame(prefs: SharedPreferences) = prefs.getBoolean(TAME, true)
+
     fun enabled(prefs: SharedPreferences) = prefs.getBoolean(ENABLED, false)
     /** Since 5.0.6-beta42 the sounds have +10 dB of headroom: a volume set before (100 % was just audible) is moved
      * once to the new default, so the update does not make them 10 dB louder. */

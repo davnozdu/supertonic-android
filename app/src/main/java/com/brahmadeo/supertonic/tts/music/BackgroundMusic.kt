@@ -157,6 +157,7 @@ object BackgroundMusic {
             underScene = true
             if (active || now < gapUntil) {
                 handler.removeCallbacks(idleRelease)
+                prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.tame = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.tame(it) }
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current, ambienceVolume())
             } else {
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.pause()

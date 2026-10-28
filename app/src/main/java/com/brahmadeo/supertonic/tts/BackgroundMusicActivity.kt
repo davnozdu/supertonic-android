@@ -41,6 +41,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceVolume by remember { mutableIntStateOf(AmbienceSettings.volume(prefs)) }
                 var ambienceReady by remember { mutableStateOf(AmbienceModel.ready(this)) }
                 var ambienceNpu by remember { mutableStateOf(prefs.getBoolean(AmbienceModel.NPU_KEY,false)) }
+                var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
+                var ambienceVariants by remember { mutableIntStateOf(AmbienceSettings.variants(prefs)) }
                 var busy by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("") }
                 val error by BackgroundMusic.status.collectAsState()
@@ -158,6 +160,19 @@ class BackgroundMusicActivity : ComponentActivity() {
                             onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.VOLUME,ambienceVolume).apply() },
                             valueRange=0f..100f,steps=99)
                         Text("По умолчанию 30 %. Громкость речи не изменяется.",style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Сглаживать резкие звуки",Modifier.weight(1f))
+                            Switch(checked=ambienceTame,enabled=!busy,onCheckedChange={ ambienceTame=it; prefs.edit().putBoolean(AmbienceSettings.TAME,it).apply() })
+                        }
+                        Text("Гудки, смех, удары и другие события сцены не громче ровного фона больше чем на ~3 дБ и не перебивают голос. " +
+                            "Действует сразу, звуки пересоздавать не нужно.",style=MaterialTheme.typography.bodySmall)
+                        Text("Вариантов звука на сцену: $ambienceVariants",style=MaterialTheme.typography.titleMedium)
+                        Slider(value=ambienceVariants.toFloat(),onValueChange={ ambienceVariants=it.roundToInt() },
+                            onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.VARIANTS,ambienceVariants).apply() },
+                            valueRange=2f..8f,steps=5)
+                        Text("По 30 с каждый, играют в случайном порядке: ровный фон и варианты с событиями места (гудок паровоза, лай собаки). " +
+                            "Больше вариантов — разнообразнее, но дольше создание и больше файл книги (≈240 КБ на вариант, ≈3 с на NPU). " +
+                            "Недостающие варианты создаются кнопкой в карточке книги. По умолчанию 3.",style=MaterialTheme.typography.bodySmall)
                         if(com.brahmadeo.supertonic.tts.utils.Npu.supported(this@BackgroundMusicActivity)) {
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                                 Text("Генерация на NPU · эксперимент",Modifier.weight(1f))
