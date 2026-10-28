@@ -58,7 +58,7 @@ class AmbienceEventsTest {
     @Test fun severalActionsOfOneParagraphAllSound() {
         val events = listOf(EventIndex.Event("e1", "a single gunshot"), EventIndex.Event("e2", "glass shattering"))
         val builder = EventIndex.Companion.Builder(events)
-        val text = "Раздался выстрел, и стекло со звоном разбилось."
+        val text = "В коридоре раздался выстрел, и стекло со звоном разбилось."
         builder.add(text, listOf("раздался выстрел" to 0, "стекло со звоном разбилось" to 1))
         val index = builder.build()
         val hits = index.hitAll(text, emptyList())
@@ -70,7 +70,7 @@ class AmbienceEventsTest {
 
     @Test fun rewordedQuoteStillFindsTheAction() {
         val words = ReplyIndex.words("Он с треском захлопнул дверь.")
-        assertEquals(0, EventIndex.anchorStart(words, ReplyIndex.words("с треском захлопнул дверь")))
+        assertEquals(1, EventIndex.anchorStart(words, ReplyIndex.words("с треском захлопнул дверь")))
         // The model changed the beginning: the rest of the quote still places the event.
         assertEquals(2, EventIndex.anchorStart(words, ReplyIndex.words("с громким треском захлопнул дверь")))
         assertNull(EventIndex.anchorStart(words, ReplyIndex.words("зелёный слоник прыгал")))
