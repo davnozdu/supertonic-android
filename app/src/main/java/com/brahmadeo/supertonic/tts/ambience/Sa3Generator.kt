@@ -57,6 +57,9 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
     data class Stage(val name: String, val wallMs: Long, val cpuMs: Long)
     class Result(val pcm: FloatArray, val stages: List<Stage>) // interleaved stereo, 44.1 kHz
 
+    /** One per generator (~40 MB for its 256 k pieces), freed with it after the book's sounds. */
+    private val tokenizer by lazy { Sa3Tokenizer(File(dir, "tokenizer.model")) }
+
     fun generate(prompt: String, seconds: Float, seed: Long, cancelled: () -> Boolean = { false },
                  onStage: (Stage) -> Unit = {}): Result {
         require(seconds in 1f..MAX_SECONDS) { "Длительность 1…${MAX_SECONDS.toInt()} с" }
@@ -82,7 +85,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
         })
 
     fun encodeText(prompt: String): Pair<FloatArray, FloatArray> {
-        val tokens = Sa3Tokenizer(File(dir, "tokenizer.model")).encode(prompt).take(COND_TOKENS)
+        val tokens = tokenizer.encode(prompt).take(COND_TOKENS)
         val ids = IntArray(COND_TOKENS); val mask = IntArray(COND_TOKENS)
         tokens.forEachIndexed { i, id -> ids[i] = id; mask[i] = 1 }
         return model("encoder_fp16.tflite", cache = false).use { m ->

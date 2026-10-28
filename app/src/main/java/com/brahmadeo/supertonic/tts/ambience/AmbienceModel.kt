@@ -107,7 +107,8 @@ object AmbienceModel {
         if (!npuWanted(context) || !npuReady(context)) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         return try {
-            val session = Npu.session(context, env, File(root(context), "dit_L323_main.onnx"), emptyMap(), NPU_CACHE)
+            // family: older compiled graphs (~0.9 GB each) are deleted, not only older runtimes of this one.
+            val session = Npu.session(context, env, File(root(context), "dit_L323_main.onnx"), emptyMap(), NPU_CACHE, family = "sa3-dit")
             Log.i("Ambience", "NPU session ready, PSS ${android.os.Debug.getPss() / 1024} MB")
             val pre = try { env.createSession(File(root(context), "dit_pre.onnx").path, ai.onnxruntime.OrtSession.SessionOptions()) }
                 catch (e: Throwable) { session.close(); throw e }
