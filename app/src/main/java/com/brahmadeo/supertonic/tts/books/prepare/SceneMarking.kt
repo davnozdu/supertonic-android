@@ -306,7 +306,11 @@ internal object SceneMarking {
         val descriptions = unknown.map { it.sound }.filter { it.isNotEmpty() }.take(MAX_GROUP_ITEMS)
         val groupOf = HashMap<String, Pair<String, String>>() // description -> (kind, English prompt)
         if (group != null && descriptions.size >= 2) {
-            val answer = runCatching { grouping(group(groupPrompt(descriptions.toList())), descriptions.toList()) }.getOrNull()
+            val answer = runCatching { grouping(group(groupPrompt(descriptions)), descriptions) }.getOrElse { e ->
+                // Cancel is not a failed request: the preparation must stop, not finish with what it has.
+                if (e is java.util.concurrent.CancellationException) throw e
+                null
+            }
             answer?.let { groupOf.putAll(it) }
             log("Second pass: ${descriptions.size} unnamed actions in ${answer?.values?.map { v -> v.first }?.distinct()?.size ?: 0} groups")
         }
