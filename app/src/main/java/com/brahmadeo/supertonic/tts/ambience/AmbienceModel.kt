@@ -47,8 +47,16 @@ object AmbienceModel {
     /** Stable Audio 3 Medium (1.4 B, music only): clearer timbre, ~2.4× the CPU of the small one; same T5 and latents. */
     val MEDIUM_ASSETS = listOf(
         Asset("dit_medium_w8a8.tflite", 1_667_708_664L, "e60ea3a8b530de93ee7f1fd7b4426597006dbcde7bce45750d39c439f4ef9602"),
+        Asset("NOTICE_MEDIUM.txt", 1_548L, "8411d4e8530e3eed31b47cb471366c7b7e1a81eb578c2afbc9530a9b3988128a"),
     )
-    val MEDIUM_NPU_ASSETS = listOf<Asset>()
+    /** The medium DiT for the HTP in three parts (layers 0–7, 8–15, 16–23; each compiles on its own within the
+     * phone's memory and stays < 2 GB as an embedded context) and its fp32 CPU front. */
+    val MEDIUM_NPU_ASSETS = listOf(
+        Asset("medium_dit_L323_p0.onnx", 960_982_185L, "d243c78553f8c0923ca9b09362127a4b57c906decd6f33938ab933e3fdbced68"),
+        Asset("medium_dit_L323_p1.onnx", 952_774_163L, "838065d857249b782ef32e65d94510e6f2c6f24bb3fc2ef6d3166a9343fb7c74"),
+        Asset("medium_dit_L323_p2.onnx", 953_695_846L, "bf535fc18027ce3bab2df27d57b9aa932da38e15e4df497d793c264933ef2927"),
+        Asset("medium_dit_pre.onnx", 47_063_721L, "7134b158307db424298c3896f4e96b06d6091336895523823fab2a9ad1f62d37"),
+    )
     /** SAME-L decoder (the same latents as SAME-S): more detail, ~+30 % of the generation time. */
     val LARGE_DECODER = listOf(
         Asset("dec_l_w8a8.tflite", 515_381_432L, "53dbca41ec9620257834bda4f3008a2cd5072afba564b84906f8ffdfca2647e7"),
@@ -59,11 +67,11 @@ object AmbienceModel {
 
     /** One music model: its CPU DiT (rung signatures), its NPU graphs (30 s) and their compiled-cache names. */
     class Music(val id: String, val title: String, val ditFile: String, val rungs: IntArray, val assets: List<Asset>, val marker: String,
-                val npuAssets: List<Asset>, val npuMarker: String, val npuMain: String, val npuPre: String, val npuCache: String, val family: String)
+                val npuAssets: List<Asset>, val npuMarker: String, val npuParts: List<String>, val npuPre: String, val npuCache: String, val family: String)
     val SMALL_MUSIC = Music("small", "Малая", "dit_music_w8a8.tflite", Sa3Generator.SMALL_RUNGS, MUSIC_ASSETS, "verified-ambience-sa3-v1-music",
-        MUSIC_NPU_ASSETS, "verified-ambience-sa3-v1-music-npu", "music_dit_L323_main.onnx", "music_dit_pre.onnx", "sa3-music-L323-b76f554f", "sa3-music")
+        MUSIC_NPU_ASSETS, "verified-ambience-sa3-v1-music-npu", listOf("music_dit_L323_main.onnx"), "music_dit_pre.onnx", "sa3-music-L323-b76f554f", "sa3-music")
     val MEDIUM_MUSIC = Music("medium", "Средняя", "dit_medium_w8a8.tflite", Sa3Generator.MEDIUM_RUNGS, MEDIUM_ASSETS, "verified-ambience-sa3-v1-medium",
-        MEDIUM_NPU_ASSETS, "verified-ambience-sa3-v1-medium-npu", "medium_dit_L323_main.onnx", "medium_dit_pre.onnx", "sa3-medium-L323", "sa3-medium")
+        MEDIUM_NPU_ASSETS, "verified-ambience-sa3-v1-medium-npu", (0..2).map { "medium_dit_L323_p$it.onnx" }, "medium_dit_pre.onnx", "sa3-medium-L323-d243c785", "sa3-medium")
     private fun prefs(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0)
     /** The chosen music model (pref [MUSIC_MODEL_KEY], the small one by default). */
     fun music(context: Context) = if (prefs(context).getString(MUSIC_MODEL_KEY, "small") == "medium") MEDIUM_MUSIC else SMALL_MUSIC
@@ -175,16 +183,24 @@ object AmbienceModel {
         if (!npuWanted(context) || !(if (music) musicNpuReady(context) else npuReady(context))) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         val m = music(context)
-        val (main, pre, cache) = if (music) Triple(m.npuMain, m.npuPre, m.npuCache) else Triple("dit_L323_main.onnx", "dit_pre.onnx", NPU_CACHE)
+        val parts = if (music) m.npuParts else listOf("dit_L323_main.onnx")
+        val pre = if (music) m.npuPre else "dit_pre.onnx"
+        val cache = if (music) m.npuCache else NPU_CACHE
         val family = if (music) m.family else "sa3-dit"
+        // One graph keeps its old cache name; the parts of a cut model get "-p<k>" and keep each other's caches.
+        val names = if (parts.size == 1) listOf(cache) else parts.indices.map { "$cache-p$it" }
+        fun open(k: Int) = Npu.session(context, env, File(root(context), parts[k]), emptyMap(), names[k], family = family, siblings = names)
+        val sessions = ArrayList<ai.onnxruntime.OrtSession>()
         return try {
-            // family: older compiled graphs (~0.9 GB each) are deleted, not only older runtimes of this one.
-            val session = Npu.session(context, env, File(root(context), main), emptyMap(), cache, family = family)
-            Log.i("Ambience", "NPU session ready (music=$music), PSS ${android.os.Debug.getPss() / 1024} MB")
-            val preSession = try { env.createSession(File(root(context), pre).path, ai.onnxruntime.OrtSession.SessionOptions()) }
-                catch (e: Throwable) { session.close(); throw e }
-            Sa3Generator.NpuDit(session, preSession, NPU_LENGTH)
+            // Compile the missing parts one at a time and free each (a compile peaks at several GB), then load all
+            // from the cache. family: older compiled graphs (~1 GB each) are deleted, not only older runtimes.
+            if (parts.size > 1) for (k in parts.indices) if (!Npu.cacheReady(context, names[k])) open(k).close()
+            for (k in parts.indices) sessions.add(open(k))
+            Log.i("Ambience", "NPU session ready (music=$music, parts=${parts.size}), PSS ${android.os.Debug.getPss() / 1024} MB")
+            val preSession = env.createSession(File(root(context), pre).path, ai.onnxruntime.OrtSession.SessionOptions())
+            Sa3Generator.NpuDit(sessions, preSession, NPU_LENGTH)
         } catch (e: Throwable) {
+            sessions.forEach { runCatching { it.close() } }
             Log.w("Ambience", "NPU DiT unavailable: ${e.javaClass.simpleName}: ${e.message}")
             // A rejected build may still have written its context (~1 GB): never keep or reuse it.
             File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith(cache) }?.forEach { it.delete() }

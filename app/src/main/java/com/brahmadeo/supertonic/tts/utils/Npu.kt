@@ -87,10 +87,13 @@ object Npu {
      * app storage (one flash write); later loads skip the multi-second HTP compilation. */
     fun session(ctx: Context, env: OrtEnvironment, model: File, dims: Map<String, Long>, cacheName: String,
                 performance: String = "high_performance", allowCpuFallback: Boolean = false, logInfo: Boolean = false,
-                extra: Map<String, String> = emptyMap(), verbose: Boolean = false, family: String = cacheName): OrtSession {
+                extra: Map<String, String> = emptyMap(), verbose: Boolean = false, family: String = cacheName,
+                /** Other graphs of the same model compiled separately (its parts): their caches are kept. */
+                siblings: List<String> = emptyList()): OrtSession {
         val cacheDir = File(ctx.filesDir, "npu-cache").apply { mkdirs() }
         val cached = File(cacheDir, "$cacheName-${cacheVersion(ctx)}_ctx.onnx")
-        cacheDir.listFiles()?.filter { it.name.startsWith("$family-") && it != cached }?.forEach { it.delete() }
+        val keep = (siblings + cacheName).map { "$it-${cacheVersion(ctx)}_ctx.onnx" }.toSet()
+        cacheDir.listFiles()?.filter { it.name.startsWith("$family-") && it.name !in keep }?.forEach { it.delete() }
         OrtSession.SessionOptions().use { options ->
             dims.forEach { (name, value) -> options.setSymbolicDimensionValue(name, value) }
             options.setIntraOpNumThreads(1)
@@ -109,6 +112,9 @@ object Npu {
     /** Diagnostics only: "key=value;key=value" from a pref to try QNN/session options without a rebuild. */
     private fun debug(ctx: Context, key: String): Map<String, String> = prefs(ctx).getString(key, null).orEmpty()
         .split(';').mapNotNull { it.split('=', limit = 2).takeIf { p -> p.size == 2 && p[0].isNotBlank() }?.let { p -> p[0].trim() to p[1].trim() } }.toMap()
+
+    /** True when [session] has compiled [cacheName] for this runtime (the next load takes seconds). */
+    fun cacheReady(ctx: Context, cacheName: String) = File(File(ctx.filesDir, "npu-cache"), "$cacheName-${cacheVersion(ctx)}_ctx.onnx").isFile
 
     /** True when a shared context for [cacheName] is compiled for this runtime (loading takes seconds). */
     fun sharedCacheReady(ctx: Context, cacheName: String) = File(File(ctx.filesDir, "npu-cache"), "$cacheName-${cacheVersion(ctx)}.done").isFile

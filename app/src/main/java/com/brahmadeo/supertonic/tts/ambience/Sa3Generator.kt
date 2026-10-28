@@ -28,7 +28,8 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
      * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
-    class NpuDit(val session: ai.onnxruntime.OrtSession, val pre: ai.onnxruntime.OrtSession, val length: Int) : AutoCloseable {
+    class NpuDit(val sessions: List<ai.onnxruntime.OrtSession>, val pre: ai.onnxruntime.OrtSession, val length: Int) : AutoCloseable {
+        constructor(session: ai.onnxruntime.OrtSession, pre: ai.onnxruntime.OrtSession, length: Int) : this(listOf(session), pre, length)
         private class Cond(val data: FloatArray, val shape: LongArray)
         private val conditioning = HashMap<Pair<Float, Float>, Map<String, Cond>>()
 
@@ -53,11 +54,22 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
                 conditioning(t, seconds).mapValues { (_, c) -> tensor(c.data, *c.shape) }
             try {
                 return com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
-                    session.run(inputs).use { r -> val o = r[0] as ai.onnxruntime.OnnxTensor; FloatArray(LATENT_CH * length).also { o.floatBuffer.get(it) } }
+                    // A model cut into parts (the medium one): each part takes the inputs and the earlier parts'
+                    // tensors it names; the last part's first output is the velocity.
+                    val results = ArrayList<ai.onnxruntime.OrtSession.Result>()
+                    try {
+                        val values = HashMap<String, ai.onnxruntime.OnnxTensorLike>(inputs)
+                        for (part in sessions) {
+                            val r = part.run(part.inputNames.associateWith { values.getValue(it) }); results.add(r)
+                            r.forEach { (name, value) -> values[name] = value as ai.onnxruntime.OnnxTensor }
+                        }
+                        val o = results.last()[0] as ai.onnxruntime.OnnxTensor
+                        FloatArray(LATENT_CH * length).also { o.floatBuffer.get(it) }
+                    } finally { results.forEach { it.close() } }
                 }
             } finally { inputs.values.forEach { it.close() } }
         }
-        override fun close() { session.close(); pre.close() }
+        override fun close() { sessions.forEach { it.close() }; pre.close() }
     }
 
     data class Stage(val name: String, val wallMs: Long, val cpuMs: Long)

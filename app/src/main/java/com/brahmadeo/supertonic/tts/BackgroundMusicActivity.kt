@@ -66,6 +66,19 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var message by remember { mutableStateOf("") }
                 val error by BackgroundMusic.status.collectAsState()
                 val scope=rememberCoroutineScope()
+                /** «Скачать» a made track: copied as .m4a to where the user picks (Downloads, Music…). */
+                var toSave by remember { mutableStateOf<GeneratedMusic.Track?>(null) }
+                val saver=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { uri ->
+                    val track=toSave; toSave=null
+                    if(uri!=null && track!=null) scope.launch {
+                        message=try {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                contentResolver.openOutputStream(uri,"w")?.use { out -> track.file.inputStream().use { it.copyTo(out) } } ?: error("не удалось записать")
+                            }
+                            "Трек «${track.title}» сохранён"
+                        } catch(t: Exception) { "Не удалось сохранить трек: ${t.message.orEmpty()}" }
+                    }
+                }
                 val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if(uri!=null) {
                         busy=true; message="Загрузка MP3…"
@@ -173,7 +186,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Text("Своя музыка",style=MaterialTheme.typography.titleLarge)
                         Text("Музыка по вашему описанию, создаётся на телефоне — без подготовки книги. Модель понимает только английский: " +
                             "описание на русском переводится автоматически (облако, а без него — Gemma 4); для точности можно сразу писать " +
-                            "по-английски. Готовый трек зацикливается без стыка и появляется в списке ниже.",style=MaterialTheme.typography.bodySmall)
+                            "по-английски. Готовый трек зацикливается без стыка и появляется в списке ниже; «Скачать» сохраняет его файлом .m4a на телефон.",style=MaterialTheme.typography.bodySmall)
                         Text("Модель хуже всего справляется со струнными (скрипка, виолончель): в высоких нотах возможны артефакты и " +
                             "«пластмассовый» звук. Лучше получаются фортепиано, гитара, духовые, эмбиент и шумовые подложки.",
                             style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
@@ -187,6 +200,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                                     message = "Трек удалён"
                                     Unit } }) },horizontalArrangement=Arrangement.SpaceBetween) {
                                 Text("${g.title} · ${g.seconds} с",Modifier.weight(1f).padding(top=12.dp))
+                                TextButton(enabled=!busy,onClick={
+                                    toSave=g; saver.launch(g.title.replace(Regex("[\\\\/:*?\"<>|]"),"_").ifBlank { "Музыка" } + ".m4a") }) { Text("Скачать") }
                                 RadioButton(selected=selected=="gen:${g.id}",enabled=!busy,onClick={select("gen:${g.id}")})
                             }
                         }
