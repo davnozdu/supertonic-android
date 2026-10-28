@@ -42,10 +42,30 @@ object SoundBank {
         }.getOrElse { emptyMap() }
     }
 
-    fun size(context: Context): Int = manifest(context).size
+    fun size(context: Context): Int = (manifest(context).keys + local(context).keys).size
+
+    /** Свои и импортированные клипы: вид -> файл (files/sound-bank/index-local.json). */
+    fun local(context: Context): Map<String, String> {
+        val file = File(dir(context), "index-local.json")
+        if (!file.isFile) return emptyMap()
+        return runCatching {
+            val o = JSONObject(file.readText())
+            o.keys().asSequence().mapNotNull { k ->
+                val v = o.opt(k)
+                val name = when (v) {
+                    is JSONObject -> v.optString("file")
+                    is String -> v
+                    else -> ""
+                }
+                if (name.isEmpty()) null else k to name
+            }.toMap()
+        }.getOrElse { emptyMap() }
+    }
 
     /** Клип вида [kind] из базы: уже скачанный или скачанный сейчас (null — нет в базе или нет сети). */
     fun clip(context: Context, kind: String): File? {
+        // Своя (и импортированная) часть базы: файл уже на телефоне.
+        local(context)[kind]?.let { file -> File(dir(context), file).takeIf { it.isFile && it.length() > 0L } }?.let { return it }
         val (file, sha) = manifest(context)[kind] ?: return null
         val target = File(dir(context), file)
         if (target.isFile && target.length() > 0L) return target
@@ -85,6 +105,64 @@ object SoundBank {
         }
         progress(done, list.size, "")
         return done
+    }
+
+
+    /** «Выгрузить базу»: все клипы базы одним zip (manifest.json + <вид>.m4a) в выбранный пользователем файл. */
+    fun export(context: Context, out: java.io.OutputStream): Int {
+        val dir = dir(context)
+        val clips = dir.listFiles { f -> f.isFile && f.name.endsWith(".$FORMAT") }?.sortedBy { it.name }.orEmpty()
+        val sounds = org.json.JSONArray()
+        val zip = java.util.zip.ZipOutputStream(out.buffered())
+        zip.use { z ->
+            for (clip in clips) {
+                val key = clip.name.removeSuffix(".$FORMAT")
+                val bytes = clip.readBytes()
+                sounds.put(JSONObject().put("key", key).put("file", clip.name).put("bytes", clip.length())
+                    .put("sha256", sha256(bytes)).put("seconds", 8))
+                z.putNextEntry(java.util.zip.ZipEntry(clip.name))
+                z.write(bytes)
+                z.closeEntry()
+            }
+            z.putNextEntry(java.util.zip.ZipEntry("manifest.json"))
+            z.write(JSONObject().put("version", 1).put("sounds", sounds).toString().toByteArray())
+            z.closeEntry()
+        }
+        return clips.size
+    }
+
+    /** «Импортировать базу»: zip с manifest.json и клипами. [replace] — стереть текущую базу, иначе слить;
+     * дубли (тот же вид и тот же sha256) пропускаются, отличающийся файл того же вида при слиянии не затирается. */
+    fun importZip(context: Context, input: java.io.InputStream, replace: Boolean): Pair<Int, Int> {
+        val dir = dir(context).apply { mkdirs() }
+        var added = 0; var skipped = 0
+        val local = File(dir, "index-local.json").let {
+            if (it.isFile) runCatching { JSONObject(it.readText()) }.getOrDefault(JSONObject()) else JSONObject()
+        }
+        if (replace) {
+            dir.listFiles { f -> f.isFile && f.name.endsWith(".$FORMAT") }?.forEach { it.delete() }
+            local.keys().asSequence().toList().forEach { local.remove(it) }
+        }
+        java.util.zip.ZipInputStream(input.buffered()).use { z ->
+            var entry = z.nextEntry
+            while (entry != null) {
+                val name = File(entry.name).name
+                if (name.endsWith(".$FORMAT")) {
+                    val bytes = z.readBytes()
+                    val key = name.removeSuffix(".$FORMAT")
+                    val target = File(dir, name)
+                    val same = target.isFile && target.length() == bytes.size.toLong() && sha256(target.readBytes()) == sha256(bytes)
+                    if (same) skipped++
+                    else if (!replace && target.isFile) skipped++      // другой звук того же вида — не затираем
+                    else { target.writeBytes(bytes); local.put(key, JSONObject().put("file", name).put("custom", true)); added++ }
+                }
+                z.closeEntry()
+                entry = z.nextEntry
+            }
+        }
+        File(dir, "index-local.json").writeText(local.toString())
+        Log.i("SoundBank", "import: +$added, skipped $skipped, replace=$replace")
+        return added to skipped
     }
 
     private fun fetch(url: String, limit: Long): ByteArray? = runCatching {

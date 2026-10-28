@@ -356,6 +356,55 @@ class BackgroundMusicActivity : ComponentActivity() {
                             }
                         }) { Text(if (bankBusy) "Скачивание…" else if (bankCount > 0) "Обновить список базы" else "Скачать список базы") }
                         if (bankNote.isNotEmpty()) Text(bankNote,style=MaterialTheme.typography.bodySmall)
+                        // «Выгрузить базу» — все клипы одним zip; «Импортировать базу» — zip со слиянием или заменой.
+                        var askImport by remember { mutableStateOf<android.net.Uri?>(null) }
+                        val bankExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+                            if (uri!=null) scope.launch {
+                                val n=runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    contentResolver.openOutputStream(uri)?.use { out ->
+                                        com.brahmadeo.supertonic.tts.ambience.SoundBank.export(this@BackgroundMusicActivity, out) } ?: 0 } }
+                                bankCount=com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)
+                                bankNote=n.fold({ "Выгружено клипов: $it" }, { "Не удалось выгрузить: ${it.message ?: it.javaClass.simpleName}" })
+                            }
+                        }
+                        val bankImport=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri!=null) askImport=uri }
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(enabled=!bankBusy,onClick={
+                                bankExport.launch("sound-bank.zip")
+                            }) { Text("Выгрузить базу") }
+                            OutlinedButton(enabled=!bankBusy,onClick={
+                                bankImport.launch(arrayOf("application/zip","application/octet-stream"))
+                            }) { Text("Импортировать базу") }
+                        }
+                        Text("Выгрузка: все клипы базы одним zip (manifest.json + файлы). Импорт: тот же zip — приложение " +
+                            "спросит, заменить базу целиком или слить; при слиянии одинаковые файлы (по sha256) пропускаются, " +
+                            "а другой звук того же вида не затирается.",style=MaterialTheme.typography.bodySmall)
+                        askImport?.let { uri ->
+                            AlertDialog(onDismissRequest={ askImport=null },
+                                title={ Text("Импорт базы") },
+                                text={ Text("Заменить базу целиком или слить с текущей? При слиянии дубли пропускаются.") },
+                                confirmButton={ TextButton(onClick={
+                                    val target=uri; askImport=null; bankBusy=true
+                                    scope.launch {
+                                        val r=runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            contentResolver.openInputStream(target)?.use {
+                                                com.brahmadeo.supertonic.tts.ambience.SoundBank.importZip(this@BackgroundMusicActivity, it, replace=true) } ?: (0 to 0) } }
+                                        bankBusy=false; bankCount=com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)
+                                        bankNote=r.fold({ "+${it.first} заменено" }, { "Не удалось: ${it.message ?: it.javaClass.simpleName}" })
+                                    }
+                                }) { Text("Заменить") } },
+                                dismissButton={ Row { TextButton(onClick={
+                                    val target=uri; askImport=null; bankBusy=true
+                                    scope.launch {
+                                        val r=runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            contentResolver.openInputStream(target)?.use {
+                                                com.brahmadeo.supertonic.tts.ambience.SoundBank.importZip(this@BackgroundMusicActivity, it, replace=false) } ?: (0 to 0) } }
+                                        bankBusy=false; bankCount=com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)
+                                        bankNote=r.fold({ "+${it.first}, пропущено ${it.second}" }, { "Не удалось: ${it.message ?: it.javaClass.simpleName}" })
+                                    }
+                                }) { Text("Слить") }
+                                    TextButton(onClick={ askImport=null }) { Text("Отмена") } } })
+                        }
 
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Музыка по настроению",Modifier.weight(1f))
