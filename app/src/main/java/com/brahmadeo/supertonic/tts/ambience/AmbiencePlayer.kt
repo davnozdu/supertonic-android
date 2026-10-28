@@ -44,17 +44,30 @@ internal object AmbiencePlayer {
             scene = target
             start(target, 0, SCENE_FADE_MS)
         }
+        if (pausing) pausing = false // resumed during the pause fade: the tick restores the levels
         if (!playing) { playing = true; voices.forEach { runCatching { it.player.start() } } }
         schedule()
     }
 
-    /** Reading paused: everything holds where it is. */
+    /** Reading paused or stopped: a quick fade (no click), then everything holds where it is. */
     fun pause() {
-        if (!playing) return
-        playing = false
+        if (!playing || pausing) return
+        pausing = true
         handler.removeCallbacks(tick)
-        voices.forEach { runCatching { if (it.player.isPlaying) it.player.pause() } }
+        val start = android.os.SystemClock.uptimeMillis()
+        handler.post(object : Runnable { override fun run() {
+            val k = 1f - (android.os.SystemClock.uptimeMillis() - start).toFloat() / PAUSE_FADE_MS
+            if (k > 0f && pausing) {
+                for (v in voices) { val g = kotlin.math.sqrt(v.level) * volume * k; runCatching { v.player.setVolume(g, g) } }
+                handler.postDelayed(this, TICK_MS); return
+            }
+            if (!pausing) return // resumed meanwhile
+            pausing = false; playing = false
+            voices.forEach { runCatching { if (it.player.isPlaying) it.player.pause() } }
+        } })
     }
+    private var pausing = false
+    private const val PAUSE_FADE_MS = 400L
 
     /** Back to the music (no scene here): fade out, then release. */
     fun fadeOut() {
@@ -65,7 +78,7 @@ internal object AmbiencePlayer {
     }
 
     fun release() {
-        handler.removeCallbacks(tick)
+        handler.removeCallbacks(tick); pausing = false
         voices.forEach { runCatching { it.player.release() } }
         voices.clear(); scene = null; playing = false
     }
@@ -93,7 +106,7 @@ internal object AmbiencePlayer {
         for (v in voices.toList()) {
             val step = TICK_MS.toFloat() / v.fadeMs
             v.level = if (v.level < v.target) minOf(v.target, v.level + step) else maxOf(v.target, v.level - step)
-            val gain = v.level * volume
+            val gain = kotlin.math.sqrt(v.level) * volume // equal power: a crossfade of two sounds keeps the loudness
             runCatching { v.player.setVolume(gain, gain) }
             if (v.target == 0f && v.level == 0f) { voices.remove(v); runCatching { v.player.release() } ; continue }
             // Before the clip ends the next variant fades in over it.

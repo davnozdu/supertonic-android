@@ -116,7 +116,29 @@ object BackgroundMusic {
     private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true
     private fun ambienceVolume() = (prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.volume(it) } ?: 5) / 100f
     private fun volume() = (previewVolume ?: prefs?.getInt("background_music_volume",DEFAULT_VOLUME) ?: DEFAULT_VOLUME).coerceIn(0,100) / 100f
-    private fun updateVolume() { if (prepared) runCatching { player?.setVolume(volume(),volume()) } }
+    private fun updateVolume() { if (prepared) runCatching { val g = kotlin.math.sqrt(level) * volume(); player?.setVolume(g, g) } }
+
+    /** The music fades instead of cutting: out under a scene's sound and back after it (as long as the scene
+     * crossfade), quickly on pause or resume; equal-power gain (sqrt), so a crossfade keeps the loudness. */
+    private var level = 0f
+    private var target = 0f
+    private var fadeMs = QUICK_FADE_MS
+    private const val SCENE_FADE_MS = 2500L
+    private const val QUICK_FADE_MS = 400L
+    private const val FADE_TICK_MS = 50L
+    private val fade: Runnable = object : Runnable { override fun run() {
+        val step = FADE_TICK_MS.toFloat() / fadeMs
+        level = if (level < target) minOf(target, level + step) else maxOf(target, level - step)
+        updateVolume()
+        if (level == 0f && target == 0f) { if (prepared) runCatching { if (player?.isPlaying == true) player?.pause() }; return }
+        if (level != target) handler.postDelayed(this, FADE_TICK_MS)
+    } }
+    private fun fadeTo(value: Float, ms: Long) {
+        target = value; fadeMs = ms
+        handler.removeCallbacks(fade)
+        if (level != target) handler.post(fade) else if (target == 0f) fade.run()
+    }
+    private var underScene = false
 
     private fun update() {
         val ctx = context ?: return
@@ -125,7 +147,8 @@ object BackgroundMusic {
         val active = reading.playing() || now < holdUntil
         val current = scene?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.enabled(it) } == true }
         if (current != null) {
-            if (prepared) runCatching { if (player?.isPlaying == true) player?.pause() }
+            if (prepared && player?.isPlaying == true) fadeTo(0f, SCENE_FADE_MS)
+            underScene = true
             if (active || now < gapUntil) {
                 handler.removeCallbacks(idleRelease)
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current, ambienceVolume())
@@ -147,7 +170,7 @@ object BackgroundMusic {
         if (!enabled() || !(reading.playing() || held) || track.isEmpty()) {
             // Between two utterances of the same reading: keep playing until the gap ends.
             if (enabled() && track.isNotEmpty() && android.os.SystemClock.uptimeMillis() < gapUntil) return
-            if (prepared) runCatching { if(player?.isPlaying==true) player?.pause() }
+            if (prepared && player?.isPlaying == true) fadeTo(0f, QUICK_FADE_MS)
             handler.removeCallbacks(idleRelease)
             handler.postDelayed(idleRelease,120_000)
             return
@@ -156,7 +179,11 @@ object BackgroundMusic {
         if (failedTrack == track) return
         if (player != null) {
             // Every utterance refreshes the state (KOReader: several times a sentence); a playing track is left alone.
-            if (prepared && !seeking) runCatching { updateVolume(); if (player?.isPlaying != true) player?.start() }.onFailure { fail(track) }
+            if (prepared && !seeking) runCatching {
+                if (player?.isPlaying != true) { level = 0f; updateVolume(); player?.start() }
+                if (target != 1f || level < 1f) fadeTo(1f, if (underScene) SCENE_FADE_MS else QUICK_FADE_MS)
+                underScene = false
+            }.onFailure { fail(track) }
             return
         }
         loadedSource = source
@@ -197,6 +224,7 @@ object BackgroundMusic {
     }
     private fun release(rememberPosition: Boolean) {
         if (rememberPosition && prepared) savedPosition = runCatching { player?.currentPosition ?: 0 }.getOrDefault(0)
+        handler.removeCallbacks(fade); level = 0f; target = 0f
         player?.let { runCatching { it.release() } }
         player = null
         prepared = false
