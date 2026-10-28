@@ -27,7 +27,8 @@ class BookPreparationService : Service() {
             if (BookPreparation.state.value.running) BookPreparation.stop() else stopSelf()
             return START_NOT_STICKY
         }
-        val uri = intent?.data ?: run { stopSelf(); return START_NOT_STICKY }
+        val uri = intent?.data ?: intent?.getStringExtra("queue_file")?.let { android.net.Uri.fromFile(java.io.File(it)) }
+            ?: run { stopSelf(); return START_NOT_STICKY }
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel("book_preparation", "Подготовка книг", NotificationManager.IMPORTANCE_LOW))
         startForeground(4207, notification(BookPreparation.State(true, "Подготовка книги")))

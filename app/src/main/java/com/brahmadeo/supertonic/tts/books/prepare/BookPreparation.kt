@@ -65,12 +65,14 @@ object BookPreparation {
                             scenes: Boolean = false): Boolean {
         if (job != null || mutable.value.running) return false
         val ctx = context.applicationContext
-        ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // A queued book is a file of the app (no permission to keep).
+        if (uri.scheme != "file") ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         pendingSource = source
         mutable.value = State(running = true, stage = "Копирование книги", startedAt = System.currentTimeMillis())
         try {
+            // A file:// URI may not travel in an intent's data (FileUriExposedException): a queued book goes as a path.
             ContextCompat.startForegroundService(ctx, Intent(ctx, BookPreparationService::class.java)
-                .setData(uri).putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor).putExtra("smart", smart).putExtra("scenes", scenes))
+                .apply { if (uri.scheme == "file") putExtra("queue_file", uri.path) else setData(uri) }.putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor).putExtra("smart", smart).putExtra("scenes", scenes))
         } catch (t: Exception) {
             pendingSource = null; mutable.value = State(message = "Не удалось запустить фоновую подготовку; откройте MyTTS и повторите.")
             throw t
@@ -186,6 +188,7 @@ object BookPreparation {
                     ctx.stopService(Intent(ctx, BookPreparationService::class.java))
                     job = null; cancellation = null
                 }
+                BookQueue.finished(ctx, uri, mutable.value.bookId != null)
             }
         }.also { it.start() }
     }
@@ -287,6 +290,7 @@ object BookPreparation {
         val name = runCatching { ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null } }.getOrNull()?.trim().orEmpty()
         if (BookFiles.validSourceName(name)) return name
+        if (uri.scheme == "file") uri.lastPathSegment?.takeIf { BookFiles.validSourceName(it) }?.let { return it }
         val head = file.inputStream().use { val b = ByteArray(4096); val n = it.read(b); String(b, 0, maxOf(n, 0), Charsets.ISO_8859_1) }
         return if (head.startsWith("PK") && !head.contains("mimetypeapplication/epub")) "book.fb2.zip" else if (head.startsWith("PK")) "book.epub" else "book.fb2"
     }

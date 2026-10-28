@@ -65,6 +65,20 @@ class BooksActivity : ComponentActivity() {
                 var repliesOn by remember { mutableStateOf(prepPrefs.getBoolean("replies", true)) }
                 var smartOn by remember { mutableStateOf(prepPrefs.getBoolean("smart", false)) }
                 var scenesOn by remember { mutableStateOf(prepPrefs.getBoolean("scenes", false)) }
+                var nightQueue by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.prepare.BookQueue.nightOn(this@BooksActivity)) }
+                val queue by com.brahmadeo.supertonic.tts.books.prepare.BookQueue.entries.collectAsState()
+                LaunchedEffect(Unit) { withContext(Dispatchers.IO) { com.brahmadeo.supertonic.tts.books.prepare.BookQueue.refresh(this@BooksActivity) } }
+                val queuePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+                    if (uris.isNotEmpty()) scope.launch {
+                        var added = 0; var failed = 0
+                        withContext(Dispatchers.IO) { for (u in uris) runCatching {
+                            com.brahmadeo.supertonic.tts.books.prepare.BookQueue.add(this@BooksActivity, u, repliesOn, smartOn, scenesOn, thinking)
+                        }.onSuccess { added++ }.onFailure { failed++ } }
+                        message = "В очередь добавлено книг: $added" + (if (failed > 0) ", не удалось: $failed" else "") +
+                            ". Подготовка — ночью (00:00–06:00), когда телефон заряжается и не используется."
+                        allowBackground()
+                    }
+                }
                 val ambience by com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.collectAsState()
                 var extractBook by remember { mutableStateOf<BookLibrary.Entry?>(null) }
                 val extractPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
@@ -195,6 +209,30 @@ class BooksActivity : ComponentActivity() {
                                 }
                                 Text("Обработка может занять 10–15 минут. Продолжается в фоне и при выключенном экране. " +
                                     "Запросы к LLM выполняются строго по одному.", style = MaterialTheme.typography.bodySmall)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("Подготовить ночью")
+                                        Text("Книги встают в очередь (можно выбрать сразу несколько) с текущими настройками и готовятся " +
+                                            "по одной с 00:00 до 06:00, когда телефон на зарядке и им не пользуются. Начатая книга " +
+                                            "доделывается и после 6 утра; без зарядки следующая не начинается.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked = nightQueue, onCheckedChange = {
+                                        nightQueue = it; com.brahmadeo.supertonic.tts.books.prepare.BookQueue.setNight(this@BooksActivity, it)
+                                    })
+                                }
+                                if (queue.isNotEmpty()) {
+                                    Text("В очереди: ${queue.size}", style = MaterialTheme.typography.titleSmall)
+                                    for (e in queue) Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        Text(e.name + (if (e.failures > 0) " · не удалось ${e.failures} раз" else ""), Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall)
+                                        TextButton(onClick = { scope.launch { withContext(Dispatchers.IO) {
+                                            com.brahmadeo.supertonic.tts.books.prepare.BookQueue.remove(this@BooksActivity, e.id) } } }) { Text("Убрать") }
+                                    }
+                                    if (!preparation.running) OutlinedButton(onClick = {
+                                        if (!com.brahmadeo.supertonic.tts.books.prepare.BookQueue.startAll(this@BooksActivity))
+                                            message = "Не удалось начать: проверьте облачную LLM в настройках." else allowBackground()
+                                    }) { Text("Подготовить очередь сейчас") }
+                                }
                                 if (preparation.running) {
                                     // Read with elapsedSeconds, so it is recomposed every second.
                                     val waiting = elapsedSeconds.let { ((System.currentTimeMillis() - preparation.stageAt) / 1000).coerceAtLeast(0) }
@@ -208,7 +246,8 @@ class BooksActivity : ComponentActivity() {
                                         Text("Готово разделов: ${preparation.done}/${preparation.total}", style = MaterialTheme.typography.bodySmall)
                                     } else LinearProgressIndicator(Modifier.fillMaxWidth())
                                     OutlinedButton(onClick = BookPreparation::stop) { Text("Остановить") }
-                                } else Button(enabled = !busy, onClick = { epubPicker.launch(arrayOf("application/epub+zip", "application/x-fictionbook+xml", "application/xml", "text/xml", "application/zip", "*/*")) }) { Text("Выбрать книгу") }
+                                } else if (nightQueue) Button(enabled = !busy, onClick = { queuePicker.launch(arrayOf("application/epub+zip", "application/x-fictionbook+xml", "application/xml", "text/xml", "application/zip", "*/*")) }) { Text("Добавить книги в очередь") }
+                                else Button(enabled = !busy, onClick = { epubPicker.launch(arrayOf("application/epub+zip", "application/x-fictionbook+xml", "application/xml", "text/xml", "application/zip", "*/*")) }) { Text("Выбрать книгу") }
                                 if (preparation.message.isNotBlank()) Text(preparation.message)
                             }
                         }
