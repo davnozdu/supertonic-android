@@ -52,6 +52,8 @@ object BackgroundMusic {
     /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
      * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
     private const val GAP_MS = 4000L
+    /** Two event sounds of one utterance start at least this far apart. */
+    private const val MIN_EVENT_GAP_MS = 1200L
     @Volatile private var gapUntil = 0L
     private val gapEnd = Runnable { update() }
     /** A reader that synthesizes to files and plays them itself (KOReader's audiobook plugin) never says when its
@@ -160,7 +162,15 @@ object BackgroundMusic {
         if (S.events(p) && tag.events.isNotEmpty()) {
             val per = owner?.let { msPerWord(it) } ?: 330f
             val level = S.eventsVolume(p) / 100f
-            for (moment in tag.events) player.oneShot(ctx, moment.file, (moment.word * per).toLong(), level)
+            // A dense paragraph may describe several actions: they are all marked, but two sounds never start closer
+            // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere).
+            var lastAt = -MIN_EVENT_GAP_MS
+            for (moment in tag.events) {
+                val at = (moment.word * per).toLong()
+                if (at - lastAt < MIN_EVENT_GAP_MS) continue
+                lastAt = at
+                player.oneShot(ctx, moment.file, at, level)
+            }
         }
     }
 

@@ -44,8 +44,9 @@ class EventIndex private constructor(private val keys: LongArray, private val va
 
     companion object {
         const val WINDOW = ReplyIndex.WINDOW
-        /** Event sounds an utterance may bring (a paragraph holds one or two described actions, rarely more). */
-        const val MAX_PER_TEXT = 3
+        /** Event sounds an utterance may bring: a dense paragraph may describe six or seven actions, and every one of
+         * them is in the index; the player spaces them out so they do not pile up. */
+        const val MAX_PER_TEXT = 8
         /** The chapter transition («Переходы между главами»): a book-level sound of its own. */
         const val CHAPTER_ID = "e0"
         const val CHAPTER_SOUND = "a soft page turn followed by a gentle low chime, quiet and warm"
@@ -84,10 +85,14 @@ class EventIndex private constructor(private val keys: LongArray, private val va
                     val q = ReplyIndex.words(quote)
                     if (q.isEmpty()) continue
                     val start = anchorStart(words, q) ?: continue
-                    // The first window that ends inside the quote (its first words with the ones before).
-                    val end = p + start + minOf(WINDOW - 1, q.size - 1)
-                    if (end - WINDOW + 1 < 0) continue
-                    entries.putIfAbsent(ReplyIndex.key(full.subList(end - WINDOW + 1, end + 1)), event)
+                    // The first window that ends inside the quote (its first words with the ones before). Two actions of
+                    // one sentence can end in the same window; then the neighbouring window keeps both findable.
+                    val first = p + start + minOf(WINDOW - 1, q.size - 1)
+                    for (delta in intArrayOf(0, 1, 2, 3, -1, -2)) {
+                        val end = first + delta
+                        if (end - WINDOW + 1 < 0 || end >= p + words.size) continue
+                        if (entries.putIfAbsent(ReplyIndex.key(full.subList(end - WINDOW + 1, end + 1)), event) == null) break
+                    }
                 }
                 for (w in words) { before.addLast(w); while (before.size > WINDOW - 1) before.removeFirst() }
             }
