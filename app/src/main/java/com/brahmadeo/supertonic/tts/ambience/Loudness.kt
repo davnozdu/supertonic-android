@@ -13,6 +13,8 @@ import kotlin.math.tanh
 object Loudness {
     /** As loud as the bundled music tracks (~−14 LUFS): the two sliders mean the same; the limiter keeps the peaks. */
     const val TARGET_LUFS = -14.0
+    /** Generated music: as loud as the bundled tracks (measured −11.5…−13.6, mean −12.7 LUFS), so one music slider fits all. */
+    const val MUSIC_LUFS = -12.5
     private const val CEILING = 0.9f
 
     private class Biquad(val b0: Double, val b1: Double, val b2: Double, val a1: Double, val a2: Double)

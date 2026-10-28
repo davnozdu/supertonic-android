@@ -35,7 +35,7 @@ object GeneratedMusic {
     }
 
     /** Makes a track: translates [description] if needed (cloud → Gemma 4), generates [seconds] of music (30 s on the
-     * NPU when it is on, longer on the CPU), loudness to −14 LUFS, a seamless loop (2 s shorter), AAC 128 kbit/s. */
+     * NPU when it is on, longer on the CPU), loudness as the bundled tracks (−12.5 LUFS), a seamless loop (2 s shorter), AAC 128 kbit/s. */
     fun create(context: Context, description: String, seconds: Int, progress: (String) -> Unit, cancelled: () -> Boolean): Track {
         require(AmbienceModel.musicReady(context)) { "Скачайте модель музыки" }
         progress(if (com.brahmadeo.supertonic.tts.ambience.MusicPrompt.cyrillic(description)) "Перевод описания" else "Подготовка")
@@ -48,7 +48,7 @@ object GeneratedMusic {
                 .generate(prompt, seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm
         } finally { npu?.close() }
         progress("Сохранение")
-        Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE)
+        Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, Loudness.MUSIC_LUFS)
         val loop = loop(pcm, (LOOP_FADE_S * Sa3Generator.SAMPLE_RATE).toInt())
         val id = System.currentTimeMillis().toString()
         val folder = dir(context).apply { mkdirs() }

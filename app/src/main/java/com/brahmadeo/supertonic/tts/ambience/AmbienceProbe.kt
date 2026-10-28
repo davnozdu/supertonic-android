@@ -150,3 +150,26 @@ object ScenesProbe {
         Log.i("ScenesProbe", "DONE locations=${result.index.locations.size} failed=${result.failed} requests=$requests ms=${out.getLong("ms")}")
     }
 }
+
+/** «Своя музыка» through the real path (translation, generation, loop, saving into the list): cache/music-probe.txt has
+ * one description a line; extra musicSeconds (60). Results (prompt, seconds, file) → cache/music-probe-out.json. */
+object MusicProbe {
+    fun run(context: Context, seconds: Int) {
+        val lines = File(context.cacheDir, "music-probe.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (!com.brahmadeo.supertonic.tts.ambience.AmbienceModel.musicReady(context))
+            runBlocking { com.brahmadeo.supertonic.tts.ambience.AmbienceModel.downloadMusic(context) { text, _ -> Log.i("MusicProbe", text) } }
+        val out = JSONArray()
+        for (d in lines) {
+            val started = android.os.SystemClock.elapsedRealtime(); val cpu = android.os.Process.getElapsedCpuTime()
+            val row = JSONObject().put("description", d)
+            try {
+                val t = com.brahmadeo.supertonic.tts.music.GeneratedMusic.create(context, d, seconds, { Log.i("MusicProbe", it) }, { false })
+                row.put("prompt", t.prompt).put("file", t.file.path).put("seconds", t.seconds)
+            } catch (e: Exception) { row.put("error", "${e.javaClass.simpleName}: ${e.message}") }
+            row.put("wallMs", android.os.SystemClock.elapsedRealtime() - started).put("cpuMs", android.os.Process.getElapsedCpuTime() - cpu)
+            out.put(row); Log.i("MusicProbe", "RESULT $row")
+            File(context.cacheDir, "music-probe-out.json").writeText(out.toString(1))
+        }
+        Log.i("MusicProbe", "DONE ${out.length()}")
+    }
+}

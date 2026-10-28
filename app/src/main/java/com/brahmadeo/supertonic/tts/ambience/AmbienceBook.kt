@@ -128,7 +128,7 @@ object AmbienceBook {
                     musicMode = job.music
                 }
                 val pcm = generator!!.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
-                val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE)
+                val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
                 AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
                 manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
                 manifest(context, sha).writeText(manifest.toString())

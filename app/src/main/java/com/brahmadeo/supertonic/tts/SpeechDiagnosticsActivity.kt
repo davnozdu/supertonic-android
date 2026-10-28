@@ -100,6 +100,12 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     return@withContext
                 }
                 // Read-only: Stable Audio 3 ambience generation into cache/ambience/*.wav, downloads the model if missing.
+                if (intent.getBooleanExtra("musicProbe", false)) {
+                    try { com.brahmadeo.supertonic.tts.ambience.MusicProbe.run(this@SpeechDiagnosticsActivity, intent.getIntExtra("musicSeconds", 60)) }
+                    catch (e: Exception) { Log.e("MusicProbe", "FAILED ${e.javaClass.simpleName}: ${e.message}") }
+                    finally { running.set(false) }
+                    return@withContext
+                }
                 if (intent.getBooleanExtra("scenesProbe", false)) {
                     try { com.brahmadeo.supertonic.tts.ambience.ScenesProbe.run(this@SpeechDiagnosticsActivity) }
                     catch (e: Exception) { Log.e("ScenesProbe", "FAILED ${e.javaClass.simpleName}: ${e.message}") }

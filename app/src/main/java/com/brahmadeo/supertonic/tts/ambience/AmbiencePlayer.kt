@@ -13,7 +13,10 @@ import java.io.File
  * [CROSSFADE_MS] crossfades, so the loop never restarts the same way; a new location (or the music) takes over with
  * a [SCENE_FADE_MS] crossfade. Main thread only (driven by BackgroundMusic, which keeps it in step with reading). */
 internal object AmbiencePlayer {
-    data class Scene(val key: String, val name: String, val files: List<File>)
+    data class Scene(val key: String, val name: String, val files: List<File>) {
+        /** Mood music («Музыка по настроению»): never compressed — only the scene sounds' sudden events are tamed. */
+        val music get() = key.startsWith("music/")
+    }
 
     private const val CROSSFADE_MS = 3000L
     private const val SCENE_FADE_MS = 2500L
@@ -29,11 +32,11 @@ internal object AmbiencePlayer {
         set(value) { if (field != value) { field = value; handler.post { voices.forEach { it.applyTame() } } } }
 
     private class Voice(val player: MediaPlayer, val scene: Scene, val clip: Int) {
-        private val dynamics: Any? = if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.create(player.audioSessionId) else null
+        private val dynamics: Any? = if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.create(player.audioSessionId, !scene.music) else null
         private val boost: android.media.audiofx.LoudnessEnhancer? = if (dynamics != null) null else runCatching {
             android.media.audiofx.LoudnessEnhancer(player.audioSessionId).apply { setTargetGain(BOOST_MB); enabled = true }
         }.getOrNull()
-        fun applyTame() { if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.configure(dynamics) }
+        fun applyTame() { if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.configure(dynamics, !scene.music) }
         fun release() {
             runCatching { (dynamics as? android.media.audiofx.AudioEffect)?.release() }
             runCatching { boost?.release() }; runCatching { player.release() }
@@ -47,19 +50,19 @@ internal object AmbiencePlayer {
     @androidx.annotation.RequiresApi(28)
     private object Dynamics {
         /** The player's DynamicsProcessing, or null when the system has none for it (then: LoudnessEnhancer). */
-        fun create(session: Int): Any? = runCatching {
+        fun create(session: Int, tameable: Boolean): Any? = runCatching {
             val config = android.media.audiofx.DynamicsProcessing.Config.Builder(
                 android.media.audiofx.DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION, 2, false, 0, true, 1, false, 0, true).build()
-            android.media.audiofx.DynamicsProcessing(0, session, config).also { configure(it); it.enabled = true }
+            android.media.audiofx.DynamicsProcessing(0, session, config).also { configure(it, tameable); it.enabled = true }
         }.getOrNull()
 
         /** Clips are at −14 LUFS (steady background ≈ −17 dBFS RMS). Taming: above −14 dBFS 4:1 (attack 5 ms, release
          * 400 ms), so an event 12 dB over the background comes out ~3 dB over it; off: no compression. Then +10 dB
          * and a −1 dBFS limiter (no clipping, no clicks). */
-        fun configure(effect: Any?) {
+        fun configure(effect: Any?, tameable: Boolean) {
             val d = effect as? android.media.audiofx.DynamicsProcessing ?: return
             runCatching {
-                val band = android.media.audiofx.DynamicsProcessing.MbcBand(true, 20000f, 5f, 400f, if (tame) 4f else 1f, -14f, 6f, -90f, 1f, 0f, BOOST_DB)
+                val band = android.media.audiofx.DynamicsProcessing.MbcBand(true, 20000f, 5f, 400f, if (tame && tameable) 4f else 1f, -14f, 6f, -90f, 1f, 0f, BOOST_DB)
                 val limiter = android.media.audiofx.DynamicsProcessing.Limiter(true, true, 0, 1f, 60f, 10f, -1f, 0f)
                 for (ch in 0..1) { d.setMbcBandByChannelIndex(ch, 0, band); d.setLimiterByChannelIndex(ch, limiter) }
             }
