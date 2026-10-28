@@ -77,6 +77,13 @@ object AmbienceModel {
             } }
         }
 
+    /** Deletes the model, the NPU graphs and their compiled HTP cache. */
+    suspend fun remove(context: Context) = withContext(Dispatchers.IO) { lock.withLock {
+        root(context).deleteRecursively()
+        File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("sa3-dit-") }?.forEach { it.delete() }
+    } }
+    fun installedBytes(context: Context) = root(context).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
     /** DiT on the NPU for 30 s clips, or null (CPU) when it is off, not downloaded or fails to build. A build
      * failure turns the NPU off for this app version; the first build compiles the HTP graph (~2 min, cached). */
     fun npuDit(context: Context): Sa3Generator.NpuDit? {

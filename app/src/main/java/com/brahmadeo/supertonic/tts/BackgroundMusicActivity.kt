@@ -13,6 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.brahmadeo.supertonic.tts.ambience.AmbienceModel
+import com.brahmadeo.supertonic.tts.ambience.AmbienceSettings
+import com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.musicOn
 import com.brahmadeo.supertonic.tts.music.BackgroundMusic
 import com.brahmadeo.supertonic.tts.music.MusicFiles
 import com.brahmadeo.supertonic.tts.music.MusicCatalog
@@ -34,6 +37,10 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var selected by remember { mutableStateOf(MusicCatalog.ensureDefault(this)) }
                 var customName by remember { mutableStateOf(if(MusicFiles.custom(this)!=null) prefs.getString("background_music_name","Свой MP3").orEmpty() else "") }
                 var volume by remember { mutableIntStateOf(prefs.getInt("background_music_volume",BackgroundMusic.DEFAULT_VOLUME).coerceIn(0,100)) }
+                var ambience by remember { mutableStateOf(AmbienceSettings.enabled(prefs)) }
+                var ambienceVolume by remember { mutableIntStateOf(AmbienceSettings.volume(prefs)) }
+                var ambienceReady by remember { mutableStateOf(AmbienceModel.ready(this)) }
+                var ambienceNpu by remember { mutableStateOf(prefs.getBoolean(AmbienceModel.NPU_KEY,false)) }
                 var busy by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("") }
                 val error by BackgroundMusic.status.collectAsState()
@@ -44,7 +51,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                         scope.launch {
                             try {
                                 customName=MusicFiles.import(this@BackgroundMusicActivity,uri)
-                                selected="custom"; enabled=true; message="MP3 добавлен"
+                                selected="custom"; enabled=true; ambience=false; message="MP3 добавлен"
                             } catch(t: Exception) { message="Не удалось загрузить MP3: ${t.message.orEmpty()}" }
                             finally { busy=false }
                         }
@@ -52,7 +59,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 }
                 fun select(track: String) {
                     selected=track; enabled=true
-                    prefs.edit().putString("background_music_track",track).putBoolean("background_music_enabled",true).apply()
+                    prefs.edit().putString("background_music_track",track).musicOn().apply(); ambience=false
                 }
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -62,7 +69,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Включить музыку",Modifier.weight(1f))
                             Switch(checked=enabled && selected.isNotEmpty(),enabled=!busy && selected.isNotEmpty(),onCheckedChange={
-                                enabled=it; prefs.edit().putBoolean("background_music_enabled",it).apply()
+                                enabled=it
+                                if(it) { prefs.edit().musicOn().apply(); ambience=false } else prefs.edit().putBoolean("background_music_enabled",false).apply()
                             })
                         }
                         Text("Громкость фона: $volume %",style=MaterialTheme.typography.titleMedium)
@@ -133,6 +141,58 @@ class BackgroundMusicActivity : ComponentActivity() {
                             }
                         }) { Text("Удалить свой MP3") }
                         Text("Файл сохраняется в приложении и доступен без интернета.",style=MaterialTheme.typography.bodySmall)
+                        HorizontalDivider()
+                        Text("Фоновые звуки локаций · эксперимент",style=MaterialTheme.typography.titleLarge)
+                        Text("Для книг, подготовленных в MyTTS: звук места действия по ходу чтения — поезд, кафе, улица, лес. " +
+                            "Звуки создаются на телефоне один раз для каждой локации книги. Вместе с фоновой музыкой не играют: " +
+                            "включение одного выключает другое.",style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Включить фоновые звуки",Modifier.weight(1f))
+                            Switch(checked=ambience && ambienceReady,enabled=!busy && ambienceReady,onCheckedChange={
+                                ambience=it; AmbienceSettings.setAmbience(prefs,it)
+                                if(it) enabled=false
+                            })
+                        }
+                        Text("Громкость звуков: $ambienceVolume %",style=MaterialTheme.typography.titleMedium)
+                        Slider(value=ambienceVolume.toFloat(),onValueChange={ ambienceVolume=it.roundToInt() },
+                            onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.VOLUME,ambienceVolume).apply() },
+                            valueRange=0f..100f,steps=99)
+                        Text("По умолчанию 5 %. Громкость речи не изменяется.",style=MaterialTheme.typography.bodySmall)
+                        if(com.brahmadeo.supertonic.tts.utils.Npu.supported(this@BackgroundMusicActivity)) {
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                                Text("Генерация на NPU · эксперимент",Modifier.weight(1f))
+                                Switch(checked=ambienceNpu,enabled=!busy,onCheckedChange={
+                                    ambienceNpu=it; prefs.edit().putBoolean(AmbienceModel.NPU_KEY,it).apply()
+                                })
+                            }
+                            Text("Нагружает процессор примерно в 3 раза меньше. Дополнительно ${AmbienceModel.npuBytes()/1048576} МБ; " +
+                                "первая подготовка NPU занимает около 2 минут.",style=MaterialTheme.typography.bodySmall)
+                        }
+                        val npuMissing=ambienceNpu && ambienceReady && !AmbienceModel.npuReady(this@BackgroundMusicActivity)
+                        Button(enabled=!busy && (!ambienceReady || npuMissing),onClick={
+                            busy=true
+                            scope.launch {
+                                try {
+                                    AmbienceModel.download(this@BackgroundMusicActivity) { text,_ -> runOnUiThread { message=text } }
+                                    message="Генератор звуков установлен"
+                                } catch(t: Exception) { message="Не удалось скачать: ${t.message.orEmpty()}" }
+                                finally { ambienceReady=AmbienceModel.ready(this@BackgroundMusicActivity); busy=false }
+                            }
+                        }) { Text(when { npuMissing -> "Скачать модель для NPU"; ambienceReady -> "Генератор звуков скачан"
+                            else -> "Скачать генератор звуков (${AmbienceModel.totalBytes()/1048576} МБ)" }) }
+                        if(ambienceReady) OutlinedButton(enabled=!busy,onClick={
+                            busy=true
+                            scope.launch {
+                                try {
+                                    AmbienceModel.remove(this@BackgroundMusicActivity)
+                                    AmbienceSettings.setAmbience(prefs,false); ambience=false
+                                    message="Генератор звуков удалён"
+                                } catch(t: Exception) { message="Не удалось удалить: ${t.message.orEmpty()}" }
+                                finally { ambienceReady=AmbienceModel.ready(this@BackgroundMusicActivity); busy=false }
+                            }
+                        }) { Text("Удалить генератор звуков") }
+                        Text("Модель Stable Audio 3 Small SFX. Powered by Stability AI. Лицензия Stability AI Community License; " +
+                            "текстовый энкодер — Gemma Terms of Use.",style=MaterialTheme.typography.bodySmall)
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         if(message.isNotBlank()) Text(message)
                         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)

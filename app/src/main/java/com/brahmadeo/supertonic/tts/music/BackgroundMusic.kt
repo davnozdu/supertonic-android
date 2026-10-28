@@ -99,7 +99,9 @@ object BackgroundMusic {
     private fun refresh() { handler.post {
         update()
     } }
-    private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true
+    /** Never together with the location ambience (the settings keep them exclusive; this guards stale prefs). */
+    private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true &&
+        prefs?.getBoolean(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.ENABLED,false) != true
     private fun volume() = (previewVolume ?: prefs?.getInt("background_music_volume",DEFAULT_VOLUME) ?: DEFAULT_VOLUME).coerceIn(0,100) / 100f
     private fun updateVolume() { if (prepared) runCatching { player?.setVolume(volume(),volume()) } }
 

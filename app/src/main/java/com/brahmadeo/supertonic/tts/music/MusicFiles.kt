@@ -53,7 +53,7 @@ object MusicFiles {
                 BackgroundMusic.initialize(context)
                 check(prefs.edit().putString("background_music_file",file.absolutePath)
                     .putString("background_music_name",name).putString("background_music_track","custom")
-                    .putBoolean("background_music_enabled",true).commit()) { "Не удалось сохранить настройку" }
+                    .let { with(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings) { it.musicOn() } }.commit()) { "Не удалось сохранить настройку" }
                 installed=true
                 old?.delete()
                 name
