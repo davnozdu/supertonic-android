@@ -221,7 +221,7 @@ object SoundBank {
         }
         val target = File(dir(context), variant.file)
         return runCatching { target.writeBytes(bytes); target }
-            .onFailure { Log.w("SoundBank", "save ${entry.file}: ${it.javaClass.simpleName}") }
+            .onFailure { Log.w("SoundBank", "save ${variant.file}: ${it.javaClass.simpleName}") }
             .getOrNull()
     }
 
