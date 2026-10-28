@@ -44,7 +44,7 @@ object AmbienceBook {
     private const val MUSIC_VARIANTS = 2
 
     /** Event sounds are short one-shots; the chapter transition a little shorter. */
-    const val EVENT_SECONDS = 4f
+    const val EVENT_SECONDS = 8f
     private const val CHAPTER_SECONDS = 3f
 
     /** Every clip the book needs: its locations' variants, its events and the chapter transition. */
@@ -53,7 +53,8 @@ object AmbienceBook {
         val places = scenes.locations.flatMap { loc -> (0 until n).map { k ->
             Job("${loc.id}_$k.m4a", prompt(loc, k), SECONDS, loc.sound.hashCode().toLong() * 31 + k, loc.id, recipe(loc), loc.name)
         } }
-        val events = scenes.events.events.map { e -> Job("${e.id}.m4a", e.sound, EVENT_SECONDS, e.sound.hashCode().toLong(), e.id, e.sound, "событие") }
+        val events = scenes.events.events.map { e -> Job("${e.id}.m4a", e.sound, EVENT_SECONDS, e.sound.hashCode().toLong(), e.id,
+            "${e.sound} | ${EVENT_SECONDS.toInt()} s", "событие") }
         val chapter = com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID.let { id ->
             Job("$id.m4a", com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, CHAPTER_SECONDS, 1L, id,
                 com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, "переход главы")
