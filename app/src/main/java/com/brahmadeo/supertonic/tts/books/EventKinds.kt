@@ -404,6 +404,17 @@ object EventKinds {
         Kind("whisper_male", "шёпот мужской", "a man whispering close to the ear, no words"),
         Kind("whistle_human", "человек свистит", "a man whistling a short tune"),
         Kind("yawn", "зевота", "a long audible yawn"),
+        Kind("fountain_pen", "перьевой ручкой по бумаге", "a fountain pen writing quickly on paper, fine scratching"),
+        Kind("ballpoint", "шариковая ручка", "a ballpoint pen writing steadily on paper"),
+        Kind("pen_cap", "колпачок ручки", "a pen cap pulled off and clicked back on"),
+        Kind("charcoal", "уголь по бумаге", "a charcoal stick drawing on rough paper"),
+        Kind("chalk", "мел по доске", "chalk writing on a blackboard, short squeaks"),
+        Kind("signature", "подпись", "a pen signing a name with quick strokes"),
+        Kind("letter_fold", "складывают письмо", "a letter folded in three and smoothed flat"),
+        Kind("paper_tear", "бумага рвётся", "paper torn slowly along a fold"),
+        Kind("ledger", "счётная книга", "thick ledger pages turned and a pen ticking"),
+        Kind("notebook", "блокнот", "a small notebook opened and pages flipped"),
+        Kind("blotting", "промокашка", "a blotting sheet pressed on wet ink"),
         Kind("other", "другое (в поле sound опиши сам)", "a short distinctive sound effect")
     )
 

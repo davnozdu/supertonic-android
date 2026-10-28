@@ -113,17 +113,30 @@ class AmbienceEventsTest {
 
     @Test fun unnamedActionsOfOneMeaningBecomeOneKindOfTheirOwn() {
         val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
-            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a latch clicking shut"},
-                      {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a latch clicking shut"}]}"""
-        val group = """{"groups":[{"kind":"latch_click","hint":"щёлкнула задвижка",
-            "sound":"a small brass latch clicking shut once","items":[1,2]}]}"""
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a chisel clattering on a wooden floor"},
+                      {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a chisel clatters on the floorboards"}]}"""
+        val group = """{"groups":[{"kind":"chisel_clatter","hint":"падает стамеска",
+            "sound":"a small metal chisel clattering on wooden floorboards","items":[1,2]}]}"""
         val asked = ArrayList<String>()
         val result = SceneMarking.mark(paragraphs, { ans }, group = { prompt -> asked += prompt; group })
         assertEquals(2, result.events)
         assertEquals(1, result.kinds)
-        assertEquals(setOf("latch_click"), result.kindPrompts.keys)
+        assertEquals(setOf("chisel_clatter"), result.kindPrompts.keys)
         assertEquals(1, asked.size) // one request per book, not per paragraph
-        assertEquals(setOf("k_latch_click"), result.index.events.events.map { EventIndex.fileKey(it) }.toSet())
+        assertEquals(setOf("k_chisel_clatter"), result.index.events.events.map { EventIndex.fileKey(it) }.toSet())
+    }
+
+    @Test fun aNewNameForAKnownSoundTakesTheExistingClip() {
+        // «щёлкнула задвижка» — уже есть вид latch: нового клипа не нужно, попадание по смыслу, а не по букве.
+        val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a latch clicking shut"},
+                      {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a latch clicking shut"}]}"""
+        val group = """{"groups":[{"kind":"latch_click","hint":"щёлкнула задвижка",
+            "sound":"a small brass latch clicking shut once","items":[1,2]}]}"""
+        val result = SceneMarking.mark(paragraphs, { ans }, group = { group })
+        assertEquals(2, result.events)
+        assertEquals(setOf("latch"), result.kindPrompts.keys)
+        assertEquals(setOf("k_latch"), result.index.events.events.map { EventIndex.fileKey(it) }.toSet())
     }
 
     @Test fun aLoneUnnamedActionIsDroppedInsteadOfPlayingSomethingElse() {
