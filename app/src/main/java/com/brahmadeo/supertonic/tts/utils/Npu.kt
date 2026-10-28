@@ -53,6 +53,7 @@ object Npu {
     /** Scopes keep a Kokoro failure from switching off the Tera vocoder and vice versa. */
     const val KOKORO = "_kokoro"
     const val TERA_SAMPLER = "_tera_sampler"
+    const val AMBIENCE = "_ambience"
     fun failed(ctx: Context, scope: String = "") = prefs(ctx).getLong(FAILED + scope, -1L) == version(ctx)
     fun enabled(ctx: Context, scope: String = ""): Boolean {
         cleanStale(ctx)
@@ -72,7 +73,7 @@ object Npu {
         Log.w(TAG, "NPU$scope disabled for this version: $reason")
         prefs(ctx).edit().putLong(FAILED + scope, version(ctx)).apply()
     }
-    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).remove(FAILED + TERA_SAMPLER).apply() }
+    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).remove(FAILED + TERA_SAMPLER).remove(FAILED + AMBIENCE).apply() }
 
     fun options(ctx: Context, performance: String = "high_performance"): Map<String, String> {
         // The DSP loads the HTP skel through FastRPC from the app's extracted native libraries.
