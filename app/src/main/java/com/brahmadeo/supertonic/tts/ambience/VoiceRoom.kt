@@ -23,6 +23,7 @@ object VoiceRoom {
         "room" to Room("room", 0.70f, 0.45f, 0.08f),
         "large_room" to Room("large_room", 0.80f, 0.40f, 0.11f),
         "hall" to Room("hall", 0.88f, 0.30f, 0.15f),
+        "bathroom" to Room("bathroom", 0.68f, 0.10f, 0.13f),   // small, hard tiles: short and bright
         "vehicle" to Room("vehicle", 0.60f, 0.60f, 0.06f),
         "cave" to Room("cave", 0.92f, 0.20f, 0.18f, echoMs = 140, echoFeedback = 0.25f, echoLevel = 0.12f),
         "tunnel" to Room("tunnel", 0.90f, 0.25f, 0.16f, echoMs = 210, echoFeedback = 0.35f, echoLevel = 0.18f),
