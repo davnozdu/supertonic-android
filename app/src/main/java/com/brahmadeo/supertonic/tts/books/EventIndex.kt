@@ -4,9 +4,14 @@ package com.brahmadeo.supertonic.tts.books
  * sound. An occurrence is found like [ReplyIndex], by the window of [WINDOW] words where its quote starts, so any cut
  * of the text works; [hit] also says how many words into the reader's text it is (the sound waits for the voice).
  * The same sound in several places is one [Event]. Stored as sorted 8-byte keys + 2-byte event numbers, base64. */
-class EventIndex private constructor(private val keys: LongArray, private val values: ShortArray, val events: List<Event>) {
-    /** [id]: e<N> (the file e<N>.m4a); [sound]: the English prompt of the one-shot sound. */
-    data class Event(val id: String, val sound: String)
+class EventIndex private constructor(private val keys: LongArray, private val values: ShortArray, val events: List<Event>,
+                                     /** The English prompt of every kind of action of the book: one clip per kind, played
+                                      * at every place the action occurs. Kinds the closed list cannot name are made by the
+                                      * second pass and live here with the rest. */
+                                     val kinds: Map<String, String> = emptyMap()) {
+    /** [id]: e<N> (the file e<N>.m4a of a book marked before kinds were shared); [sound]: the English prompt of the
+     * sound; [kind]: the kind of action — one clip serves every occurrence of it. */
+    data class Event(val id: String, val sound: String, val kind: String = "")
     data class Hit(val event: Event, val word: Int)
 
     val size get() = keys.size
@@ -38,7 +43,10 @@ class EventIndex private constructor(private val keys: LongArray, private val va
         val bytes = java.nio.ByteBuffer.allocate(keys.size * 10)
         for (i in keys.indices) { bytes.putLong(keys[i]); bytes.putShort(values[i]) }
         return org.json.JSONObject()
-            .put("events", org.json.JSONArray(events.map { org.json.JSONObject().put("id", it.id).put("sound", it.sound) }))
+            .put("events", org.json.JSONArray(events.map {
+                org.json.JSONObject().put("id", it.id).put("sound", it.sound).apply { if (it.kind.isNotEmpty()) put("kind", it.kind) }
+            }))
+            .apply { if (kinds.isNotEmpty()) put("kinds", org.json.JSONObject().also { o -> kinds.forEach { (k, v) -> o.put(k, v) } }) }
             .put("index", java.util.Base64.getEncoder().encodeToString(bytes.array()))
     }
 
@@ -49,6 +57,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
         const val MAX_PER_TEXT = 8
         /** The chapter transition («Переходы между главами»): a book-level sound of its own. */
         const val CHAPTER_ID = "e0"
+        /** The clip of an event: one per kind ([kinds] of the book); a book marked before kinds is still read by id. */
+        fun fileKey(event: Event): String = if (event.kind.isEmpty()) event.id else "k_" + event.kind
         const val CHAPTER_SOUND = "a soft page turn followed by a gentle low chime, quiet and warm"
         private val ID = Regex("e[0-9]{1,4}")
 
@@ -74,7 +84,7 @@ class EventIndex private constructor(private val keys: LongArray, private val va
         }
 
         /** Feed every paragraph in reading order with its events: (quote, event number). */
-        class Builder(private val events: List<Event>) {
+        class Builder(private val events: List<Event>, private val kinds: Map<String, String> = emptyMap()) {
             private val before = ArrayDeque<String>()
             private val entries = HashMap<Long, Int>()
             fun add(paragraph: String, marks: List<Pair<String, Int>>) {
@@ -98,7 +108,7 @@ class EventIndex private constructor(private val keys: LongArray, private val va
             }
             fun build(): EventIndex {
                 val sorted = entries.entries.sortedBy { it.key }
-                return EventIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, events)
+                return EventIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, events, kinds)
             }
         }
 
@@ -107,7 +117,7 @@ class EventIndex private constructor(private val keys: LongArray, private val va
             val events = (0 until list.length()).map { list.getJSONObject(it) }.map {
                 val id = it.getString("id")
                 require(ID.matches(id) && id != CHAPTER_ID) { "Некорректный идентификатор события: $id" }
-                Event(id, it.getString("sound"))
+                Event(id, it.getString("sound"), it.optString("kind").takeIf { k -> k.isNotEmpty() && EventKinds.KEY.matches(k) }.orEmpty())
             }
             require(events.size <= Short.MAX_VALUE && events.map { it.id }.distinct().size == events.size) { "События повторяются" }
             val bytes = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(o.getString("index")))
@@ -119,7 +129,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
                 require(values[i] in 0 until events.size) { "Некорректная разметка событий" }
                 require(i == 0 || keys[i] > keys[i - 1]) { "Разметка событий не упорядочена" }
             }
-            return EventIndex(keys, values, events)
+            val kinds = o.optJSONObject("kinds")?.let { k -> k.keys().asSequence().filter { EventKinds.KEY.matches(it) }.associateWith { k.getString(it) } }.orEmpty()
+            return EventIndex(keys, values, events, kinds)
         }
 
         val EMPTY = EventIndex(LongArray(0), ShortArray(0), emptyList())

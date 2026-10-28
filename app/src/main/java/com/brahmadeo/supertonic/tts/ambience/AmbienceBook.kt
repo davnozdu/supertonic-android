@@ -55,8 +55,12 @@ object AmbienceBook {
         val places = scenes.locations.flatMap { loc -> (0 until n).map { k ->
             Job("${loc.id}_$k.m4a", prompt(loc, k), SECONDS, loc.sound.hashCode().toLong() * 31 + k, loc.id, recipe(loc), loc.name)
         } }
-        val events = scenes.events.events.map { e -> Job("${e.id}.m4a", e.sound, EVENT_SECONDS, e.sound.hashCode().toLong(), e.id,
-            "${e.sound} | ${EVENT_SECONDS.toInt()} s", "событие") }
+        // One clip per kind of action: a door slammed in chapter 1 is the same sound in chapter 30.
+        val events = scenes.events.events.groupBy { com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(it) }.map { (key, same) ->
+            val prompt = scenes.events.kinds[key.removePrefix("k_")] ?: same.first().sound
+            Job("$key.m4a", prompt, EVENT_SECONDS, key.hashCode().toLong(), key, "$prompt | ${EVENT_SECONDS.toInt()} s",
+                "событие: " + same.first().kind.ifEmpty { prompt.take(40) })
+        }
         val chapter = com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID.let { id ->
             Job("$id.m4a", com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, CHAPTER_SECONDS, 1L, id,
                 com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, "переход главы")
@@ -68,8 +72,12 @@ object AmbienceBook {
         return places + events + chapter + music
     }
 
-    /** l3_0.m4a -> l3; m2_1.m4a -> m2; e5.m4a -> e5. */
-    private fun idOf(file: File) = if (file.name.startsWith("e")) file.name.substringBefore('.') else file.name.substringBefore('_')
+    /** l3_0.m4a -> l3; m2_1.m4a -> m2; e5.m4a -> e5; k_door_slam.m4a -> k_door_slam (a clip of a kind of action). */
+    private fun idOf(file: File) = when {
+        file.name.startsWith("k_") -> file.name.substringBeforeLast('.')
+        file.name.startsWith("e") -> file.name.substringBefore('.')
+        else -> file.name.substringBefore('_')
+    }
 
     /** Drops sounds of places and events that are gone or whose prompt changed. Sounds without a manifest came inside
      * the book file (made for exactly these locations) and are kept. */

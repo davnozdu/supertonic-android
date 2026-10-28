@@ -54,7 +54,7 @@ internal object AmbienceScenes {
             val sha = BookLibrary.contentSha(context, position.book) ?: return@runCatching null
             if (chapter) chapterSound = BookFiles.event(context, sha, com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID)
             if (withEvents) for (hit in scenes.events.hitAll(text, before)) {
-                val file = BookFiles.event(context, sha, hit.event.id) ?: continue
+                val file = BookFiles.event(context, sha, com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(hit.event)) ?: continue
                 moments += Moment(file, hit.word)
                 trace(context, "event ${hit.event.id} at word ${hit.word} of ${words.size}")
             }

@@ -9,6 +9,9 @@ object EventKinds {
      * description of the sound (used when the answer has none of its own). */
     data class Kind(val key: String, val hint: String, val sound: String)
 
+    /** The kind the model uses when no key of the list fits: such events are grouped by the second pass or dropped. */
+    const val OTHER = "other"
+
     val ALL: List<Kind> = listOf(
         Kind("door_open", "дверь открывается", "a door opening with a soft creak"),
         Kind("door_close", "дверь закрывается", "a door closing with a soft thud"),
@@ -91,6 +94,9 @@ object EventKinds {
 
     /** The default sound of [key], or null for an unknown kind. */
     fun sound(key: String?): String? = key?.let { byKey[it]?.sound }
+
+    /** A key of the list that names a real sound (not [OTHER], which means «no idea»). */
+    fun proper(key: String?): Boolean = key != null && key != OTHER && byKey.containsKey(key)
 
     /** The whole list for the prompt: «door_open — дверь открывается; …» (one line, the model copies a key exactly). */
     fun promptList(): String = ALL.joinToString("; ") { "${it.key} — ${it.hint}" }

@@ -111,6 +111,32 @@ class AmbienceEventsTest {
         assertEquals("a door closing with a soft thud", result.index.events.events.single().sound)
     }
 
+    @Test fun unnamedActionsOfOneMeaningBecomeOneKindOfTheirOwn() {
+        val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a latch clicking shut"},
+                      {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a latch clicking shut"}]}"""
+        val group = """{"groups":[{"kind":"latch_click","hint":"щёлкнула задвижка",
+            "sound":"a small brass latch clicking shut once","items":[1,2]}]}"""
+        val asked = ArrayList<String>()
+        val result = SceneMarking.mark(paragraphs, { ans }, group = { prompt -> asked += prompt; group })
+        assertEquals(2, result.events)
+        assertEquals(1, result.kinds)
+        assertEquals(setOf("latch_click"), result.kindPrompts.keys)
+        assertEquals(1, asked.size) // one request per book, not per paragraph
+        assertEquals(setOf("k_latch_click"), result.index.events.events.map { EventIndex.fileKey(it) }.toSet())
+    }
+
+    @Test fun aLoneUnnamedActionIsDroppedInsteadOfPlayingSomethingElse() {
+        val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+            "events":[{"at":2,"quote":"разложил на столе бумаги","kind":"other","sound":"an odd knocking under the floor"}]}"""
+        val group = """{"groups":[{"kind":"odd_knock","hint":"стук под полом",
+            "sound":"a dull knock under the floorboards","items":[1]}]}"""
+        val result = SceneMarking.mark(paragraphs, { ans }, group = { group })
+        assertEquals(0, result.events)
+        assertEquals(0, result.kinds)
+        assertTrue(result.dropped >= 1)
+    }
+
     @Test fun everyAccentGetsItsOwnVariant() {
         val location = SceneIndex.Location("l1", "купе", "train interior, wheel clacking", 12,
             listOf("a whistle blows twice", "brakes squeal and steam hisses", "a conductor's steps", "a door sliding"))
