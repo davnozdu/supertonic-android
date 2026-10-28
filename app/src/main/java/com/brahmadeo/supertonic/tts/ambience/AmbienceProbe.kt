@@ -23,12 +23,14 @@ object AmbienceProbe {
 
     /** Static 30 s DiT (L=323, Pow→Mul, ORT-folded; pushed to files/ambience/sa3-small-sfx/npu/ for the probe).
      * Compiles once into npu-cache, then checks one forward against the same graph on the ORT CPU. */
-    private fun npuDit(context: Context, threads: Int, prompt: String): Sa3Generator.NpuDit {
+    private fun npuDit(context: Context, threads: Int, prompt: String, fallback: Boolean, verbose: Boolean): Sa3Generator.NpuDit {
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         val model = File(AmbienceModel.root(context), "npu/dit_L323.onnx")
         require(model.isFile) { "No ${model.path}" }
         val wall = android.os.SystemClock.elapsedRealtime(); val cpu = android.os.Process.getElapsedCpuTime()
-        val session = com.brahmadeo.supertonic.tts.utils.Npu.session(context, env, model, emptyMap(), "sa3-dit-L323-d2103fa6")
+        // With fallback the saved context keeps the nodes QNN rejected as plain ONNX nodes: that file lists them.
+        val session = com.brahmadeo.supertonic.tts.utils.Npu.session(context, env, model, emptyMap(),
+            if (fallback) "sa3-dit-L323-fb-d2103fa6" else "sa3-dit-L323-d2103fa6", allowCpuFallback = fallback, logInfo = fallback, verbose = verbose)
         Log.i(TAG, "NPU LOAD wallMs=${android.os.SystemClock.elapsedRealtime() - wall} cpuMs=${android.os.Process.getElapsedCpuTime() - cpu}")
         val dit = Sa3Generator.NpuDit(session, 323)
         val (hidden, mask) = Sa3Generator(AmbienceModel.root(context), threads).encodeText(prompt)
@@ -62,7 +64,8 @@ object AmbienceProbe {
         val runs = intent.getIntExtra("ambienceRuns", 2)
         val out = File(context.cacheDir, "ambience").apply { mkdirs() }
         val results = JSONArray()
-        val npuDit = if (intent.getBooleanExtra("ambienceNpu", false)) npuDit(context, threads, prompts.first().second) else null
+        val npuDit = if (intent.getBooleanExtra("ambienceNpu", false)) npuDit(context, threads, prompts.first().second,
+            intent.getBooleanExtra("ambienceNpuFallback", false), intent.getBooleanExtra("ambienceNpuVerbose", false)) else null
         if (npuDit != null && seconds != 30f) Log.w(TAG, "NPU graph is 30 s only; this run stays on CPU")
         val generator = Sa3Generator(AmbienceModel.root(context), threads, npuDit)
         for (run in 0 until runs) for ((name, prompt) in prompts) {
