@@ -6,6 +6,8 @@ import android.util.Log
 import com.brahmadeo.supertonic.tts.utils.Npu
 import com.brahmadeo.supertonic.tts.utils.ResumableModelFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,6 +39,7 @@ object AmbienceModel {
     const val NPU_LENGTH = 323
     private const val NPU_CACHE = "sa3-dit-L323-e30c054b"
     private val lock = Mutex()
+    private const val PARALLEL = 3
     private const val MARKER = "verified-ambience-sa3-v1"
     private const val NPU_MARKER = "verified-ambience-sa3-v1-npu2"
 
@@ -54,14 +57,28 @@ object AmbienceModel {
     fun npuWanted(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getBoolean(NPU_KEY, false) &&
         Npu.supported(context) && !Npu.failed(context, Npu.AMBIENCE)
 
+    /** Up to [PARALLEL] files at once (each resumable and SHA-checked on its own): one HTTP stream from GitHub is
+     * often throttled, and the model is three large files. */
     private suspend fun fetch(context: Context, assets: List<Asset>, marker: String, label: String, progress: (String, Float) -> Unit) {
         val dir = root(context).apply { mkdirs() }
-        val total = assets.sumOf { it.size }; var done = 0L
-        for (asset in assets) {
-            ResumableModelFile.fetch("$BASE/${asset.name}", File(dir, asset.name), asset.size, asset.sha) { received, _ ->
-                progress("$label: ${(done + received) / 1048576} / ${total / 1048576} МБ", (done + received).toFloat() / total)
-            }
-            done += asset.size
+        val total = assets.sumOf { it.size }
+        val received = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        val gate = kotlinx.coroutines.sync.Semaphore(PARALLEL)
+        kotlinx.coroutines.coroutineScope {
+            for (asset in assets.sortedByDescending { it.size }) launch { gate.withPermit {
+                val target = File(dir, asset.name)
+                // A shorter file left by an older pinned version is not a partial download: resuming would splice two
+                // versions. The checksum catches it (and deletes the file); one clean retry then fetches it whole.
+                for (attempt in 0..1) try {
+                    ResumableModelFile.fetch("$BASE/${asset.name}", target, asset.size, asset.sha) { got, _ ->
+                        received[asset.name] = got
+                        val sum = received.values.sum()
+                        progress("$label: ${sum / 1048576} / ${total / 1048576} МБ", sum.toFloat() / total)
+                    }
+                    break
+                } catch (e: IllegalStateException) { if (attempt == 1) throw e; target.delete() }
+                received[asset.name] = asset.size
+            } }
         }
         File(dir, marker).writeText("ok")
     }
@@ -91,6 +108,7 @@ object AmbienceModel {
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         return try {
             val session = Npu.session(context, env, File(root(context), "dit_L323_main.onnx"), emptyMap(), NPU_CACHE)
+            Log.i("Ambience", "NPU session ready, PSS ${android.os.Debug.getPss() / 1024} MB")
             val pre = try { env.createSession(File(root(context), "dit_pre.onnx").path, ai.onnxruntime.OrtSession.SessionOptions()) }
                 catch (e: Throwable) { session.close(); throw e }
             Sa3Generator.NpuDit(session, pre, NPU_LENGTH)

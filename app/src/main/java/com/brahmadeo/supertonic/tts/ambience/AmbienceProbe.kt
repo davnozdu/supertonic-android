@@ -29,14 +29,19 @@ object AmbienceProbe {
         prefs.edit().putBoolean(AmbienceModel.NPU_KEY, true).commit()
         try {
             if (!AmbienceModel.npuReady(context)) runBlocking { AmbienceModel.download(context) { text, _ -> Log.i(TAG, "DOWNLOAD $text") } }
+            memory("before-npu")
             val wall = android.os.SystemClock.elapsedRealtime(); val cpu = android.os.Process.getElapsedCpuTime()
             val dit = AmbienceModel.npuDit(context) ?: return null.also { Log.e(TAG, "NPU DiT unavailable") }
             Log.i(TAG, "NPU LOAD wallMs=${android.os.SystemClock.elapsedRealtime() - wall} cpuMs=${android.os.Process.getElapsedCpuTime() - cpu}")
+            memory("after-npu-load")
             val (hidden, mask) = Sa3Generator(AmbienceModel.root(context), threads).encodeText(prompt)
+            memory("after-t5")
             val rng = java.util.Random(1)
             val x = FloatArray(Sa3Generator.LATENT_CH * AmbienceModel.NPU_LENGTH) { rng.nextGaussian().toFloat() }
             val npu = (0 until 3).map { val t0 = android.os.SystemClock.elapsedRealtime(); val c0 = android.os.Process.getElapsedCpuTime()
                 dit.velocity(x, 0.7f, hidden, mask, 30f).also { _ -> Log.i(TAG, "NPU FORWARD wallMs=${android.os.SystemClock.elapsedRealtime() - t0} cpuMs=${android.os.Process.getElapsedCpuTime() - c0}") } }.last()
+            memory("after-npu-forward")
+            System.gc(); Runtime.getRuntime().gc(); memory("after-gc")
             if (check) {
                 val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
                 ai.onnxruntime.OrtSession.SessionOptions().use { o ->
@@ -53,6 +58,13 @@ object AmbienceProbe {
         } finally {
             prefs.edit().apply { if (had) putBoolean(AmbienceModel.NPU_KEY, old) else remove(AmbienceModel.NPU_KEY) }.commit()
         }
+    }
+
+    /** PSS split by kind (summary.* from Debug.MemoryInfo, MB): where a big NPU footprint sits. */
+    private fun memory(tag: String) {
+        val mi = Debug.MemoryInfo(); Debug.getMemoryInfo(mi)
+        val stats = mi.memoryStats.filterKeys { it.startsWith("summary.") }.mapValues { (it.value.toLongOrNull() ?: 0L) / 1024 }
+        Log.i(TAG, "MEM $tag " + stats.entries.joinToString(" ") { "${it.key.removePrefix("summary.")}=${it.value}" })
     }
 
     fun run(context: Context, intent: Intent) {
