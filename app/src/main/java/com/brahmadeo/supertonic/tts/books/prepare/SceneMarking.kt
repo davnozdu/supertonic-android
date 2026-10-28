@@ -165,7 +165,7 @@ internal object SceneMarking {
         val t = text.trim()
         if (t.length !in min..max) return false
         if (!t.all { it in ' '..'~' }) return false
-        return t.count { it in 'a'..'z' || it in 'A'..'Z' } >= 8
+        return t.count { it in 'a'..'z' || it in 'A'..'Z' } >= 5
     }
 
     /** A description for the generator: as it came when it is English, else a translation (null when that fails too). */
