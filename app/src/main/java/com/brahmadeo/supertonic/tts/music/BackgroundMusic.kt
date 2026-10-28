@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
-/** Separate decoder; no audio-focus request or media session to steal reader controls. */
+/** Separate decoder; no audio-focus request or media session to steal reader controls. In a scene of a prepared book
+ * with location sounds («Фоновые звуки локаций») the location sound plays instead of the music; outside scenes the
+ * music. The two never sound together: the switch is a crossfade (AmbiencePlayer) and the music pauses meanwhile. */
 object BackgroundMusic {
     const val DEFAULT_VOLUME = 10
     private val reading = MusicReadingState()
@@ -29,13 +31,19 @@ object BackgroundMusic {
     private val message = MutableStateFlow("")
     val status = message.asStateFlow()
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == null || key.startsWith("background_music_")) handler.post {
+        if (key == null || key.startsWith("background_music_") || key.startsWith("ambience_")) handler.post {
             previewVolume = null
             failedTrack = ""
             update()
         }
     }
-    private val idleRelease = Runnable { if (!reading.playing() || !enabled()) release(rememberPosition = true) }
+    private val idleRelease = Runnable {
+        if (!reading.playing() || !enabled()) release(rememberPosition = true)
+        if (!reading.playing()) com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.release()
+    }
+    /** Scene of each queued utterance (by owner and id), applied when it starts to sound; the current one. */
+    private val scenes = java.util.concurrent.ConcurrentHashMap<Pair<Any, String?>, java.util.Optional<com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene>>()
+    @Volatile private var scene: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
     /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
      * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
     private const val GAP_MS = 4000L
@@ -53,11 +61,16 @@ object BackgroundMusic {
         prefs = context!!.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
             .also { it.registerOnSharedPreferenceChangeListener(listener) }
     }
-    fun enqueue(ctx: Context, owner: Any, id: String?, flush: Boolean): Long {
+    fun enqueue(ctx: Context, owner: Any, id: String?, flush: Boolean, text: String? = null): Long {
         initialize(ctx)
+        if (flush) scenes.keys.removeAll { it.first === owner }
+        scenes[owner to id] = java.util.Optional.ofNullable(com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.locate(ctx, owner, text))
         return reading.enqueue(owner, id, flush).also { refresh() }
     }
-    fun started(owner: Any, id: String?) { reading.start(owner,id); refresh() }
+    fun started(owner: Any, id: String?) {
+        scenes.remove(owner to id)?.let { scene = it.orElse(null) }
+        reading.start(owner,id); refresh()
+    }
     fun finished(owner: Any, id: String?, wasStarted: Boolean? = null) {
         val was = reading.playing()
         reading.finish(owner,id,wasStarted)
@@ -68,8 +81,9 @@ object BackgroundMusic {
         refresh()
     }
     fun rejected(owner: Any, token: Long) { reading.reject(owner,token); refresh() }
-    fun hold(ctx: Context, ms: Long) {
+    fun hold(ctx: Context, ms: Long, owner: Any? = null, text: String? = null) {
         initialize(ctx)
+        if (owner != null) scene = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.locate(ctx, owner, text)
         handler.post {
             holdUntil = maxOf(holdUntil, android.os.SystemClock.uptimeMillis() + ms)
             handler.removeCallbacks(holdEnd); handler.postAtTime(holdEnd, holdUntil)
@@ -99,14 +113,29 @@ object BackgroundMusic {
     private fun refresh() { handler.post {
         update()
     } }
-    /** Never together with the location ambience (the settings keep them exclusive; this guards stale prefs). */
-    private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true &&
-        prefs?.getBoolean(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.ENABLED,false) != true
+    private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true
+    private fun ambienceVolume() = (prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.volume(it) } ?: 5) / 100f
     private fun volume() = (previewVolume ?: prefs?.getInt("background_music_volume",DEFAULT_VOLUME) ?: DEFAULT_VOLUME).coerceIn(0,100) / 100f
     private fun updateVolume() { if (prepared) runCatching { player?.setVolume(volume(),volume()) } }
 
     private fun update() {
         val ctx = context ?: return
+        // A scene with location sounds: they play, the music waits (keeps its place in the track).
+        val now = android.os.SystemClock.uptimeMillis()
+        val active = reading.playing() || now < holdUntil
+        val current = scene?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.enabled(it) } == true }
+        if (current != null) {
+            if (prepared) runCatching { if (player?.isPlaying == true) player?.pause() }
+            if (active || now < gapUntil) {
+                handler.removeCallbacks(idleRelease)
+                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current, ambienceVolume())
+            } else {
+                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.pause()
+                handler.removeCallbacks(idleRelease); handler.postDelayed(idleRelease, 120_000)
+            }
+            return
+        }
+        com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.fadeOut()
         val track = prefs?.getString("background_music_track", "").orEmpty().ifEmpty { MusicCatalog.ensureDefault(ctx) }
         val source = if(track=="custom") "custom:${prefs?.getString("background_music_file","")}" else track
         if (source != loadedSource && loadedSource.isNotEmpty()) {

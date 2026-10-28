@@ -64,6 +64,22 @@ class BooksActivity : ComponentActivity() {
                 var thinking by remember { mutableStateOf(prepPrefs.getBoolean("thinking", true)) }
                 var repliesOn by remember { mutableStateOf(prepPrefs.getBoolean("replies", true)) }
                 var smartOn by remember { mutableStateOf(prepPrefs.getBoolean("smart", false)) }
+                var scenesOn by remember { mutableStateOf(prepPrefs.getBoolean("scenes", false)) }
+                val ambience by com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.collectAsState()
+                var extractBook by remember { mutableStateOf<BookLibrary.Entry?>(null) }
+                val extractPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+                    val book = extractBook; extractBook = null
+                    if (uri != null && book != null) scope.launch {
+                        message = try {
+                            withContext(Dispatchers.IO) {
+                                val sha = requireNotNull(BookLibrary.contentSha(this@BooksActivity, book.id))
+                                val file = requireNotNull(com.brahmadeo.supertonic.tts.books.BookFiles.source(this@BooksActivity, sha)) { "в книге нет исходного файла" }
+                                contentResolver.openOutputStream(uri, "w")?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: error("не удалось записать")
+                            }
+                            "Файл книги сохранён: откройте его в читалке"
+                        } catch (t: Exception) { "Не удалось извлечь файл книги: ${t.message.orEmpty()}" }
+                    }
+                }
                 var repliesBook by remember { mutableStateOf<Long?>(null) }
                 val repliesPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     val id = repliesBook; repliesBook = null
@@ -100,11 +116,12 @@ class BooksActivity : ComponentActivity() {
                         "Режим размышления ${if (pendingSource!!.thinking) "включён" else "выключен"}. " +
                         (if (repliesOn) "Затем реплики будут размечены по голосам (абзацы с речью уходят в облако). " else "") +
                         (if (smartOn) "Умная книга: текст каждого раздела уйдёт в облако для краткого содержания, текст книги сохранится в файле. " else "") +
+                        (if (scenesOn) "Локации: весь текст книги уйдёт в облако по частям, чтобы определить места действия; затем на телефоне будут созданы их звуки. " else "") +
                         "Подготовка может занять 10–15 минут и продолжится при выключенном экране.") },
                     confirmButton = { TextButton(onClick = {
                         val uri = pendingUri!!; val source = pendingSource!!
                         pendingUri = null; pendingSource = null
-                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn, smart = smartOn)) message = "Подготовка другой книги уже идёт." else allowBackground() }
+                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn, smart = smartOn, scenes = scenesOn)) message = "Подготовка другой книги уже идёт." else allowBackground() }
                         catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите книгу снова." }
                     }) { Text("Подготовить") } },
                     dismissButton = { TextButton(onClick = { pendingUri = null; pendingSource = null }) { Text("Отмена") } }
@@ -164,6 +181,18 @@ class BooksActivity : ComponentActivity() {
                                         smartOn = it; prepPrefs.edit().putBoolean("smart", it).apply()
                                     })
                                 }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("Локации и фоновые звуки · эксперимент")
+                                        Text("Нейросеть размечает места действия (вагон, трактир, улица), телефон создаёт для каждого 2–3 звука " +
+                                            "по 30 с с одинаковой громкостью. Звуки хранятся в файле книги. Весь текст уходит в облако по частям " +
+                                            "(около 1 запроса на 6 000 знаков); звуки — около 3 с на 30 с звука с NPU, 6–8 с без него. " +
+                                            "Нужен генератор из раздела «Фоновая музыка».", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked = scenesOn, enabled = !preparation.running, onCheckedChange = {
+                                        scenesOn = it; prepPrefs.edit().putBoolean("scenes", it).apply()
+                                    })
+                                }
                                 Text("Обработка может занять 10–15 минут. Продолжается в фоне и при выключенном экране. " +
                                     "Запросы к LLM выполняются строго по одному.", style = MaterialTheme.typography.bodySmall)
                                 if (preparation.running) {
@@ -183,9 +212,9 @@ class BooksActivity : ComponentActivity() {
                                 if (preparation.message.isNotBlank()) Text(preparation.message)
                             }
                         }
-                        Text("Файл подготовленной книги (.mytts-book) содержит персонажей, их имена и пол по разделам и " +
-                            "отпечатки предложений; текст книги — только если включена «Умная книга». Им можно делиться. Во время чтения в любой читалке " +
-                            "MyTTS узнаёт книгу и раздел по тексту и включает набор персонажей.")
+                        Text("Файл подготовленной книги (.mytts-book) — обычный ZIP: персонажи с именами и полом по разделам, " +
+                            "отпечатки предложений, исходный EPUB/FB2 и звуки локаций; текст для «Умной книги» — если она включена. Им можно делиться. " +
+                            "Во время чтения в любой читалке MyTTS узнаёт книгу и раздел по тексту и включает набор персонажей.")
                         val reading = remember(position, books) { position?.let { p ->
                             val pkg = runCatching { BookLibrary.get(this@BooksActivity, p.book) }.getOrNull()
                             "Сейчас читается: «${pkg?.title ?: "книга ${p.book}"}», раздел «${pkg?.sections?.firstOrNull { it.id == p.section }?.title ?: p.section}»"
@@ -209,7 +238,14 @@ class BooksActivity : ComponentActivity() {
                                     }
                                     if (openBook == book.id) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            OutlinedButton(enabled = !busy, onClick = { share(book) }) { Text("Поделиться") }
+                                            OutlinedButton(enabled = !busy, onClick = {
+                                                busy = true; message = "Упаковка книги…"
+                                                scope.launch {
+                                                    val file = withContext(Dispatchers.IO) { runCatching { pack(book) }.getOrNull() }
+                                                    busy = false; message = ""
+                                                    if (file != null) share(file) else message = "Не удалось упаковать книгу"
+                                                }
+                                            }) { Text("Поделиться") }
                                             OutlinedButton(enabled = !busy, onClick = {
                                                 scope.launch {
                                                     withContext(Dispatchers.IO) { BookLibrary.remove(this@BooksActivity, book.id) }
@@ -220,6 +256,27 @@ class BooksActivity : ComponentActivity() {
                                         OutlinedButton(enabled = !busy && !preparation.running, modifier = Modifier.fillMaxWidth(), onClick = {
                                             repliesBook = book.id; repliesPicker.launch(arrayOf("*/*"))
                                         }) { Text("Разметить реплики — выбрать исходный EPUB/FB2") }
+                                        val sha = remember(book.id, preparation.bookId) { BookLibrary.contentSha(this@BooksActivity, book.id) }
+                                        val hasSource = remember(book.id, preparation.bookId) { sha != null && com.brahmadeo.supertonic.tts.books.BookFiles.source(this@BooksActivity, sha) != null }
+                                        if (hasSource) OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+                                            extractBook = book; extractPicker.launch(com.brahmadeo.supertonic.tts.books.BookFiles.sourceName(this@BooksActivity, sha!!))
+                                        }) { Text("Извлечь файл книги") }
+                                        val scenes = remember(book.id, preparation.bookId) { BookLibrary.scenes(this@BooksActivity, book.id) }
+                                        if (scenes.locations.isNotEmpty() && sha != null) {
+                                            val missing = remember(book.id, preparation.bookId, ambience.running) { com.brahmadeo.supertonic.tts.ambience.AmbienceBook.missing(this@BooksActivity, sha, scenes).size }
+                                            Text("Локации: ${scenes.locations.size} (${scenes.locations.take(6).joinToString(", ") { it.name }}${if (scenes.locations.size > 6) "…" else ""}). " +
+                                                if (missing == 0) "Звуки готовы." else "Без звуков: $missing.", style = MaterialTheme.typography.bodySmall)
+                                            if (ambience.running && ambience.book == book.id) {
+                                                Text("Звуки: ${ambience.done}/${ambience.total}${if (ambience.place.isNotEmpty()) " · ${ambience.place}" else ""}", style = MaterialTheme.typography.bodySmall)
+                                                if (ambience.total > 0) LinearProgressIndicator(progress = { ambience.done.toFloat() / ambience.total }, modifier = Modifier.fillMaxWidth())
+                                                else LinearProgressIndicator(Modifier.fillMaxWidth())
+                                                OutlinedButton(onClick = com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration::stop) { Text("Остановить") }
+                                            } else if (missing > 0) OutlinedButton(enabled = !busy && !ambience.running && com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(this@BooksActivity),
+                                                modifier = Modifier.fillMaxWidth(), onClick = {
+                                                    com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.start(this@BooksActivity, book.id); allowBackground()
+                                                }) { Text("Создать фоновые звуки") }
+                                            if (ambience.book == book.id && ambience.message.isNotBlank()) Text(ambience.message, style = MaterialTheme.typography.bodySmall)
+                                        }
                                         CharacterVoices(book.id, voiceRevision, previewState) { voiceRevision++ }
                                     }
                                 }
@@ -418,11 +475,14 @@ class BooksActivity : ComponentActivity() {
 
     private fun import(uri: Uri): String {
         val size = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
-        require(size <= BookPackage.MAX_BYTES) { "файл больше ${BookPackage.MAX_BYTES / 1024 / 1024} МБ" }
-        val json = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: error("файл не читается")
-        val id = BookLibrary.import(this, json)
-        changed()
-        return BookLibrary.get(this, id)?.title.orEmpty()
+        require(size <= com.brahmadeo.supertonic.tts.books.BookArchive.MAX_BYTES) { "файл больше ${com.brahmadeo.supertonic.tts.books.BookArchive.MAX_BYTES / 1024 / 1024} МБ" }
+        val temp = File.createTempFile("book-import-", ".mytts-book", cacheDir)
+        try {
+            contentResolver.openInputStream(uri)?.use { input -> temp.outputStream().use { input.copyTo(it) } } ?: error("файл не читается")
+            val id = com.brahmadeo.supertonic.tts.books.BookArchive.import(this, temp)
+            changed()
+            return BookLibrary.get(this, id)?.title.orEmpty()
+        } finally { temp.delete() }
     }
 
     /** Paragraphs prepared before the change would keep old voices: prepared text, roles and audio are redone. */
@@ -432,11 +492,14 @@ class BooksActivity : ComponentActivity() {
         com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
     }
 
-    private fun share(book: BookLibrary.Entry) {
-        val json = BookLibrary.export(this, book.id) ?: return
-        val dir = File(cacheDir, "books").apply { mkdirs() }
+    /** The book's .mytts-book container in cache/books (one at a time), or null. */
+    private fun pack(book: BookLibrary.Entry): File? {
+        val dir = File(cacheDir, "books").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val file = File(dir, book.title.replace(Regex("[^\\p{L}\\p{N}._-]+"), "_").take(80) + ".mytts-book")
-        file.writeText(json)
+        return file.takeIf { com.brahmadeo.supertonic.tts.books.BookArchive.export(this, book.id, it) }
+    }
+
+    private fun share(file: File) {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "application/octet-stream"

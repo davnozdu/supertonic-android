@@ -51,7 +51,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                         scope.launch {
                             try {
                                 customName=MusicFiles.import(this@BackgroundMusicActivity,uri)
-                                selected="custom"; enabled=true; ambience=false; message="MP3 добавлен"
+                                selected="custom"; enabled=true; message="MP3 добавлен"
                             } catch(t: Exception) { message="Не удалось загрузить MP3: ${t.message.orEmpty()}" }
                             finally { busy=false }
                         }
@@ -59,7 +59,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 }
                 fun select(track: String) {
                     selected=track; enabled=true
-                    prefs.edit().putString("background_music_track",track).musicOn().apply(); ambience=false
+                    prefs.edit().putString("background_music_track",track).musicOn().apply()
                 }
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -70,7 +70,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("Включить музыку",Modifier.weight(1f))
                             Switch(checked=enabled && selected.isNotEmpty(),enabled=!busy && selected.isNotEmpty(),onCheckedChange={
                                 enabled=it
-                                if(it) { prefs.edit().musicOn().apply(); ambience=false } else prefs.edit().putBoolean("background_music_enabled",false).apply()
+                                if(it) prefs.edit().musicOn().apply() else prefs.edit().putBoolean("background_music_enabled",false).apply()
                             })
                         }
                         Text("Громкость фона: $volume %",style=MaterialTheme.typography.titleMedium)
@@ -143,14 +143,14 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Text("Файл сохраняется в приложении и доступен без интернета.",style=MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Фоновые звуки локаций · эксперимент",style=MaterialTheme.typography.titleLarge)
-                        Text("Для книг, подготовленных в MyTTS: звук места действия по ходу чтения — поезд, кафе, улица, лес. " +
-                            "Звуки создаются на телефоне один раз для каждой локации книги. Вместе с фоновой музыкой не играют: " +
-                            "включение одного выключает другое.",style=MaterialTheme.typography.bodySmall)
+                        Text("Для книг, подготовленных в MyTTS с локациями: звук места действия по ходу чтения — поезд, кафе, улица, лес. " +
+                            "Звуки создаются на телефоне один раз для каждой локации книги и хранятся в её файле. В сценах с локацией играет её звук, " +
+                            "а там, где сцены нет (рассуждения автора, нераспознанные места), — фоновая музыка, если она включена. " +
+                            "Одновременно они не звучат, переход плавный.",style=MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Включить фоновые звуки",Modifier.weight(1f))
-                            Switch(checked=ambience && ambienceReady,enabled=!busy && ambienceReady,onCheckedChange={
+                            Switch(checked=ambience,enabled=!busy,onCheckedChange={
                                 ambience=it; AmbienceSettings.setAmbience(prefs,it)
-                                if(it) enabled=false
                             })
                         }
                         Text("Громкость звуков: $ambienceVolume %",style=MaterialTheme.typography.titleMedium)
@@ -185,13 +185,13 @@ class BackgroundMusicActivity : ComponentActivity() {
                             scope.launch {
                                 try {
                                     AmbienceModel.remove(this@BackgroundMusicActivity)
-                                    AmbienceSettings.setAmbience(prefs,false); ambience=false
                                     message="Генератор звуков удалён"
                                 } catch(t: Exception) { message="Не удалось удалить: ${t.message.orEmpty()}" }
                                 finally { ambienceReady=AmbienceModel.ready(this@BackgroundMusicActivity); busy=false }
                             }
                         }) { Text("Удалить генератор звуков") }
-                        Text("Модель Stable Audio 3 Small SFX. Powered by Stability AI. Лицензия Stability AI Community License; " +
+                        Text("Генератор нужен только чтобы создать звуки при подготовке книги; книги со звуками играют и без него. " +
+                            "Модель Stable Audio 3 Small SFX. Powered by Stability AI. Лицензия Stability AI Community License; " +
                             "текстовый энкодер — Gemma Terms of Use.",style=MaterialTheme.typography.bodySmall)
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         if(message.isNotBlank()) Text(message)

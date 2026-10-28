@@ -54,6 +54,7 @@
         <activity android:name=".SpeechDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <service android:name=".utils.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".books.prepare.BookPreparationService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
+        <service android:name=".ambience.AmbienceGenerationService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <service android:name=".books.smart.SmartRecapService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
         <!-- «Умная книга» commands from the KOReader plugin (audiobook.koplugin): invisible, finishes at once. -->
         <activity android:name=".books.smart.SmartBookCommandActivity" android:exported="true" android:excludeFromRecents="true"

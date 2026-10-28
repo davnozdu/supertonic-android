@@ -119,7 +119,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                     // The reader never says when its file plays or pauses. With its lookahead this request comes as the
                     // previous sentence starts; without it, this sentence plays next. Cover the longer one plus the gap.
                     val chars = maxOf(text.length, lastFileChars); lastFileChars = text.length
-                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context, (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L))
+                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context, (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L), caller, text)
                 }
             } catch (_: Exception) { Log.w("LlmPreparation", "File synthesis observation unavailable; using ordinary synthesis") }
             finally { data.setDataPosition(position) }
@@ -161,7 +161,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                                     LlmPreparation.cancel(caller); null
                                 } else LlmPreparation.submit(context, caller, text, mode != TextToSpeech.QUEUE_ADD)
                                 musicOwner=caller
-                                musicToken=com.brahmadeo.supertonic.tts.music.BackgroundMusic.enqueue(context,caller,utteranceId,mode!=TextToSpeech.QUEUE_ADD)
+                                musicToken=com.brahmadeo.supertonic.tts.music.BackgroundMusic.enqueue(context,caller,utteranceId,mode!=TextToSpeech.QUEUE_ADD,text)
                                 if(mode == TextToSpeech.QUEUE_ADD) {
                                     queuedText=text
                                     queuedParams=params
