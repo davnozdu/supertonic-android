@@ -222,7 +222,7 @@ internal object SceneMarking {
                 val sound = s.optString("sound").takeIf { !s.isNull("sound") }?.let { forGenerator(it, 8, 300, translate) }
                 val placeKey = if (place != null && sound != null) key(place).also { k ->
                     sounds.putIfAbsent(k, place.trim() to sound)
-                    val accents = s.optJSONArray("accents")?.let { a -> (0 until a.length()).mapNotNull { forGenerator(a.optString(it), 6, 200, translate) } }.orEmpty()
+                    val accents = s.optJSONArray("accents")?.let { a -> (0 until a.length()).mapNotNull { if (a.isNull(it)) null else forGenerator(a.optString(it), 6, 200, translate) } }.orEmpty()
                     if (accents.isNotEmpty()) accentsOf.putIfAbsent(k, accents.take(4))
                     s.optString("acoustics").takeIf { !s.isNull("acoustics") && it in ACOUSTICS }?.let { acousticsOf.putIfAbsent(k, it) }
                 } else null
@@ -242,9 +242,10 @@ internal object SceneMarking {
             for (k in 0 until ev.length()) {
                 val e = ev.optJSONObject(k) ?: continue
                 val at = e.optInt("at", -1) - 1
-                val quote = e.optString("quote").trim()
-                val kind = e.optString("kind").trim().lowercase().takeIf { com.brahmadeo.supertonic.tts.books.EventKinds.KEY.matches(it) }
-                val given = e.optString("sound").trim()
+                val quote = e.optString("quote").takeIf { !e.isNull("quote") }?.trim().orEmpty()
+                val kind = e.optString("kind").takeIf { !e.isNull("kind") }?.trim()?.lowercase()
+                    ?.takeIf { com.brahmadeo.supertonic.tts.books.EventKinds.KEY.matches(it) }
+                val given = e.optString("sound").takeIf { !e.isNull("sound") }?.trim().orEmpty()
                 if (at !in batch.first()..batch.last() || quote.length !in 3..80) { dropped++; continue }
                 val quoteWords = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(quote)
                 if (quoteWords.isEmpty() ||
