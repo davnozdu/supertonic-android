@@ -42,6 +42,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceReady by remember { mutableStateOf(AmbienceModel.ready(this)) }
                 var ambienceNpu by remember { mutableStateOf(prefs.getBoolean(AmbienceModel.NPU_KEY,false)) }
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
+                var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
+                var chapters by remember { mutableStateOf(AmbienceSettings.chapters(prefs)) }
                 var ambienceVariants by remember { mutableIntStateOf(AmbienceSettings.variants(prefs)) }
                 var busy by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("") }
@@ -166,6 +168,18 @@ class BackgroundMusicActivity : ComponentActivity() {
                         }
                         Text("Гудки, смех, удары и другие события сцены не громче ровного фона больше чем на ~3 дБ и не перебивают голос. " +
                             "Действует сразу, звуки пересоздавать не нужно.",style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Дыхание звука",Modifier.weight(1f))
+                            Switch(checked=breathe,enabled=!busy,onCheckedChange={ breathe=it; prefs.edit().putBoolean(AmbienceSettings.BREATHE,it).apply() })
+                        }
+                        Text("Как в кино: новая сцена первые секунды звучит чуть громче, а под речью фон (звуки и музыка) на 3 дБ тише " +
+                            "и поднимается в паузах между абзацами.",style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Переходы между главами",Modifier.weight(1f))
+                            Switch(checked=chapters,enabled=!busy,onCheckedChange={ chapters=it; prefs.edit().putBoolean(AmbienceSettings.CHAPTERS,it).apply() })
+                        }
+                        Text("На новой главе подготовленной книги фон плавно затихает и возвращается — слышно, что глава сменилась.",
+                            style=MaterialTheme.typography.bodySmall)
                         Text("Вариантов звука на сцену: $ambienceVariants",style=MaterialTheme.typography.titleMedium)
                         Slider(value=ambienceVariants.toFloat(),onValueChange={ ambienceVariants=it.roundToInt() },
                             onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.VARIANTS,ambienceVariants).apply() },

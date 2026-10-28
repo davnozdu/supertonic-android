@@ -71,6 +71,41 @@ internal object AmbiencePlayer {
     private var volume = 0.3f
     private var playing = false
     private var context: Context? = null
+    /** «Дыхание звука»: [duck] lowers the scene under speech (−3 dB) and lifts it in the pauses; [establish] makes a new
+     * scene ~4 dB louder for its first seconds. [chapter] is the dip of a new section (also without breathing). */
+    @Volatile var breathe = false
+    private var duck = 1f
+    private var duckTarget = 1f
+    private var establishUntil = 0L
+    private var chapterAt = 0L
+    private const val DUCK = 0.7f            // −3 dB under speech
+    private const val DUCK_MS = 300L
+    private const val ESTABLISH = 1.6f       // +4 dB
+    private const val ESTABLISH_HOLD_MS = 3000L
+    private const val ESTABLISH_FADE_MS = 3000L
+
+    fun speaking(on: Boolean) { duckTarget = if (on && breathe) DUCK else 1f; handler.post { if (playing) schedule() } }
+
+    /** A new section: everything dips out (1.2 s), holds (0.8 s) and comes back (2.5 s). */
+    fun chapter() { chapterAt = android.os.SystemClock.uptimeMillis(); handler.post { if (playing) schedule() } }
+
+    /** The section dip, shared with the music (BackgroundMusic multiplies its gain by it). */
+    fun chapterGain(now: Long = android.os.SystemClock.uptimeMillis()): Float {
+        val t = now - chapterAt
+        return when {
+            chapterAt == 0L || t >= 4500 -> 1f
+            t < 1200 -> 1f - t / 1200f
+            t < 2000 -> 0f
+            else -> (t - 2000) / 2500f
+        }
+    }
+
+    private fun establishGain(now: Long): Float {
+        if (!breathe || now >= establishUntil + ESTABLISH_FADE_MS) return 1f
+        if (now < establishUntil) return ESTABLISH
+        return ESTABLISH - (ESTABLISH - 1f) * (now - establishUntil) / ESTABLISH_FADE_MS.toFloat()
+    }
+
     /** Pause and resume fade every voice together over [PAUSE_FADE_MS] (no click either way). */
     private var master = 0f
     private var masterTarget = 0f
@@ -86,6 +121,7 @@ internal object AmbiencePlayer {
             AmbienceScenes.trace(ctx, "play ${target.key} clips=${target.files.size} volume=${"%.2f".format(volume)}")
             for (v in voices) { v.target = 0f; v.fadeMs = SCENE_FADE_MS }
             scene = target
+            establishUntil = android.os.SystemClock.uptimeMillis() + SCENE_FADE_MS + ESTABLISH_HOLD_MS
             start(target, 0, SCENE_FADE_MS)
         }
         masterTarget = 1f
@@ -121,7 +157,11 @@ internal object AmbiencePlayer {
     }
 
     /** Equal power (sqrt): a crossfade of two sounds keeps the loudness. */
-    private fun applyGain(v: Voice) { val g = kotlin.math.sqrt(v.level) * master * volume; runCatching { v.player.setVolume(g, g) } }
+    private fun applyGain(v: Voice) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val g = (kotlin.math.sqrt(v.level) * master * volume * duck * establishGain(now) * chapterGain(now)).coerceAtMost(1f)
+        runCatching { v.player.setVolume(g, g) }
+    }
 
     private fun start(target: Scene, clip: Int, fadeMs: Long) {
         val ctx = context ?: return
@@ -148,6 +188,8 @@ internal object AmbiencePlayer {
     private val tick: Runnable = Runnable {
         val mStep = TICK_MS.toFloat() / PAUSE_FADE_MS
         master = if (master < masterTarget) minOf(masterTarget, master + mStep) else maxOf(masterTarget, master - mStep)
+        val dStep = TICK_MS.toFloat() / DUCK_MS * (1f - DUCK)
+        duck = if (duck < duckTarget) minOf(duckTarget, duck + dStep) else maxOf(duckTarget, duck - dStep)
         for (v in voices.toList()) {
             val step = TICK_MS.toFloat() / v.fadeMs
             // While pausing the crossfades hold: they continue after the resume.

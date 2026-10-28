@@ -42,7 +42,7 @@ object BackgroundMusic {
         if (!reading.playing()) com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.release()
     }
     /** Scene of each queued utterance (by owner and id), applied when it starts to sound; the current one. */
-    private val scenes = java.util.concurrent.ConcurrentHashMap<Pair<Any, String?>, java.util.Optional<com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene>>()
+    private val scenes = java.util.concurrent.ConcurrentHashMap<Pair<Any, String?>, com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag>()
     @Volatile private var scene: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
     /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
      * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
@@ -64,18 +64,25 @@ object BackgroundMusic {
     fun enqueue(ctx: Context, owner: Any, id: String?, flush: Boolean, text: String? = null): Long {
         initialize(ctx)
         if (flush) scenes.keys.removeAll { it.first === owner }
-        scenes[owner to id] = java.util.Optional.ofNullable(com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.locate(ctx, owner, text, flush))
+        scenes[owner to id] = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text, flush)
         return reading.enqueue(owner, id, flush).also { refresh() }
     }
     fun started(owner: Any, id: String?) {
+        com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.speaking(true)
+        speaking = true; handler.post(shape)
         scenes.remove(owner to id)?.let { found ->
-            val next = found.orElse(null)
+            val next = found.scene
+            if (found.chapter && prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.chapters(it) } == true) {
+                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.chapter(); handler.post(shape)
+            }
             if (next?.key != scene?.key) context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "sounding scene=${next?.key ?: "music"}") }
             scene = next
         } ?: context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "started without a tagged utterance") }
         reading.start(owner,id); refresh()
     }
     fun finished(owner: Any, id: String?, wasStarted: Boolean? = null) {
+        com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.speaking(false)
+        speaking = false; handler.post(shape)
         val was = reading.playing()
         reading.finish(owner,id,wasStarted)
         if (was && !reading.playing()) handler.post {
@@ -87,7 +94,13 @@ object BackgroundMusic {
     fun rejected(owner: Any, token: Long) { reading.reject(owner,token); refresh() }
     fun hold(ctx: Context, ms: Long, owner: Any? = null, text: String? = null) {
         initialize(ctx)
-        if (owner != null) scene = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.locate(ctx, owner, text)
+        if (owner != null) {
+            val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
+            scene = tag.scene
+            if (tag.chapter && prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.chapters(it) } == true) {
+                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.chapter(); handler.post(shape)
+            }
+        }
         handler.post {
             holdUntil = maxOf(holdUntil, android.os.SystemClock.uptimeMillis() + ms)
             handler.removeCallbacks(holdEnd); handler.postAtTime(holdEnd, holdUntil)
@@ -122,7 +135,21 @@ object BackgroundMusic {
     private fun ambienceVolume() = (prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.volume(it) }
         ?: com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.DEFAULT_VOLUME) / 100f
     private fun volume() = (previewVolume ?: prefs?.getInt("background_music_volume",DEFAULT_VOLUME) ?: DEFAULT_VOLUME).coerceIn(0,100) / 100f
-    private fun updateVolume() { if (prepared) runCatching { val g = kotlin.math.sqrt(level) * volume(); player?.setVolume(g, g) } }
+    private fun updateVolume() { if (prepared) runCatching {
+        val breathe = prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.breathe(it) } == true
+        val g = kotlin.math.sqrt(level) * volume() * (if (breathe) duck else 1f) * com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.chapterGain()
+        player?.setVolume(g, g)
+    } }
+
+    /** «Дыхание звука» for the music too (−3 dB under speech, 0.3 s), and the section dip; ticks only while they move. */
+    @Volatile private var speaking = false
+    private var duck = 1f
+    private val shape: Runnable = object : Runnable { override fun run() {
+        val target = if (speaking) 0.7f else 1f
+        duck = if (duck < target) minOf(target, duck + 0.05f) else maxOf(target, duck - 0.05f)
+        updateVolume()
+        if (duck != target || com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.chapterGain() < 1f) { handler.removeCallbacks(this); handler.postDelayed(this, 50) }
+    } }
 
     /** The music fades instead of cutting: out under a scene's sound and back after it (as long as the scene
      * crossfade), quickly on pause or resume; equal-power gain (sqrt), so a crossfade keeps the loudness. */
@@ -157,7 +184,10 @@ object BackgroundMusic {
             underScene = true
             if (active || now < gapUntil) {
                 handler.removeCallbacks(idleRelease)
-                prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.tame = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.tame(it) }
+                prefs?.let {
+                    com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.tame = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.tame(it)
+                    com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.breathe = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.breathe(it)
+                }
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current, ambienceVolume())
             } else {
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.pause()

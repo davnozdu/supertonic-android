@@ -18,6 +18,14 @@ object AmbienceSettings {
     /** «Сглаживать резкие звуки»: a compressor keeps the events (a whistle) close to the background level. */
     const val TAME = "ambience_tame"
 
+    /** «Дыхание звука»: a new scene is a little louder for a moment, the background dips under speech. Off by default. */
+    const val BREATHE = "ambience_breathe"
+    /** «Переходы между главами»: the background fades out and back at a new section. Off by default. */
+    const val CHAPTERS = "ambience_chapters"
+
+    fun breathe(prefs: SharedPreferences) = prefs.getBoolean(BREATHE, false)
+    fun chapters(prefs: SharedPreferences) = prefs.getBoolean(CHAPTERS, false)
+
     fun variants(prefs: SharedPreferences) = prefs.getInt(VARIANTS, DEFAULT_VARIANTS).coerceIn(2, 8)
     fun tame(prefs: SharedPreferences) = prefs.getBoolean(TAME, true)
 

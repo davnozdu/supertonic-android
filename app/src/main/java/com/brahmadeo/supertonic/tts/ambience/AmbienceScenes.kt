@@ -11,19 +11,33 @@ import com.brahmadeo.supertonic.tts.books.ReplyIndex
  * leaves it (the music plays); a piece without a hit keeps the current sound. */
 internal object AmbienceScenes {
     /** [matcher]: this reader's key in BookMatcher (lives as long as the reader's entry here). */
-    private class State(var before: List<String> = emptyList(), var scene: AmbiencePlayer.Scene? = null, val matcher: Any = Any())
+    private class State(var before: List<String> = emptyList(), var scene: AmbiencePlayer.Scene? = null, val matcher: Any = Any(),
+                        var section: Pair<Long, String>? = null)
+
+    /** What an utterance brings: its scene (null: music) and whether a new section of the book starts with it. */
+    data class Tag(val scene: AmbiencePlayer.Scene?, val chapter: Boolean)
     private val states = java.util.WeakHashMap<Any, State>()
 
     /** The scene for [text] of [owner], or null (no prepared book here, no location, no sounds: the music plays). */
-    fun locate(context: Context, owner: Any, text: String?, flush: Boolean = false): AmbiencePlayer.Scene? {
-        if (text.isNullOrBlank() || !AmbienceSettings.enabled(context.getSharedPreferences("SupertonicPrefs", 0))) return null
+    fun locate(context: Context, owner: Any, text: String?, flush: Boolean = false): AmbiencePlayer.Scene? = tag(context, owner, text, flush).scene
+
+    fun tag(context: Context, owner: Any, text: String?, flush: Boolean = false): Tag {
+        val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
+        val sounds = AmbienceSettings.enabled(prefs)
+        if (text.isNullOrBlank() || !(sounds || AmbienceSettings.chapters(prefs))) return Tag(null, false)
         val state = synchronized(states) { states.getOrPut(owner) { State() } }
-        if (flush) state.before = emptyList() // the reader jumped: the previous words are elsewhere
-        return runCatching {
+        if (flush) { state.before = emptyList(); state.section = null } // the reader jumped: the previous words are elsewhere
+        var chapter = false
+        val scene = runCatching {
             val words = ReplyIndex.words(text)
             val before = state.before
             state.before = (before + words).takeLast(ReplyIndex.WINDOW - 1)
             val position = BookMatcher.feed(context, state.matcher, text) ?: return@runCatching null.also { state.scene = null; trace(context, "no book") }
+            // A new section of the same book (not the first one recognised, not a jump).
+            val section = position.book to position.section
+            chapter = state.section != null && state.section != section && state.section?.first == position.book
+            state.section = section
+            if (!sounds) return@runCatching null
             val scenes = BookLibrary.scenes(context, position.book)
             if (scenes.locations.isEmpty()) return@runCatching null.also { trace(context, "book=${position.book} has no locations") }
             val location = when (val found = scenes.find(text, before)) {
@@ -38,6 +52,8 @@ internal object AmbienceScenes {
             trace(context, "book=${position.book} at=${location.id} files=${files.size}")
             AmbiencePlayer.Scene("$sha/${location.id}", location.name, files).takeIf { files.isNotEmpty() }.also { state.scene = it }
         }.getOrElse { trace(context, "error ${it.javaClass.simpleName}"); null }
+        if (chapter) trace(context, "chapter starts")
+        return Tag(scene, chapter)
     }
 
     /** Last decisions (no book text), with verbose logs only (no flash writes while reading otherwise): in
