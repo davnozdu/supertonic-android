@@ -66,6 +66,24 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var message by remember { mutableStateOf("") }
                 val error by BackgroundMusic.status.collectAsState()
                 val scope=rememberCoroutineScope()
+                /** «▶» a made track: plays it once in this screen (stopped by «■», another track, or leaving). */
+                var previewId by remember { mutableStateOf<String?>(null) }
+                val preview = remember { arrayOfNulls<android.media.MediaPlayer>(1) }
+                fun stopPreview() { preview[0]?.let { runCatching { it.stop() }; it.release() }; preview[0] = null; previewId = null }
+                fun playPreview(t: GeneratedMusic.Track) {
+                    stopPreview()
+                    preview[0] = runCatching { android.media.MediaPlayer().apply {
+                        setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                        setDataSource(t.file.path); setOnCompletionListener { stopPreview() }; prepare(); start()
+                    } }.onFailure { message = "Не удалось воспроизвести трек" }.getOrNull()
+                    if (preview[0] != null) previewId = t.id
+                }
+                DisposableEffect(Unit) {
+                    val stopOnLeave = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_STOP) stopPreview() }
+                    lifecycle.addObserver(stopOnLeave)
+                    onDispose { lifecycle.removeObserver(stopOnLeave); stopPreview() }
+                }
                 /** «Скачать» a made track: copied as .m4a to where the user picks (Downloads, Music…). */
                 var toSave by remember { mutableStateOf<GeneratedMusic.Track?>(null) }
                 val saver=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { uri ->
@@ -194,12 +212,15 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Row(Modifier.fillMaxWidth().pointerInput(g.id,busy) { detectTapGestures(
                                 onTap = { if (!busy) select("gen:${g.id}") },
                                 onLongPress = { if (!busy) toDelete = g.title to {
+                                    if (previewId==g.id) stopPreview()
                                     GeneratedMusic.remove(this@BackgroundMusicActivity, g.id)
                                     generated = GeneratedMusic.list(this@BackgroundMusicActivity)
                                     if (selected == "gen:${g.id}") { selected = ""; enabled = false }
                                     message = "Трек удалён"
                                     Unit } }) },horizontalArrangement=Arrangement.SpaceBetween) {
                                 Text("${g.title} · ${g.seconds} с",Modifier.weight(1f).padding(top=12.dp))
+                                TextButton(onClick={ if (previewId==g.id) stopPreview() else playPreview(g) }) {
+                                    Text(if (previewId==g.id) "■ Стоп" else "▶ Слушать") }
                                 TextButton(enabled=!busy,onClick={
                                     toSave=g; saver.launch(g.title.replace(Regex("[\\\\/:*?\"<>|]"),"_").ifBlank { "Музыка" } + ".m4a") }) { Text("Скачать") }
                                 RadioButton(selected=selected=="gen:${g.id}",enabled=!busy,onClick={select("gen:${g.id}")})
