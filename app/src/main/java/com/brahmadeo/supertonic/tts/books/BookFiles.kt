@@ -8,8 +8,8 @@ import java.io.InputStream
  * regeneration keeps them): the original EPUB/FB2 («Извлечь файл книги») and the location sounds. */
 object BookFiles {
     private val SOURCE = Regex("[^/\\\\:*?\"<>|\\u0000-\\u001F]{1,120}\\.(epub|fb2|fb2\\.zip|zip)", RegexOption.IGNORE_CASE)
-    /** l<number>_<variant>.m4a, as written by the ambience generator. */
-    val SOUND = Regex("l[0-9]{1,4}_[0-9]{1,2}\\.m4a")
+    /** l<number>_<variant>.m4a (location sounds) and e<number>.m4a (event sounds), as written by the ambience generator. */
+    val SOUND = Regex("(l[0-9]{1,4}_[0-9]{1,2}|e[0-9]{1,4})\\.m4a")
     private val SHA = Regex("[0-9a-f]{64}")
 
     fun dir(context: Context, sha: String): File {
@@ -51,6 +51,9 @@ object BookFiles {
 
     fun sounds(context: Context, sha: String): List<File> =
         ambience(context, sha).listFiles()?.filter { it.isFile && SOUND.matches(it.name) }?.sortedBy { it.name }.orEmpty()
+
+    /** The sound of event [id] (e<N>), or null when it was not made. */
+    fun event(context: Context, sha: String, id: String): File? = File(ambience(context, sha), "$id.m4a").takeIf { it.isFile }
 
     /** Sound variants of one location, in order. */
     fun sounds(context: Context, sha: String, location: String): List<File> =

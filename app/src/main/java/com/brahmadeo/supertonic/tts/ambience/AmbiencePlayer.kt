@@ -146,9 +146,28 @@ internal object AmbiencePlayer {
 
     fun release() {
         handler.removeCallbacks(tick)
+        shots.forEach { it.release() }; shots.clear()
         voices.forEach { it.release() }
         voices.clear(); scene = null; playing = false; master = 0f; masterTarget = 0f
     }
+
+    /** A one-shot sound (an event, the chapter transition) over the background after [delayMs], through the same
+     * taming and headroom as the scene sounds, at the scene volume; released when it ends. */
+    fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float) {
+        handler.postDelayed({
+            try {
+                val p = MediaPlayer()
+                p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                p.setDataSource(file.path); p.prepare()
+                val v = Voice(p, Scene(file.name, file.name, listOf(file)), 0)
+                p.setVolume(volume, volume)
+                shots += v
+                p.setOnCompletionListener { handler.post { shots.remove(v); v.release() } }
+                p.start()
+            } catch (e: Exception) { AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}") }
+        }, delayMs.coerceIn(0, 20_000))
+    }
+    private val shots = ArrayList<Voice>()
 
     /** Any other variant at random: the events come at no fixed interval and the loop never repeats the same way. */
     private fun nextClip(scene: Scene, current: Int): Int {

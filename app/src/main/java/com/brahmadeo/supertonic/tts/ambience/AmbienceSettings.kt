@@ -23,6 +23,10 @@ object AmbienceSettings {
     /** «Переходы между главами»: the background fades out and back at a new section. Off by default. */
     const val CHAPTERS = "ambience_chapters"
 
+    /** «Звуки событий»: short sounds of what the text describes (a door slams). Off by default. */
+    const val EVENTS = "ambience_events"
+    fun events(prefs: SharedPreferences) = prefs.getBoolean(EVENTS, false)
+
     fun breathe(prefs: SharedPreferences) = prefs.getBoolean(BREATHE, false)
     fun chapters(prefs: SharedPreferences) = prefs.getBoolean(CHAPTERS, false)
 

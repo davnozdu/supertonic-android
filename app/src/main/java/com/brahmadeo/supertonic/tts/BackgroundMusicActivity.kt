@@ -43,6 +43,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceNpu by remember { mutableStateOf(prefs.getBoolean(AmbienceModel.NPU_KEY,false)) }
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
+                var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
                 var chapters by remember { mutableStateOf(AmbienceSettings.chapters(prefs)) }
                 var ambienceVariants by remember { mutableIntStateOf(AmbienceSettings.variants(prefs)) }
                 var busy by remember { mutableStateOf(false) }
@@ -168,6 +169,13 @@ class BackgroundMusicActivity : ComponentActivity() {
                         }
                         Text("Гудки, смех, удары и другие события сцены не громче ровного фона больше чем на ~3 дБ и не перебивают голос. " +
                             "Действует сразу, звуки пересоздавать не нужно.",style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Звуки событий",Modifier.weight(1f))
+                            Switch(checked=events,enabled=!busy,onCheckedChange={ events=it; prefs.edit().putBoolean(AmbienceSettings.EVENTS,it).apply() })
+                        }
+                        Text("Короткие звуки того, что происходит в тексте: хлопнула дверь, выстрел, заржала лошадь, ударил колокол — " +
+                            "в момент, когда голос до этого доходит. Нужна книга, подготовленная с локациями в этой версии или новее.",
+                            style=MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Дыхание звука",Modifier.weight(1f))
                             Switch(checked=breathe,enabled=!busy,onCheckedChange={ breathe=it; prefs.edit().putBoolean(AmbienceSettings.BREATHE,it).apply() })

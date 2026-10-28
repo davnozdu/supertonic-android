@@ -35,8 +35,32 @@ object AmbienceBook {
     private fun readManifest(context: Context, sha: String): JSONObject =
         runCatching { JSONObject(manifest(context, sha).readText()) }.getOrDefault(JSONObject())
 
-    /** Drops sounds of places that are gone or whose prompt changed. Sounds without a manifest came inside the
-     * book file (made for exactly these locations) and are kept. */
+    /** One clip to make: [file] in the book's ambience folder, from [prompt]; [id]/[recipe] go into sounds.json. */
+    class Job(val file: String, val prompt: String, val seconds: Float, val seed: Long, val id: String, val recipe: String, val label: String)
+
+    /** Event sounds are short one-shots; the chapter transition a little shorter. */
+    const val EVENT_SECONDS = 4f
+    private const val CHAPTER_SECONDS = 3f
+
+    /** Every clip the book needs: its locations' variants, its events and the chapter transition. */
+    private fun jobs(context: Context, scenes: SceneIndex): List<Job> {
+        val n = variants(context, scenes.locations.size)
+        val places = scenes.locations.flatMap { loc -> (0 until n).map { k ->
+            Job("${loc.id}_$k.m4a", prompt(loc, k), SECONDS, loc.sound.hashCode().toLong() * 31 + k, loc.id, recipe(loc), loc.name)
+        } }
+        val events = scenes.events.events.map { e -> Job("${e.id}.m4a", e.sound, EVENT_SECONDS, e.sound.hashCode().toLong(), e.id, e.sound, "событие") }
+        val chapter = com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID.let { id ->
+            Job("$id.m4a", com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, CHAPTER_SECONDS, 1L, id,
+                com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, "переход главы")
+        }
+        return places + events + chapter
+    }
+
+    /** l3_0.m4a -> l3; e5.m4a -> e5. */
+    private fun idOf(file: File) = if (file.name.startsWith("l")) file.name.substringBefore('_') else file.name.substringBefore('.')
+
+    /** Drops sounds of places and events that are gone or whose prompt changed. Sounds without a manifest came inside
+     * the book file (made for exactly these locations) and are kept. */
     fun sync(context: Context, sha: String, scenes: SceneIndex) {
         val files = BookFiles.sounds(context, sha)
         if (files.isEmpty()) return
@@ -44,54 +68,50 @@ object AmbienceBook {
         if (known.length() == 0) return
         // Made at another loudness (before −14 LUFS): all of them again.
         if (known.optDouble(LUFS_KEY, -20.0) != Loudness.TARGET_LUFS) { files.forEach { it.delete() }; manifest(context, sha).delete(); return }
-        val current = scenes.locations.associate { it.id to recipe(it) }
+        val current = jobs(context, scenes).associate { it.id to it.recipe }
         for (f in files) {
-            val id = f.name.substringBefore('_') // l3_0.m4a -> l3
+            val id = idOf(f)
             if (current[id] == null || known.optString(id) != current[id]) f.delete()
         }
     }
 
-    /** Sounds that came inside a book file were made for exactly its locations: record that, so a later
-     * re-preparation (new location numbers) drops them instead of playing them in the wrong places. */
+    /** Sounds that came inside a book file were made for exactly its locations and events: record that, so a later
+     * re-preparation (new numbers) drops them instead of playing them in the wrong places. */
     fun adopt(context: Context, sha: String, scenes: SceneIndex) {
         if (BookFiles.sounds(context, sha).isEmpty()) return
         val manifest = JSONObject().put(LUFS_KEY, Loudness.TARGET_LUFS)
-        for (loc in scenes.locations) manifest.put(loc.id, recipe(loc))
+        for (job in jobs(context, scenes)) manifest.put(job.id, job.recipe)
         runCatching { manifest(context, sha).writeText(manifest.toString()) }
     }
 
-    /** Locations with a clip still to make. */
-    fun missing(context: Context, sha: String, scenes: SceneIndex): List<SceneIndex.Location> {
+    /** Clips still to make. */
+    fun missing(context: Context, sha: String, scenes: SceneIndex): List<Job> {
         sync(context, sha, scenes)
-        val n = variants(context, scenes.locations.size)
-        val have = BookFiles.sounds(context, sha).map { it.name }.toSet()
-        return scenes.locations.filter { loc -> (0 until n).any { "${loc.id}_$it.m4a" !in have } }
+        val dir = BookFiles.ambience(context, sha)
+        return if (scenes.locations.isEmpty() && scenes.events.events.isEmpty()) emptyList()
+            else jobs(context, scenes).filter { !File(dir, it.file).isFile }
     }
 
-    /** Generates the missing clips (one at a time; NPU when switched on). [progress]: (done, total, place). */
+    /** Generates the missing clips (one at a time; the 30 s ones on the NPU when switched on). [progress]: (done, total, place). */
     fun generate(context: Context, sha: String, scenes: SceneIndex, threads: Int = 4,
                  progress: (Int, Int, String) -> Unit = { _, _, _ -> }, cancelled: () -> Boolean = { false }) {
         require(AmbienceModel.ready(context)) { "Скачайте генератор фоновых звуков в разделе «Фоновая музыка»" }
-        sync(context, sha, scenes)
-        val n = variants(context, scenes.locations.size)
-        val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
-        val todo = scenes.locations.flatMap { loc -> (0 until n).map { loc to it } }.filter { (loc, k) -> !File(dir, "${loc.id}_$k.m4a").isFile }
+        val todo = missing(context, sha, scenes)
         if (todo.isEmpty()) return
-        val npu = AmbienceModel.npuDit(context)
+        val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
+        val npu = if (todo.any { it.seconds == SECONDS }) AmbienceModel.npuDit(context) else null
         try {
             val generator = Sa3Generator(AmbienceModel.root(context), threads, npu)
             val manifest = readManifest(context, sha)
-            for ((done, pair) in todo.withIndex()) {
+            for ((done, job) in todo.withIndex()) {
                 if (cancelled()) throw InterruptedException("cancelled")
-                val (loc, k) = pair
-                progress(done, todo.size, loc.name)
-                val seed = loc.sound.hashCode().toLong() * 31 + k
-                val pcm = generator.generate(prompt(loc, k), SECONDS, seed, cancelled).pcm
+                progress(done, todo.size, job.label)
+                val pcm = generator.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
                 val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE)
-                AacFile.write(File(dir, "${loc.id}_$k.m4a"), pcm, bitrate = BITRATE)
-                manifest.put(loc.id, recipe(loc)).put(LUFS_KEY, Loudness.TARGET_LUFS)
+                AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
+                manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
                 manifest(context, sha).writeText(manifest.toString())
-                Log.i("Ambience", "Sound ${loc.id}_$k ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null})")
+                Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS})")
             }
             progress(todo.size, todo.size, "")
         } finally { npu?.close() }

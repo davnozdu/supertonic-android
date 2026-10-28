@@ -72,9 +72,7 @@ object BackgroundMusic {
         speaking = true; handler.post(shape)
         scenes.remove(owner to id)?.let { found ->
             val next = found.scene
-            if (found.chapter && prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.chapters(it) } == true) {
-                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.chapter(); handler.post(shape)
-            }
+            handler.post { playMoments(found) }
             if (next?.key != scene?.key) context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "sounding scene=${next?.key ?: "music"}") }
             scene = next
         } ?: context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "started without a tagged utterance") }
@@ -97,9 +95,7 @@ object BackgroundMusic {
         if (owner != null) {
             val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
             scene = tag.scene
-            if (tag.chapter && prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.chapters(it) } == true) {
-                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.chapter(); handler.post(shape)
-            }
+            handler.post { playMoments(tag) }
         }
         handler.post {
             holdUntil = maxOf(holdUntil, android.os.SystemClock.uptimeMillis() + ms)
@@ -140,6 +136,20 @@ object BackgroundMusic {
         val g = kotlin.math.sqrt(level) * volume() * (if (breathe) duck else 1f) * com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.chapterGain()
         player?.setVolume(g, g)
     } }
+
+    /** The moments an utterance brings when it starts to sound: the chapter dip with its transition sound (at the quiet
+     * point) and an event sound when the voice reaches its words (~180 words a minute). */
+    private fun playMoments(tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag) {
+        val ctx = context ?: return
+        val p = prefs ?: return
+        val S = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings
+        val player = com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer
+        if (tag.chapter && S.chapters(p)) {
+            player.chapter(); handler.post(shape)
+            tag.chapterSound?.let { player.oneShot(ctx, it, 1200, ambienceVolume()) }
+        }
+        if (S.events(p)) tag.event?.let { player.oneShot(ctx, it, tag.eventWord * 330L, ambienceVolume()) }
+    }
 
     /** «Дыхание звука» for the music too (−3 dB under speech, 0.3 s), and the section dip; ticks only while they move. */
     @Volatile private var speaking = false

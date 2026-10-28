@@ -6,7 +6,9 @@ package com.brahmadeo.supertonic.tts.books
  * word is stored (half the size; a sentence of four words still has a hit). Text outside any scene is stored too, as
  * [NONE] (there the background music plays); a piece with no hit at all keeps the current sound.
  * Stored as sorted 8-byte keys + 2-byte location numbers (−1 = no scene), base64. */
-class SceneIndex private constructor(private val keys: LongArray, private val values: ShortArray, val locations: List<Location>) {
+class SceneIndex private constructor(private val keys: LongArray, private val values: ShortArray, val locations: List<Location>,
+                                     /** «Звуки событий» of the book (empty when none were marked). */
+                                     val events: EventIndex = EventIndex.EMPTY) {
     /** [sound]: the English prompt of the steady background for the ambience generator; [accents]: occasional events
      * of the place (a distant locomotive whistle), each in a variant of its own; [paragraphs]: how much of the book is there. */
     data class Location(val id: String, val name: String, val sound: String, val paragraphs: Int, val accents: List<String> = emptyList())
@@ -46,6 +48,7 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
                     .put("accents", org.json.JSONArray(it.accents))
             }))
             .put("index", java.util.Base64.getEncoder().encodeToString(bytes.array()))
+            .apply { if (events.events.isNotEmpty()) put("events", events.toJson()) }
     }
 
     companion object {
@@ -72,9 +75,9 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
                     if (old != null && old != value) { entries.remove(k); clash += k }
                 }
             }
-            fun build(): SceneIndex {
+            fun build(events: EventIndex = EventIndex.EMPTY): SceneIndex {
                 val sorted = entries.entries.sortedBy { it.key }
-                return SceneIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, locations)
+                return SceneIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, locations, events)
             }
         }
 
@@ -98,7 +101,8 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
                 require(values[i] in NONE until locations.size) { "Некорректная разметка локаций" }
                 require(i == 0 || keys[i] > keys[i - 1]) { "Разметка локаций не упорядочена" }
             }
-            return SceneIndex(keys, values, locations)
+            val events = o.optJSONObject("events")?.let { EventIndex.parse(it) } ?: EventIndex.EMPTY
+            return SceneIndex(keys, values, locations, events)
         }
 
         val EMPTY = SceneIndex(LongArray(0), ShortArray(0), emptyList())

@@ -14,8 +14,10 @@ internal object AmbienceScenes {
     private class State(var before: List<String> = emptyList(), var scene: AmbiencePlayer.Scene? = null, val matcher: Any = Any(),
                         var section: Pair<Long, String>? = null)
 
-    /** What an utterance brings: its scene (null: music) and whether a new section of the book starts with it. */
-    data class Tag(val scene: AmbiencePlayer.Scene?, val chapter: Boolean)
+    /** What an utterance brings: its scene (null: music), whether a new section of the book starts with it (and that
+     * book's transition sound), and an event sound [eventWord] words into it. */
+    data class Tag(val scene: AmbiencePlayer.Scene?, val chapter: Boolean, val chapterSound: java.io.File? = null,
+                   val event: java.io.File? = null, val eventWord: Int = 0)
     private val states = java.util.WeakHashMap<Any, State>()
 
     /** The scene for [text] of [owner], or null (no prepared book here, no location, no sounds: the music plays). */
@@ -24,10 +26,14 @@ internal object AmbienceScenes {
     fun tag(context: Context, owner: Any, text: String?, flush: Boolean = false): Tag {
         val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
         val sounds = AmbienceSettings.enabled(prefs)
-        if (text.isNullOrBlank() || !(sounds || AmbienceSettings.chapters(prefs))) return Tag(null, false)
+        val withEvents = AmbienceSettings.events(prefs)
+        if (text.isNullOrBlank() || !(sounds || withEvents || AmbienceSettings.chapters(prefs))) return Tag(null, false)
         val state = synchronized(states) { states.getOrPut(owner) { State() } }
         if (flush) { state.before = emptyList(); state.section = null } // the reader jumped: the previous words are elsewhere
         var chapter = false
+        var chapterSound: java.io.File? = null
+        var event: java.io.File? = null
+        var eventWord = 0
         val scene = runCatching {
             val words = ReplyIndex.words(text)
             val before = state.before
@@ -37,15 +43,20 @@ internal object AmbienceScenes {
             val section = position.book to position.section
             chapter = state.section != null && state.section != section && state.section?.first == position.book
             state.section = section
-            if (!sounds) return@runCatching null
             val scenes = BookLibrary.scenes(context, position.book)
+            val sha = BookLibrary.contentSha(context, position.book) ?: return@runCatching null
+            if (chapter) chapterSound = BookFiles.event(context, sha, com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID)
+            if (withEvents) scenes.events.hit(text, before)?.let { hit ->
+                event = BookFiles.event(context, sha, hit.event.id); eventWord = hit.word
+                trace(context, "event ${hit.event.id} at word ${hit.word} file=${event != null}")
+            }
+            if (!sounds) return@runCatching null
             if (scenes.locations.isEmpty()) return@runCatching null.also { trace(context, "book=${position.book} has no locations") }
             val location = when (val found = scenes.find(text, before)) {
                 is com.brahmadeo.supertonic.tts.books.SceneIndex.At -> found.location
                 com.brahmadeo.supertonic.tts.books.SceneIndex.Outside -> { trace(context, "book=${position.book} outside"); state.scene = null; return@runCatching null }
                 com.brahmadeo.supertonic.tts.books.SceneIndex.Unknown -> { trace(context, "book=${position.book} unknown keep=${state.scene?.key}"); return@runCatching state.scene }
             }
-            val sha = BookLibrary.contentSha(context, position.book) ?: return@runCatching null
             // The first N variants (the setting may have been lowered after more were made).
             val n = AmbienceBook.variants(context, scenes.locations.size)
             val files = BookFiles.sounds(context, sha, location.id).filter { it.name.substringAfter('_').substringBefore('.').toIntOrNull()?.let { k -> k < n } == true }
@@ -53,7 +64,7 @@ internal object AmbienceScenes {
             AmbiencePlayer.Scene("$sha/${location.id}", location.name, files).takeIf { files.isNotEmpty() }.also { state.scene = it }
         }.getOrElse { trace(context, "error ${it.javaClass.simpleName}"); null }
         if (chapter) trace(context, "chapter starts")
-        return Tag(scene, chapter)
+        return Tag(scene, chapter, chapterSound, event, eventWord)
     }
 
     /** Last decisions (no book text), with verbose logs only (no flash writes while reading otherwise): in
