@@ -465,6 +465,8 @@ object EventKinds {
     fun resolve(raw: String?): String? {
         val text = raw?.trim()?.lowercase() ?: return null
         if (text.isEmpty()) return null
+        // Уже выученный синоним: тот же слепок, что и раньше.
+        Aliases.resolve(text)?.let { return it }
         byKey[text]?.let { if (it.key != OTHER) return it.key }
         byCanon[canon(text)]?.let { return it.key }
         val words = canon(text).split('_').filter { it.isNotEmpty() }.toSet()

@@ -278,8 +278,12 @@ internal object SceneMarking {
                 val e = ev.optJSONObject(k) ?: continue
                 val at = e.optInt("at", -1) - 1
                 val quote = e.optString("quote").takeIf { !e.isNull("quote") }?.trim().orEmpty()
-                // Название вида модель может написать по-разному (open_door вместо door_open): приводим к ключу списка.
-                val kind = com.brahmadeo.supertonic.tts.books.EventKinds.resolve(e.optString("kind")).orEmpty()
+                // Название вида модель может написать по-разному (open_door вместо door_open): приводим к ключу списка
+                // и запоминаем слепок названия, чтобы в следующих книгах попадание было точным сразу.
+                val rawKind = e.optString("kind")
+                val kind = com.brahmadeo.supertonic.tts.books.EventKinds.resolve(rawKind).orEmpty()
+                if (kind.isNotEmpty() && !rawKind.trim().equals(kind, ignoreCase = true))
+                    com.brahmadeo.supertonic.tts.books.Aliases.learn(rawKind, kind)
                 val given = e.optString("sound").takeIf { !e.isNull("sound") }?.trim().orEmpty()
                 if (at !in batch.first()..batch.last() || quote.length !in 3..80) { dropped++; continue }
                 val quoteWords = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(quote)
@@ -373,11 +377,14 @@ internal object SceneMarking {
         for (g in 0 until groups.length()) {
             val group = groups.optJSONObject(g) ?: continue
             // Второй проход тоже может назвать по-своему: сначала ищем известный вид, иначе берём его имя как новое.
-            val kind = com.brahmadeo.supertonic.tts.books.EventKinds.resolve(group.optString("kind"))
-                ?: group.optString("kind").trim().lowercase()
+            val rawKind = group.optString("kind")
+            val kind = com.brahmadeo.supertonic.tts.books.EventKinds.resolve(rawKind)
+                ?: rawKind.trim().lowercase()
                     .takeIf { com.brahmadeo.supertonic.tts.books.EventKinds.KEY.matches(it) &&
                         it != com.brahmadeo.supertonic.tts.books.EventKinds.OTHER }
                 ?: continue
+            if (!rawKind.trim().equals(kind, ignoreCase = true))
+                com.brahmadeo.supertonic.tts.books.Aliases.learn(rawKind, kind)
             val sound = forGenerator(group.optString("sound"), 6, 200, { null })
                 ?: com.brahmadeo.supertonic.tts.books.EventKinds.sound(kind) ?: continue
             val items = group.optJSONArray("items") ?: continue
