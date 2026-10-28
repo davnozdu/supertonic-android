@@ -408,7 +408,7 @@ object SupertonicTTS {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
         // «Акустика помещения»: the room of this text's scene (null: dry), part of the cached audio.
         val room = routeContext(stylePath)?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.forText(it, text) }
-        val cacheKey = routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() + "\u0000room=" + (room?.name ?: "") }
+        val cacheKey = routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() + "\u0000room=" + (room?.let { r -> r.name + ":" + com.brahmadeo.supertonic.tts.ambience.VoiceRoom.strength(it) } ?: "") }
         if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val sid = sessionIdCounter.incrementAndGet()
         currentSession.set(SessionContext(sid, listener))
@@ -421,7 +421,7 @@ object SupertonicTTS {
                 val converter = if (sourceRate != targetRate) com.brahmadeo.supertonic.tts.utils.StreamingPcmResampler(sourceRate, targetRate) else null
                 // «Обработка звука»: after the resampler, at the output rate (also reads the soft-limiter switch).
                 val filters = com.brahmadeo.supertonic.tts.utils.SpeechFilters.stream(context, targetRate)
-                val reverb = room?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.Stream(targetRate, it) }
+                val reverb = room?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.Stream(targetRate, it, com.brahmadeo.supertonic.tts.ambience.VoiceRoom.strength(context)) }
                 val converted = java.io.ByteArrayOutputStream()
                 val routedListener = if (converter == null && filters == null && reverb == null) listener else object : ProgressListener {
                     override fun onProgress(sessionId: Long, current: Int, total: Int) { listener?.onProgress(sessionId, current, total) }

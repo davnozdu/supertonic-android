@@ -184,6 +184,7 @@ class MainActivity : ComponentActivity() {
         com.brahmadeo.supertonic.tts.service.SleepTimer.initialize(this)
         com.brahmadeo.supertonic.tts.service.ReadingControls.show(this)
         SupertonicTTS.setApplicationContext(this)
+        Thread { runCatching { com.brahmadeo.supertonic.tts.utils.UpdateInstaller.cleanup(applicationContext) } }.start()
 
         val bindIntent = Intent(this, PlaybackService::class.java)
         bindService(bindIntent, connection, BIND_AUTO_CREATE)

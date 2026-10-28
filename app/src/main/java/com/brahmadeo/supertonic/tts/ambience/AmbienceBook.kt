@@ -15,7 +15,7 @@ object AmbienceBook {
     private const val BITRATE = 64_000
     private const val LUFS_KEY = "_lufs"
 
-    private const val MAX_CLIPS = 160
+    private const val MAX_CLIPS = 240
 
     /** The chosen number of variants, fewer when the book has so many locations that the clips would pass [MAX_CLIPS]. */
     fun variants(context: Context, locations: Int): Int {

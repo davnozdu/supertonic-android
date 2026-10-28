@@ -54,6 +54,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var moodMusic by remember { mutableStateOf(AmbienceSettings.moodMusic(prefs)) }
                 var moodByChapter by remember { mutableStateOf(AmbienceSettings.moodByChapter(prefs)) }
                 var room by remember { mutableStateOf(prefs.getBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,false)) }
+                var roomStrength by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.STRENGTH,100).coerceIn(0,200)) }
                 var chapters by remember { mutableStateOf(AmbienceSettings.chapters(prefs)) }
                 var ambienceVariants by remember { mutableIntStateOf(AmbienceSettings.variants(prefs)) }
                 var busy by remember { mutableStateOf(false) }
@@ -340,9 +341,16 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("Акустика помещения для голоса",Modifier.weight(1f))
                             Switch(checked=room,enabled=!busy,onCheckedChange={ room=it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,it).apply() })
                         }
-                        Text("Лёгкая реверберация голоса по месту сцены: на улице сухо, в комнате коротко, в соборе и подвале гулко. " +
-                            "Для книг с локациями, подготовленных в этой версии или новее. Заранее озвученные фразы пересоздаются.",
-                            style=MaterialTheme.typography.bodySmall)
+                        Text("Реверберация голоса по месту сцены: на улице сухо, в комнате коротко, в соборе гулко, в подвале, туннеле " +
+                            "и ущелье — с отражённым эхом. Для книг с локациями, подготовленных в этой версии или новее (туннели — с этой). " +
+                            "Заранее озвученные фразы пересоздаются.",style=MaterialTheme.typography.bodySmall)
+                        if (room) {
+                            Text("Сила эха и реверберации: $roomStrength %",style=MaterialTheme.typography.titleMedium)
+                            Slider(value=roomStrength.toFloat(),onValueChange={ roomStrength=(it/10f).roundToInt()*10 },
+                                onValueChangeFinished={ prefs.edit().putInt(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.STRENGTH,roomStrength).apply() },
+                                valueRange=0f..200f,steps=19)
+                            Text("100 % — как настроено; меньше — тоньше, больше — гулче. Применяется к новым фразам.",style=MaterialTheme.typography.bodySmall)
+                        }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Дыхание звука",Modifier.weight(1f))
                             Switch(checked=breathe,enabled=!busy,onCheckedChange={ breathe=it; prefs.edit().putBoolean(AmbienceSettings.BREATHE,it).apply() })

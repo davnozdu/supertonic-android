@@ -15,6 +15,18 @@ import java.security.MessageDigest
 object UpdateInstaller {
     private const val TAG = "UpdateInstaller"
 
+    /** Downloaded APKs already installed (or older): deleted at start, they were never removed before (~330 MB). */
+    fun cleanup(context: Context) {
+        val directory = File(context.cacheDir, "updates")
+        val installed = runCatching { androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(
+            context.packageManager.getPackageInfo(context.packageName, 0)) }.getOrNull() ?: return
+        directory.listFiles()?.forEach { file ->
+            val code = runCatching { context.packageManager.getPackageArchiveInfo(file.path, 0)
+                ?.let { androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(it) } }.getOrNull()
+            if (code == null || code <= installed) file.delete()
+        }
+    }
+
     suspend fun download(context: Context, update: UpdateChecker.Update): File = withContext(Dispatchers.IO) {
         val address = requireNotNull(update.apkUrl) { "Release has no APK" }
         val expected = requireNotNull(update.apkSha256) { "Release APK has no SHA-256 digest" }
@@ -22,6 +34,8 @@ object UpdateInstaller {
         val directory = File(context.cacheDir, "updates").apply { mkdirs() }
         val name = update.tag.replace(Regex("[^A-Za-z0-9._-]"), "_")
         val target = File(directory, "Supertonic-$name.apk")
+        // Only this release is kept: earlier downloads (~50–100 MB each) are dropped.
+        directory.listFiles()?.filter { it != target }?.forEach { it.delete() }
         if (target.exists() && sha256(target).equals(expected, ignoreCase = true)) {
             checkPackage(context, target)
             return@withContext target

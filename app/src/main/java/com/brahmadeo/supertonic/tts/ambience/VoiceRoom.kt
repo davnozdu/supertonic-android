@@ -12,14 +12,20 @@ import com.brahmadeo.supertonic.tts.books.SceneIndex
 object VoiceRoom {
     const val KEY = "ambience_room"
     /** [size]: comb feedback (decay); [damp]: high-frequency loss; [wet]: share of the reverb in the mix. */
-    data class Room(val name: String, val size: Float, val damp: Float, val wet: Float)
+    data class Room(val name: String, val size: Float, val damp: Float, val wet: Float,
+                    /** A distinct echo (tunnel, gorge): delay, feedback and level of a repeating reflection; 0 — none. */
+                    val echoMs: Int = 0, val echoFeedback: Float = 0f, val echoLevel: Float = 0f)
+    /** «Сила эха и реверберации», 0–200 % (100 — as tuned); part of the audio cache key. */
+    const val STRENGTH = "ambience_room_strength"
+    fun strength(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getInt(STRENGTH, 100).coerceIn(0, 200)
 
     val ROOMS = mapOf(
         "room" to Room("room", 0.70f, 0.45f, 0.08f),
         "large_room" to Room("large_room", 0.80f, 0.40f, 0.11f),
         "hall" to Room("hall", 0.88f, 0.30f, 0.15f),
         "vehicle" to Room("vehicle", 0.60f, 0.60f, 0.06f),
-        "cave" to Room("cave", 0.92f, 0.20f, 0.18f),
+        "cave" to Room("cave", 0.92f, 0.20f, 0.18f, echoMs = 140, echoFeedback = 0.25f, echoLevel = 0.12f),
+        "tunnel" to Room("tunnel", 0.90f, 0.25f, 0.16f, echoMs = 210, echoFeedback = 0.35f, echoLevel = 0.18f),
     )
 
     fun enabled(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getBoolean(KEY, false)
@@ -32,16 +38,23 @@ object VoiceRoom {
         if (!enabled(context)) return null
         val book = BookMatcher.recognised.value?.book ?: return null.also { last = null }
         val scenes = runCatching { BookLibrary.scenes(context, book) }.getOrNull() ?: return null
-        return when (val found = scenes.find(text, emptyList())) {
+        val room = when (val found = scenes.find(text, emptyList())) {
             is SceneIndex.At -> ROOMS[found.location.acoustics].also { last = it }
             SceneIndex.Outside -> null.also { last = null }
             SceneIndex.Unknown -> last
         }
+        // The verbose trace shows which room the voice gets (logged when it changes).
+        AmbienceScenes.trace(context, "voice room ${room?.name ?: "dry"}")
+        return room
     }
 
     /** Streaming reverb of 16-bit little-endian mono PCM at [rate]. */
-    class Stream(rate: Int, private val room: Room) {
+    class Stream(rate: Int, private val room: Room, strength: Int = 100) {
         private val scale = rate / 44100f
+        private val amount = strength / 100f
+        private val wetMix = (room.wet * amount).coerceAtMost(0.4f)
+        private val echo = FloatArray(if (room.echoMs > 0) maxOf(1, room.echoMs * rate / 1000) else 0)
+        private var echoAt = 0
         private val combs = intArrayOf(1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617).map { Comb((it * scale).toInt().coerceAtLeast(8)) }
         private val passes = intArrayOf(556, 441, 341, 225).map { AllPass((it * scale).toInt().coerceAtLeast(4)) }
         private var odd: Byte? = null
@@ -76,7 +89,15 @@ object VoiceRoom {
                 var wet = 0f
                 for (c in combs) wet += c.run(x * 0.015f)
                 for (a in passes) wet = a.run(wet)
-                val y = (x * (1 - room.wet) + wet * 3f * room.wet).coerceIn(-1f, 1f)
+                var y = x * (1 - wetMix) + wet * 3f * wetMix
+                if (echo.isNotEmpty()) {
+                    // A repeating reflection off far walls: the delayed sound, fed back a little each time.
+                    val e = echo[echoAt]
+                    echo[echoAt] = x + e * room.echoFeedback
+                    if (++echoAt == echo.size) echoAt = 0
+                    y += e * room.echoLevel * amount
+                }
+                y = y.coerceIn(-1f, 1f)
                 val s = (y * 32767f).toInt()
                 out[2 * k] = s.toByte(); out[2 * k + 1] = (s shr 8).toByte()
             }
