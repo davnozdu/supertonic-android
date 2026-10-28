@@ -19,20 +19,28 @@ import kotlin.math.roundToInt
  * so only one of them is resident at a time. The DiT and the decoder are "rung" files: one signature per fixed
  * length sharing weights; the XNNPACK weight cache next to each file keeps that sharing (flat RAM). */
 class Sa3Generator(private val dir: File, private val threads: Int = 4, private val npuDit: NpuDit? = null) {
-    /** DiT on the NPU (ORT QNN): a static-length ONNX graph, used when the clip has exactly [length] latents. */
-    class NpuDit(val session: ai.onnxruntime.OrtSession, val length: Int) {
+    /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
+     * latents. The sin/cos embeddings of t and seconds (arguments up to ~6e4, meaningless in fp16) come from [pre],
+     * a tiny fp32 graph on the ORT CPU. */
+    class NpuDit(val session: ai.onnxruntime.OrtSession, val pre: ai.onnxruntime.OrtSession, val length: Int) : AutoCloseable {
         fun velocity(x: FloatArray, t: Float, hidden: FloatArray, mask: FloatArray, seconds: Float): FloatArray {
             val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
             fun tensor(data: FloatArray, vararg shape: Long) = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(data), shape)
-            val inputs = mapOf("x" to tensor(x, 1, LATENT_CH.toLong(), length.toLong()), "t" to tensor(floatArrayOf(t), 1),
+            val scalars = mapOf("t" to tensor(floatArrayOf(t), 1), "seconds_total" to tensor(floatArrayOf(seconds), 1))
+            val features = try { pre.run(scalars).use { r -> listOf("t_features", "seconds_features").associateWith { name ->
+                val o = r.get(name).get() as ai.onnxruntime.OnnxTensor; FloatArray(o.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { o.floatBuffer.get(it) } } }
+            } finally { scalars.values.forEach { it.close() } }
+            val inputs = mapOf("x" to tensor(x, 1, LATENT_CH.toLong(), length.toLong()),
                 "t5_hidden" to tensor(hidden, 1, COND_TOKENS.toLong(), COND_DIM.toLong()), "t5_mask" to tensor(mask, 1, COND_TOKENS.toLong()),
-                "seconds_total" to tensor(floatArrayOf(seconds), 1), "local_add_cond" to tensor(FloatArray(257 * length), 1, 257, length.toLong()))
+                "local_add_cond" to tensor(FloatArray(257 * length), 1, 257, length.toLong())) +
+                features.mapValues { (_, v) -> tensor(v, 1, v.size.toLong()) }
             try {
                 return com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
                     session.run(inputs).use { r -> val o = r[0] as ai.onnxruntime.OnnxTensor; FloatArray(LATENT_CH * length).also { o.floatBuffer.get(it) } }
                 }
             } finally { inputs.values.forEach { it.close() } }
         }
+        override fun close() { session.close(); pre.close() }
     }
 
     data class Stage(val name: String, val wallMs: Long, val cpuMs: Long)

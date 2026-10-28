@@ -37,16 +37,19 @@ object AacFile {
                         codec.queueInputBuffer(index, 0, n * 4, time, if (inputDone) MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0)
                     }
                 }
-                val out = codec.dequeueOutputBuffer(info, 10_000)
-                when {
-                    out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> { track = muxer.addTrack(codec.outputFormat); muxer.start() }
-                    out >= 0 -> {
-                        if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0 && info.size > 0 && track >= 0)
-                            muxer.writeSampleData(track, codec.getOutputBuffer(out)!!, info)
-                        codec.releaseOutputBuffer(out, false)
-                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
-                    }
+                // Drain everything ready; wait only once the input is finished.
+                var finished = false
+                while (true) {
+                    val out = codec.dequeueOutputBuffer(info, if (inputDone) 10_000 else 0)
+                    if (out == MediaCodec.INFO_TRY_AGAIN_LATER) break
+                    if (out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) { track = muxer.addTrack(codec.outputFormat); muxer.start(); continue }
+                    if (out < 0) continue
+                    if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0 && info.size > 0 && track >= 0)
+                        muxer.writeSampleData(track, codec.getOutputBuffer(out)!!, info)
+                    codec.releaseOutputBuffer(out, false)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) { finished = true; break }
                 }
+                if (finished) break
             }
             muxer.stop()
         } finally {
