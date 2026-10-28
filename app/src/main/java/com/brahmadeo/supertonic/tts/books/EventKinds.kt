@@ -33,6 +33,7 @@ object EventKinds {
         Kind("cutlery", "вилка, нож, ложка", "silver cutlery being laid on a table"),
         Kind("bottle", "бутылка, графин", "a bottle set on a table with a dull clink"),
         Kind("glass_break", "разбилось стекло", "glass shattering on the floor with falling shards"),
+        Kind("drop", "что-то падает, удар предмета", "a heavy object dropping and hitting the floor"),
         Kind("footsteps_wood", "шаги по дереву, половицы", "measured footsteps on creaking wooden floorboards"),
         Kind("footsteps_stone", "шаги по камню", "footsteps echoing on stone slabs"),
         Kind("footsteps_gravel", "шаги по гравию, земле", "boots crunching on gravel for a few seconds"),
