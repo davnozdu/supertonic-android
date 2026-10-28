@@ -116,3 +116,30 @@ object AmbienceProbe {
         Log.i(TAG, "PROBE DONE ${results.length()}")
     }
 }
+
+/** Silent check of the LLM's scene places: cache/scene-probe.txt (sections start with "### ", one paragraph a
+ * line) through SceneMarking with the configured cloud (its key stays in the app) → cache/scene-probe-out.json. */
+object ScenesProbe {
+    fun run(context: Context) {
+        val lines = File(context.cacheDir, "scene-probe.txt").readLines()
+        var section = -1
+        val paragraphs = mutableListOf<com.brahmadeo.supertonic.tts.books.prepare.EpubBook.Paragraph>()
+        for (l in lines) {
+            if (l.startsWith("### ")) section++ else if (l.isNotBlank()) paragraphs += com.brahmadeo.supertonic.tts.books.prepare.EpubBook.Paragraph(maxOf(section, 0), l.trim())
+        }
+        val source = com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.source(context).withThinking(false)
+        val started = android.os.SystemClock.elapsedRealtime()
+        var requests = 0
+        val result = com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.mark(paragraphs, { prompt ->
+            requests++
+            com.brahmadeo.supertonic.tts.llm.LlmProviders.cloudRequest(source.config, prompt, com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.INSTRUCTION,
+                com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.schema(), source.gemini, tokens = 8000, deadlineMs = 180_000L, provider = source.provider)
+        }, { done, all -> Log.i("ScenesProbe", "batch $done/$all") })
+        val out = JSONObject().put("provider", source.label).put("ms", android.os.SystemClock.elapsedRealtime() - started).put("requests", requests)
+            .put("marked", result.marked).put("failed", result.failed).put("ambience", result.index.toJson().apply { remove("index") })
+            .put("paragraphs", JSONArray(paragraphs.mapIndexed { i, p -> JSONObject().put("i", i + 1).put("section", p.section)
+                .put("place", result.places.getOrNull(i) ?: JSONObject.NULL).put("text", p.text.take(90)) }))
+        File(context.cacheDir, "scene-probe-out.json").writeText(out.toString(1))
+        Log.i("ScenesProbe", "DONE locations=${result.index.locations.size} failed=${result.failed} requests=$requests ms=${out.getLong("ms")}")
+    }
+}

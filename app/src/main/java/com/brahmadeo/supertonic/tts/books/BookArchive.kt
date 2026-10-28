@@ -1,0 +1,68 @@
+package com.brahmadeo.supertonic.tts.books
+
+import android.content.Context
+import java.io.File
+import java.util.zip.Deflater
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+
+/** The `.mytts-book` file: an ordinary ZIP (any archiver opens it) with
+ *  - book.json — the prepared book ([BookPackage]: characters, fingerprints, replies, locations, «Умная книга»);
+ *  - source/<name>.epub|.fb2 — the original book file (optional);
+ *  - ambience/l<N>_<k>.m4a — the location sounds (optional).
+ * Deflate at the lowest level: book.json shrinks several times, the sounds and the book file are compressed already.
+ * A plain JSON `.mytts-book` (older versions) is still imported. */
+object BookArchive {
+    const val MAX_BYTES = 512L * 1024 * 1024
+    private const val MAX_SOURCE = 64L * 1024 * 1024
+    private const val MAX_SOUNDS = 400
+
+    fun isZip(file: File) = file.inputStream().use { val b = ByteArray(2); it.read(b) == 2 && b[0] == 'P'.code.toByte() && b[1] == 'K'.code.toByte() }
+
+    /** Imports [file] (a copy owned by the caller) and returns the book id. */
+    fun import(context: Context, file: File): Long {
+        require(file.length() in 1..MAX_BYTES) { "Файл книги больше ${MAX_BYTES / 1024 / 1024} МБ" }
+        if (!isZip(file)) {
+            require(file.length() <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
+            return BookLibrary.import(context, file.readText())
+        }
+        ZipFile(file).use { zip ->
+            val entry = requireNotNull(zip.getEntry("book.json")) { "Это не файл подготовленной книги MyTTS" }
+            require(entry.size in 1..BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
+            val json = zip.getInputStream(entry).use { it.readBytes().toString(Charsets.UTF_8) }
+            val id = BookLibrary.import(context, json)
+            val sha = requireNotNull(BookLibrary.contentSha(context, id))
+            val entries = zip.entries().toList().filter { !it.isDirectory }
+            entries.firstOrNull { it.name.startsWith("source/") }?.let { e ->
+                val name = e.name.removePrefix("source/")
+                if (BookFiles.validSourceName(name)) zip.getInputStream(e).use { BookFiles.saveSource(context, sha, name, it, MAX_SOURCE) }
+            }
+            val sounds = entries.filter { it.name.startsWith("ambience/") && BookFiles.SOUND.matches(it.name.removePrefix("ambience/")) }
+            require(sounds.size <= MAX_SOUNDS) { "В книге слишком много звуков" }
+            for (e in sounds) zip.getInputStream(e).use { BookFiles.saveSound(context, sha, e.name.removePrefix("ambience/"), it) }
+            return id
+        }
+    }
+
+    /** The container of book [id] for «Поделиться», written to [target]. */
+    fun export(context: Context, id: Long, target: File): Boolean {
+        val json = BookLibrary.export(context, id) ?: return false
+        val sha = BookLibrary.contentSha(context, id) ?: return false
+        val tmp = File(target.path + ".tmp")
+        try {
+            ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
+                zip.setLevel(Deflater.BEST_SPEED)
+                zip.putNextEntry(ZipEntry("book.json")); zip.write(json.toByteArray()); zip.closeEntry()
+                BookFiles.source(context, sha)?.let { src ->
+                    zip.putNextEntry(ZipEntry("source/${BookFiles.sourceName(context, sha)}")); src.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
+                }
+                for (s in BookFiles.sounds(context, sha)) {
+                    zip.putNextEntry(ZipEntry("ambience/${s.name}")); s.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
+                }
+            }
+            check(tmp.renameTo(target)) { "Не удалось сохранить файл книги" }
+            return true
+        } finally { tmp.delete() }
+    }
+}

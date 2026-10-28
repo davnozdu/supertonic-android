@@ -75,6 +75,7 @@ object BookLibrary {
         val db = db(context)
         // The text saved with this book («Умная книга») goes with it; a copy from the books folder stays.
         contentSha(context, id)?.let { sha ->
+            BookFiles.remove(context, sha) // its book file and location sounds
             val smart = com.brahmadeo.supertonic.tts.books.smart.SmartLibrary
             if (smart.book(context, sha)?.source == smart.PREPARED) { smart.remove(context, sha); com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.forget(context, sha) }
         }
@@ -124,7 +125,8 @@ object BookLibrary {
         return out.toString()
     }
 
-    /** The file to share: as imported, with the text of «Умная книга» when it was saved with the book. */
+    /** book.json to share (inside the [BookArchive] container): as imported, with the text of «Умная книга» when it
+     * was saved with the book. */
     fun export(context: Context, id: Long): String? {
         val json = json(context, id) ?: return null
         val sha = contentSha(context, id) ?: return json
@@ -138,6 +140,9 @@ object BookLibrary {
 
     /** «Разметка реплик» of a book (empty when it has none). */
     fun replies(context: Context, id: Long): ReplyIndex = runCatching { get(context, id)?.replies }.getOrNull() ?: ReplyIndex.EMPTY
+
+    /** «Фоновые звуки локаций» of a book (empty when it has none). */
+    fun scenes(context: Context, id: Long): SceneIndex = runCatching { get(context, id)?.scenes }.getOrNull() ?: SceneIndex.EMPTY
 
     fun lookup(context: Context, hashes: List<Long>): List<Hit> {
         if (hashes.isEmpty()) return emptyList()

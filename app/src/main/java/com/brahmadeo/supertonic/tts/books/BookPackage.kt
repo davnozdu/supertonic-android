@@ -16,6 +16,8 @@ data class BookPackage(
     val fingerprints: Map<String, List<Long>>,
     /** «Разметка реплик» (optional): the voice of each word of the dialogue paragraphs ([ReplyIndex]). */
     val replies: ReplyIndex = ReplyIndex.EMPTY,
+    /** «Фоновые звуки локаций» (optional): where each part takes place ([SceneIndex]); the sounds live next to the book. */
+    val scenes: SceneIndex = SceneIndex.EMPTY,
 ) {
     data class Section(val id: String, val title: String, val cast: Int?)
     data class Cast(val sections: List<String>, val characters: List<Character>, val other: List<String>)
@@ -54,6 +56,7 @@ data class BookPackage(
     }
 
     companion object {
+        /** book.json; the container (.mytts-book ZIP with the book file and the sounds) is limited by [BookArchive]. */
         const val MAX_BYTES = 32L * 1024 * 1024
         private const val MAX_FINGERPRINTS = 1_000_000
         private val ID = Regex("[a-z0-9_.]{1,80}")
@@ -96,8 +99,9 @@ data class BookPackage(
                 require(r.getString("algorithm") == ReplyIndex.ALGORITHM) { "Неизвестный способ разметки реплик: ${r.optString("algorithm")}" }
                 ReplyIndex.parse(r.getJSONArray("codes").strings(), r.getString("index"))
             } ?: ReplyIndex.EMPTY
+            val scenes = o.optJSONObject("ambience")?.let { SceneIndex.parse(it) } ?: SceneIndex.EMPTY
             return BookPackage(book.getString("title"), book.optString("author"), book.optString("file_sha256"),
-                book.getString("content_sha256"), o.optString("scope", "book"), sections, casts, fingerprints, replies)
+                book.getString("content_sha256"), o.optString("scope", "book"), sections, casts, fingerprints, replies, scenes)
         }
 
         private fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }

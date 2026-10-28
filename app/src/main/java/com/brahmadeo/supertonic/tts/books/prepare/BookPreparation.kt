@@ -6,6 +6,7 @@ import android.net.Uri
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.brahmadeo.supertonic.tts.books.BookLibrary
+import com.brahmadeo.supertonic.tts.books.BookFiles
 import com.brahmadeo.supertonic.tts.books.BookMatcher
 import com.brahmadeo.supertonic.tts.books.BookPackage
 import com.brahmadeo.supertonic.tts.books.BookVoices
@@ -58,8 +59,10 @@ object BookPreparation {
 
     @Volatile private var pendingSource: Source? = null
     /** [replies]: also «Разметка реплик»; [repliesFor]: an already prepared book — only its replies are marked;
-     * [smart]: «Умная книга» — the text and short content of its sections go into the file. */
-    @Synchronized fun start(context: Context, uri: Uri, source: Source, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false): Boolean {
+     * [smart]: «Умная книга» — the text and short content of its sections go into the file;
+     * [scenes]: «Фоновые звуки локаций» — places of the scenes by the LLM, then their sounds (when the generator is installed). */
+    @Synchronized fun start(context: Context, uri: Uri, source: Source, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false,
+                            scenes: Boolean = false): Boolean {
         if (job != null || mutable.value.running) return false
         val ctx = context.applicationContext
         ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -67,7 +70,7 @@ object BookPreparation {
         mutable.value = State(running = true, stage = "Копирование книги", startedAt = System.currentTimeMillis())
         try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, BookPreparationService::class.java)
-                .setData(uri).putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor).putExtra("smart", smart))
+                .setData(uri).putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor).putExtra("smart", smart).putExtra("scenes", scenes))
         } catch (t: Exception) {
             pendingSource = null; mutable.value = State(message = "Не удалось запустить фоновую подготовку; откройте MyTTS и повторите.")
             throw t
@@ -76,7 +79,8 @@ object BookPreparation {
     }
 
     /** Called by the foreground service, also when Android redelivers its intent after process death. */
-    @Synchronized internal fun execute(context: Context, uri: Uri, thinking: Boolean, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false) {
+    @Synchronized internal fun execute(context: Context, uri: Uri, thinking: Boolean, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false,
+                                       scenes: Boolean = false) {
         if (job != null) return
         val ctx = context.applicationContext
         val source = pendingSource ?: try { source(ctx).withThinking(thinking) } catch (_: Exception) {
@@ -135,9 +139,19 @@ object BookPreparation {
                         smartSections = text.summaries.size
                         json = JSONObject(json).put("smart", text.toJson()).toString()
                     }
+                    var sceneResult: SceneMarking.Result? = null
+                    if (scenes) {
+                        sceneResult = markScenes(plan, folder, source, cancel, startedAt)
+                        json = JSONObject(json).put("ambience", sceneResult.index.toJson()).toString()
+                    }
                     require(json.toByteArray().size <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
                     val pkg = BookPackage.parse(json)
                     val characters = pkg.groups.indices.sumOf { pkg.groupCast(it).characters.size }
+                    // The original EPUB/FB2 goes into the book's container («Извлечь файл книги»).
+                    runCatching { epub.inputStream().use { BookFiles.saveSource(ctx, pkg.contentSha256, sourceName(ctx, uri, epub), it, EpubBook.MAX_BYTES) } }
+                        .onFailure { report(ctx, it) }
+                    var soundsNote = ""
+                    if (sceneResult != null && sceneResult.index.locations.isNotEmpty()) soundsNote = generateSounds(ctx, pkg, cancel, startedAt)
                     // Cancellation and committing the completed package are one critical section.
                     // Once committed, the UI reports success even if Stop was tapped at that instant.
                     synchronized(this@BookPreparation) {
@@ -149,6 +163,7 @@ object BookPreparation {
                             (if (pipeline.notes.isNotEmpty()) pipeline.notes.joinToString("; ", postfix = ". ") else "") +
                             (marking?.let { "Реплики размечены: ${it.marked} абзацев${if (it.failed > 0) ", не удалось ${it.failed}" else ""}. " } ?: "") +
                             (if (smart) "Умная книга: текст сохранён, краткое содержание разделов $smartSections. " else "") +
+                            (sceneResult?.let { "Локации: ${it.index.locations.size}${if (it.failed > 0) " (не удалось разметить ${it.failed} абзацев)" else ""}. $soundsNote" } ?: "") +
                             "Откройте исходную книгу в читалке — MyTTS узнает её по тексту.", bookId = id)
                     }
                 }
@@ -229,9 +244,43 @@ object BookPreparation {
         }
     }
 
+    /** «Фоновые звуки локаций»: places of all paragraphs, without thinking (sequential: each answer feeds the known
+     * places of the next request). */
+    private fun markScenes(plan: BookPreparationPlan, folder: File, source: Source, cancel: LlmProviders.CloudCancellation,
+                           startedAt: Long): SceneMarking.Result =
+        SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, SceneMarking.INSTRUCTION, SceneMarking.schema(), "scenes", source, cancel) },
+            { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check)
+
+    /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
+     * book's card. Never fails the preparation: the book without sounds plays the music. */
+    private fun generateSounds(ctx: Context, pkg: BookPackage, cancel: LlmProviders.CloudCancellation, startedAt: Long): String {
+        if (!com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx)) return "Звуки не созданы: скачайте генератор в разделе «Фоновая музыка» и создайте их в карточке книги. "
+        return try {
+            com.brahmadeo.supertonic.tts.ambience.AmbienceBook.generate(ctx, pkg.contentSha256, pkg.scenes,
+                progress = { done, all, place -> mutable.value = State(true, "Фоновые звуки${if (place.isNotEmpty()) ": $place" else ""}", done, all, startedAt = startedAt) },
+                cancelled = { runCatching { cancel.check() }.isFailure })
+            "Фоновые звуки созданы. "
+        } catch (e: InterruptedException) { throw CancellationException("stopped")
+        } catch (e: Exception) { report(ctx, e); "Фоновые звуки не созданы (${e.javaClass.simpleName}); можно повторить в карточке книги. " }
+    }
+
+    /** The book file's own name (for «Извлечь файл книги»), or book.epub / book.fb2 by its content. */
+    private fun sourceName(ctx: Context, uri: Uri, file: File): String {
+        val name = runCatching { ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null } }.getOrNull()?.trim().orEmpty()
+        if (BookFiles.validSourceName(name)) return name
+        val head = file.inputStream().use { val b = ByteArray(4096); val n = it.read(b); String(b, 0, maxOf(n, 0), Charsets.ISO_8859_1) }
+        return if (head.startsWith("PK") && !head.contains("mimetypeapplication/epub")) "book.fb2.zip" else if (head.startsWith("PK")) "book.epub" else "book.fb2"
+    }
+
     /** One role request, cached by its prompt: up to three attempts on network or server errors. */
-    private fun roleRequest(folder: File, prompt: String, source: Source, cancel: LlmProviders.CloudCancellation): String {
-        val file = File(folder, "roles.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.json")
+    private fun roleRequest(folder: File, prompt: String, source: Source, cancel: LlmProviders.CloudCancellation): String =
+        jsonRequest(folder, "roles", prompt, VoiceRoleProtocol.INSTRUCTION, VoiceRoleProtocol.schema(), "paragraphs", source, cancel)
+
+    /** One JSON request without thinking, cached by its prompt under [kind]; saved only when it has [field]. */
+    private fun jsonRequest(folder: File, kind: String, prompt: String, system: String, schema: JSONObject, field: String,
+                            source: Source, cancel: LlmProviders.CloudCancellation): String {
+        val file = File(folder, "$kind.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.json")
         if (file.isFile && file.length() <= 512 * 1024) return file.readText()
         val config = source.withThinking(false).config
         var delay = 4000L
@@ -239,12 +288,12 @@ object BookPreparation {
         for (attempt in 1..3) {
             cancel.check()
             try {
-                val raw = LlmProviders.cloudRequest(config, prompt, VoiceRoleProtocol.INSTRUCTION, VoiceRoleProtocol.schema(), source.gemini,
+                val raw = LlmProviders.cloudRequest(config, prompt, system, schema, source.gemini,
                     tokens = 8000, deadlineMs = 3 * 60 * 1000L, cancellation = cancel, provider = source.provider)
                 cancel.check()
                 val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
                 // Saved only when it is the expected JSON; a broken answer is asked again next time.
-                if (start >= 0 && end > start && runCatching { JSONObject(raw.substring(start, end + 1)).has("paragraphs") }.getOrDefault(false)) {
+                if (start >= 0 && end > start && runCatching { JSONObject(raw.substring(start, end + 1)).has(field) }.getOrDefault(false)) {
                     val tmp = File(folder, "${file.name}.tmp")
                     try { tmp.writeText(raw); check(tmp.renameTo(file)) { "Не удалось сохранить ответ LLM" } } finally { tmp.delete() }
                     return raw
