@@ -8,23 +8,41 @@ import java.io.File
 
 /** Prepared books on the phone (no_backup/books.db): the `.mytts-book` file as imported and a
  * fingerprint → (book, section) index for recognising the book in text from Moon+. ~0.2 MB per novel;
- * a lookup is ~10 µs. A fingerprint present in two books or sections points nowhere (book = -1). */
+ * a lookup is ~10 µs. A sentence shared by several books (the same chapter in a collection and in the novel) points
+ * to all of them; BookMatcher decides by the reading and the other sentences. Inside one book a sentence repeated
+ * in two sections keeps the first. */
 object BookLibrary {
     data class Entry(val id: Long, val title: String, val author: String, val characters: Int, val sections: Int, val added: Long)
     data class Hit(val book: Long, val section: String)
-
-    private const val AMBIGUOUS = -1L
     @Volatile private var helper: Helper? = null
     private val packages = java.util.concurrent.ConcurrentHashMap<Long, BookPackage>()
 
-    private class Helper(context: Context) : SQLiteOpenHelper(context, File(context.noBackupFilesDir, "books.db").path, null, 1) {
+    private class Helper(context: Context) : SQLiteOpenHelper(context, File(context.noBackupFilesDir, "books.db").path, null, 2) {
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL("CREATE TABLE books(id INTEGER PRIMARY KEY AUTOINCREMENT, content_sha TEXT UNIQUE NOT NULL, " +
                 "file_sha TEXT, title TEXT NOT NULL, author TEXT, characters INTEGER, sections INTEGER, added INTEGER, json TEXT NOT NULL)")
-            db.execSQL("CREATE TABLE fingerprints(hash INTEGER PRIMARY KEY, book INTEGER NOT NULL, section TEXT NOT NULL) WITHOUT ROWID")
+            createPrints(db)
+        }
+        /** v1 kept one book per sentence and lost the shared ones: the index is rebuilt from the stored books. */
+        override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) {
+            if (old < 2) {
+                db.execSQL("DROP TABLE IF EXISTS fingerprints")
+                createPrints(db)
+                val ids = db.rawQuery("SELECT id FROM books", null).use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList() }
+                for (id in ids) runCatching { addPrints(db, id, BookPackage.parse(readJson(db, id) ?: return@runCatching)) }
+            }
+        }
+        private fun createPrints(db: SQLiteDatabase) {
+            db.execSQL("CREATE TABLE fingerprints(hash INTEGER NOT NULL, book INTEGER NOT NULL, section TEXT NOT NULL, PRIMARY KEY(hash, book)) WITHOUT ROWID")
             db.execSQL("CREATE INDEX fingerprints_book ON fingerprints(book)")
         }
-        override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) = Unit
+    }
+
+    private fun addPrints(db: SQLiteDatabase, id: Long, pkg: BookPackage) {
+        val insert = db.compileStatement("INSERT OR IGNORE INTO fingerprints(hash, book, section) VALUES (?, ?, ?)")
+        for ((section, hashes) in pkg.fingerprints) for (h in hashes) {
+            insert.bindLong(1, h); insert.bindLong(2, id); insert.bindString(3, section); insert.executeInsert()
+        }
     }
 
     private fun db(context: Context): SQLiteDatabase =
@@ -56,12 +74,7 @@ object BookLibrary {
                 packages.remove(existing)
                 existing
             } else db.insertOrThrow("books", null, values.apply { put("added", System.currentTimeMillis()) })
-            val insert = db.compileStatement("INSERT OR IGNORE INTO fingerprints(hash, book, section) VALUES (?, ?, ?)")
-            val mark = db.compileStatement("UPDATE fingerprints SET book=$AMBIGUOUS WHERE hash=? AND NOT (book=? AND section=?)")
-            for ((section, hashes) in pkg.fingerprints) for (h in hashes) {
-                insert.bindLong(1, h); insert.bindLong(2, id); insert.bindString(3, section)
-                if (insert.executeInsert() == -1L) { mark.bindLong(1, h); mark.bindLong(2, id); mark.bindString(3, section); mark.executeUpdateDelete() }
-            }
+            addPrints(db, id, pkg)
             db.setTransactionSuccessful()
             packages[id] = pkg
             // A text that cannot be saved does not undo the voices: the book is simply not «умная».
@@ -110,8 +123,9 @@ object BookLibrary {
     private const val CHUNK = 200_000
 
     /** The file as imported, for «Поделиться». Read in pieces (see [CHUNK]). */
-    fun json(context: Context, id: Long): String? {
-        val db = db(context)
+    fun json(context: Context, id: Long): String? = readJson(db(context), id)
+
+    private fun readJson(db: SQLiteDatabase, id: Long): String? {
         val key = id.toString()
         val length = db.rawQuery("SELECT length(json) FROM books WHERE id=?", arrayOf(key)).use { if (it.moveToFirst()) it.getLong(0) else null } ?: return null
         val out = StringBuilder(length.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
@@ -144,13 +158,15 @@ object BookLibrary {
     /** «Фоновые звуки локаций» of a book (empty when it has none). */
     fun scenes(context: Context, id: Long): SceneIndex = runCatching { get(context, id)?.scenes }.getOrNull() ?: SceneIndex.EMPTY
 
-    fun lookup(context: Context, hashes: List<Long>): List<Hit> {
+    /** Per fingerprint found: every book (and its section) that has it, newest book first. */
+    fun lookup(context: Context, hashes: List<Long>): List<List<Hit>> {
         if (hashes.isEmpty()) return emptyList()
         val db = db(context)
         return hashes.mapNotNull { h ->
-            db.rawQuery("SELECT book, section FROM fingerprints WHERE hash=?", arrayOf(h.toString())).use { c ->
-                if (c.moveToFirst() && c.getLong(0) != AMBIGUOUS) Hit(c.getLong(0), c.getString(1)) else null
-            }
+            db.rawQuery("SELECT f.book, f.section FROM fingerprints f JOIN books b ON b.id = f.book WHERE f.hash=? ORDER BY b.added DESC",
+                arrayOf(h.toString())).use { c ->
+                generateSequence { if (c.moveToNext()) Hit(c.getLong(0), c.getString(1)) else null }.toList()
+            }.takeIf { it.isNotEmpty() }
         }
     }
 }

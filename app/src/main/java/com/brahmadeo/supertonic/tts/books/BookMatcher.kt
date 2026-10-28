@@ -6,7 +6,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Recognises a prepared book and its section in the text a reader sends (Moon+ gives no book id).
  * Another book is taken only after two fingerprints in a row agree on it (a stray coincidence never
- * switches); inside the current book a single hit moves the section. Eight chunks with fingerprints and
+ * switches); inside the current book a single hit moves the section. Sentences shared by several books
+ * (one chapter in a collection and in the novel) keep the book being read. Eight chunks with fingerprints and
  * no hit drop the book, so an unprepared book is never read with another book's characters.
  * State is per TTS client; the result belongs to the text it was computed for (readers queue ahead). */
 object BookMatcher {
@@ -39,14 +40,20 @@ object BookMatcher {
             if (hashes.isNotEmpty() && hits.isEmpty()) {
                 if (s.current != null && ++s.misses >= MISSES_TO_DROP) { s.current = null; s.candidate = null; s.streak = 0 }
             }
-            for (hit in hits) {
+            for (found in hits) {
                 s.misses = 0
                 val current = s.current
-                if (current != null && current.book == hit.book) {
-                    s.current = Position(hit.book, hit.section)
+                // A sentence of the book being read keeps it, even if another book has it too.
+                val mine = found.firstOrNull { it.book == current?.book }
+                if (mine != null) {
+                    s.current = Position(mine.book, mine.section)
                     s.candidate = null; s.streak = 0
                     continue
                 }
+                // Another book: CONFIRM sentences in a row must agree. A sentence shared by several books counts for
+                // the candidate if it has it, otherwise for the newest of them (a whole shared chapter: the book added
+                // last); a sentence only one book has settles it.
+                val hit = found.firstOrNull { it.book == s.candidate } ?: found.first()
                 if (s.candidate == hit.book) s.streak++ else { s.candidate = hit.book; s.streak = 1 }
                 if (s.streak >= CONFIRM) {
                     s.current = Position(hit.book, hit.section)
