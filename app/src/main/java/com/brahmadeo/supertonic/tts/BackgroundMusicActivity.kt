@@ -48,6 +48,9 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
+                var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
+                var eventsDensity by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,
+                    com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.DEFAULT_DENSITY)) }
                 var moodMusic by remember { mutableStateOf(AmbienceSettings.moodMusic(prefs)) }
                 var moodByChapter by remember { mutableStateOf(AmbienceSettings.moodByChapter(prefs)) }
                 var room by remember { mutableStateOf(prefs.getBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,false)) }
@@ -300,6 +303,25 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Text("Короткие звуки того, что происходит в тексте: хлопнула дверь, выстрел, заржала лошадь, ударил колокол — " +
                             "в момент, когда голос до этого доходит. Нужна книга, подготовленная с локациями в этой версии или новее.",
                             style=MaterialTheme.typography.bodySmall)
+                        if (events) {
+                            Text("Громкость звуков событий: $eventsVolume %",style=MaterialTheme.typography.titleMedium)
+                            Slider(value=eventsVolume.toFloat(),onValueChange={ eventsVolume=it.roundToInt() },
+                                onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.EVENTS_VOLUME,eventsVolume).apply() },
+                                valueRange=0f..100f,steps=99)
+                            Text("Отдельно от звуков локаций; по умолчанию 40 % — чуть выше фона. Действует сразу.",style=MaterialTheme.typography.bodySmall)
+                            Text("Сколько событий отмечать",style=MaterialTheme.typography.titleMedium)
+                            for ((d, label) in listOf(1 to "Редко: только яркие (выстрел, гром, хлопнула дверь)",
+                                    2 to "Обычно: и действия героев (шаги по гравию, скрип двери или фонаря)",
+                                    3 to "Часто: все слышимые подробности")) {
+                                Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                                    RadioButton(selected=eventsDensity==d,enabled=!busy,onClick={ eventsDensity=d
+                                        prefs.edit().putInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,d).apply() })
+                                    Text(label,Modifier.weight(1f))
+                                }
+                            }
+                            Text("Действует при подготовке книги (нужно подготовить её заново). Больше событий — дольше подготовка и создание " +
+                                "звуков (~4 с звука на событие); событие отмечается только по точной цитате из текста.",style=MaterialTheme.typography.bodySmall)
+                        }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Музыка по настроению",Modifier.weight(1f))
                             Switch(checked=moodMusic,enabled=!busy,onCheckedChange={ moodMusic=it; prefs.edit().putBoolean(AmbienceSettings.MOOD_MUSIC,it).apply() })

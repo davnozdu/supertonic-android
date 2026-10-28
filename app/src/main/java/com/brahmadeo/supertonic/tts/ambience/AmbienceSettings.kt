@@ -26,6 +26,10 @@ object AmbienceSettings {
     /** «Звуки событий»: short sounds of what the text describes (a door slams). Off by default. */
     const val EVENTS = "ambience_events"
     fun events(prefs: SharedPreferences) = prefs.getBoolean(EVENTS, false)
+    /** «Громкость звуков событий» (0–100 %, its own slider): by default a little above the location sounds. */
+    const val EVENTS_VOLUME = "ambience_events_volume"
+    const val DEFAULT_EVENTS_VOLUME = 40
+    fun eventsVolume(prefs: SharedPreferences) = prefs.getInt(EVENTS_VOLUME, DEFAULT_EVENTS_VOLUME).coerceIn(0, 100)
 
     /** «Музыка по настроению»: outside scenes the music of the passage's mood, generated for the book. Off by default. */
     const val MOOD_MUSIC = "ambience_mood_music"

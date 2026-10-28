@@ -150,7 +150,7 @@ object BackgroundMusic {
             player.chapter(); handler.post(shape)
             tag.chapterSound?.let { player.oneShot(ctx, it, 1200, ambienceVolume()) }
         }
-        if (S.events(p)) tag.event?.let { player.oneShot(ctx, it, tag.eventWord * 330L, ambienceVolume()) }
+        if (S.events(p)) tag.event?.let { player.oneShot(ctx, it, tag.eventWord * 330L, S.eventsVolume(p) / 100f) }
     }
 
     /** «Дыхание звука» for the music too (−3 dB under speech, 0.3 s), and the section dip; ticks only while they move. */

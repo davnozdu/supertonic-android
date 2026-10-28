@@ -141,7 +141,7 @@ object BookPreparation {
                     }
                     var sceneResult: SceneMarking.Result? = null
                     if (scenes) {
-                        sceneResult = markScenes(plan, folder, source, cancel, startedAt)
+                        sceneResult = markScenes(ctx, plan, folder, source, cancel, startedAt)
                         // Nothing found in the whole book (no place, mood or event): nothing to store.
                         val idx = sceneResult.index
                         if (idx.locations.isNotEmpty() || idx.moods.moods.isNotEmpty() || idx.events.events.isNotEmpty())
@@ -258,10 +258,11 @@ object BookPreparation {
 
     /** «Фоновые звуки локаций»: places of all paragraphs, without thinking (sequential: each answer feeds the known
      * places of the next request). */
-    private fun markScenes(plan: BookPreparationPlan, folder: File, source: Source, cancel: LlmProviders.CloudCancellation,
+    private fun markScenes(ctx: Context, plan: BookPreparationPlan, folder: File, source: Source, cancel: LlmProviders.CloudCancellation,
                            startedAt: Long): SceneMarking.Result =
         SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, SceneMarking.INSTRUCTION, SceneMarking.schema(), null, source, cancel) },
-            { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check, plan.sections.map { it.id })
+            { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check, plan.sections.map { it.id },
+            ctx.getSharedPreferences("SupertonicPrefs", 0).getInt(SceneMarking.EVENTS_DENSITY, SceneMarking.DEFAULT_DENSITY))
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */
