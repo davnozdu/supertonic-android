@@ -262,9 +262,11 @@ class BooksActivity : ComponentActivity() {
                                             extractBook = book; extractPicker.launch(com.brahmadeo.supertonic.tts.books.BookFiles.sourceName(this@BooksActivity, sha!!))
                                         }) { Text("Извлечь файл книги") }
                                         val scenes = remember(book.id, preparation.bookId) { BookLibrary.scenes(this@BooksActivity, book.id) }
-                                        if (scenes.locations.isNotEmpty() && sha != null) {
+                                        if ((scenes.locations.isNotEmpty() || scenes.moods.moods.isNotEmpty()) && sha != null) {
                                             val missing = remember(book.id, preparation.bookId, ambience.running) { com.brahmadeo.supertonic.tts.ambience.AmbienceBook.missing(this@BooksActivity, sha, scenes).size }
                                             Text("Локации: ${scenes.locations.size} (${scenes.locations.take(6).joinToString(", ") { it.name }}${if (scenes.locations.size > 6) "…" else ""}). " +
+                                                (if (scenes.moods.moods.isNotEmpty()) "Настроения: ${scenes.moods.moods.joinToString(", ") { it.name }}. " else "") +
+                                                (if (scenes.events.events.isNotEmpty()) "Событий: ${scenes.events.events.size}. " else "") +
                                                 if (missing == 0) "Звуки готовы." else "Без звуков: $missing.", style = MaterialTheme.typography.bodySmall)
                                             if (ambience.running && ambience.book == book.id) {
                                                 Text("Звуки: ${ambience.done}/${ambience.total}${if (ambience.place.isNotEmpty()) " · ${ambience.place}" else ""}", style = MaterialTheme.typography.bodySmall)

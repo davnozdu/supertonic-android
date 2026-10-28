@@ -18,7 +18,9 @@ import kotlin.math.roundToInt
  * (cfg 1, 8-step rectified-flow pingpong). The three graphs load one after another and close straight away,
  * so only one of them is resident at a time. The DiT and the decoder are "rung" files: one signature per fixed
  * length sharing weights; the XNNPACK weight cache next to each file keeps that sharing (flat RAM). */
-class Sa3Generator(private val dir: File, private val threads: Int = 4, private val npuDit: NpuDit? = null) {
+class Sa3Generator(private val dir: File, private val threads: Int = 4, private val npuDit: NpuDit? = null,
+                   /** The DiT on the CPU: sound effects (dit_w8a8) or music (dit_music_w8a8). */
+                   private val ditFile: String = "dit_w8a8.tflite") {
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
      * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
@@ -104,7 +106,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
         npuDit?.takeIf { it.length == length }?.let { dit -> return pingpong(length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) } }
         val rung = DIT_RUNGS.first { it >= length }
         val sig = "s$rung"
-        return model("dit_w8a8.tflite", cache = true).use { m ->
+        return model(ditFile, cache = true).use { m ->
             val buffers = (0..6).associate { "args_$it" to m.createInputBuffer("args_$it", sig) }
             val out = m.createOutputBuffer("output_0", sig)
             val gIn = (0..1).map { m.createInputBuffer("args_$it", "gcond") }

@@ -37,7 +37,10 @@ object AmbienceGeneration {
             try {
                 val sha = requireNotNull(BookLibrary.contentSha(ctx, book)) { "Книга не найдена" }
                 val scenes = BookLibrary.scenes(ctx, book)
-                require(scenes.locations.isNotEmpty()) { "В книге нет локаций: подготовьте её с «Локации и фоновые звуки»" }
+                require(scenes.locations.isNotEmpty() || scenes.moods.moods.isNotEmpty()) { "В книге нет локаций: подготовьте её с «Локации и фоновые звуки»" }
+                // «Музыка по настроению» needs its model (and the NPU graphs when the NPU is on).
+                if (AmbienceSettings.moodMusic(ctx.getSharedPreferences("SupertonicPrefs", 0)) && !AmbienceModel.musicReady(ctx))
+                    AmbienceModel.download(ctx) { text, _ -> mutable.value = State(true, book, place = text) }
                 AmbienceBook.generate(ctx, sha, scenes, progress = { done, total, place -> mutable.value = State(true, book, done, total, place) },
                     cancelled = { stopped })
                 mutable.value = State(book = book, message = "Фоновые звуки созданы: ${scenes.locations.size} локаций")

@@ -44,6 +44,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
+                var moodMusic by remember { mutableStateOf(AmbienceSettings.moodMusic(prefs)) }
+                var moodByChapter by remember { mutableStateOf(AmbienceSettings.moodByChapter(prefs)) }
                 var room by remember { mutableStateOf(prefs.getBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,false)) }
                 var chapters by remember { mutableStateOf(AmbienceSettings.chapters(prefs)) }
                 var ambienceVariants by remember { mutableIntStateOf(AmbienceSettings.variants(prefs)) }
@@ -178,6 +180,20 @@ class BackgroundMusicActivity : ComponentActivity() {
                             "в момент, когда голос до этого доходит. Нужна книга, подготовленная с локациями в этой версии или новее.",
                             style=MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Музыка по настроению",Modifier.weight(1f))
+                            Switch(checked=moodMusic,enabled=!busy,onCheckedChange={ moodMusic=it; prefs.edit().putBoolean(AmbienceSettings.MOOD_MUSIC,it).apply() })
+                        }
+                        Text("Вместо одного трека по кругу — музыка, созданная под книгу: нейросеть сама называет настроения (мрачное, " +
+                            "тревожное ожидание, светлая грусть…) и описывает музыку под эпоху; на каждое настроение 2 фрагмента. Звучит там, " +
+                            "где нет сцены с локацией, если фоновая музыка включена, на её громкости. Модель музыки — ещё ${AmbienceModel.musicBytes()/1048576} МБ " +
+                            "(и NPU-граф, если включён NPU); недостающая музыка создаётся кнопкой в карточке книги.",style=MaterialTheme.typography.bodySmall)
+                        if (moodMusic) Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                            RadioButton(selected=!moodByChapter,onClick={ moodByChapter=false; prefs.edit().putString(AmbienceSettings.MOOD_SCOPE,"scene").apply() })
+                            Text("По сценам",Modifier.padding(end=16.dp))
+                            RadioButton(selected=moodByChapter,onClick={ moodByChapter=true; prefs.edit().putString(AmbienceSettings.MOOD_SCOPE,"chapter").apply() })
+                            Text("По главам")
+                        }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Акустика помещения для голоса",Modifier.weight(1f))
                             Switch(checked=room,enabled=!busy,onCheckedChange={ room=it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,it).apply() })
                         }
@@ -213,7 +229,9 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("Нагружает процессор примерно в 3 раза меньше. Дополнительно ${AmbienceModel.npuBytes()/1048576} МБ; " +
                                 "первая подготовка NPU занимает около 2 минут.",style=MaterialTheme.typography.bodySmall)
                         }
-                        val npuMissing=ambienceNpu && ambienceReady && !AmbienceModel.npuReady(this@BackgroundMusicActivity)
+                        val npuMissing=(ambienceNpu && ambienceReady && !AmbienceModel.npuReady(this@BackgroundMusicActivity)) ||
+                            (moodMusic && ambienceReady && !AmbienceModel.musicReady(this@BackgroundMusicActivity)) ||
+                            (moodMusic && ambienceNpu && ambienceReady && !AmbienceModel.musicNpuReady(this@BackgroundMusicActivity))
                         Button(enabled=!busy && (!ambienceReady || npuMissing),onClick={
                             busy=true
                             scope.launch {
@@ -223,7 +241,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 } catch(t: Exception) { message="Не удалось скачать: ${t.message.orEmpty()}" }
                                 finally { ambienceReady=AmbienceModel.ready(this@BackgroundMusicActivity); busy=false }
                             }
-                        }) { Text(when { npuMissing -> "Скачать модель для NPU"; ambienceReady -> "Генератор звуков скачан"
+                        }) { Text(when { npuMissing -> "Докачать модели (NPU / музыка)"; ambienceReady -> "Генератор звуков скачан"
                             else -> "Скачать генератор звуков (${AmbienceModel.totalBytes()/1048576} МБ)" }) }
                         if(ambienceReady) OutlinedButton(enabled=!busy,onClick={
                             busy=true

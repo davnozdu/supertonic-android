@@ -27,6 +27,13 @@ object AmbienceSettings {
     const val EVENTS = "ambience_events"
     fun events(prefs: SharedPreferences) = prefs.getBoolean(EVENTS, false)
 
+    /** «Музыка по настроению»: outside scenes the music of the passage's mood, generated for the book. Off by default. */
+    const val MOOD_MUSIC = "ambience_mood_music"
+    /** "scene" (default) — the mood of each passage; "chapter" — one mood per chapter. */
+    const val MOOD_SCOPE = "ambience_mood_scope"
+    fun moodMusic(prefs: SharedPreferences) = prefs.getBoolean(MOOD_MUSIC, false)
+    fun moodByChapter(prefs: SharedPreferences) = prefs.getString(MOOD_SCOPE, "scene") == "chapter"
+
     fun breathe(prefs: SharedPreferences) = prefs.getBoolean(BREATHE, false)
     fun chapters(prefs: SharedPreferences) = prefs.getBoolean(CHAPTERS, false)
 

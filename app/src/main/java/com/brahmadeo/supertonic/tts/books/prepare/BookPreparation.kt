@@ -142,8 +142,10 @@ object BookPreparation {
                     var sceneResult: SceneMarking.Result? = null
                     if (scenes) {
                         sceneResult = markScenes(plan, folder, source, cancel, startedAt)
-                        // No place with a sound in the whole book: nothing to store (the music plays throughout).
-                        if (sceneResult.index.locations.isNotEmpty()) json = JSONObject(json).put("ambience", sceneResult.index.toJson()).toString()
+                        // Nothing found in the whole book (no place, mood or event): nothing to store.
+                        val idx = sceneResult.index
+                        if (idx.locations.isNotEmpty() || idx.moods.moods.isNotEmpty() || idx.events.events.isNotEmpty())
+                            json = JSONObject(json).put("ambience", idx.toJson()).toString()
                     }
                     require(json.toByteArray().size <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
                     val pkg = BookPackage.parse(json)
@@ -154,7 +156,8 @@ object BookPreparation {
                     var soundsNote = ""
                     // Sounds of an earlier preparation that no longer fit the new locations go at once.
                     if (sceneResult != null) com.brahmadeo.supertonic.tts.ambience.AmbienceBook.sync(ctx, pkg.contentSha256, pkg.scenes)
-                    if (sceneResult != null && sceneResult.index.locations.isNotEmpty()) soundsNote = generateSounds(ctx, pkg, cancel, startedAt)
+                    if (sceneResult != null && (sceneResult.index.locations.isNotEmpty() || sceneResult.index.moods.moods.isNotEmpty()))
+                        soundsNote = generateSounds(ctx, pkg, cancel, startedAt)
                     // Cancellation and committing the completed package are one critical section.
                     // Once committed, the UI reports success even if Stop was tapped at that instant.
                     synchronized(this@BookPreparation) {
@@ -252,13 +255,17 @@ object BookPreparation {
     private fun markScenes(plan: BookPreparationPlan, folder: File, source: Source, cancel: LlmProviders.CloudCancellation,
                            startedAt: Long): SceneMarking.Result =
         SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, SceneMarking.INSTRUCTION, SceneMarking.schema(), null, source, cancel) },
-            { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check)
+            { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check, plan.sections.map { it.id })
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */
     private fun generateSounds(ctx: Context, pkg: BookPackage, cancel: LlmProviders.CloudCancellation, startedAt: Long): String {
         if (!com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx)) return "Звуки не созданы: скачайте генератор в разделе «Фоновая музыка» и создайте их в карточке книги. "
         return try {
+            if (com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(ctx.getSharedPreferences("SupertonicPrefs", 0)) &&
+                !com.brahmadeo.supertonic.tts.ambience.AmbienceModel.musicReady(ctx)) runBlocking {
+                com.brahmadeo.supertonic.tts.ambience.AmbienceModel.download(ctx) { text, _ -> mutable.value = State(true, text, startedAt = startedAt) }
+            }
             com.brahmadeo.supertonic.tts.ambience.AmbienceBook.generate(ctx, pkg.contentSha256, pkg.scenes,
                 progress = { done, all, place -> mutable.value = State(true, "Фоновые звуки${if (place.isNotEmpty()) ": $place" else ""}", done, all, startedAt = startedAt) },
                 cancelled = { runCatching { cancel.check() }.isFailure })

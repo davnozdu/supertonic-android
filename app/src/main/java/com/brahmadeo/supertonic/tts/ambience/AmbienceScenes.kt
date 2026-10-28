@@ -12,12 +12,14 @@ import com.brahmadeo.supertonic.tts.books.ReplyIndex
 internal object AmbienceScenes {
     /** [matcher]: this reader's key in BookMatcher (lives as long as the reader's entry here). */
     private class State(var before: List<String> = emptyList(), var scene: AmbiencePlayer.Scene? = null, val matcher: Any = Any(),
-                        var section: Pair<Long, String>? = null)
+                        var section: Pair<Long, String>? = null, var mood: AmbiencePlayer.Scene? = null)
 
     /** What an utterance brings: its scene (null: music), whether a new section of the book starts with it (and that
      * book's transition sound), and an event sound [eventWord] words into it. */
     data class Tag(val scene: AmbiencePlayer.Scene?, val chapter: Boolean, val chapterSound: java.io.File? = null,
-                   val event: java.io.File? = null, val eventWord: Int = 0)
+                   val event: java.io.File? = null, val eventWord: Int = 0,
+                   /** «Музыка по настроению»: the music of the passage (or chapter), played where there is no scene. */
+                   val mood: AmbiencePlayer.Scene? = null)
     private val states = java.util.WeakHashMap<Any, State>()
 
     /** The scene for [text] of [owner], or null (no prepared book here, no location, no sounds: the music plays). */
@@ -27,13 +29,15 @@ internal object AmbienceScenes {
         val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
         val sounds = AmbienceSettings.enabled(prefs)
         val withEvents = AmbienceSettings.events(prefs)
-        if (text.isNullOrBlank() || !(sounds || withEvents || AmbienceSettings.chapters(prefs))) return Tag(null, false)
+        val withMood = AmbienceSettings.moodMusic(prefs)
+        if (text.isNullOrBlank() || !(sounds || withEvents || withMood || AmbienceSettings.chapters(prefs))) return Tag(null, false)
         val state = synchronized(states) { states.getOrPut(owner) { State() } }
         if (flush) { state.before = emptyList(); state.section = null } // the reader jumped: the previous words are elsewhere
         var chapter = false
         var chapterSound: java.io.File? = null
         var event: java.io.File? = null
         var eventWord = 0
+        var mood: AmbiencePlayer.Scene? = null
         val scene = runCatching {
             val words = ReplyIndex.words(text)
             val before = state.before
@@ -50,6 +54,14 @@ internal object AmbienceScenes {
                 event = BookFiles.event(context, sha, hit.event.id); eventWord = hit.word
                 trace(context, "event ${hit.event.id} at word ${hit.word} file=${event != null}")
             }
+            if (withMood) {
+                val found = if (AmbienceSettings.moodByChapter(prefs)) scenes.moods.ofSection(position.section) else scenes.moods.find(text, before)
+                if (found != null) {
+                    val files = BookFiles.sounds(context, sha, found.id)
+                    state.mood = AmbiencePlayer.Scene("music/$sha/${found.id}", found.name, files).takeIf { files.isNotEmpty() }
+                }
+                mood = state.mood // a piece without a known word keeps the current mood
+            }
             if (!sounds) return@runCatching null
             if (scenes.locations.isEmpty()) return@runCatching null.also { trace(context, "book=${position.book} has no locations") }
             val location = when (val found = scenes.find(text, before)) {
@@ -64,7 +76,7 @@ internal object AmbienceScenes {
             AmbiencePlayer.Scene("$sha/${location.id}", location.name, files).takeIf { files.isNotEmpty() }.also { state.scene = it }
         }.getOrElse { trace(context, "error ${it.javaClass.simpleName}"); null }
         if (chapter) trace(context, "chapter starts")
-        return Tag(scene, chapter, chapterSound, event, eventWord)
+        return Tag(scene, chapter, chapterSound, event, eventWord, mood)
     }
 
     /** Last decisions (no book text), with verbose logs only (no flash writes while reading otherwise): in

@@ -44,6 +44,8 @@ object BackgroundMusic {
     /** Scene of each queued utterance (by owner and id), applied when it starts to sound; the current one. */
     private val scenes = java.util.concurrent.ConcurrentHashMap<Pair<Any, String?>, com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag>()
     @Volatile private var scene: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
+    /** «Музыка по настроению» of the sounding utterance: played instead of the track where there is no scene. */
+    @Volatile private var mood: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
     /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
      * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
     private const val GAP_MS = 4000L
@@ -74,7 +76,7 @@ object BackgroundMusic {
             val next = found.scene
             handler.post { playMoments(found) }
             if (next?.key != scene?.key) context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "sounding scene=${next?.key ?: "music"}") }
-            scene = next
+            scene = next; mood = found.mood
         } ?: context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "started without a tagged utterance") }
         reading.start(owner,id); refresh()
     }
@@ -94,7 +96,7 @@ object BackgroundMusic {
         initialize(ctx)
         if (owner != null) {
             val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
-            scene = tag.scene
+            scene = tag.scene; mood = tag.mood
             handler.post { playMoments(tag) }
         }
         handler.post {
@@ -188,7 +190,11 @@ object BackgroundMusic {
         // A scene with location sounds: they play, the music waits (keeps its place in the track).
         val now = android.os.SystemClock.uptimeMillis()
         val active = reading.playing() || now < holdUntil
-        val current = scene?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.enabled(it) } == true }
+        val located = scene?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.enabled(it) } == true }
+        // Outside scenes, with the music on: the book's music of this mood instead of the track. Its clips are at
+        // −14 LUFS with the +10 dB headroom of the player, so it plays 10 dB under the music slider to match the tracks.
+        val moody = if (located == null && enabled()) mood?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(it) } == true } else null
+        val current = located ?: moody
         if (current != null) {
             if (prepared && player?.isPlaying == true) fadeTo(0f, SCENE_FADE_MS)
             underScene = true
@@ -198,7 +204,7 @@ object BackgroundMusic {
                     com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.tame = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.tame(it)
                     com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.breathe = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.breathe(it)
                 }
-                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current, ambienceVolume())
+                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current, if (current === moody) volume() / 3.16f else ambienceVolume())
             } else {
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.pause()
                 handler.removeCallbacks(idleRelease); handler.postDelayed(idleRelease, 120_000)

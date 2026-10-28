@@ -36,7 +36,12 @@ object AmbienceBook {
         runCatching { JSONObject(manifest(context, sha).readText()) }.getOrDefault(JSONObject())
 
     /** One clip to make: [file] in the book's ambience folder, from [prompt]; [id]/[recipe] go into sounds.json. */
-    class Job(val file: String, val prompt: String, val seconds: Float, val seed: Long, val id: String, val recipe: String, val label: String)
+    class Job(val file: String, val prompt: String, val seconds: Float, val seed: Long, val id: String, val recipe: String, val label: String,
+              /** Made by the music model («Музыка по настроению»). */
+              val music: Boolean = false)
+
+    /** Music fragments per mood, played in a random order like the scene variants. */
+    private const val MUSIC_VARIANTS = 2
 
     /** Event sounds are short one-shots; the chapter transition a little shorter. */
     const val EVENT_SECONDS = 4f
@@ -53,11 +58,15 @@ object AmbienceBook {
             Job("$id.m4a", com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, CHAPTER_SECONDS, 1L, id,
                 com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, "переход главы")
         }
-        return places + events + chapter
+        val music = if (!AmbienceSettings.moodMusic(context.getSharedPreferences("SupertonicPrefs", 0))) emptyList()
+            else scenes.moods.moods.flatMap { m -> (0 until MUSIC_VARIANTS).map { k ->
+                Job("${m.id}_$k.m4a", m.music, SECONDS, m.music.hashCode().toLong() * 31 + k, m.id, m.music, "музыка: ${m.name}", music = true)
+            } }
+        return places + events + chapter + music
     }
 
-    /** l3_0.m4a -> l3; e5.m4a -> e5. */
-    private fun idOf(file: File) = if (file.name.startsWith("l")) file.name.substringBefore('_') else file.name.substringBefore('.')
+    /** l3_0.m4a -> l3; m2_1.m4a -> m2; e5.m4a -> e5. */
+    private fun idOf(file: File) = if (file.name.startsWith("e")) file.name.substringBefore('.') else file.name.substringBefore('_')
 
     /** Drops sounds of places and events that are gone or whose prompt changed. Sounds without a manifest came inside
      * the book file (made for exactly these locations) and are kept. */
@@ -71,6 +80,8 @@ object AmbienceBook {
         val current = jobs(context, scenes).associate { it.id to it.recipe }
         for (f in files) {
             val id = idOf(f)
+            // Mood music stays when the switch is only turned off (it would be made again on).
+            if (id.startsWith("m") && current[id] == null && scenes.moods.moods.any { it.id == id && it.music == known.optString(id) }) continue
             if (current[id] == null || known.optString(id) != current[id]) f.delete()
         }
     }
@@ -96,24 +107,34 @@ object AmbienceBook {
     fun generate(context: Context, sha: String, scenes: SceneIndex, threads: Int = 4,
                  progress: (Int, Int, String) -> Unit = { _, _, _ -> }, cancelled: () -> Boolean = { false }) {
         require(AmbienceModel.ready(context)) { "Скачайте генератор фоновых звуков в разделе «Фоновая музыка»" }
-        val todo = missing(context, sha, scenes)
+        // Music without its model (not downloaded yet) waits for it; the sounds are made now.
+        val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
         if (todo.isEmpty()) return
         val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
-        val npu = if (todo.any { it.seconds == SECONDS }) AmbienceModel.npuDit(context) else null
+        // One NPU session at a time: the sounds first, then the music (each ~0.9 GB of HTP context).
+        val ordered = todo.sortedBy { it.music }
+        var npu: Sa3Generator.NpuDit? = null
+        var generator: Sa3Generator? = null
+        var musicMode: Boolean? = null
         try {
-            val generator = Sa3Generator(AmbienceModel.root(context), threads, npu)
             val manifest = readManifest(context, sha)
-            for ((done, job) in todo.withIndex()) {
+            for ((done, job) in ordered.withIndex()) {
                 if (cancelled()) throw InterruptedException("cancelled")
-                progress(done, todo.size, job.label)
-                val pcm = generator.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
+                progress(done, ordered.size, job.label)
+                if (musicMode != job.music) {
+                    npu?.close()
+                    npu = AmbienceModel.npuDit(context, music = job.music)
+                    generator = Sa3Generator(AmbienceModel.root(context), threads, npu, if (job.music) "dit_music_w8a8.tflite" else "dit_w8a8.tflite")
+                    musicMode = job.music
+                }
+                val pcm = generator!!.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
                 val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE)
                 AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
                 manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
                 manifest(context, sha).writeText(manifest.toString())
-                Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS})")
+                Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS}, music=${job.music})")
             }
-            progress(todo.size, todo.size, "")
+            progress(ordered.size, ordered.size, "")
         } finally { npu?.close() }
     }
 }

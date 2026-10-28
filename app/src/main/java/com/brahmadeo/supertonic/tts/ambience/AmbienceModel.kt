@@ -29,13 +29,29 @@ object AmbienceModel {
         Asset("dec_w8a8.tflite", 89_329_616L, "90cad5ef81e6b18eb205012aee03bc53ed59e1c17033b79a84a4612674b1e03a"),
         Asset("LICENSE.md", 11_852L, "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d"),
         Asset("LICENSE_GEMMA.md", 10_541L, "e77acc0d3163bb7534675045c584b4d04b387b529239fc4b3647da0a01ba4745"),
-        Asset("NOTICE.txt", 1_736L, "17699e05140c040456d1f3d82840d8a0e8cd630c0256055646fdfcf1ef00a699"),
+        Asset("NOTICE.txt", 2_049L, "9cb849e59ae91296694324860e83d90dcbde7ac3c5f5d27ef5dbb79969a1051c"),
     )
     /** 30 s DiT for the HTP (all-fp16 safe) and its fp32 CPU front for everything that depends only on t/seconds. */
     val NPU_ASSETS = listOf(
         Asset("dit_L323_main.onnx", 923_766_247L, "e30c054b1a34a2eea6e25c19f668192e619327126486893b358547deab9c53af"),
         Asset("dit_pre.onnx", 21_792_854L, "7611401792c7bb24a0c1af4bca88cd877aca6ec8ba63cbe53773cdfe56c5294d"),
     )
+    /** «Музыка по настроению»: Stable Audio 3 Small Music (same T5 and decoder), its NPU graphs made the same way. */
+    val MUSIC_ASSETS = listOf(
+        Asset("dit_music_w8a8.tflite", 539_350_360L, "1d8ef99bf10f51cc52b68f7b527d3773828e700758b253edd8a8e088a906e241"),
+    )
+    val MUSIC_NPU_ASSETS = listOf(
+        Asset("music_dit_L323_main.onnx", 923_780_604L, "b76f554f3f66c9b82307a352c72a6a3db5fb116fac057e6aee3b747a2be1408b"),
+        Asset("music_dit_pre.onnx", 21_792_854L, "4cb8277b82ce3569323543f10360803addca880b6d706e8095cc64403966e168"),
+    )
+    private const val MUSIC_MARKER = "verified-ambience-sa3-v1-music"
+    private const val MUSIC_NPU_MARKER = "verified-ambience-sa3-v1-music-npu"
+    private const val MUSIC_NPU_CACHE = "sa3-music-L323-b76f554f"
+    fun musicBytes() = MUSIC_ASSETS.sumOf { it.size }
+    fun musicReady(context: Context) = ready(context) && complete(context, MUSIC_ASSETS, MUSIC_MARKER)
+    fun musicNpuReady(context: Context) = musicReady(context) && complete(context, MUSIC_NPU_ASSETS, MUSIC_NPU_MARKER)
+    private fun musicWanted(context: Context) = AmbienceSettings.moodMusic(context.getSharedPreferences("SupertonicPrefs", 0))
+
     const val NPU_LENGTH = 323
     private const val NPU_CACHE = "sa3-dit-L323-e30c054b"
     private val lock = Mutex()
@@ -83,13 +99,15 @@ object AmbienceModel {
         File(dir, marker).writeText("ok")
     }
 
-    /** The CPU model, plus the NPU graphs when the switch is on. */
+    /** The CPU model, plus the NPU graphs when the NPU switch is on, plus the music model when «Музыка по настроению» is. */
     suspend fun download(context: Context, progress: (String, Float) -> Unit) =
         com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) {
             withContext(Dispatchers.IO) { lock.withLock {
                 require(supported()) { "Генератор фоновых звуков требует ARM64" }
                 if (!ready(context)) fetch(context, ASSETS, MARKER, "Звуки", progress)
                 if (npuWanted(context) && !npuReady(context)) fetch(context, NPU_ASSETS, NPU_MARKER, "Звуки · NPU", progress)
+                if (musicWanted(context) && !musicReady(context)) fetch(context, MUSIC_ASSETS, MUSIC_MARKER, "Музыка", progress)
+                if (musicWanted(context) && npuWanted(context) && !musicNpuReady(context)) fetch(context, MUSIC_NPU_ASSETS, MUSIC_NPU_MARKER, "Музыка · NPU", progress)
                 progress("Генератор звуков установлен", 1f)
             } }
         }
@@ -97,26 +115,28 @@ object AmbienceModel {
     /** Deletes the model, the NPU graphs and their compiled HTP cache. */
     suspend fun remove(context: Context) = withContext(Dispatchers.IO) { lock.withLock {
         root(context).deleteRecursively()
-        File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("sa3-dit-") }?.forEach { it.delete() }
+        File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("sa3-dit-") || it.name.startsWith("sa3-music-") }?.forEach { it.delete() }
     } }
     fun installedBytes(context: Context) = root(context).walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     /** DiT on the NPU for 30 s clips, or null (CPU) when it is off, not downloaded or fails to build. A build
      * failure turns the NPU off for this app version; the first build compiles the HTP graph (~2 min, cached). */
-    fun npuDit(context: Context): Sa3Generator.NpuDit? {
-        if (!npuWanted(context) || !npuReady(context)) return null
+    fun npuDit(context: Context, music: Boolean = false): Sa3Generator.NpuDit? {
+        if (!npuWanted(context) || !(if (music) musicNpuReady(context) else npuReady(context))) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+        val (main, pre, cache) = if (music) Triple("music_dit_L323_main.onnx", "music_dit_pre.onnx", MUSIC_NPU_CACHE)
+            else Triple("dit_L323_main.onnx", "dit_pre.onnx", NPU_CACHE)
         return try {
             // family: older compiled graphs (~0.9 GB each) are deleted, not only older runtimes of this one.
-            val session = Npu.session(context, env, File(root(context), "dit_L323_main.onnx"), emptyMap(), NPU_CACHE, family = "sa3-dit")
-            Log.i("Ambience", "NPU session ready, PSS ${android.os.Debug.getPss() / 1024} MB")
-            val pre = try { env.createSession(File(root(context), "dit_pre.onnx").path, ai.onnxruntime.OrtSession.SessionOptions()) }
+            val session = Npu.session(context, env, File(root(context), main), emptyMap(), cache, family = if (music) "sa3-music" else "sa3-dit")
+            Log.i("Ambience", "NPU session ready (music=$music), PSS ${android.os.Debug.getPss() / 1024} MB")
+            val preSession = try { env.createSession(File(root(context), pre).path, ai.onnxruntime.OrtSession.SessionOptions()) }
                 catch (e: Throwable) { session.close(); throw e }
-            Sa3Generator.NpuDit(session, pre, NPU_LENGTH)
+            Sa3Generator.NpuDit(session, preSession, NPU_LENGTH)
         } catch (e: Throwable) {
             Log.w("Ambience", "NPU DiT unavailable: ${e.javaClass.simpleName}: ${e.message}")
             // A rejected build may still have written its context (~1 GB): never keep or reuse it.
-            File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith(NPU_CACHE) }?.forEach { it.delete() }
+            File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith(cache) }?.forEach { it.delete() }
             Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", Npu.AMBIENCE)
             null
         }
