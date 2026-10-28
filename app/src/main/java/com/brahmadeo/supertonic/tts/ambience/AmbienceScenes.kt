@@ -15,9 +15,10 @@ internal object AmbienceScenes {
     private val states = java.util.WeakHashMap<Any, State>()
 
     /** The scene for [text] of [owner], or null (no prepared book here, no location, no sounds: the music plays). */
-    fun locate(context: Context, owner: Any, text: String?): AmbiencePlayer.Scene? {
+    fun locate(context: Context, owner: Any, text: String?, flush: Boolean = false): AmbiencePlayer.Scene? {
         if (text.isNullOrBlank() || !AmbienceSettings.enabled(context.getSharedPreferences("SupertonicPrefs", 0))) return null
         val state = synchronized(states) { states.getOrPut(owner) { State() } }
+        if (flush) state.before = emptyList() // the reader jumped: the previous words are elsewhere
         return runCatching {
             val words = ReplyIndex.words(text)
             val before = state.before
@@ -37,9 +38,11 @@ internal object AmbienceScenes {
         }.getOrElse { trace(context, "error ${it.javaClass.simpleName}"); null }
     }
 
-    /** Last decisions (no book text) in cache/ambience-trace.txt: OnePlus drops app logs after a while. */
+    /** Last decisions (no book text), with verbose logs only (no flash writes while reading otherwise): in
+     * cache/ambience-trace.txt, because OnePlus drops app logs after a while. */
     private val lines = ArrayDeque<String>()
     fun trace(context: Context, line: String) {
+        if (!com.brahmadeo.supertonic.tts.utils.DiagLog.verbose) return
         val text = synchronized(lines) {
             lines.addLast("${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.ROOT).format(java.util.Date())} $line")
             while (lines.size > 200) lines.removeFirst()

@@ -36,9 +36,13 @@ internal object AmbiencePlayer {
 
     private val voices = ArrayList<Voice>()
     private var scene: Scene? = null
-    private var volume = 0.05f
+    private var volume = 0.3f
     private var playing = false
     private var context: Context? = null
+    /** Pause and resume fade every voice together over [PAUSE_FADE_MS] (no click either way). */
+    private var master = 0f
+    private var masterTarget = 0f
+    private const val PAUSE_FADE_MS = 400L
 
     val active get() = scene != null
 
@@ -52,30 +56,17 @@ internal object AmbiencePlayer {
             scene = target
             start(target, 0, SCENE_FADE_MS)
         }
-        if (pausing) pausing = false // resumed during the pause fade: the tick restores the levels
-        if (!playing) { playing = true; voices.forEach { runCatching { it.player.start() } } }
+        masterTarget = 1f
+        if (!playing) { playing = true; voices.forEach { runCatching { applyGain(it); it.player.start() } } }
         schedule()
     }
 
-    /** Reading paused or stopped: a quick fade (no click), then everything holds where it is. */
+    /** Reading paused or stopped: a quick fade, then everything holds where it is. */
     fun pause() {
-        if (!playing || pausing) return
-        pausing = true
-        handler.removeCallbacks(tick)
-        val start = android.os.SystemClock.uptimeMillis()
-        handler.post(object : Runnable { override fun run() {
-            val k = 1f - (android.os.SystemClock.uptimeMillis() - start).toFloat() / PAUSE_FADE_MS
-            if (k > 0f && pausing) {
-                for (v in voices) { val g = kotlin.math.sqrt(v.level) * volume * k; runCatching { v.player.setVolume(g, g) } }
-                handler.postDelayed(this, TICK_MS); return
-            }
-            if (!pausing) return // resumed meanwhile
-            pausing = false; playing = false
-            voices.forEach { runCatching { if (it.player.isPlaying) it.player.pause() } }
-        } })
+        if (!playing) return
+        masterTarget = 0f
+        schedule()
     }
-    private var pausing = false
-    private const val PAUSE_FADE_MS = 400L
 
     /** Back to the music (no scene here): fade out, then release. */
     fun fadeOut() {
@@ -86,10 +77,13 @@ internal object AmbiencePlayer {
     }
 
     fun release() {
-        handler.removeCallbacks(tick); pausing = false
+        handler.removeCallbacks(tick)
         voices.forEach { it.release() }
-        voices.clear(); scene = null; playing = false
+        voices.clear(); scene = null; playing = false; master = 0f; masterTarget = 0f
     }
+
+    /** Equal power (sqrt): a crossfade of two sounds keeps the loudness. */
+    private fun applyGain(v: Voice) { val g = kotlin.math.sqrt(v.level) * master * volume; runCatching { v.player.setVolume(g, g) } }
 
     private fun start(target: Scene, clip: Int, fadeMs: Long) {
         val ctx = context ?: return
@@ -100,7 +94,7 @@ internal object AmbiencePlayer {
             p.setWakeMode(ctx, PowerManager.PARTIAL_WAKE_LOCK)
             p.setDataSource(file.path)
             p.prepare()
-            p.setVolume(0f, 0f)
+            p.setVolume(0f, 0f) // fades in from silence: no click
             val v = Voice(p, target, clip % target.files.size).apply { this.fadeMs = fadeMs }
             p.setOnCompletionListener { handler.post { voices.remove(v); v.release() } }
             voices += v
@@ -114,19 +108,25 @@ internal object AmbiencePlayer {
     private fun schedule() { handler.removeCallbacks(tick); if (playing) handler.postDelayed(tick, TICK_MS) }
 
     private val tick: Runnable = Runnable {
+        val mStep = TICK_MS.toFloat() / PAUSE_FADE_MS
+        master = if (master < masterTarget) minOf(masterTarget, master + mStep) else maxOf(masterTarget, master - mStep)
         for (v in voices.toList()) {
             val step = TICK_MS.toFloat() / v.fadeMs
-            v.level = if (v.level < v.target) minOf(v.target, v.level + step) else maxOf(v.target, v.level - step)
-            val gain = kotlin.math.sqrt(v.level) * volume // equal power: a crossfade of two sounds keeps the loudness
-            runCatching { v.player.setVolume(gain, gain) }
+            // While pausing the crossfades hold: they continue after the resume.
+            if (masterTarget > 0f) v.level = if (v.level < v.target) minOf(v.target, v.level + step) else maxOf(v.target, v.level - step)
+            applyGain(v)
             if (v.target == 0f && v.level == 0f) { voices.remove(v); v.release(); continue }
             // Before the clip ends the next variant fades in over it.
             val current = scene
-            if (!v.next && v.target > 0f && current != null && v.scene.key == current.key) {
+            if (masterTarget > 0f && !v.next && v.target > 0f && current != null && v.scene.key == current.key) {
                 val left = runCatching { v.player.duration - v.player.currentPosition }.getOrDefault(Int.MAX_VALUE)
                 if (left in 1..CROSSFADE_MS) { v.next = true; v.target = 0f; v.fadeMs = CROSSFADE_MS; start(current, v.clip + 1, CROSSFADE_MS) }
             }
         }
-        if (voices.isNotEmpty()) schedule()
+        if (masterTarget == 0f && master == 0f) {
+            // Faded out for a pause: hold the players where they are.
+            playing = false
+            voices.forEach { runCatching { if (it.player.isPlaying) it.player.pause() } }
+        } else if (voices.isNotEmpty()) schedule()
     }
 }

@@ -34,13 +34,16 @@ object BookArchive {
             val id = BookLibrary.import(context, json)
             val sha = requireNotNull(BookLibrary.contentSha(context, id))
             val entries = zip.entries().toList().filter { !it.isDirectory }
+            // The book is imported either way; a book file or a sound that cannot be kept is only logged.
             entries.firstOrNull { it.name.startsWith("source/") }?.let { e ->
                 val name = e.name.removePrefix("source/")
-                if (BookFiles.validSourceName(name)) zip.getInputStream(e).use { BookFiles.saveSource(context, sha, name, it, MAX_SOURCE) }
+                if (BookFiles.validSourceName(name)) runCatching { zip.getInputStream(e).use { BookFiles.saveSource(context, sha, name, it, MAX_SOURCE) } }
+                    .onFailure { android.util.Log.w("BookArchive", "Book file not kept: ${it.javaClass.simpleName}") }
             }
-            val sounds = entries.filter { it.name.startsWith("ambience/") && BookFiles.SOUND.matches(it.name.removePrefix("ambience/")) }
-            require(sounds.size <= MAX_SOUNDS) { "В книге слишком много звуков" }
-            for (e in sounds) zip.getInputStream(e).use { BookFiles.saveSound(context, sha, e.name.removePrefix("ambience/"), it) }
+            val sounds = entries.filter { it.name.startsWith("ambience/") && BookFiles.SOUND.matches(it.name.removePrefix("ambience/")) }.take(MAX_SOUNDS)
+            for (e in sounds) runCatching { zip.getInputStream(e).use { BookFiles.saveSound(context, sha, e.name.removePrefix("ambience/"), it) } }
+                .onFailure { android.util.Log.w("BookArchive", "Sound not kept: ${it.javaClass.simpleName}") }
+            BookLibrary.get(context, id)?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceBook.adopt(context, sha, it.scenes) }
             return id
         }
     }

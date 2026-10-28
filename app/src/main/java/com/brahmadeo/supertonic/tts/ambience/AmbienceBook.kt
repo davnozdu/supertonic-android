@@ -37,6 +37,15 @@ object AmbienceBook {
         }
     }
 
+    /** Sounds that came inside a book file were made for exactly its locations: record that, so a later
+     * re-preparation (new location numbers) drops them instead of playing them in the wrong places. */
+    fun adopt(context: Context, sha: String, scenes: SceneIndex) {
+        if (BookFiles.sounds(context, sha).isEmpty()) return
+        val manifest = JSONObject().put(LUFS_KEY, Loudness.TARGET_LUFS)
+        for (loc in scenes.locations) manifest.put(loc.id, loc.sound)
+        runCatching { manifest(context, sha).writeText(manifest.toString()) }
+    }
+
     /** Locations with a clip still to make. */
     fun missing(context: Context, sha: String, scenes: SceneIndex): List<SceneIndex.Location> {
         sync(context, sha, scenes)

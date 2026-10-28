@@ -142,7 +142,8 @@ object BookPreparation {
                     var sceneResult: SceneMarking.Result? = null
                     if (scenes) {
                         sceneResult = markScenes(plan, folder, source, cancel, startedAt)
-                        json = JSONObject(json).put("ambience", sceneResult.index.toJson()).toString()
+                        // No place with a sound in the whole book: nothing to store (the music plays throughout).
+                        if (sceneResult.index.locations.isNotEmpty()) json = JSONObject(json).put("ambience", sceneResult.index.toJson()).toString()
                     }
                     require(json.toByteArray().size <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
                     val pkg = BookPackage.parse(json)
@@ -151,6 +152,8 @@ object BookPreparation {
                     runCatching { epub.inputStream().use { BookFiles.saveSource(ctx, pkg.contentSha256, sourceName(ctx, uri, epub), it, EpubBook.MAX_BYTES) } }
                         .onFailure { report(ctx, it) }
                     var soundsNote = ""
+                    // Sounds of an earlier preparation that no longer fit the new locations go at once.
+                    if (sceneResult != null) com.brahmadeo.supertonic.tts.ambience.AmbienceBook.sync(ctx, pkg.contentSha256, pkg.scenes)
                     if (sceneResult != null && sceneResult.index.locations.isNotEmpty()) soundsNote = generateSounds(ctx, pkg, cancel, startedAt)
                     // Cancellation and committing the completed package are one critical section.
                     // Once committed, the UI reports success even if Stop was tapped at that instant.

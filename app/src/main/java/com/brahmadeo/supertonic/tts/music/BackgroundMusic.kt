@@ -64,7 +64,7 @@ object BackgroundMusic {
     fun enqueue(ctx: Context, owner: Any, id: String?, flush: Boolean, text: String? = null): Long {
         initialize(ctx)
         if (flush) scenes.keys.removeAll { it.first === owner }
-        scenes[owner to id] = java.util.Optional.ofNullable(com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.locate(ctx, owner, text))
+        scenes[owner to id] = java.util.Optional.ofNullable(com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.locate(ctx, owner, text, flush))
         return reading.enqueue(owner, id, flush).also { refresh() }
     }
     fun started(owner: Any, id: String?) {
@@ -98,6 +98,7 @@ object BackgroundMusic {
      * next request (0.8 s), so a real pause still silences it. */
     fun stop(owner: Any) {
         reading.stop(owner)
+        scenes.keys.removeAll { it.first === owner } // utterances that will never sound
         handler.post {
             gapUntil = 0L; handler.removeCallbacks(gapEnd)
             val now = android.os.SystemClock.uptimeMillis()
@@ -118,7 +119,8 @@ object BackgroundMusic {
         update()
     } }
     private fun enabled() = prefs?.getBoolean("background_music_enabled",false) == true
-    private fun ambienceVolume() = (prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.volume(it) } ?: 5) / 100f
+    private fun ambienceVolume() = (prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.volume(it) }
+        ?: com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.DEFAULT_VOLUME) / 100f
     private fun volume() = (previewVolume ?: prefs?.getInt("background_music_volume",DEFAULT_VOLUME) ?: DEFAULT_VOLUME).coerceIn(0,100) / 100f
     private fun updateVolume() { if (prepared) runCatching { val g = kotlin.math.sqrt(level) * volume(); player?.setVolume(g, g) } }
 
