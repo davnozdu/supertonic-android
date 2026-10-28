@@ -54,6 +54,29 @@ object AmbienceGeneration {
         return true
     }
 
+    /** «Своя музыка»: one track from a description, in the same foreground service (model download if needed). */
+    @Synchronized fun startMusic(context: Context, description: String, seconds: Int): Boolean {
+        if (job != null) return false
+        val ctx = context.applicationContext
+        mutable.value = State(true, null, place = "Подготовка")
+        ContextCompat.startForegroundService(ctx, Intent(ctx, AmbienceGenerationService::class.java))
+        stopped = false
+        job = scope.launch {
+            try {
+                if (!AmbienceModel.musicReady(ctx)) AmbienceModel.downloadMusic(ctx) { text, _ -> mutable.value = State(true, null, place = text) }
+                val track = com.brahmadeo.supertonic.tts.music.GeneratedMusic.create(ctx, description, seconds,
+                    { mutable.value = State(true, null, place = it) }, { stopped })
+                mutable.value = State(message = "Музыка «${track.title}» готова — выберите её в списке треков")
+            } catch (_: InterruptedException) { mutable.value = State(message = "Создание музыки остановлено")
+            } catch (e: Exception) { mutable.value = State(message = "Не удалось создать музыку: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                synchronized(this@AmbienceGeneration) { job = null }
+                ctx.stopService(Intent(ctx, AmbienceGenerationService::class.java))
+            }
+        }
+        return true
+    }
+
     fun stop() { stopped = true }
 }
 

@@ -112,6 +112,18 @@ object AmbienceModel {
             } }
         }
 
+    /** «Своя музыка»: the base model and the music model (+ its NPU graphs when the NPU is on), whatever the book switches. */
+    suspend fun downloadMusic(context: Context, progress: (String, Float) -> Unit) =
+        com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) {
+            withContext(Dispatchers.IO) { lock.withLock {
+                require(supported()) { "Генератор музыки требует ARM64" }
+                if (!ready(context)) fetch(context, ASSETS, MARKER, "Звуки", progress)
+                if (!musicReady(context)) fetch(context, MUSIC_ASSETS, MUSIC_MARKER, "Музыка", progress)
+                if (npuWanted(context) && !musicNpuReady(context)) fetch(context, MUSIC_NPU_ASSETS, MUSIC_NPU_MARKER, "Музыка · NPU", progress)
+                progress("Модель музыки установлена", 1f)
+            } }
+        }
+
     /** Deletes the model, the NPU graphs and their compiled HTP cache. */
     suspend fun remove(context: Context) = withContext(Dispatchers.IO) { lock.withLock {
         root(context).deleteRecursively()

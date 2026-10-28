@@ -264,7 +264,8 @@ object BackgroundMusic {
                 }
             }
             val file = if(track.startsWith("ready:")) MusicCatalog.selected(ctx,track.removePrefix("ready:"))
-                else if(track=="custom") MusicFiles.custom(ctx) else null
+                else if(track=="custom") MusicFiles.custom(ctx)
+                else if(track.startsWith("gen:")) GeneratedMusic.file(ctx,track.removePrefix("gen:")) else null
             current.setDataSource(requireNotNull(file).absolutePath)
             current.prepareAsync()
         } catch (_: Exception) { fail(track) }

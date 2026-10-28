@@ -223,6 +223,12 @@ object LlmProviders {
     /** Protocols whose prompt and answer pass through as they are (no text-fragment wrapping or response checks). */
     private fun rawProtocol(protocol: String) = protocol.startsWith("roles") || protocol == STRESS_PROTOCOL
     /** [verifyStress] with local Gemma (GPU LiteRT or NPU, whichever is selected), without reasoning. */
+    /** One plain request to the local Gemma 4 with [instruction] (raw: no speech protocol), e.g. translating a music
+     * description when no cloud is available. */
+    fun localRaw(context: Context, c: LlmConfig, instruction: String, text: String, deadlineMs: Long = 30000, tokens: Int = 200): String =
+        local(context, c.copy(localThinking = false), listOf(text), deadlineMs = deadlineMs, protocol = STRESS_PROTOCOL,
+            diagnosticInstruction = instruction, outputTokenLimit = tokens).single()
+
     fun verifyStressLocal(context: Context, c: LlmConfig, items: List<StressCheck.Item>, stopped: () -> Boolean = { false }): List<Int?> {
         val out = arrayOfNulls<Int>(items.size)
         for (from in items.indices step STRESS_CHECK_CHUNK) {
