@@ -184,6 +184,7 @@ object BackgroundMusic {
         if (level != target) handler.post(fade) else if (target == 0f) fade.run()
     }
     private var underScene = false
+    private var lastDecision = ""
 
     private fun update() {
         val ctx = context ?: return
@@ -195,6 +196,9 @@ object BackgroundMusic {
         // −14 LUFS with the +10 dB headroom of the player, so it plays 10 dB under the music slider to match the tracks.
         val moody = if (located == null && enabled()) mood?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(it) } == true } else null
         val current = located ?: moody
+        // What sounds now and why (verbose trace only; logged when it changes): finds a music that stops mid-reading.
+        val decision = "decide ${current?.key ?: "track"} reading=${reading.playing()} hold=${now < holdUntil} gap=${now < gapUntil} enabled=${enabled()}"
+        if (decision != lastDecision) { lastDecision = decision; com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx, decision) }
         if (current != null) {
             if (prepared && player?.isPlaying == true) fadeTo(0f, SCENE_FADE_MS)
             underScene = true

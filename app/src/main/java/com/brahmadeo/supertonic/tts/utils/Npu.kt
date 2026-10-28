@@ -54,6 +54,8 @@ object Npu {
     const val KOKORO = "_kokoro"
     const val TERA_SAMPLER = "_tera_sampler"
     const val AMBIENCE = "_ambience"
+    /** The medium music model: its own scope, so its failure leaves the sounds and the small model on the NPU. */
+    const val AMBIENCE_MEDIUM = "_ambience_medium"
     fun failed(ctx: Context, scope: String = "") = prefs(ctx).getLong(FAILED + scope, -1L) == version(ctx)
     fun enabled(ctx: Context, scope: String = ""): Boolean {
         cleanStale(ctx)
@@ -71,9 +73,10 @@ object Npu {
     }
     fun markFailed(ctx: Context, reason: String, scope: String = "") {
         Log.w(TAG, "NPU$scope disabled for this version: $reason")
-        prefs(ctx).edit().putLong(FAILED + scope, version(ctx)).apply()
+        // The reason is kept (OnePlus drops app logs after a while): the pref <failed><scope>_reason.
+        prefs(ctx).edit().putLong(FAILED + scope, version(ctx)).putString(FAILED + scope + "_reason", reason.take(500)).apply()
     }
-    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).remove(FAILED + TERA_SAMPLER).remove(FAILED + AMBIENCE).apply() }
+    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).remove(FAILED + TERA_SAMPLER).remove(FAILED + AMBIENCE).remove(FAILED + AMBIENCE_MEDIUM).apply() }
 
     fun options(ctx: Context, performance: String = "high_performance"): Map<String, String> {
         // The DSP loads the HTP skel through FastRPC from the app's extracted native libraries.

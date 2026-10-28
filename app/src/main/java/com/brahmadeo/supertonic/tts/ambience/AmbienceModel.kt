@@ -47,14 +47,14 @@ object AmbienceModel {
     /** Stable Audio 3 Medium (1.4 B, music only): clearer timbre, ~2.4× the CPU of the small one; same T5 and latents. */
     val MEDIUM_ASSETS = listOf(
         Asset("dit_medium_w8a8.tflite", 1_667_708_664L, "e60ea3a8b530de93ee7f1fd7b4426597006dbcde7bce45750d39c439f4ef9602"),
-        Asset("NOTICE_MEDIUM.txt", 1_548L, "8411d4e8530e3eed31b47cb471366c7b7e1a81eb578c2afbc9530a9b3988128a"),
+        Asset("NOTICE_MEDIUM.txt", 1_728L, "acde99a66b7e912b9c9d3cf6da2784a7ee70f5314e07f6d7a85b7c878c2116aa"),
     )
     /** The medium DiT for the HTP in three parts (layers 0–7, 8–15, 16–23; each compiles on its own within the
      * phone's memory and stays < 2 GB as an embedded context) and its fp32 CPU front. */
     val MEDIUM_NPU_ASSETS = listOf(
-        Asset("medium_dit_L323_p0.onnx", 960_982_185L, "d243c78553f8c0923ca9b09362127a4b57c906decd6f33938ab933e3fdbced68"),
-        Asset("medium_dit_L323_p1.onnx", 952_774_163L, "838065d857249b782ef32e65d94510e6f2c6f24bb3fc2ef6d3166a9343fb7c74"),
-        Asset("medium_dit_L323_p2.onnx", 953_695_846L, "bf535fc18027ce3bab2df27d57b9aa932da38e15e4df497d793c264933ef2927"),
+        Asset("medium_dit_L323_r_p0.onnx", 960_813_101L, "2fd544d27814af2ecdbdac519639f9a54117fd80dd46c6a75b6a189e244632c4"),
+        Asset("medium_dit_L323_r_p1.onnx", 952_607_398L, "1d73f64d7bb89d6cc81c69b0ed0d241906b4ed793daf362aa0ce4bc0a33b89de"),
+        Asset("medium_dit_L323_r_p2.onnx", 953_528_040L, "0ffd507bc84d447f6b2c279e65bef12d3ec19a69ef9d60d57b8e1c8a7b77f94d"),
         Asset("medium_dit_pre.onnx", 47_063_721L, "7134b158307db424298c3896f4e96b06d6091336895523823fab2a9ad1f62d37"),
     )
     /** SAME-L decoder (the same latents as SAME-S): more detail, ~+30 % of the generation time. */
@@ -67,11 +67,14 @@ object AmbienceModel {
 
     /** One music model: its CPU DiT (rung signatures), its NPU graphs (30 s) and their compiled-cache names. */
     class Music(val id: String, val title: String, val ditFile: String, val rungs: IntArray, val assets: List<Asset>, val marker: String,
-                val npuAssets: List<Asset>, val npuMarker: String, val npuParts: List<String>, val npuPre: String, val npuCache: String, val family: String)
+                val npuAssets: List<Asset>, val npuMarker: String, val npuParts: List<String>, val npuPre: String, val npuCache: String, val family: String,
+                /** Where an NPU failure of this model is recorded. */
+                val failScope: String = Npu.AMBIENCE)
     val SMALL_MUSIC = Music("small", "Малая", "dit_music_w8a8.tflite", Sa3Generator.SMALL_RUNGS, MUSIC_ASSETS, "verified-ambience-sa3-v1-music",
         MUSIC_NPU_ASSETS, "verified-ambience-sa3-v1-music-npu", listOf("music_dit_L323_main.onnx"), "music_dit_pre.onnx", "sa3-music-L323-b76f554f", "sa3-music")
     val MEDIUM_MUSIC = Music("medium", "Средняя", "dit_medium_w8a8.tflite", Sa3Generator.MEDIUM_RUNGS, MEDIUM_ASSETS, "verified-ambience-sa3-v1-medium",
-        MEDIUM_NPU_ASSETS, "verified-ambience-sa3-v1-medium-npu", (0..2).map { "medium_dit_L323_p$it.onnx" }, "medium_dit_pre.onnx", "sa3-medium-L323-d243c785", "sa3-medium")
+        MEDIUM_NPU_ASSETS, "verified-ambience-sa3-v1-medium-npu2", (0..2).map { "medium_dit_L323_r_p$it.onnx" }, "medium_dit_pre.onnx", "sa3-medium-L323-2fd544d2", "sa3-medium",
+        Npu.AMBIENCE_MEDIUM)
     private fun prefs(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0)
     /** The chosen music model (pref [MUSIC_MODEL_KEY], the small one by default). */
     fun music(context: Context) = if (prefs(context).getString(MUSIC_MODEL_KEY, "small") == "medium") MEDIUM_MUSIC else SMALL_MUSIC
@@ -110,8 +113,8 @@ object AmbienceModel {
     fun npuReady(context: Context) = ready(context) && complete(context, NPU_ASSETS, NPU_MARKER)
 
     /** Own switch, off by default; also needs an HTP and no recorded build failure for this app version. */
-    fun npuWanted(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getBoolean(NPU_KEY, false) &&
-        Npu.supported(context) && !Npu.failed(context, Npu.AMBIENCE)
+    fun npuWanted(context: Context, scope: String = Npu.AMBIENCE) = context.getSharedPreferences("SupertonicPrefs", 0).getBoolean(NPU_KEY, false) &&
+        Npu.supported(context) && !Npu.failed(context, scope)
 
     /** Up to [PARALLEL] files at once (each resumable and SHA-checked on its own): one HTTP stream from GitHub is
      * often throttled, and the model is three large files. */
@@ -167,7 +170,7 @@ object AmbienceModel {
         val m = music(context)
         if (!complete(context, m.assets, m.marker)) fetch(context, m.assets, m.marker, "Музыка · ${m.title.lowercase()}", progress)
         if (largeDecoderWanted(context) && !largeDecoderReady(context)) fetch(context, LARGE_DECODER, LARGE_DECODER_MARKER, "Большой декодер", progress)
-        if (npuWanted(context) && musicNpuMissing(context)) fetch(context, m.npuAssets, m.npuMarker, "Музыка · NPU", progress)
+        if (npuWanted(context, m.failScope) && musicNpuMissing(context)) fetch(context, m.npuAssets, m.npuMarker, "Музыка · NPU", progress)
     }
 
     /** Deletes the model, the NPU graphs and their compiled HTP cache. */
@@ -180,9 +183,10 @@ object AmbienceModel {
     /** DiT on the NPU for 30 s clips, or null (CPU) when it is off, not downloaded or fails to build. A build
      * failure turns the NPU off for this app version; the first build compiles the HTP graph (~2 min, cached). */
     fun npuDit(context: Context, music: Boolean = false): Sa3Generator.NpuDit? {
-        if (!npuWanted(context) || !(if (music) musicNpuReady(context) else npuReady(context))) return null
-        val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         val m = music(context)
+        val scope = if (music) m.failScope else Npu.AMBIENCE
+        if (!npuWanted(context, scope) || !(if (music) musicNpuReady(context) else npuReady(context))) return null
+        val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         val parts = if (music) m.npuParts else listOf("dit_L323_main.onnx")
         val pre = if (music) m.npuPre else "dit_pre.onnx"
         val cache = if (music) m.npuCache else NPU_CACHE
@@ -204,7 +208,7 @@ object AmbienceModel {
             Log.w("Ambience", "NPU DiT unavailable: ${e.javaClass.simpleName}: ${e.message}")
             // A rejected build may still have written its context (~1 GB): never keep or reuse it.
             File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith(cache) }?.forEach { it.delete() }
-            Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", Npu.AMBIENCE)
+            Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", scope)
             null
         }
     }

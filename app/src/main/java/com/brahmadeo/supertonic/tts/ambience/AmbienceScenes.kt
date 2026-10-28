@@ -82,11 +82,15 @@ internal object AmbienceScenes {
     /** Last decisions (no book text), with verbose logs only (no flash writes while reading otherwise): in
      * cache/ambience-trace.txt, because OnePlus drops app logs after a while. */
     private val lines = ArrayDeque<String>()
+    private var lastLine = ""
     fun trace(context: Context, line: String) {
         if (!com.brahmadeo.supertonic.tts.utils.DiagLog.verbose) return
         val text = synchronized(lines) {
+            // Every queued sentence tags its scene: a repeat of the last line is skipped, so the decisions stay visible.
+            if (line == lastLine) return
+            lastLine = line
             lines.addLast("${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.ROOT).format(java.util.Date())} $line")
-            while (lines.size > 200) lines.removeFirst()
+            while (lines.size > 600) lines.removeFirst()
             lines.joinToString("\n")
         }
         runCatching { java.io.File(context.cacheDir, "ambience-trace.txt").writeText(text + "\n") }
