@@ -57,7 +57,7 @@ class AmbienceEventsTest {
 
     @Test fun severalActionsOfOneParagraphAllSound() {
         val events = listOf(EventIndex.Event("e1", "a single gunshot"), EventIndex.Event("e2", "glass shattering"))
-        val builder = EventIndex.Builder(events)
+        val builder = EventIndex.Companion.Builder(events)
         val text = "Раздался выстрел, и стекло со звоном разбилось."
         builder.add(text, listOf("раздался выстрел" to 0, "стекло со звоном разбилось" to 1))
         val index = builder.build()
