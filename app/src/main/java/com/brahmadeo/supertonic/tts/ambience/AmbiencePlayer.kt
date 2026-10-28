@@ -40,6 +40,7 @@ internal object AmbiencePlayer {
         this.volume = volume
         if (scene?.key != target.key) {
             Log.i("Ambience", "Scene ${target.key} «${target.name}» (${target.files.size} clips)")
+            AmbienceScenes.trace(ctx, "play ${target.key} clips=${target.files.size} volume=${"%.2f".format(volume)}")
             for (v in voices) { v.target = 0f; v.fadeMs = SCENE_FADE_MS }
             scene = target
             start(target, 0, SCENE_FADE_MS)
@@ -97,7 +98,10 @@ internal object AmbiencePlayer {
             p.setOnCompletionListener { mp -> handler.post { voices.remove(v); runCatching { mp.release() } } }
             voices += v
             if (playing) p.start()
-        } catch (e: Exception) { Log.w("Ambience", "Sound unavailable: ${e.javaClass.simpleName}") }
+        } catch (e: Exception) {
+            Log.w("Ambience", "Sound unavailable: ${e.javaClass.simpleName}")
+            AmbienceScenes.trace(ctx, "player failed ${e.javaClass.simpleName} on ${file.name}")
+        }
     }
 
     private fun schedule() { handler.removeCallbacks(tick); if (playing) handler.postDelayed(tick, TICK_MS) }

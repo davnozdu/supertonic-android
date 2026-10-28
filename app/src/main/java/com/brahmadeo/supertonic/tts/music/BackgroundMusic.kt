@@ -68,7 +68,11 @@ object BackgroundMusic {
         return reading.enqueue(owner, id, flush).also { refresh() }
     }
     fun started(owner: Any, id: String?) {
-        scenes.remove(owner to id)?.let { scene = it.orElse(null) }
+        scenes.remove(owner to id)?.let { found ->
+            val next = found.orElse(null)
+            if (next?.key != scene?.key) context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "sounding scene=${next?.key ?: "music"}") }
+            scene = next
+        } ?: context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "started without a tagged utterance") }
         reading.start(owner,id); refresh()
     }
     fun finished(owner: Any, id: String?, wasStarted: Boolean? = null) {

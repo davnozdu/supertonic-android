@@ -11,7 +11,8 @@ import kotlin.math.tanh
 /** Integrated loudness (ITU-R BS.1770-4: K-weighting, 400 ms blocks with 75 % overlap, absolute −70 LUFS and
  * relative −10 LU gates) and normalisation, so every location of every book sounds equally loud at one volume. */
 object Loudness {
-    const val TARGET_LUFS = -20.0
+    /** As loud as the bundled music tracks (~−14 LUFS): the two sliders mean the same; the limiter keeps the peaks. */
+    const val TARGET_LUFS = -14.0
     private const val CEILING = 0.9f
 
     private class Biquad(val b0: Double, val b1: Double, val b2: Double, val a1: Double, val a2: Double)
