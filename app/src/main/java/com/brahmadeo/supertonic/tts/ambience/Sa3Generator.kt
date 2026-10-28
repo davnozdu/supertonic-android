@@ -20,20 +20,31 @@ import kotlin.math.roundToInt
  * length sharing weights; the XNNPACK weight cache next to each file keeps that sharing (flat RAM). */
 class Sa3Generator(private val dir: File, private val threads: Int = 4, private val npuDit: NpuDit? = null) {
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
-     * latents. The sin/cos embeddings of t and seconds (arguments up to ~6e4, meaningless in fp16) come from [pre],
-     * a tiny fp32 graph on the ORT CPU. */
+     * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
+     * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
     class NpuDit(val session: ai.onnxruntime.OrtSession, val pre: ai.onnxruntime.OrtSession, val length: Int) : AutoCloseable {
+        private class Cond(val data: FloatArray, val shape: LongArray)
+        private val conditioning = HashMap<Pair<Float, Float>, Map<String, Cond>>()
+
+        private fun conditioning(t: Float, seconds: Float): Map<String, Cond> = conditioning.getOrPut(t to seconds) {
+            val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+            val scalars = mapOf("t" to ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(floatArrayOf(t)), longArrayOf(1)),
+                "seconds_total" to ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(floatArrayOf(seconds)), longArrayOf(1)))
+            try {
+                pre.run(scalars).use { r -> r.associate { (name, value) ->
+                    val o = value as ai.onnxruntime.OnnxTensor
+                    name to Cond(FloatArray(o.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { o.floatBuffer.get(it) }, o.info.shape)
+                } }
+            } finally { scalars.values.forEach { it.close() } }
+        }
+
         fun velocity(x: FloatArray, t: Float, hidden: FloatArray, mask: FloatArray, seconds: Float): FloatArray {
             val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
             fun tensor(data: FloatArray, vararg shape: Long) = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(data), shape)
-            val scalars = mapOf("t" to tensor(floatArrayOf(t), 1), "seconds_total" to tensor(floatArrayOf(seconds), 1))
-            val features = try { pre.run(scalars).use { r -> listOf("t_features", "seconds_features").associateWith { name ->
-                val o = r.get(name).get() as ai.onnxruntime.OnnxTensor; FloatArray(o.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { o.floatBuffer.get(it) } } }
-            } finally { scalars.values.forEach { it.close() } }
             val inputs = mapOf("x" to tensor(x, 1, LATENT_CH.toLong(), length.toLong()),
                 "t5_hidden" to tensor(hidden, 1, COND_TOKENS.toLong(), COND_DIM.toLong()), "t5_mask" to tensor(mask, 1, COND_TOKENS.toLong()),
                 "local_add_cond" to tensor(FloatArray(257 * length), 1, 257, length.toLong())) +
-                features.mapValues { (_, v) -> tensor(v, 1, v.size.toLong()) }
+                conditioning(t, seconds).mapValues { (_, c) -> tensor(c.data, *c.shape) }
             try {
                 return com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
                     session.run(inputs).use { r -> val o = r[0] as ai.onnxruntime.OnnxTensor; FloatArray(LATENT_CH * length).also { o.floatBuffer.get(it) } }

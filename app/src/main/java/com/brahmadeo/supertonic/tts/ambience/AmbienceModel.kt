@@ -27,18 +27,18 @@ object AmbienceModel {
         Asset("dec_w8a8.tflite", 89_329_616L, "90cad5ef81e6b18eb205012aee03bc53ed59e1c17033b79a84a4612674b1e03a"),
         Asset("LICENSE.md", 11_852L, "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d"),
         Asset("LICENSE_GEMMA.md", 10_541L, "e77acc0d3163bb7534675045c584b4d04b387b529239fc4b3647da0a01ba4745"),
-        Asset("NOTICE.txt", 1_687L, "e433f0bc3f112718a34df5da76739db7e1028fd5a535bf4cd11b7db31d79a557"),
+        Asset("NOTICE.txt", 1_736L, "17699e05140c040456d1f3d82840d8a0e8cd630c0256055646fdfcf1ef00a699"),
     )
-    /** 30 s DiT for the HTP (all-fp16 safe) and its fp32 CPU front for the sin/cos features. */
+    /** 30 s DiT for the HTP (all-fp16 safe) and its fp32 CPU front for everything that depends only on t/seconds. */
     val NPU_ASSETS = listOf(
-        Asset("dit_L323_main.onnx", 923_866_160L, "00eace78103783ad19a9e5360872ae95ea190fc39dfa0b5e0d7931f8677affbf"),
-        Asset("dit_pre.onnx", 3_819L, "9391f5b6806194c0a2b860095ddc9e6661f5dabb54bddaa41bd8df3e1c09a44c"),
+        Asset("dit_L323_main.onnx", 923_766_247L, "e30c054b1a34a2eea6e25c19f668192e619327126486893b358547deab9c53af"),
+        Asset("dit_pre.onnx", 21_792_854L, "7611401792c7bb24a0c1af4bca88cd877aca6ec8ba63cbe53773cdfe56c5294d"),
     )
     const val NPU_LENGTH = 323
-    private const val NPU_CACHE = "sa3-dit-L323-00eace78"
+    private const val NPU_CACHE = "sa3-dit-L323-e30c054b"
     private val lock = Mutex()
     private const val MARKER = "verified-ambience-sa3-v1"
-    private const val NPU_MARKER = "verified-ambience-sa3-v1-npu"
+    private const val NPU_MARKER = "verified-ambience-sa3-v1-npu2"
 
     fun supported() = Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a"
     fun root(context: Context) = File(context.filesDir, "ambience/sa3-small-sfx")
@@ -96,6 +96,8 @@ object AmbienceModel {
             Sa3Generator.NpuDit(session, pre, NPU_LENGTH)
         } catch (e: Throwable) {
             Log.w("Ambience", "NPU DiT unavailable: ${e.javaClass.simpleName}: ${e.message}")
+            // A rejected build may still have written its context (~1 GB): never keep or reuse it.
+            File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith(NPU_CACHE) }?.forEach { it.delete() }
             Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", Npu.AMBIENCE)
             null
         }
