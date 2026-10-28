@@ -172,6 +172,9 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Text("Музыка по вашему описанию, создаётся на телефоне — без подготовки книги. Модель понимает только английский: " +
                             "описание на русском переводится автоматически (облако, а без него — Gemma 4); для точности можно сразу писать " +
                             "по-английски. Готовый трек зацикливается без стыка и появляется в списке ниже.",style=MaterialTheme.typography.bodySmall)
+                        Text("Модель хуже всего справляется со струнными (скрипка, виолончель): в высоких нотах возможны артефакты и " +
+                            "«пластмассовый» звук. Лучше получаются фортепиано, гитара, духовые, эмбиент и шумовые подложки.",
+                            style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
                         for (g in generated) {
                             Row(Modifier.fillMaxWidth().pointerInput(g.id,busy) { detectTapGestures(
                                 onTap = { if (!busy) select("gen:${g.id}") },
