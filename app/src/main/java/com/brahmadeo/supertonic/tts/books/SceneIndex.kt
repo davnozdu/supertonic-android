@@ -11,7 +11,9 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
                                      val events: EventIndex = EventIndex.EMPTY) {
     /** [sound]: the English prompt of the steady background for the ambience generator; [accents]: occasional events
      * of the place (a distant locomotive whistle), each in a variant of its own; [paragraphs]: how much of the book is there. */
-    data class Location(val id: String, val name: String, val sound: String, val paragraphs: Int, val accents: List<String> = emptyList())
+    data class Location(val id: String, val name: String, val sound: String, val paragraphs: Int, val accents: List<String> = emptyList(),
+                        /** outdoor / room / large_room / hall / vehicle / cave — the voice's room («Акустика помещения»). */
+                        val acoustics: String = "")
 
     val size get() = keys.size
 
@@ -45,7 +47,7 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
         return org.json.JSONObject().put("algorithm", ALGORITHM)
             .put("locations", org.json.JSONArray(locations.map {
                 org.json.JSONObject().put("id", it.id).put("name", it.name).put("sound", it.sound).put("paragraphs", it.paragraphs)
-                    .put("accents", org.json.JSONArray(it.accents))
+                    .put("accents", org.json.JSONArray(it.accents)).put("acoustics", it.acoustics)
             }))
             .put("index", java.util.Base64.getEncoder().encodeToString(bytes.array()))
             .apply { if (events.events.isNotEmpty()) put("events", events.toJson()) }
@@ -89,7 +91,7 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
                 val id = it.getString("id")
                 require(ID.matches(id)) { "Некорректный идентификатор локации: $id" }
                 val accents = it.optJSONArray("accents")?.let { a -> (0 until a.length()).map { k -> a.getString(k) } }.orEmpty().take(2)
-                Location(id, it.getString("name"), it.getString("sound"), it.optInt("paragraphs"), accents)
+                Location(id, it.getString("name"), it.getString("sound"), it.optInt("paragraphs"), accents, it.optString("acoustics"))
             }
             require(locations.size <= Short.MAX_VALUE && locations.map { it.id }.distinct().size == locations.size) { "Локации повторяются" }
             val bytes = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(o.getString("index")))

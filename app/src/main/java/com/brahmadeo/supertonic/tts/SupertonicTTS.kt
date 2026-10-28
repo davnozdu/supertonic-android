@@ -406,7 +406,9 @@ object SupertonicTTS {
     /** Called only under the model monitor; cached delivery never enters it. */
     private fun generateAudioLocked(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean, aheadOwner: String?): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
-        val cacheKey = routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() }
+        // «Акустика помещения»: the room of this text's scene (null: dry), part of the cached audio.
+        val room = routeContext(stylePath)?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.forText(it, text) }
+        val cacheKey = routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() + "\u0000room=" + (room?.name ?: "") }
         if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val sid = sessionIdCounter.incrementAndGet()
         currentSession.set(SessionContext(sid, listener))
@@ -419,13 +421,15 @@ object SupertonicTTS {
                 val converter = if (sourceRate != targetRate) com.brahmadeo.supertonic.tts.utils.StreamingPcmResampler(sourceRate, targetRate) else null
                 // «Обработка звука»: after the resampler, at the output rate (also reads the soft-limiter switch).
                 val filters = com.brahmadeo.supertonic.tts.utils.SpeechFilters.stream(context, targetRate)
+                val reverb = room?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.Stream(targetRate, it) }
                 val converted = java.io.ByteArrayOutputStream()
-                val routedListener = if (converter == null && filters == null) listener else object : ProgressListener {
+                val routedListener = if (converter == null && filters == null && reverb == null) listener else object : ProgressListener {
                     override fun onProgress(sessionId: Long, current: Int, total: Int) { listener?.onProgress(sessionId, current, total) }
                     override fun onAudioChunk(sessionId: Long, data: ByteArray) {
                         if (isCancelled()) return
                         val resampled = converter?.feed(data) ?: data
-                        val bytes = filters?.feed(resampled) ?: resampled
+                        val filtered = filters?.feed(resampled) ?: resampled
+                        val bytes = reverb?.feed(filtered) ?: filtered
                         converted.write(bytes)
                         if (bytes.isNotEmpty()) listener?.onAudioChunk(sessionId, bytes)
                     }
@@ -478,9 +482,10 @@ object SupertonicTTS {
                         output.write(pcm)
                     }
                 }
-                val result = if (converter == null && filters == null) output.toByteArray() else {
+                val result = if (converter == null && filters == null && reverb == null) output.toByteArray() else {
                     val rest = converter?.finish() ?: ByteArray(0)
-                    val tail = if (filters == null) rest else filters.feed(rest) + filters.finish()
+                    val filteredTail = if (filters == null) rest else filters.feed(rest) + filters.finish()
+                    val tail = reverb?.feed(filteredTail) ?: filteredTail
                     converted.write(tail)
                     if (tail.isNotEmpty() && !isCancelled()) listener?.onAudioChunk(sid, tail)
                     converted.toByteArray()

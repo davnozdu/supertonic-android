@@ -44,6 +44,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
+                var room by remember { mutableStateOf(prefs.getBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,false)) }
                 var chapters by remember { mutableStateOf(AmbienceSettings.chapters(prefs)) }
                 var ambienceVariants by remember { mutableIntStateOf(AmbienceSettings.variants(prefs)) }
                 var busy by remember { mutableStateOf(false) }
@@ -175,6 +176,13 @@ class BackgroundMusicActivity : ComponentActivity() {
                         }
                         Text("Короткие звуки того, что происходит в тексте: хлопнула дверь, выстрел, заржала лошадь, ударил колокол — " +
                             "в момент, когда голос до этого доходит. Нужна книга, подготовленная с локациями в этой версии или новее.",
+                            style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Акустика помещения для голоса",Modifier.weight(1f))
+                            Switch(checked=room,enabled=!busy,onCheckedChange={ room=it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,it).apply() })
+                        }
+                        Text("Лёгкая реверберация голоса по месту сцены: на улице сухо, в комнате коротко, в соборе и подвале гулко. " +
+                            "Для книг с локациями, подготовленных в этой версии или новее. Заранее озвученные фразы пересоздаются.",
                             style=MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Дыхание звука",Modifier.weight(1f))
