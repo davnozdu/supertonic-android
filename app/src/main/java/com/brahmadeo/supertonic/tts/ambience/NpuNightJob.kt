@@ -15,7 +15,9 @@ import android.os.BatteryManager
  * longer than a job may run). Unplugging stops it between parts; the parts made stay, the rest waits for the next night. */
 class NpuNightJob : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
-        if (!AmbienceGeneration.startNpuCompile(this)) jobFinished(params, true) // busy making sounds: later
+        // A book being prepared (it makes its sounds) or other generator work: later, never beside it.
+        val busy = com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.state.value.running || AmbienceModel.busy
+        if (busy || !AmbienceGeneration.startNpuCompile(this)) jobFinished(params, true)
         else jobFinished(params, false)
         return false
     }
@@ -29,6 +31,9 @@ class NpuNightJob : JobService() {
             return status != 0
         }
         /** Scheduled while the switch is on and a graph is waiting; cancelled otherwise. Cheap: call it freely. */
+        /** True when the switch is on and a graph waits to be compiled (the night book queue lets it go first). */
+        fun pending(context: Context) = AmbienceSettings.npuNight(context.getSharedPreferences("SupertonicPrefs", 0)) &&
+            (AmbienceModel.npuUncompiled(context, false) || AmbienceModel.npuUncompiled(context, true))
         fun schedule(context: Context) {
             val jobs = context.getSystemService(JobScheduler::class.java) ?: return
             val prefs = context.getSharedPreferences("SupertonicPrefs", 0)

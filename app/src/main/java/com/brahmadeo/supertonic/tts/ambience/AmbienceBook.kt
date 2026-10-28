@@ -106,6 +106,12 @@ object AmbienceBook {
     /** Generates the missing clips (one at a time; the 30 s ones on the NPU when switched on). [progress]: (done, total, place). */
     fun generate(context: Context, sha: String, scenes: SceneIndex, threads: Int = 4,
                  progress: (Int, Int, String) -> Unit = { _, _, _ -> }, cancelled: () -> Boolean = { false }) {
+        if (AmbienceModel.busy) progress(0, 0, "ждёт окончания другой работы генератора")
+        AmbienceModel.exclusive { generateLocked(context, sha, scenes, threads, progress, cancelled) }
+    }
+
+    private fun generateLocked(context: Context, sha: String, scenes: SceneIndex, threads: Int,
+                               progress: (Int, Int, String) -> Unit, cancelled: () -> Boolean) {
         require(AmbienceModel.ready(context)) { "Скачайте генератор фоновых звуков в разделе «Фоновая музыка»" }
         // Music without its model (not downloaded yet) waits for it; the sounds are made now.
         val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }

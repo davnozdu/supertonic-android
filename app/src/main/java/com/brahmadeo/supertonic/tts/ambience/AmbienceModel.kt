@@ -239,16 +239,22 @@ object AmbienceModel {
         }
     }
 
+    /** One heavy generator task at a time (an NPU compile, a book's sounds, own music): each holds the HTP and
+     * several GB; a second one waits for the first instead of running beside it. */
+    private val work = java.util.concurrent.locks.ReentrantLock()
+    fun <T> exclusive(block: () -> T): T { work.lockInterruptibly(); try { return block() } finally { work.unlock() } }
+    val busy get() = work.isLocked
+
     /** «Готовить NPU ночью»: compiles every NPU DiT that would be used and is not compiled yet (the sounds, the chosen
      * music model), part by part; stops between parts when [stop] says so (unplugged, «Остановить»). */
-    fun compileMissing(context: Context, stop: () -> Boolean, progress: (String) -> Unit): Boolean {
+    fun compileMissing(context: Context, stop: () -> Boolean, progress: (String) -> Unit): Boolean = exclusive {
         for (music in listOf(false, true)) {
             if (!npuUncompiled(context, music)) continue
             val label = target(context, music).label
             npuDit(context, music, allowCompile = true, onCompile = { k, n -> progress("Подготовка NPU ($label): часть $k из $n") }, stop = stop)?.close()
-            if (stop()) return false
+            if (stop()) return@exclusive false
         }
-        return !npuUncompiled(context, false) && !npuUncompiled(context, true)
+        !npuUncompiled(context, false) && !npuUncompiled(context, true)
     }
 
 }

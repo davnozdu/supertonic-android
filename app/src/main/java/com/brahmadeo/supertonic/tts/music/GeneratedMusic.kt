@@ -41,13 +41,16 @@ object GeneratedMusic {
         progress(if (com.brahmadeo.supertonic.tts.ambience.MusicPrompt.cyrillic(description)) "Перевод описания" else "Подготовка")
         val prompt = com.brahmadeo.supertonic.tts.ambience.MusicPrompt.english(context, description)
         if (cancelled()) throw InterruptedException("cancelled")
-        progress("Создание музыки (${seconds} с)")
-        val npu = if (seconds == 30) AmbienceModel.npuDit(context, music = true,
-            onCompile = { k, n -> progress("Подготовка NPU: часть $k из $n (один раз)") }) else null
-        val pcm = try {
-            AmbienceModel.musicGenerator(context, 4, npu)
-                .generate(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.prompt(prompt), seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm
-        } finally { npu?.close() }
+        if (AmbienceModel.busy) progress("Ждёт окончания другой работы генератора")
+        val pcm = AmbienceModel.exclusive {
+            progress("Создание музыки (${seconds} с)")
+            val npu = if (seconds == 30) AmbienceModel.npuDit(context, music = true,
+                onCompile = { k, n -> progress("Подготовка NPU: часть $k из $n (один раз)") }) else null
+            try {
+                AmbienceModel.musicGenerator(context, 4, npu)
+                    .generate(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.prompt(prompt), seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm
+            } finally { npu?.close() }
+        }
         progress("Сохранение")
         if (com.brahmadeo.supertonic.tts.ambience.MusicEnhance.enabled(context)) com.brahmadeo.supertonic.tts.ambience.MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
         Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, Loudness.MUSIC_LUFS)

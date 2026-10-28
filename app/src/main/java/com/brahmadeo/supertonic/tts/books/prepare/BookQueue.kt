@@ -71,10 +71,18 @@ object BookQueue {
     /** Starts the next book (night rules unless [now]); false when the queue is empty, LLM is not set up or busy. */
     fun startNext(context: Context, now: Boolean = false): Boolean {
         if (!now && (!inNight() || !com.brahmadeo.supertonic.tts.ambience.NpuNightJob.charging(context))) return false
+        // Never beside the generator's own work (an NPU compile holds the chip and several GB).
+        if (com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.value.running) return false
         val next = refresh(context).firstOrNull { it.failures < MAX_FAILURES } ?: return false
         val source = runCatching { BookPreparation.source(context).withThinking(next.thinking) }.getOrNull() ?: return false
         return runCatching { BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies, smart = next.smart, scenes = next.scenes) }
             .getOrDefault(false).also { if (it) running = next.id }
+    }
+
+    /** After the night NPU compile: the queue continues if it is still night and the phone charges. */
+    fun resume(context: Context) {
+        if (!nightOn(context) || BookPreparation.state.value.running) return
+        Handler(Looper.getMainLooper()).postDelayed({ if (!startNext(context)) BookNightJob.schedule(context) }, 3000)
     }
 
     @Volatile private var running: String? = null
@@ -103,6 +111,11 @@ object BookQueue {
  * next night). */
 class BookNightJob : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
+        // The NPU compile first (the books' sounds then run on the NPU); the queue resumes when it ends.
+        if (BookQueue.inNight() && com.brahmadeo.supertonic.tts.ambience.NpuNightJob.pending(this) &&
+            !BookPreparation.state.value.running && com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.startNpuCompile(this)) {
+            jobFinished(params, false); return false
+        }
         val started = BookQueue.inNight() && BookQueue.startNext(this)
         jobFinished(params, false)
         if (!started) schedule(this)

@@ -95,6 +95,8 @@ object AmbienceGeneration {
                 synchronized(this@AmbienceGeneration) { job = null }
                 ctx.stopService(Intent(ctx, AmbienceGenerationService::class.java))
                 NpuNightJob.schedule(ctx)
+                // The night book queue waited for the NPU: it goes on now (still at night, on the charger).
+                com.brahmadeo.supertonic.tts.books.prepare.BookQueue.resume(ctx)
             }
         }
         return true
