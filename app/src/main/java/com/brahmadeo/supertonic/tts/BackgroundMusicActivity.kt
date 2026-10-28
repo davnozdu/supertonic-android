@@ -44,6 +44,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceVolume by remember { mutableIntStateOf(AmbienceSettings.volume(prefs)) }
                 var ambienceReady by remember { mutableStateOf(AmbienceModel.ready(this)) }
                 var ambienceNpu by remember { mutableStateOf(prefs.getBoolean(AmbienceModel.NPU_KEY,false)) }
+                var npuNight by remember { mutableStateOf(AmbienceSettings.npuNight(prefs)) }
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
@@ -348,6 +349,24 @@ class BackgroundMusicActivity : ComponentActivity() {
                             }
                             Text("Нагружает процессор примерно в 3 раза меньше. Дополнительно ${AmbienceModel.npuBytes()/1048576} МБ; " +
                                 "первая подготовка NPU занимает около 2 минут.",style=MaterialTheme.typography.bodySmall)
+                            if (ambienceNpu) {
+                                Text("Подготовка NPU (компиляция графов, один раз)",style=MaterialTheme.typography.titleMedium)
+                                Text("Компиляция долгая: модели звуков и малая модель музыки — минуты, средняя модель музыки — до часа; " +
+                                    "всё это время процессор нагружен. Готовые графы сохраняются и дальше загружаются за секунды.",
+                                    style=MaterialTheme.typography.bodySmall)
+                                fun night(on: Boolean) { npuNight=on; prefs.edit().putBoolean(AmbienceSettings.NPU_NIGHT,on).apply()
+                                    com.brahmadeo.supertonic.tts.ambience.NpuNightJob.schedule(this@BackgroundMusicActivity) }
+                                Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                                    RadioButton(selected=!npuNight,enabled=!busy,onClick={ night(false) })
+                                    Text("При первом создании звуков: первый раз ждать компиляцию",Modifier.weight(1f))
+                                }
+                                Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                                    RadioButton(selected=npuNight,enabled=!busy,onClick={ night(true) })
+                                    Text("Ночью на зарядке: пока NPU не готов, создавать на процессоре",Modifier.weight(1f))
+                                }
+                                if (npuNight) Text("Компиляция начнётся сама, когда телефон заряжается и не используется (обычно ночью). " +
+                                    "Отключение зарядки приостанавливает её между частями, готовые части сохраняются.",style=MaterialTheme.typography.bodySmall)
+                            }
                         }
                         val npuMissing=(ambienceNpu && ambienceReady && !AmbienceModel.npuReady(this@BackgroundMusicActivity)) ||
                             (moodMusic && ambienceReady && !AmbienceModel.musicReady(this@BackgroundMusicActivity)) ||

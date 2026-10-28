@@ -49,6 +49,7 @@ object AmbienceGeneration {
             } finally {
                 synchronized(this@AmbienceGeneration) { job = null }
                 ctx.stopService(Intent(ctx, AmbienceGenerationService::class.java))
+                NpuNightJob.schedule(ctx)
             }
         }
         return true
@@ -72,6 +73,28 @@ object AmbienceGeneration {
             } finally {
                 synchronized(this@AmbienceGeneration) { job = null }
                 ctx.stopService(Intent(ctx, AmbienceGenerationService::class.java))
+            }
+        }
+        return true
+    }
+
+    /** «Готовить NPU ночью»: compiles the waiting NPU graphs in this foreground service, part by part; stops between
+     * parts when unplugged or on «Остановить», and asks the night job to come back for the rest. */
+    @Synchronized fun startNpuCompile(context: Context): Boolean {
+        if (job != null) return false
+        val ctx = context.applicationContext
+        mutable.value = State(true, null, place = "Подготовка NPU")
+        ContextCompat.startForegroundService(ctx, Intent(ctx, AmbienceGenerationService::class.java))
+        stopped = false
+        job = scope.launch {
+            try {
+                val done = AmbienceModel.compileMissing(ctx, { stopped || !NpuNightJob.charging(ctx) }) { mutable.value = State(true, null, place = it) }
+                mutable.value = State(message = if (done) "NPU подготовлен: звуки и музыка создаются на NPU" else "Подготовка NPU продолжится при следующей зарядке")
+            } catch (e: Exception) { mutable.value = State(message = "Не удалось подготовить NPU: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                synchronized(this@AmbienceGeneration) { job = null }
+                ctx.stopService(Intent(ctx, AmbienceGenerationService::class.java))
+                NpuNightJob.schedule(ctx)
             }
         }
         return true

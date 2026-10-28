@@ -123,7 +123,8 @@ object AmbienceBook {
                 progress(done, ordered.size, job.label)
                 if (musicMode != job.music) {
                     npu?.close()
-                    npu = AmbienceModel.npuDit(context, music = job.music)
+                    npu = AmbienceModel.npuDit(context, music = job.music,
+                        onCompile = { k, n -> progress(done, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
                     generator = if (job.music) AmbienceModel.musicGenerator(context, threads, npu) else Sa3Generator(AmbienceModel.root(context), threads, npu)
                     musicMode = job.music
                 }

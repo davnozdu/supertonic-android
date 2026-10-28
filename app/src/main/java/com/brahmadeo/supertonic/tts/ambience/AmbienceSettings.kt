@@ -40,6 +40,11 @@ object AmbienceSettings {
     fun variants(prefs: SharedPreferences) = prefs.getInt(VARIANTS, DEFAULT_VARIANTS).coerceIn(2, 8)
     fun tame(prefs: SharedPreferences) = prefs.getBoolean(TAME, true)
 
+    /** «Готовить NPU ночью»: an NPU graph not compiled yet is not compiled while making sounds (the CPU makes them);
+     * a job compiles it when the phone charges and is idle. Off by default. */
+    const val NPU_NIGHT = "ambience_npu_night"
+    fun npuNight(prefs: SharedPreferences) = prefs.getBoolean(NPU_NIGHT, false)
+
     fun enabled(prefs: SharedPreferences) = prefs.getBoolean(ENABLED, false)
     /** Since 5.0.6-beta42 the sounds have +10 dB of headroom: a volume set before (100 % was just audible) is moved
      * once to the new default, so the update does not make them 10 dB louder. */

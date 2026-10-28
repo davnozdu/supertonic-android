@@ -275,6 +275,7 @@ object BookPreparation {
             com.brahmadeo.supertonic.tts.ambience.AmbienceBook.generate(ctx, pkg.contentSha256, pkg.scenes,
                 progress = { done, all, place -> mutable.value = State(true, "Фоновые звуки${if (place.isNotEmpty()) ": $place" else ""}", done, all, startedAt = startedAt) },
                 cancelled = { runCatching { cancel.check() }.isFailure })
+            com.brahmadeo.supertonic.tts.ambience.NpuNightJob.schedule(ctx)
             "Фоновые звуки созданы. "
         } catch (e: InterruptedException) { throw CancellationException("stopped")
         } catch (e: Exception) { report(ctx, e); "Фоновые звуки не созданы (${e.javaClass.simpleName}); можно повторить в карточке книги. " }

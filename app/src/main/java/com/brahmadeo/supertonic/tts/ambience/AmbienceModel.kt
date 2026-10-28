@@ -182,34 +182,73 @@ object AmbienceModel {
 
     /** DiT on the NPU for 30 s clips, or null (CPU) when it is off, not downloaded or fails to build. A build
      * failure turns the NPU off for this app version; the first build compiles the HTP graph (~2 min, cached). */
-    fun npuDit(context: Context, music: Boolean = false): Sa3Generator.NpuDit? {
+    /** One NPU DiT: its graph files, CPU front, cache names (one per part) and failure scope. */
+    private class NpuTarget(val parts: List<String>, val pre: String, val cache: String, val family: String, val scope: String, val names: List<String>, val label: String)
+    private fun target(context: Context, music: Boolean): NpuTarget {
         val m = music(context)
-        val scope = if (music) m.failScope else Npu.AMBIENCE
-        if (!npuWanted(context, scope) || !(if (music) musicNpuReady(context) else npuReady(context))) return null
-        val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         val parts = if (music) m.npuParts else listOf("dit_L323_main.onnx")
-        val pre = if (music) m.npuPre else "dit_pre.onnx"
         val cache = if (music) m.npuCache else NPU_CACHE
-        val family = if (music) m.family else "sa3-dit"
         // One graph keeps its old cache name; the parts of a cut model get "-p<k>" and keep each other's caches.
-        val names = if (parts.size == 1) listOf(cache) else parts.indices.map { "$cache-p$it" }
-        fun open(k: Int) = Npu.session(context, env, File(root(context), parts[k]), emptyMap(), names[k], family = family, siblings = names)
+        return NpuTarget(parts, if (music) m.npuPre else "dit_pre.onnx", cache, if (music) m.family else "sa3-dit",
+            if (music) m.failScope else Npu.AMBIENCE, if (parts.size == 1) listOf(cache) else parts.indices.map { "$cache-p$it" },
+            if (music) "музыка, ${m.title.lowercase()}" else "звуки")
+    }
+    private fun npuUsable(context: Context, music: Boolean) =
+        npuWanted(context, target(context, music).scope) && (if (music) musicNpuReady(context) else npuReady(context))
+    /** True when this DiT would use the NPU but its graphs are not compiled yet. */
+    fun npuUncompiled(context: Context, music: Boolean) =
+        npuUsable(context, music) && target(context, music).names.any { !Npu.cacheReady(context, it) }
+
+    /** DiT on the NPU for 30 s clips, or null (CPU) when it is off, not downloaded or fails to build. A build
+     * failure turns the NPU off for this model and app version. The first build compiles the HTP graphs (the small
+     * models ~2 min, the medium one up to an hour), part by part, each cached as soon as it is made. With
+     * «Готовить NPU ночью» ([allowCompile] false) nothing is compiled here: the CPU makes the clip and the night job
+     * compiles. [onCompile] (part, parts) before each part compiled; [stop] is checked between parts. */
+    fun npuDit(context: Context, music: Boolean = false, allowCompile: Boolean = !AmbienceSettings.npuNight(prefs(context)),
+               onCompile: (Int, Int) -> Unit = { _, _ -> }, stop: () -> Boolean = { false }): Sa3Generator.NpuDit? {
+        if (!npuUsable(context, music)) return null
+        val t = target(context, music)
+        if (!allowCompile && t.names.any { !Npu.cacheReady(context, it) }) return null
+        val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+        fun open(k: Int) = Npu.session(context, env, File(root(context), t.parts[k]), emptyMap(), t.names[k], family = t.family, siblings = t.names)
         val sessions = ArrayList<ai.onnxruntime.OrtSession>()
+        var building = -1
         return try {
             // Compile the missing parts one at a time and free each (a compile peaks at several GB), then load all
             // from the cache. family: older compiled graphs (~1 GB each) are deleted, not only older runtimes.
-            if (parts.size > 1) for (k in parts.indices) if (!Npu.cacheReady(context, names[k])) open(k).close()
-            for (k in parts.indices) sessions.add(open(k))
-            Log.i("Ambience", "NPU session ready (music=$music, parts=${parts.size}), PSS ${android.os.Debug.getPss() / 1024} MB")
-            val preSession = env.createSession(File(root(context), pre).path, ai.onnxruntime.OrtSession.SessionOptions())
+            for (k in t.parts.indices) if (!Npu.cacheReady(context, t.names[k])) {
+                if (stop()) return null
+                onCompile(k + 1, t.parts.size); building = k
+                if (t.parts.size > 1) open(k).close() else sessions.add(open(k))
+                building = -1
+            }
+            if (stop()) { sessions.forEach { it.close() }; return null }
+            if (sessions.isEmpty()) for (k in t.parts.indices) sessions.add(open(k))
+            Log.i("Ambience", "NPU session ready (music=$music, parts=${t.parts.size}), PSS ${android.os.Debug.getPss() / 1024} MB")
+            val preSession = env.createSession(File(root(context), t.pre).path, ai.onnxruntime.OrtSession.SessionOptions())
             Sa3Generator.NpuDit(sessions, preSession, NPU_LENGTH)
         } catch (e: Throwable) {
             sessions.forEach { runCatching { it.close() } }
             Log.w("Ambience", "NPU DiT unavailable: ${e.javaClass.simpleName}: ${e.message}")
-            // A rejected build may still have written its context (~1 GB): never keep or reuse it.
-            File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith(cache) }?.forEach { it.delete() }
-            Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", scope)
+            // A rejected build may still have written its context (~1 GB): never keep or reuse it. Parts compiled
+            // before it stay (a load failure of a cached part drops them all).
+            val drop = if (building >= 0) listOf(t.names[building]) else t.names
+            File(context.filesDir, "npu-cache").listFiles()?.filter { f -> drop.any { f.name.startsWith("$it-") } }?.forEach { it.delete() }
+            Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", t.scope)
             null
         }
     }
+
+    /** «Готовить NPU ночью»: compiles every NPU DiT that would be used and is not compiled yet (the sounds, the chosen
+     * music model), part by part; stops between parts when [stop] says so (unplugged, «Остановить»). */
+    fun compileMissing(context: Context, stop: () -> Boolean, progress: (String) -> Unit): Boolean {
+        for (music in listOf(false, true)) {
+            if (!npuUncompiled(context, music)) continue
+            val label = target(context, music).label
+            npuDit(context, music, allowCompile = true, onCompile = { k, n -> progress("Подготовка NPU ($label): часть $k из $n") }, stop = stop)?.close()
+            if (stop()) return false
+        }
+        return !npuUncompiled(context, false) && !npuUncompiled(context, true)
+    }
+
 }
