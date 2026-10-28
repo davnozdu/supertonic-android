@@ -171,7 +171,9 @@ object BookPreparation {
                             (if (pipeline.notes.isNotEmpty()) pipeline.notes.joinToString("; ", postfix = ". ") else "") +
                             (marking?.let { "Реплики размечены: ${it.marked} абзацев${if (it.failed > 0) ", не удалось ${it.failed}" else ""}. " } ?: "") +
                             (if (smart) "Умная книга: текст сохранён, краткое содержание разделов $smartSections. " else "") +
-                            (sceneResult?.let { "Локации: ${it.index.locations.size}${if (it.failed > 0) " (не удалось разметить ${it.failed} абзацев)" else ""}. $soundsNote" } ?: "") +
+                            (sceneResult?.let { "Локации: ${it.index.locations.size}${if (it.failed > 0) " (не удалось разметить ${it.failed} абзацев)" else ""}. " +
+                                (if (it.events > 0) "События: ${it.events} моментов, разных звуков ${it.kinds}${if (it.dropped > 0) ", отклонено ${it.dropped}" else ""}. " else "") +
+                                soundsNote } ?: "") +
                             "Откройте исходную книгу в читалке — MyTTS узнает её по тексту.", bookId = id)
                     }
                 }

@@ -143,7 +143,8 @@ object ScenesProbe {
             }
         }, { done, all -> Log.i("ScenesProbe", "batch $done/$all") })
         val out = JSONObject().put("raw", raws).put("provider", source.label).put("ms", android.os.SystemClock.elapsedRealtime() - started).put("requests", requests)
-            .put("marked", result.marked).put("failed", result.failed).put("ambience", result.index.toJson().apply { remove("index") })
+            .put("marked", result.marked).put("failed", result.failed).put("events", result.events).put("kinds", result.kinds)
+            .put("dropped", result.dropped).put("ambience", result.index.toJson().apply { remove("index") })
             .put("paragraphs", JSONArray(paragraphs.mapIndexed { i, p -> JSONObject().put("i", i + 1).put("section", p.section)
                 .put("place", result.places.getOrNull(i) ?: JSONObject.NULL).put("text", p.text.take(90)) }))
         File(context.cacheDir, "scene-probe-out.json").writeText(out.toString(1))

@@ -43,6 +43,9 @@ object BackgroundMusic {
     }
     /** Scene of each queued utterance (by owner and id), applied when it starts to sound; the current one. */
     private val scenes = java.util.concurrent.ConcurrentHashMap<Pair<Any, String?>, com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag>()
+    /** Pace of each reader's voice (ms per word) and the utterance sounding now (its start and its words). */
+    private val rates = java.util.concurrent.ConcurrentHashMap<Any, Float>()
+    private val startedNotes = java.util.concurrent.ConcurrentHashMap<Pair<Any, String?>, Pair<Long, Int>>()
     @Volatile private var scene: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
     /** «Музыка по настроению» of the sounding utterance: played instead of the track where there is no scene. */
     @Volatile private var mood: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
@@ -74,13 +77,15 @@ object BackgroundMusic {
         speaking = true; handler.post(shape)
         scenes.remove(owner to id)?.let { found ->
             val next = found.scene
-            handler.post { playMoments(found) }
+            startedNotes[owner to id] = android.os.SystemClock.uptimeMillis() to found.words
+            handler.post { playMoments(found, owner) }
             if (next?.key != scene?.key) context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "sounding scene=${next?.key ?: "music"}") }
             scene = next; mood = found.mood
         } ?: context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "started without a tagged utterance") }
         reading.start(owner,id); refresh()
     }
     fun finished(owner: Any, id: String?, wasStarted: Boolean? = null) {
+        if (wasStarted != false) pace(owner, id) else startedNotes.remove(owner to id)
         com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.speaking(false)
         speaking = false; handler.post(shape)
         val was = reading.playing()
@@ -97,7 +102,7 @@ object BackgroundMusic {
         if (owner != null) {
             val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
             scene = tag.scene; mood = tag.mood
-            handler.post { playMoments(tag) }
+            handler.post { playMoments(tag, owner) }
         }
         handler.post {
             holdUntil = maxOf(holdUntil, android.os.SystemClock.uptimeMillis() + ms)
@@ -110,6 +115,7 @@ object BackgroundMusic {
     fun stop(owner: Any) {
         reading.stop(owner)
         scenes.keys.removeAll { it.first === owner } // utterances that will never sound
+        startedNotes.keys.removeAll { it.first === owner }
         handler.post {
             gapUntil = 0L; handler.removeCallbacks(gapEnd)
             val now = android.os.SystemClock.uptimeMillis()
@@ -140,8 +146,9 @@ object BackgroundMusic {
     } }
 
     /** The moments an utterance brings when it starts to sound: the chapter dip with its transition sound (at the quiet
-     * point) and an event sound when the voice reaches its words (~180 words a minute). */
-    private fun playMoments(tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag) {
+     * point) and every event sound when the voice reaches its words. The delay follows the pace learnt from the
+     * reader's own utterances ([msPerWord]) — the same text at 2.5× sounds 2.5× faster than 180 words a minute. */
+    private fun playMoments(tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, owner: Any? = null) {
         val ctx = context ?: return
         val p = prefs ?: return
         val S = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings
@@ -150,7 +157,27 @@ object BackgroundMusic {
             player.chapter(); handler.post(shape)
             tag.chapterSound?.let { player.oneShot(ctx, it, 1200, ambienceVolume()) }
         }
-        if (S.events(p)) tag.event?.let { player.oneShot(ctx, it, tag.eventWord * 330L, S.eventsVolume(p) / 100f) }
+        if (S.events(p) && tag.events.isNotEmpty()) {
+            val per = owner?.let { msPerWord(it) } ?: 330f
+            val level = S.eventsVolume(p) / 100f
+            for (moment in tag.events) player.oneShot(ctx, moment.file, (moment.word * per).toLong(), level)
+        }
+    }
+
+    /** How long one word lasts in the reader's voice (ms): learnt from the utterances that have just sounded, because
+     * a reader sets its own rate (Moon+ and KOReader keep it fast here) and a fixed 330 ms — 180 words a minute —
+     * would place an event seconds after its words. The app's own speed is the first guess. */
+    private fun msPerWord(owner: Any): Float =
+        rates[owner] ?: (330f / ((prefs?.getFloat("speed", 1f) ?: 1f).coerceIn(0.5f, 2.5f)))
+
+    /** The pace of the utterance that just ended: its words against the time it sounded (0.6 old, 0.4 new). */
+    private fun pace(owner: Any, id: String?) {
+        val note = startedNotes.remove(owner to id) ?: return
+        val ms = android.os.SystemClock.uptimeMillis() - note.first
+        if (note.second < 8 || ms < 800) return
+        val per = ms.toFloat() / note.second
+        if (per !in 60f..900f) return
+        rates[owner] = rates[owner]?.let { it * 0.6f + per * 0.4f } ?: per
     }
 
     /** «Дыхание звука» for the music too (−3 dB under speech, 0.3 s), and the section dip; ticks only while they move. */

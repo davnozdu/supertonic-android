@@ -93,7 +93,7 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
             val locations = (0 until list.length()).map { list.getJSONObject(it) }.map {
                 val id = it.getString("id")
                 require(ID.matches(id)) { "Некорректный идентификатор локации: $id" }
-                val accents = it.optJSONArray("accents")?.let { a -> (0 until a.length()).map { k -> a.getString(k) } }.orEmpty().take(2)
+                val accents = it.optJSONArray("accents")?.let { a -> (0 until a.length()).map { k -> a.getString(k) } }.orEmpty().take(4)
                 Location(id, it.getString("name"), it.getString("sound"), it.optInt("paragraphs"), accents, it.optString("acoustics"))
             }
             require(locations.size <= Short.MAX_VALUE && locations.map { it.id }.distinct().size == locations.size) { "Локации повторяются" }

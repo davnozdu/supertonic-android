@@ -31,12 +31,14 @@ internal object AmbiencePlayer {
     @Volatile var tame = true
         set(value) { if (field != value) { field = value; handler.post { voices.forEach { it.applyTame() } } } }
 
-    private class Voice(val player: MediaPlayer, val scene: Scene, val clip: Int) {
-        private val dynamics: Any? = if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.create(player.audioSessionId, !scene.music) else null
+    private class Voice(val player: MediaPlayer, val scene: Scene, val clip: Int,
+                        /** One-shots keep their impact: the compressor is for the accents inside the steady bed. */
+                        private val tameable: Boolean = !scene.music) {
+        private val dynamics: Any? = if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.create(player.audioSessionId, tameable) else null
         private val boost: android.media.audiofx.LoudnessEnhancer? = if (dynamics != null) null else runCatching {
             android.media.audiofx.LoudnessEnhancer(player.audioSessionId).apply { setTargetGain(BOOST_MB); enabled = true }
         }.getOrNull()
-        fun applyTame() { if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.configure(dynamics, !scene.music) }
+        fun applyTame() { if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.configure(dynamics, tameable) }
         fun release() {
             runCatching { (dynamics as? android.media.audiofx.AudioEffect)?.release() }
             runCatching { boost?.release() }; runCatching { player.release() }
@@ -155,8 +157,9 @@ internal object AmbiencePlayer {
         voices.clear(); scene = null; playing = false; master = 0f; masterTarget = 0f
     }
 
-    /** A one-shot sound (an event, the chapter transition) over the background after [delayMs], through the same
-     * taming and headroom as the scene sounds, at the scene volume; released when it ends. */
+    /** A one-shot sound (an event, the chapter transition) over the background after [delayMs], with the headroom and
+     * the limiter of the scene sounds but without their compressor: an event is what the listener should notice, not an
+     * accent to be levelled into the bed. Its loudness is the events' own slider. Released when it ends. */
     fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float) {
         lateinit var run: Runnable
         run = Runnable {
@@ -167,7 +170,7 @@ internal object AmbiencePlayer {
                 val p = MediaPlayer()
                 p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 p.setDataSource(file.path); p.prepare()
-                val v = Voice(p, Scene(file.name, file.name, listOf(file)), 0)
+                val v = Voice(p, Scene(file.name, file.name, listOf(file)), 0, tameable = false)
                 p.setVolume(volume, volume)
                 shots += v
                 p.setOnCompletionListener { handler.post { shots.remove(v); v.release() } }

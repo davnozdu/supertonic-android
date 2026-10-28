@@ -23,10 +23,12 @@ object AmbienceBook {
         return if (locations == 0) wanted else minOf(wanted, maxOf(2, MAX_CLIPS / locations))
     }
 
-    /** Variant [k] of a location: 0 — steady background; 1, 2 — with the first / second event; then the same again
-     * with other seeds. A place without events gets the background each time. */
-    fun prompt(location: SceneIndex.Location, k: Int): String =
-        location.accents.getOrNull(k % 3 - 1)?.let { "${location.sound}, $it" } ?: location.sound
+    /** Variant [k] of a location: 0 — the steady background; then one with each of the place's accents (up to four),
+     * again with new seeds. The player takes them at random, so an accent never comes at a fixed interval. */
+    fun prompt(location: SceneIndex.Location, k: Int): String {
+        if (k <= 0 || location.accents.isEmpty()) return location.sound
+        return "${location.sound}, ${location.accents[(k - 1) % location.accents.size]}"
+    }
 
     /** What a location's clips were made from: changes (new prompt or events) make them again. */
     private fun recipe(location: SceneIndex.Location) = (listOf(location.sound) + location.accents).joinToString(" | ")

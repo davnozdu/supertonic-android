@@ -295,15 +295,17 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("Сглаживать резкие звуки",Modifier.weight(1f))
                             Switch(checked=ambienceTame,enabled=!busy,onCheckedChange={ ambienceTame=it; prefs.edit().putBoolean(AmbienceSettings.TAME,it).apply() })
                         }
-                        Text("Гудки, смех, удары и другие события сцены не громче ровного фона больше чем на ~3 дБ и не перебивают голос. " +
-                            "Действует сразу, звуки пересоздавать не нужно.",style=MaterialTheme.typography.bodySmall)
+                        Text("Гудки, смех, удары и другие акценты внутри звука локации не громче ровного фона больше чем на ~3 дБ и не " +
+                            "перебивают голос. Звуки событий не сглаживаются — у них своя громкость. Действует сразу, звуки пересоздавать не нужно.",
+                            style=MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Звуки событий",Modifier.weight(1f))
                             Switch(checked=events,enabled=!busy,onCheckedChange={ events=it; prefs.edit().putBoolean(AmbienceSettings.EVENTS,it).apply() })
                         }
-                        Text("Короткие звуки того, что происходит в тексте: хлопнула дверь, выстрел, заржала лошадь, ударил колокол — " +
-                            "в момент, когда голос до этого доходит. Нужна книга, подготовленная с локациями в этой версии или новее.",
-                            style=MaterialTheme.typography.bodySmall)
+                        Text("Короткие звуки того, что происходит в тексте: хлопнула дверь, шаги, шелест бумаг, выстрел — в момент, " +
+                            "когда голос до этого доходит. Один звук создаётся на вид действия (дверь, бумаги, вода, посуда) и звучит " +
+                            "во всех местах книги, поэтому моментов много, а клипов немного. Нужна книга, подготовленная в этой " +
+                            "версии или новее.", style=MaterialTheme.typography.bodySmall)
                         if (events) {
                             Text("Громкость звуков событий: $eventsVolume %",style=MaterialTheme.typography.titleMedium)
                             Slider(value=eventsVolume.toFloat(),onValueChange={ eventsVolume=it.roundToInt() },
@@ -311,17 +313,18 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 valueRange=0f..100f,steps=99)
                             Text("Отдельно от звуков локаций; по умолчанию 40 % — чуть выше фона. Действует сразу.",style=MaterialTheme.typography.bodySmall)
                             Text("Сколько событий отмечать",style=MaterialTheme.typography.titleMedium)
-                            for ((d, label) in listOf(1 to "Редко: только яркие (выстрел, гром, хлопнула дверь)",
-                                    2 to "Обычно: и действия героев (шаги по гравию, скрип двери или фонаря)",
-                                    3 to "Часто: все слышимые подробности")) {
+                            for ((d, label) in listOf(1 to "Редко: только прямо описанные звуки (выстрел, гром, хлопнула дверь)",
+                                    2 to "Обычно: звуки и заметные действия героев (шаги, дверь, посуда, бумаги)",
+                                    3 to "Часто: всё слышимое, в том числе то, о чём говорят (бумаги, деньги, дверь)")) {
                                 Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
                                     RadioButton(selected=eventsDensity==d,enabled=!busy,onClick={ eventsDensity=d
                                         prefs.edit().putInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,d).apply() })
                                     Text(label,Modifier.weight(1f))
                                 }
                             }
-                            Text("Действует при подготовке книги (нужно подготовить её заново). Больше событий — дольше подготовка и создание " +
-                                "звуков (~4 с звука на событие); событие отмечается только по точной цитате из текста.",style=MaterialTheme.typography.bodySmall)
+                            Text("Действует при подготовке книги (нужно подготовить её заново). Событие отмечается по словам цитаты " +
+                                "из текста; повтор одного и того же действия новых звуков не требует — клип делается один раз на вид " +
+                                "действия.", style=MaterialTheme.typography.bodySmall)
                         }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Музыка по настроению",Modifier.weight(1f))
