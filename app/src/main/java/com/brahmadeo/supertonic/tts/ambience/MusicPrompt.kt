@@ -12,21 +12,31 @@ object MusicPrompt {
         "Answer only JSON {\"english\":\"...\"}."
     private val schema = JSONObject("""{"type":"object","properties":{"english":{"type":"string"}},"required":["english"],"additionalProperties":false}""")
 
+    /** The same for a sound of a place or of an event: no music wording, no «no vocals». */
+    private const val SOUND_INSTRUCTION = "Translate a description of a sound effect into an English prompt for a sound " +
+        "generator. 6-20 words: what sounds, from what material, how long, how it changes. Keep the meaning, add nothing " +
+        "else, no music. Answer only JSON {\"english\":\"...\"}."
+
     fun cyrillic(text: String) = text.any { it in 'Ѐ'..'ӿ' }
 
     /** [text] itself when it is English; otherwise its translation (cloud → Gemma 4), or an error asking for English. */
-    fun english(context: Context, text: String): String {
+    fun english(context: Context, text: String): String = english(context, text, INSTRUCTION)
+
+    /** The same for the description of a sound (a place's background, an event): translated as a sound, not as music. */
+    fun englishSound(context: Context, text: String): String = english(context, text, SOUND_INSTRUCTION)
+
+    private fun english(context: Context, text: String, instruction: String): String {
         val clean = text.trim()
         require(clean.isNotEmpty()) { "Опишите музыку" }
         if (!cyrillic(clean)) return clean
         val cloud = runCatching {
             val source = com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.source(context).withThinking(false)
-            parse(LlmProviders.cloudRequest(source.config, clean, INSTRUCTION, schema, source.gemini, tokens = 400, deadlineMs = 30_000L,
+            parse(LlmProviders.cloudRequest(source.config, clean, instruction, schema, source.gemini, tokens = 400, deadlineMs = 30_000L,
                 provider = source.provider, temperature = 0.2))
         }.getOrNull()
         if (cloud != null) return cloud
         val local = runCatching {
-            parse(LlmProviders.localRaw(context, com.brahmadeo.supertonic.tts.llm.LlmSettings.load(context), INSTRUCTION, clean))
+            parse(LlmProviders.localRaw(context, com.brahmadeo.supertonic.tts.llm.LlmSettings.load(context), instruction, clean))
         }.getOrNull()
         return local ?: error("Не удалось перевести описание: облако и Gemma 4 недоступны. Напишите описание по-английски")
     }
