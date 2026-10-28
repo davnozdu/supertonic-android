@@ -75,6 +75,7 @@ object AmbienceBook {
     /** Copies the clip of [job] from the shared bank into the book (true when the book already has it now). */
     private fun adoptFromBank(context: Context, dir: File, job: Job): Boolean {
         if (!job.id.startsWith("k_")) return false
+        if (!SoundBank.on(context)) return false
         val target = File(dir, job.file)
         if (target.isFile && target.length() > 0L) return true
         val source = SoundBank.clip(context, job.id.removePrefix("k_")) ?: return false
@@ -174,7 +175,9 @@ object AmbienceBook {
                 val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
                 AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
                 // The bank grows: a sound made for this book is reused by the next one for free.
-                if (!job.music && job.id.startsWith("k_")) SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file))
+                if (!job.music && job.id.startsWith("k_") && SoundBank.on(context))
+                    SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file),
+                        custom = job.id.removePrefix("k_") !in com.brahmadeo.supertonic.tts.books.EventKinds.ALL.map { it.key })
                 manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
                 manifest(context, sha).writeText(manifest.toString())
                 Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS}, music=${job.music})")

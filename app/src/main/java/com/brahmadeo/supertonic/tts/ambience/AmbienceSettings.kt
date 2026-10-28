@@ -24,6 +24,11 @@ object AmbienceSettings {
     const val CHAPTERS = "ambience_chapters"
 
     /** «Звуки событий»: short sounds of what the text describes (a door slams). Off by default. */
+    /** «База готовых звуков»: брать клипы из общей базы и дописывать в неё то, что сделано для книги. Включено
+     * по умолчанию — это и есть «стоимость ноль»: готовый звук не генерируется заново. */
+    const val SOUND_BANK = "sound_bank"
+    fun soundBank(prefs: SharedPreferences) = prefs.getBoolean(SOUND_BANK, true)
+
     const val EVENTS = "ambience_events"
     fun events(prefs: SharedPreferences) = prefs.getBoolean(EVENTS, false)
     /** «Громкость звуков событий» (0–100 %, its own slider): by default a little above the location sounds. */

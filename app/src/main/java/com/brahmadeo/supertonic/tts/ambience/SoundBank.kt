@@ -20,6 +20,10 @@ object SoundBank {
 
     fun dir(context: Context): File = File(context.filesDir, "sound-bank")
 
+    /** Тумблер «Брать готовые звуки из базы» (по умолчанию включён). */
+    fun on(context: Context): Boolean =
+        AmbienceSettings.soundBank(context.getSharedPreferences("SupertonicPrefs", 0))
+
     /** Список базы: вид действия -> (файл, sha256). Кэшируется в files/sound-bank/manifest.json. */
     fun manifest(context: Context, refresh: Boolean = false): Map<String, Pair<String, String>> {
         val file = File(dir(context), "manifest.json")
@@ -56,7 +60,7 @@ object SoundBank {
     }
 
     /** Кладёт клип книги в базу (база растёт) — его возьмут следующие книги. */
-    fun store(context: Context, kind: String, file: File) {
+    fun store(context: Context, kind: String, file: File, custom: Boolean = false) {
         if (kind.isEmpty() || !file.isFile || file.length() == 0L) return
         runCatching {
             val dir = dir(context).apply { mkdirs() }
@@ -65,7 +69,7 @@ object SoundBank {
             val json = File(dir, "index-local.json").let {
                 if (it.isFile) runCatching { JSONObject(it.readText()) }.getOrDefault(JSONObject()) else JSONObject()
             }
-            json.put(kind, "$kind.$FORMAT")
+            json.put(kind, JSONObject().put("file", "$kind.$FORMAT").put("custom", custom))
             File(dir, "index-local.json").writeText(json.toString())
             Log.i("SoundBank", "kept $kind for the next books")
         }.onFailure { Log.w("SoundBank", "store $kind: ${it.javaClass.simpleName}") }

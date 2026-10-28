@@ -228,6 +228,7 @@ internal object SceneMarking {
         val marksOf = HashMap<Int, MutableList<Pair<String, Int>>>() // paragraph -> (quote, event)
         val kindNumber = HashMap<String, Int>()                   // kind -> event number (one clip per kind)
         val kindPrompts = LinkedHashMap<String, String>()         // kind -> English prompt of its clip
+        val customKinds = HashSet<String>()                        // kinds the second pass made up (no such kind in the list)
         var previous: String? = null
         var marked = 0; var failed = 0
         var eventsMarked = 0; var dropped = 0
@@ -326,6 +327,7 @@ internal object SceneMarking {
                 kindNumber[kind] = eventList.size
                 eventList += com.brahmadeo.supertonic.tts.books.EventIndex.Event("e${eventList.size + 1}", sound, kind)
                 kindPrompts[kind] = sound
+                if (!known) customKinds += kind
             }
             marksOf.getOrPut(r.at) { mutableListOf() } += r.quote to kindNumber.getValue(kind)
             eventsMarked++
@@ -345,7 +347,7 @@ internal object SceneMarking {
         val byBase = chosen.groupBy(::base).mapValues { (_, keys) -> number.getValue(keys.first()) }
         fun locationOf(k: String?) = k?.let { number[it] ?: byBase[base(it)] }
         val builder = SceneIndex.Companion.Builder(locations)
-        val events = com.brahmadeo.supertonic.tts.books.EventIndex.Companion.Builder(eventList, kindPrompts)
+        val events = com.brahmadeo.supertonic.tts.books.EventIndex.Companion.Builder(eventList, kindPrompts, customKinds)
         val moodKeys = moodMusic.keys.toList()
         val moodList = moodKeys.mapIndexed { i, k -> com.brahmadeo.supertonic.tts.books.MoodIndex.Mood("m${i + 1}", moodMusic.getValue(k).first, moodMusic.getValue(k).second) }
         val moods = com.brahmadeo.supertonic.tts.books.MoodIndex.Companion.Builder(moodList)

@@ -331,15 +331,20 @@ class BackgroundMusicActivity : ComponentActivity() {
                         var bankCount by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)) }
                         var bankBusy by remember { mutableStateOf(false) }
                         var bankNote by remember { mutableStateOf("") }
+                        var bankOn by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.soundBank(prefs)) }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("База готовых звуков событий",Modifier.weight(1f))
-                            Text(if (bankCount > 0) "$bankCount клипов" else "не скачана",style=MaterialTheme.typography.bodyMedium)
+                            Switch(checked=bankOn,enabled=!busy,onCheckedChange={ bankOn=it
+                                prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.SOUND_BANK,it).apply() })
                         }
+                        Text(if (bankCount > 0) "В базе $bankCount видов" else "Список базы ещё не скачан",
+                            style=MaterialTheme.typography.bodyMedium)
                         Text("Готовые клипы событий на все книги: двери, бумаги, шаги, вода, посуда, животные, голоса, эмоции — " +
                             "8 секунд каждый. Приложение берёт из базы только то, что нужно книге, и качает эти файлы по одному " +
-                            "(архива нет, распаковывать нечего). Чего в базе нет, создаётся для книги один раз и остаётся в базе " +
-                            "для следующих книг. Фон локаций в базу не входит — он делается на телефоне.",
-                            style=MaterialTheme.typography.bodySmall)
+                            "(архива нет, распаковывать нечего). Если готовый звук есть, он используется даже когда действие " +
+                            "упомянуто в книге один раз; если его нет — новый вид создаётся при двух и более упоминаниях и " +
+                            "дописывается в базу с пометкой «сделан для книги». Фон локаций в базу не входит — он делается " +
+                            "на телефоне.", style=MaterialTheme.typography.bodySmall)
                         Button(enabled=!bankBusy,onClick={
                             bankBusy=true; bankNote=""
                             scope.launch {

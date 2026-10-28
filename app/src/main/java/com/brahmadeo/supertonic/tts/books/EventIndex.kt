@@ -8,7 +8,9 @@ class EventIndex private constructor(private val keys: LongArray, private val va
                                      /** The English prompt of every kind of action of the book: one clip per kind, played
                                       * at every place the action occurs. Kinds the closed list cannot name are made by the
                                       * second pass and live here with the rest. */
-                                     val kinds: Map<String, String> = emptyMap()) {
+                                     val kinds: Map<String, String> = emptyMap(),
+                                     /** Kinds the second pass made up (not in the closed list): their clip is new. */
+                                     val custom: Set<String> = emptySet()) {
     /** [id]: e<N> (the file e<N>.m4a of a book marked before kinds were shared); [sound]: the English prompt of the
      * sound; [kind]: the kind of action — one clip serves every occurrence of it. */
     data class Event(val id: String, val sound: String, val kind: String = "")
@@ -47,6 +49,7 @@ class EventIndex private constructor(private val keys: LongArray, private val va
                 org.json.JSONObject().put("id", it.id).put("sound", it.sound).apply { if (it.kind.isNotEmpty()) put("kind", it.kind) }
             }))
             .apply { if (kinds.isNotEmpty()) put("kinds", org.json.JSONObject().also { o -> kinds.forEach { (k, v) -> o.put(k, v) } }) }
+            .apply { if (custom.isNotEmpty()) put("custom", org.json.JSONArray(custom.toList())) }
             .put("index", java.util.Base64.getEncoder().encodeToString(bytes.array()))
     }
 
@@ -84,7 +87,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
         }
 
         /** Feed every paragraph in reading order with its events: (quote, event number). */
-        class Builder(private val events: List<Event>, private val kinds: Map<String, String> = emptyMap()) {
+        class Builder(private val events: List<Event>, private val kinds: Map<String, String> = emptyMap(),
+                      private val custom: Set<String> = emptySet()) {
             private val before = ArrayDeque<String>()
             private val entries = HashMap<Long, Int>()
             fun add(paragraph: String, marks: List<Pair<String, Int>>) {
@@ -108,7 +112,7 @@ class EventIndex private constructor(private val keys: LongArray, private val va
             }
             fun build(): EventIndex {
                 val sorted = entries.entries.sortedBy { it.key }
-                return EventIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, events, kinds)
+                return EventIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, events, kinds, custom)
             }
         }
 
@@ -130,7 +134,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
                 require(i == 0 || keys[i] > keys[i - 1]) { "Разметка событий не упорядочена" }
             }
             val kinds = o.optJSONObject("kinds")?.let { k -> k.keys().asSequence().filter { EventKinds.KEY.matches(it) }.associateWith { k.getString(it) } }.orEmpty()
-            return EventIndex(keys, values, events, kinds)
+            val custom = o.optJSONArray("custom")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty()
+            return EventIndex(keys, values, events, kinds, custom)
         }
 
         val EMPTY = EventIndex(LongArray(0), ShortArray(0), emptyList())
