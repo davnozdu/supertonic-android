@@ -248,7 +248,8 @@ class BooksActivity : ComponentActivity() {
                                             }) { Text("Поделиться") }
                                             OutlinedButton(enabled = !busy, onClick = {
                                                 scope.launch {
-                                                    withContext(Dispatchers.IO) { BookLibrary.remove(this@BooksActivity, book.id) }
+                                                    withContext(Dispatchers.IO) { BookLibrary.remove(this@BooksActivity, book.id)
+                                                        com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.forgetCache(this@BooksActivity) }
                                                     changed(); reload(); message = "Книга «${book.title}» удалена"
                                                 }
                                             }) { Text("Удалить") }

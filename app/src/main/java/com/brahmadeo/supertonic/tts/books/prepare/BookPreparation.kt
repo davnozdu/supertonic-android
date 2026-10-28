@@ -213,6 +213,12 @@ object BookPreparation {
         return text.copy(summaries = summaries)
     }
 
+    /** Deleting a book forgets its LLM answers too: preparing the same file again asks anew. Only when nothing is
+     * being prepared (a running preparation keeps its answers to continue). */
+    @Synchronized fun forgetCache(ctx: Context) {
+        if (!mutable.value.running) File(ctx.cacheDir, "book-prep").deleteRecursively()
+    }
+
     @Synchronized fun stop() {
         if (!mutable.value.running) return
         mutable.value = mutable.value.copy(stage = "Остановка…")
@@ -291,7 +297,8 @@ object BookPreparation {
      * (null: the scene list [SceneMarking.scenes] can be read from it). */
     private fun jsonRequest(folder: File, kind: String, prompt: String, system: String, schema: JSONObject, field: String?,
                             source: Source, cancel: LlmProviders.CloudCancellation): String {
-        val file = File(folder, "$kind.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.json")
+        // The instruction is part of the key: a changed prompt (a new version) never reuses an old answer.
+        val file = File(folder, "$kind.${BookPreparationPlan.hash("$system\n$prompt".toByteArray()).take(16)}.json")
         if (file.isFile && file.length() <= 512 * 1024) return file.readText()
         val config = source.withThinking(false).config
         var delay = 4000L
