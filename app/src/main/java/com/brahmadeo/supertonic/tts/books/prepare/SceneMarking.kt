@@ -40,6 +40,19 @@ internal object SceneMarking {
         if (before.isNotBlank()) { appendLine("Предыдущий текст (для связности):"); appendLine(before) }
         appendLine("Абзацы:")
         numbered.forEach { appendLine(it) }
+        appendLine()
+        appendLine("Ответ — только JSON такого вида, без пояснений:")
+        appendLine("""{"scenes":[{"from":$first,"place":"купе поезда","sound":"Inside a moving passenger train, rhythmic wheel clacking on rails, low rumble"},{"from":${first + 3},"place":null,"sound":null}]}""")
+    }
+
+    /** The scene list of an answer: {"scenes":[…]}, any object holding one array, or a bare array. */
+    fun scenes(raw: String): org.json.JSONArray {
+        val text = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        val a = text.indexOf('['); val o = text.indexOf('{')
+        if (a >= 0 && (o < 0 || a < o)) return org.json.JSONArray(text.substring(a, text.lastIndexOf(']') + 1))
+        val obj = JSONObject(text.substring(o, text.lastIndexOf('}') + 1))
+        obj.optJSONArray("scenes")?.let { return it }
+        return obj.keys().asSequence().mapNotNull { obj.optJSONArray(it) }.first()
     }
 
     /** Batches of paragraph numbers in reading order, never across sections. */
@@ -71,10 +84,12 @@ internal object SceneMarking {
             val numbered = batch.map { "[${it + 1}] ${paragraphs[it].text}" }
             val before = batch.first().let { if (it > 0 && paragraphs[it - 1].section == paragraphs[it].section) paragraphs[it - 1].text.takeLast(CONTEXT_CHARS) else "" }
             val answer = runCatching {
-                val raw = ask(prompt(numbered, batch.first() + 1, before, previous?.let { sounds[it]?.first }, sounds.values.toList()))
-                val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
-                JSONObject(raw.substring(start, end + 1)).getJSONArray("scenes")
-            }.getOrElse { e -> if (e is java.util.concurrent.CancellationException) throw e; null }
+                scenes(ask(prompt(numbered, batch.first() + 1, before, previous?.let { sounds[it]?.first }, sounds.values.toList())))
+            }.getOrElse { e ->
+                if (e is java.util.concurrent.CancellationException) throw e
+                android.util.Log.w("SceneMarking", "Batch ${n + 1}/${batches.size} failed: ${e.javaClass.simpleName}")
+                null
+            }
             if (answer == null) { failed += batch.size; previous = null; continue }
             // Scene starts by paragraph number: valid, inside the batch, in order. The first covers the batch start.
             val starts = sortedMapOf<Int, String?>()

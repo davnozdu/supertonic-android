@@ -248,7 +248,7 @@ object BookPreparation {
      * places of the next request). */
     private fun markScenes(plan: BookPreparationPlan, folder: File, source: Source, cancel: LlmProviders.CloudCancellation,
                            startedAt: Long): SceneMarking.Result =
-        SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, SceneMarking.INSTRUCTION, SceneMarking.schema(), "scenes", source, cancel) },
+        SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, SceneMarking.INSTRUCTION, SceneMarking.schema(), null, source, cancel) },
             { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check)
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
@@ -277,8 +277,9 @@ object BookPreparation {
     private fun roleRequest(folder: File, prompt: String, source: Source, cancel: LlmProviders.CloudCancellation): String =
         jsonRequest(folder, "roles", prompt, VoiceRoleProtocol.INSTRUCTION, VoiceRoleProtocol.schema(), "paragraphs", source, cancel)
 
-    /** One JSON request without thinking, cached by its prompt under [kind]; saved only when it has [field]. */
-    private fun jsonRequest(folder: File, kind: String, prompt: String, system: String, schema: JSONObject, field: String,
+    /** One JSON request without thinking, cached by its prompt under [kind]; saved only when it has [field]
+     * (null: the scene list [SceneMarking.scenes] can be read from it). */
+    private fun jsonRequest(folder: File, kind: String, prompt: String, system: String, schema: JSONObject, field: String?,
                             source: Source, cancel: LlmProviders.CloudCancellation): String {
         val file = File(folder, "$kind.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.json")
         if (file.isFile && file.length() <= 512 * 1024) return file.readText()
@@ -293,7 +294,9 @@ object BookPreparation {
                 cancel.check()
                 val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
                 // Saved only when it is the expected JSON; a broken answer is asked again next time.
-                if (start >= 0 && end > start && runCatching { JSONObject(raw.substring(start, end + 1)).has(field) }.getOrDefault(false)) {
+                val valid = if (field == null) runCatching { SceneMarking.scenes(raw) }.isSuccess
+                    else start >= 0 && end > start && runCatching { JSONObject(raw.substring(start, end + 1)).has(field) }.getOrDefault(false)
+                if (valid) {
                     val tmp = File(folder, "${file.name}.tmp")
                     try { tmp.writeText(raw); check(tmp.renameTo(file)) { "Не удалось сохранить ответ LLM" } } finally { tmp.delete() }
                     return raw

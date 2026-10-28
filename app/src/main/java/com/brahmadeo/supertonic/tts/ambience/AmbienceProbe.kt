@@ -130,12 +130,19 @@ object ScenesProbe {
         val source = com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.source(context).withThinking(false)
         val started = android.os.SystemClock.elapsedRealtime()
         var requests = 0
+        val raws = JSONArray()
         val result = com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.mark(paragraphs, { prompt ->
             requests++
-            com.brahmadeo.supertonic.tts.llm.LlmProviders.cloudRequest(source.config, prompt, com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.INSTRUCTION,
-                com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.schema(), source.gemini, tokens = 8000, deadlineMs = 180_000L, provider = source.provider)
+            try {
+                com.brahmadeo.supertonic.tts.llm.LlmProviders.cloudRequest(source.config, prompt, com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.INSTRUCTION,
+                    com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.schema(), source.gemini, tokens = 8000, deadlineMs = 180_000L, provider = source.provider)
+                    .also { raws.put(it.take(4000)) }
+            } catch (e: Exception) {
+                // Provider messages may embed URLs or keys: only the class and an HTTP status go into the file.
+                raws.put("ERROR ${e.javaClass.simpleName} ${Regex("API HTTP \\d{3}").find(e.message.orEmpty())?.value.orEmpty()}"); throw e
+            }
         }, { done, all -> Log.i("ScenesProbe", "batch $done/$all") })
-        val out = JSONObject().put("provider", source.label).put("ms", android.os.SystemClock.elapsedRealtime() - started).put("requests", requests)
+        val out = JSONObject().put("raw", raws).put("provider", source.label).put("ms", android.os.SystemClock.elapsedRealtime() - started).put("requests", requests)
             .put("marked", result.marked).put("failed", result.failed).put("ambience", result.index.toJson().apply { remove("index") })
             .put("paragraphs", JSONArray(paragraphs.mapIndexed { i, p -> JSONObject().put("i", i + 1).put("section", p.section)
                 .put("place", result.places.getOrNull(i) ?: JSONObject.NULL).put("text", p.text.take(90)) }))
