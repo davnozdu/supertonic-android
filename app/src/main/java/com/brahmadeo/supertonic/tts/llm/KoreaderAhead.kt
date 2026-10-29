@@ -79,7 +79,7 @@ object KoreaderAhead {
         val ids = todo.map { it to (if (llm) LlmPreparation.submit(ctx, caller, it) else null) }
         worker.execute {
             for ((paragraph, id) in ids) try {
-                val result = id?.let { LlmPreparation.prepareResult(ctx, paragraph, it, timeoutMs = 120_000, resubmit = false) }
+                val result = id?.let { LlmPreparation.prepareResult(ctx, paragraph, it, timeoutMs = 120_000, resubmit = false, roleWaitMs = 20_000) }
                 val aligned = result?.takeIf { !it.fallback }?.let { SentenceAlign.Aligned(paragraph, it.text) }
                 // No LLM answer (offline, LLM off) or a badly matched one: the dictionaries read this paragraph.
                 val good = aligned != null && aligned.matchedShare >= 0.7
@@ -119,6 +119,9 @@ object KoreaderAhead {
                 synchronized(this) { upcoming.remove(next) }
                 continue
             }
+            // Голоса персонажей ещё не пришли: не тратим синтез на авторский вариант — эта же фраза потом
+            // считалась бы заново с ролями. Подготовка абзаца уже ждёт роли, так что при следующей попытке они будут.
+            if (com.brahmadeo.supertonic.tts.llm.LlmSettings.multiVoiceEnabled(ctx) && ready.voicePlan.isEmpty()) return
             synchronized(this) { upcoming.remove(next); submitted += next; while (submitted.size > 600) submitted.remove(submitted.first()) }
             runCatching { ReaderAudioAhead.submitPrepared(ctx, next, ready, readerVoice, readerRate) }
         }

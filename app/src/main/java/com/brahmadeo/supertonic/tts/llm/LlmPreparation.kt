@@ -189,7 +189,7 @@ object LlmPreparation {
     /** [resubmit]: false — an [id] no longer queued (evicted, cancelled) gives the dictionary result at once instead of a
      * new request (KoreaderAhead: the paragraph is not wanted any more). */
     fun prepareResult(ctx: Context, text: String, id: Long? = null, timeoutMs: Long = 1500, retainForPlayback: Boolean = false,
-                      resubmit: Boolean = true): Result {
+                      resubmit: Boolean = true, roleWaitMs: Long = -1L): Result {
         synchronized(directTexts) { if (text in directTexts) directTexts.remove(text) else null }?.let { plan ->
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reader without a queue: dictionaries, no LLM wait chars=${text.length} voices=${plan.size}")
             return Result(text, "словарь", 0, true, "Читалка без очереди", voicePlan = plan, rolesReady = plan.isNotEmpty(), roleProvider = "local")
@@ -216,8 +216,11 @@ object LlmPreparation {
                 // посчитается ещё раз, когда роли доедут (второй раз — уже с ролями), и синтез идёт вдвое дольше.
                 // Один раз ждём роли до секунды: первая, упреждающая копия станет правильной, а вторая возьмётся из кэша.
                 var it = ready
-                if (!it.rolesReady && LlmSettings.multiVoiceEnabled(ctx) && roleWaitFirstSight(ctx, text)) {
-                    val deadline = System.currentTimeMillis() + 1_000L
+                // Впрок (roleWaitMs >= 0) ждём роли долго — время есть. В обычном запросе — только один раз на фразу,
+                // чтобы повторные копии не спотыкались на секунду.
+                val waitMs = if (roleWaitMs >= 0L) roleWaitMs else if (roleWaitFirstSight(ctx, text)) 1_000L else 0L
+                if (!it.rolesReady && waitMs > 0 && LlmSettings.multiVoiceEnabled(ctx)) {
+                    val deadline = System.currentTimeMillis() + waitMs
                     while (System.currentTimeMillis() < deadline && !entry.cancelled) {
                         val now = entry.textReady
                         if (now != null && now.rolesReady) { it = now; break }
