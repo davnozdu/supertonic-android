@@ -49,6 +49,8 @@ object BackgroundMusic {
     @Volatile private var scene: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
     /** «Музыка по настроению» of the sounding utterance: played instead of the track where there is no scene. */
     @Volatile private var mood: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
+    /** Scene and sounds of a file-mode sentence that has not started playing yet. */
+    private val pendingMoment = HashMap<Any, Runnable>()
     /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
      * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
     private const val GAP_MS = 4000L
@@ -99,12 +101,19 @@ object BackgroundMusic {
         refresh()
     }
     fun rejected(owner: Any, token: Long) { reading.reject(owner,token); refresh() }
-    fun hold(ctx: Context, ms: Long, owner: Any? = null, text: String? = null) {
+    /** [startInMs]: file-mode readers (KOReader) write a sentence ahead of its playback — its scene and its sounds
+     * wait that long, so they come with the words and not with the request. */
+    fun hold(ctx: Context, ms: Long, owner: Any? = null, text: String? = null, startInMs: Long = 0L) {
         initialize(ctx)
         if (owner != null) {
-            val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
-            scene = tag.scene; mood = tag.mood
-            handler.post { playMoments(tag, owner) }
+            val apply = Runnable {
+                pendingMoment.remove(owner)
+                val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
+                scene = tag.scene; mood = tag.mood
+                handler.post { playMoments(tag, owner) }
+            }
+            pendingMoment.remove(owner)?.let { handler.removeCallbacks(it) }
+            if (startInMs > 300L) { pendingMoment[owner] = apply; handler.postDelayed(apply, startInMs) } else apply.run()
         }
         handler.post {
             holdUntil = maxOf(holdUntil, android.os.SystemClock.uptimeMillis() + ms)
@@ -115,6 +124,7 @@ object BackgroundMusic {
     /** KOReader's plugin also calls stop() before every sentence it synthesizes: a held track keeps 1.5 s for the
      * next request (0.8 s), so a real pause still silences it. */
     fun stop(owner: Any) {
+        pendingMoment.remove(owner)?.let { handler.removeCallbacks(it) }
         reading.stop(owner)
         scenes.keys.removeAll { it.first === owner } // utterances that will never sound
         startedNotes.keys.removeAll { it.first === owner }
