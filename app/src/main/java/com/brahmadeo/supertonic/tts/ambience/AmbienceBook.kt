@@ -42,6 +42,10 @@ object AmbienceBook {
               /** Made by the music model («Музыка по настроению»). */
               val music: Boolean = false)
 
+    /** Длина новых звуков событий — из настроек: клип в базе 8 с, приложение играет выбранные секунды. */
+    private fun eventSeconds(context: Context) =
+        AmbienceSettings.eventSeconds(context.getSharedPreferences("SupertonicPrefs", 0))
+
     /** Music fragments per mood, played in a random order like the scene variants. */
     private const val MUSIC_VARIANTS = 2
 
@@ -58,7 +62,7 @@ object AmbienceBook {
         // One clip per kind of action: a door slammed in chapter 1 is the same sound in chapter 30.
         val events = scenes.events.events.groupBy { com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(it) }.map { (key, same) ->
             val prompt = scenes.events.kinds[key.removePrefix("k_")] ?: same.first().sound
-            Job("$key.m4a", prompt, EVENT_SECONDS, key.hashCode().toLong(), key, "$prompt | ${EVENT_SECONDS.toInt()} s",
+            Job("$key.m4a", prompt, eventSeconds(context), key.hashCode().toLong(), key, prompt,
                 "событие: " + same.first().kind.ifEmpty { prompt.take(40) })
         }
         val chapter = com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID.let { id ->

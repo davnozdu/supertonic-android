@@ -197,14 +197,33 @@ internal object AmbiencePlayer {
                 p.setVolume(volume, volume)
                 shots += v
                 // Сколько звучит клип — столько следующий и ждёт (длительность иногда 0 сразу после prepare).
+                // В базе клип 8 с — это запас на затухание; звучит столько, сколько выбрано в настройках.
                 val length = if (p.duration > 0) p.duration.toLong() else 8_000L
-                shotUntil = android.os.SystemClock.elapsedRealtime() + length
+                val want = (AmbienceSettings.eventSeconds(ctx.getSharedPreferences("SupertonicPrefs", 0)) * 1000).toLong()
+                val limit = minOf(length, want.coerceAtLeast(600L))
+                shotUntil = android.os.SystemClock.elapsedRealtime() + limit
                 p.setOnCompletionListener { handler.post {
                     shots.remove(v); v.release()
                     // Клип кончился раньше срока — снимаем запрет, следующий звук уже может играть.
                     if (shots.isEmpty()) shotUntil = 0L
                 } }
                 p.start()
+                // Длинный клип обрезаем: плавное затухание и стоп, чтобы шорох не тянулся за пределы выбранной длины.
+                if (limit < length) {
+                    val steps = 10
+                    val step = 30L
+                    for (i in 1..steps) handler.postDelayed({
+                        val k = volume * (1f - i / steps.toFloat())
+                        runCatching { p.setVolume(k, k) }
+                    }, (limit - steps * step).coerceAtLeast(0L) + step * i)
+                    handler.postDelayed({
+                        runCatching { p.setOnCompletionListener(null) }   // отписка: ниже освобождаем сами
+                        runCatching { if (p.isPlaying) p.stop() }
+                        runCatching { v.release() }
+                        shots.remove(v)
+                        if (shots.isEmpty()) shotUntil = 0L
+                    }, limit + step)
+                }
             } catch (e: Exception) { AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}") }
         }
         pending += run

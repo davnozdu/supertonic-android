@@ -50,6 +50,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
                 var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
+                var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
                 var eventsDensity by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,
                     com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.DEFAULT_DENSITY)) }
                 var moodMusic by remember { mutableStateOf(AmbienceSettings.moodMusic(prefs)) }
@@ -313,6 +314,13 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.EVENTS_VOLUME,eventsVolume).apply() },
                                 valueRange=0f..100f,steps=99)
                             Text("Отдельно от звуков локаций; по умолчанию 40 % — чуть выше фона. Действует сразу.",style=MaterialTheme.typography.bodySmall)
+                            Text("Длина звука события: ${"%.1f".format(eventSeconds)} с",style=MaterialTheme.typography.titleMedium)
+                            Slider(value=eventSeconds,onValueChange={ eventSeconds=it },
+                                onValueChangeFinished={ prefs.edit().putFloat(AmbienceSettings.EVENT_SECONDS,eventSeconds).apply() },
+                                valueRange=1f..8f,steps=13)
+                            Text("Сколько звучит один звук. В базе клипы по 8 с — это запас на затухание, поэтому 3 с звучат " +
+                                "как короткий шорох, а 8 с как полный клип. Действует сразу; новые звуки сразу делаются такой длины.",
+                                style=MaterialTheme.typography.bodySmall)
                             Text("Сколько событий отмечать",style=MaterialTheme.typography.titleMedium)
                             for ((d, label) in listOf(1 to "Редко: только прямо описанные звуки (выстрел, гром, хлопнула дверь)",
                                     2 to "Обычно: звуки и заметные действия героев (шаги, дверь, посуда, бумаги)",

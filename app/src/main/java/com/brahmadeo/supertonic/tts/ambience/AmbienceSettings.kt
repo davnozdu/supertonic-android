@@ -36,6 +36,13 @@ object AmbienceSettings {
     const val DEFAULT_EVENTS_VOLUME = 40
     fun eventsVolume(prefs: SharedPreferences) = prefs.getInt(EVENTS_VOLUME, DEFAULT_EVENTS_VOLUME).coerceIn(0, 100)
 
+    /** «Длина звука события», секунды. Клип в базе 8 с — это запас и затухание; приложение играет только первые
+     * [eventSeconds] секунд с плавным затуханием, а новые звуки сразу делаются такой длины. */
+    const val EVENT_SECONDS = "ambience_event_seconds"
+    const val DEFAULT_EVENT_SECONDS = 3f
+    fun eventSeconds(prefs: SharedPreferences) =
+        prefs.getFloat(EVENT_SECONDS, DEFAULT_EVENT_SECONDS).coerceIn(1f, 8f)
+
     /** «Музыка по настроению»: outside scenes the music of the passage's mood, generated for the book. Off by default. */
     const val MOOD_MUSIC = "ambience_mood_music"
     /** "scene" (default) — the mood of each passage; "chapter" — one mood per chapter. */
