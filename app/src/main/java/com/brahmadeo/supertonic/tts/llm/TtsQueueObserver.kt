@@ -19,7 +19,6 @@ private const val MAX_VERIFIED_SDK = 37
 
 class TtsQueueObserver(private val context: Context, private val delegate: IBinder) : Binder() {
     @Volatile private var lastFileChars = 0
-    @Volatile private var lastFileCharsBefore = 0
     @Volatile private var lastFileAt = 0L
     private val musicCallbacks = HashMap<IBinder, com.brahmadeo.supertonic.tts.music.MusicTtsCallback>()
     private val readingOwners = java.util.concurrent.ConcurrentHashMap.newKeySet<IBinder>()
@@ -121,15 +120,14 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                     // The reader never says when its file plays or pauses. With its lookahead this request comes as the
                     // previous sentence starts; without it, this sentence plays next. Cover the longer one plus the gap.
                     val chars = maxOf(text.length, lastFileChars); lastFileChars = text.length
-                    // When it is the plugin's lookahead, this request arrives while the previous sentence is still
-                    // sounding: the sentence asked for now plays only after that one ends, and its sounds must wait
-                    // for it too — otherwise every creak and door comes a sentence early.
+                    // Время между запросами плагина — единственное, что видно из файлового режима; пишем в журнал,
+                    // чтобы измерить, на сколько предложений вперёд он просит текст (задержку не выдумываем).
                     val now = android.os.SystemClock.uptimeMillis()
-                    val estPrev = lastFileCharsBefore * FILE_SPEECH_MS_PER_CHAR
                     val gap = if (lastFileAt == 0L) 0L else now - lastFileAt
-                    val pending = if (gap in 1 until (estPrev * 7 / 10)) (estPrev - gap).coerceAtMost(20_000L) else 0L
-                    lastFileCharsBefore = text.length; lastFileAt = now
-                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context, (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L), caller, text, pending)
+                    lastFileAt = now
+                    if (gap > 0) com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(context,
+                        "file request: gap $gap ms, chars ${text.length}")
+                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context, (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L), caller, text)
                 }
             } catch (_: Exception) { Log.w("LlmPreparation", "File synthesis observation unavailable; using ordinary synthesis") }
             finally { data.setDataPosition(position) }

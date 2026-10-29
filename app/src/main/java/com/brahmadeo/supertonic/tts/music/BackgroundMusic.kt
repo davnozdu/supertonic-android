@@ -110,7 +110,8 @@ object BackgroundMusic {
                 pendingMoment.remove(owner)
                 val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
                 scene = tag.scene; mood = tag.mood
-                handler.post { playMoments(tag, owner) }
+                // Файловый режим пишет предложения вперёд (плагин KOReader): запас «раньше текста» здесь не нужен.
+                handler.post { playMoments(tag, owner, 0f) }
             }
             pendingMoment.remove(owner)?.let { handler.removeCallbacks(it) }
             if (startInMs > 300L) { pendingMoment[owner] = apply; handler.postDelayed(apply, startInMs) } else apply.run()
@@ -160,7 +161,8 @@ object BackgroundMusic {
     /** The moments an utterance brings when it starts to sound: the chapter dip with its transition sound (at the quiet
      * point) and every event sound when the voice reaches its words. The delay follows the pace learnt from the
      * reader's own utterances ([msPerWord]) — the same text at 2.5× sounds 2.5× faster than 180 words a minute. */
-    private fun playMoments(tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, owner: Any? = null) {
+    private fun playMoments(tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, owner: Any? = null,
+                            leadOverride: Float = -1f) {
         val ctx = context ?: return
         val p = prefs ?: return
         val S = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings
@@ -172,7 +174,7 @@ object BackgroundMusic {
         if (S.events(p) && tag.events.isNotEmpty()) {
             val per = owner?.let { msPerWord(it) } ?: 330f
             val level = S.eventsVolume(p) / 100f
-            val lead = S.eventLead(p).toFloat()
+            val lead = if (leadOverride >= 0f) leadOverride else S.eventLead(p).toFloat()
             // A dense paragraph may describe several actions: they are all marked, but two sounds never start closer
             // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere).
             var lastAt = -MIN_EVENT_GAP_MS
