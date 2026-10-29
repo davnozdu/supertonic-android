@@ -78,6 +78,12 @@ class EventIndex private constructor(private val keys: LongArray, private val va
             find(words, quote)?.let { return it }
             if (quote.size >= 2) find(words, quote.take(minOf(3, quote.size)))?.let { return it }
             if (quote.size >= 3) for (s in 1..quote.size - 3) find(words, quote.subList(s, s + 3))?.let { return it }
+            // Мягкая привязка: ответ модели часто расходится с текстом на слово-два (местоимение вместо предмета). Две
+            // слова подряд, затем самое длинное слово цитаты — лучше звук в соседнем месте абзаца, чем потерянное событие.
+            if (quote.size >= 2) for (s in 0..quote.size - 2) find(words, quote.subList(s, s + 2))?.let { return it }
+            quote.filter { it.length >= 6 }.maxByOrNull { it.length }?.let { long ->
+                words.indexOfFirst { it.equals(long, ignoreCase = true) }.takeIf { it >= 0 }?.let { return it }
+            }
             return null
         }
 
@@ -103,7 +109,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
                 for ((quote, event) in marks) {
                     val q = ReplyIndex.words(quote)
                     if (q.isEmpty()) continue
-                    val start = anchorStart(words, q) ?: continue
+                    // Совсем не нашли — ведём событие с начала абзаца: место внутри абзаца важнее, чем событие вовсе.
+                    val start = anchorStart(words, q) ?: 0
                     // The first window that ends inside the quote (its first words with the ones before). Two actions of
                     // one sentence can end in the same window; then the neighbouring window keeps both findable.
                     val first = p + start + minOf(WINDOW - 1, q.size - 1)

@@ -277,7 +277,9 @@ object BookPreparation {
                 SceneMarking.groupSchema(), "groups", source, cancel) },
             // «Есть в базе звуков» — тоже известный вид: такое действие берётся даже при одном упоминании.
             known = { k -> com.brahmadeo.supertonic.tts.books.EventKinds.proper(k) ||
-                com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) })
+                com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) },
+            // Добивка: абзацы, где событий не нашлось вовсе, идут отдельными короткими запросами.
+            fill = { prompt -> jsonRequest(folder, "scene-fill", prompt, SceneMarking.INSTRUCTION, SceneMarking.fillSchema(), null, source, cancel) })
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */
