@@ -34,7 +34,10 @@ class EventIndex private constructor(private val keys: LongArray, private val va
             val i = keys.binarySearch(ReplyIndex.key(window))
             if (i < 0) continue
             val event = events.getOrNull(values[i].toInt()) ?: continue
-            if (out.any { it.event.id == event.id }) continue
+            // Тот же вид может звучать в этом же абзаце ещё раз (две двери, петли через полстраницы): повторяем,
+            // только если до прошлого раза прошло достаточно слов — иначе это одно действие, описанное дважды.
+            val prev = out.lastOrNull { it.event.id == event.id }
+            if (prev != null && n - prev.word < MIN_REPEAT_WORDS) continue
             out += Hit(event, n)
             if (out.size >= limit) break
         }
@@ -58,6 +61,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
         /** Event sounds an utterance may bring: a dense paragraph may describe six or seven actions, and every one of
          * them is in the index; the player spaces them out so they do not pile up. */
         const val MAX_PER_TEXT = 8
+        /** Слов между двумя проигрываниями одного вида в одном абзаце (≈2.5 с речи): ближе — это то же действие. */
+        const val MIN_REPEAT_WORDS = 8
         /** The chapter transition («Переходы между главами»): a book-level sound of its own. */
         const val CHAPTER_ID = "e0"
         /** The clip of an event: one per kind ([kinds] of the book); a book marked before kinds is still read by id. */
