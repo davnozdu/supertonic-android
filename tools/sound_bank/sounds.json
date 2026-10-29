@@ -120,6 +120,13 @@
    "seconds": 8
   },
   {
+   "key": "ballpoint",
+   "prompt": "a ballpoint pen writing steadily on paper",
+   "hint": "шариковая ручка",
+   "seed": 43996,
+   "seconds": 8
+  },
+  {
    "key": "banner_flap",
    "prompt": "a large banner flapping in the wind",
    "hint": "знамя полощется",
@@ -208,6 +215,13 @@
    "prompt": "a heavy blanket shaken out and laid down",
    "hint": "одеяло",
    "seed": 79964,
+   "seconds": 8
+  },
+  {
+   "key": "blotting",
+   "prompt": "a blotting sheet pressed on wet ink",
+   "hint": "промокашка",
+   "seed": 41482,
    "seconds": 8
   },
   {
@@ -503,6 +517,20 @@
    "seed": 26527,
    "seconds": 8,
    "hint": "стул скрипнул по полу"
+  },
+  {
+   "key": "chalk",
+   "prompt": "chalk writing on a blackboard, short squeaks",
+   "hint": "мел по доске",
+   "seed": 41759,
+   "seconds": 8
+  },
+  {
+   "key": "charcoal",
+   "prompt": "a charcoal stick drawing on rough paper",
+   "hint": "уголь по бумаге",
+   "seed": 59509,
+   "seconds": 8
   },
   {
    "key": "chest",
@@ -1079,6 +1107,13 @@
    "seconds": 8
   },
   {
+   "key": "fountain_pen",
+   "prompt": "a fountain pen writing quickly on paper, fine scratching",
+   "hint": "перьевой ручкой по бумаге",
+   "seed": 94169,
+   "seconds": 8
+  },
+  {
    "key": "frame_break",
    "prompt": "a wooden window frame cracking apart",
    "hint": "рама треснула",
@@ -1555,11 +1590,25 @@
    "hint": null
   },
   {
+   "key": "ledger",
+   "prompt": "thick ledger pages turned and a pen ticking",
+   "hint": "счётная книга",
+   "seed": 51265,
+   "seconds": 8
+  },
+  {
    "key": "letter",
    "prompt": "an envelope being torn open and paper unfolded",
    "seed": 53189,
    "seconds": 8,
    "hint": null
+  },
+  {
+   "key": "letter_fold",
+   "prompt": "a letter folded in three and smoothed flat",
+   "hint": "складывают письмо",
+   "seed": 33833,
+   "seconds": 8
   },
   {
    "key": "lighter",
@@ -1702,6 +1751,13 @@
    "seconds": 8
   },
   {
+   "key": "notebook",
+   "prompt": "a small notebook opened and pages flipped",
+   "hint": "блокнот",
+   "seed": 77327,
+   "seconds": 8
+  },
+  {
    "key": "oars",
    "prompt": "oars pulling in water, rhythm of rowing",
    "seed": 36873,
@@ -1779,11 +1835,25 @@
    "hint": "бумажные деньги"
   },
   {
+   "key": "paper_tear",
+   "prompt": "paper torn slowly along a fold",
+   "hint": "бумага рвётся",
+   "seed": 61866,
+   "seconds": 8
+  },
+  {
    "key": "pen",
    "prompt": "a pen scratching quickly on paper",
    "seed": 17899,
    "seconds": 8,
    "hint": null
+  },
+  {
+   "key": "pen_cap",
+   "prompt": "a pen cap pulled off and clicked back on",
+   "hint": "колпачок ручки",
+   "seed": 91535,
+   "seconds": 8
   },
   {
    "key": "pencil",
@@ -2175,6 +2245,13 @@
    "prompt": "a breathy sigh of relief",
    "hint": "вздох облегчения",
    "seed": 33180,
+   "seconds": 8
+  },
+  {
+   "key": "signature",
+   "prompt": "a pen signing a name with quick strokes",
+   "hint": "подпись",
+   "seed": 16162,
    "seconds": 8
   },
   {
