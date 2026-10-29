@@ -178,8 +178,14 @@ internal object AmbiencePlayer {
                 val v = Voice(p, Scene(file.name, file.name, listOf(file)), 0, tameable = false)
                 p.setVolume(volume, volume)
                 shots += v
-                shotUntil = android.os.SystemClock.elapsedRealtime() + p.duration.toLong()
-                p.setOnCompletionListener { handler.post { shots.remove(v); v.release() } }
+                // Сколько звучит клип — столько следующий и ждёт (длительность иногда 0 сразу после prepare).
+                val length = if (p.duration > 0) p.duration.toLong() else 8_000L
+                shotUntil = android.os.SystemClock.elapsedRealtime() + length
+                p.setOnCompletionListener { handler.post {
+                    shots.remove(v); v.release()
+                    // Клип кончился раньше срока — снимаем запрет, следующий звук уже может играть.
+                    if (shots.isEmpty()) shotUntil = 0L
+                } }
                 p.start()
             } catch (e: Exception) { AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}") }
         }

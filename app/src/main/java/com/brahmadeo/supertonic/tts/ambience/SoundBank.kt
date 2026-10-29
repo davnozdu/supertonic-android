@@ -64,6 +64,10 @@ object SoundBank {
         return parsed
     }
 
+    /** Есть ли такой вид в базе (скачанный или свой): такой звук берётся даже при одном упоминании. */
+    fun known(context: Context, kind: String): Boolean =
+        kind.isNotEmpty() && (local(context).containsKey(kind) || manifest(context).containsKey(kind))
+
     fun size(context: Context): Int = (manifest(context).keys + local(context).keys).size
 
     /** Свои и импортированные клипы: вид -> файл (files/sound-bank/index-local.json). */
@@ -101,20 +105,10 @@ object SoundBank {
      * описания базы должны совпасть почти целиком (иначе — ничего, звук будет сделан заново). */
     fun find(context: Context, kind: String, prompt: String, salt: Int = 0): File? {
         clip(context, kind, salt)?.let { return it }
-        val words = tokens("$kind $prompt")
+        val words = BankText.tokens("$kind $prompt")
         if (words.isEmpty()) return null
-        val scored = manifest(context).asSequence().mapNotNull { (key, entry) ->
-            val other = tokens("$key ${entry.prompt}")
-            if (other.isEmpty()) return@mapNotNull null
-            val common = words.count { it in other }
-            if (common == 0) return@mapNotNull null
-            // Совпадение по объединению слов: одно лишнее слово уже снижает оценку, два — почти всегда отказ.
-            key to common.toFloat() / (words.size + other.size - common)
-        }.sortedByDescending { it.second }.toList()
-        val best = scored.firstOrNull() ?: return null
-        if (best.second < 0.7f) return null
-        // Второй кандидат почти так же хорош — не угадываем.
-        if ((scored.getOrNull(1)?.second ?: 0f) >= best.second - 0.15f) return null
+        val bank = manifest(context).mapValues { (key, entry) -> "$key ${entry.prompt}" }
+        val best = BankText.pick(words, bank) ?: return null
         return clip(context, best.first, salt)
     }
 
@@ -239,10 +233,6 @@ object SoundBank {
         } finally { connection.disconnect() }
     }.getOrNull()
 
-    private fun tokens(text: String): Set<String> = text.lowercase()
-        .split(Regex("[^a-z0-9]+")).filter { it.length > 2 && it !in STOP }.toSet()
-
-    private val STOP = setOf("the", "and", "with", "for", "from", "into", "onto", "some", "very", "then", "that", "this")
 
     private fun sha256(bytes: ByteArray): String =
         java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

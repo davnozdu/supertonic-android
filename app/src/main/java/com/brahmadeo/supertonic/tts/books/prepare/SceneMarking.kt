@@ -9,6 +9,9 @@ import org.json.JSONObject
  * Places without a clear setting (reflections, summaries) stay without a location: the music plays there. */
 internal object SceneMarking {
     const val BATCH_CHARS = 6000
+    /** «Часто» asks for 1–2 events in every paragraph with an action: a batch the size of 6000 characters is too
+     * much text for that, the model skips paragraphs. Smaller batches give noticeably more moments per book. */
+    const val BATCH_CHARS_DENSE = 3000
     /** Most-read places get sounds; a place of a single paragraph is not worth a sound. */
     const val MAX_LOCATIONS = 64
     private const val MIN_PARAGRAPHS = 2
@@ -177,12 +180,12 @@ internal object SceneMarking {
     }
 
     /** Batches of paragraph numbers in reading order, never across sections. */
-    fun batches(paragraphs: List<EpubBook.Paragraph>): List<List<Int>> {
+    fun batches(paragraphs: List<EpubBook.Paragraph>, density: Int = DEFAULT_DENSITY): List<List<Int>> {
         val out = mutableListOf<MutableList<Int>>()
         for (i in paragraphs.indices) {
             val last = out.lastOrNull()
             if (last == null || paragraphs[last.last()].section != paragraphs[i].section ||
-                last.sumOf { paragraphs[it].text.length } + paragraphs[i].text.length > BATCH_CHARS) out += mutableListOf(i)
+                last.sumOf { paragraphs[it].text.length } + paragraphs[i].text.length > (if (density >= 3) BATCH_CHARS_DENSE else BATCH_CHARS)) out += mutableListOf(i)
             else last += i
         }
         return out
@@ -216,8 +219,11 @@ internal object SceneMarking {
              translate: (String) -> String? = { null },
              /** The second pass: groups the descriptions of the actions no kind of the list could name (null — no
               * second pass, such actions are then dropped). */
-             group: ((String) -> String)? = null): Result {
-        val batches = batches(paragraphs)
+             group: ((String) -> String)? = null,
+             /** «Вид уже есть» (в списке приложения или в скачанной базе): такой звук берётся даже при одном
+              * упоминании, нового клипа не нужно. Всё остальное требует двух упоминаний. */
+             known: (String) -> Boolean = { com.brahmadeo.supertonic.tts.books.EventKinds.proper(it) }): Result {
+        val batches = batches(paragraphs, density)
         val placeOf = arrayOfNulls<String>(paragraphs.size)
         val sounds = LinkedHashMap<String, Pair<String, String>>() // key -> (name, sound)
         val accentsOf = HashMap<String, List<String>>()
@@ -314,7 +320,7 @@ internal object SceneMarking {
         val descriptions = unknown.map { it.sound }.filter { it.isNotEmpty() }.take(MAX_GROUP_ITEMS)
         val groupOf = HashMap<String, Pair<String, String>>() // description -> (kind, English prompt)
         if (group != null && descriptions.size >= 2) {
-            val answer = runCatching { grouping(group(groupPrompt(descriptions)), descriptions) }.getOrElse { e ->
+            val answer = runCatching { grouping(group(groupPrompt(descriptions)), descriptions, known) }.getOrElse { e ->
                 // Cancel is not a failed request: the preparation must stop, not finish with what it has.
                 if (e is java.util.concurrent.CancellationException) throw e
                 null
@@ -371,7 +377,7 @@ internal object SceneMarking {
     }
 
     /** description -> (kind, English prompt) for the groups of two or more; a lone action stays unnamed (and is dropped). */
-    private fun grouping(raw: String, descriptions: List<String>): Map<String, Pair<String, String>> {
+    private fun grouping(raw: String, descriptions: List<String>, known: (String) -> Boolean): Map<String, Pair<String, String>> {
         val groups = runCatching {
             val o = JSONObject(raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1))
             o.optJSONArray("groups") ?: org.json.JSONArray()
@@ -396,7 +402,7 @@ internal object SceneMarking {
             val items = group.optJSONArray("items") ?: continue
             val members = (0 until items.length()).mapNotNull { items.optInt(it, 0).takeIf { n -> n in 1..descriptions.size } }.distinct()
             // A known kind already has its clip: one action may join it. A new kind must occur twice to be worth a clip.
-            if (members.isEmpty() || (members.size < 2 && !com.brahmadeo.supertonic.tts.books.EventKinds.proper(kind))) continue
+            if (members.isEmpty() || (members.size < 2 && !known(kind))) continue
             for (n in members) out[descriptions[n - 1]] = kind to sound
         }
         return out

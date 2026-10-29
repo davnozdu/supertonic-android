@@ -274,7 +274,10 @@ object BookPreparation {
             // Second pass: the descriptions of the actions no kind of the closed list could name are grouped into kinds
             // of their own (one request per book); a lone action is dropped instead of played as «something else».
             group = { prompt -> jsonRequest(folder, "event-kinds", prompt, SceneMarking.GROUP_INSTRUCTION,
-                SceneMarking.groupSchema(), "groups", source, cancel) })
+                SceneMarking.groupSchema(), "groups", source, cancel) },
+            // «Есть в базе звуков» — тоже известный вид: такое действие берётся даже при одном упоминании.
+            known = { k -> com.brahmadeo.supertonic.tts.books.EventKinds.proper(k) ||
+                com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) })
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */
