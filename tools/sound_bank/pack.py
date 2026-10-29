@@ -22,9 +22,9 @@ SOUNDS = REPO / "tools" / "sound_bank" / "sounds.json"
 VERSION = "1"
 # Где лежат файлы: GitHub допускает до 1000 вложений на релиз, поэтому варианты разложены по двум релизам.
 RELEASES = {
-    "": "sound-bank-v1",
-    "_2": "sound-bank-v1",
-    "_3": "sound-bank-v1-more",
+    "": "sound-bank-v1",          # 678 клипов + manifest.json
+    "_2": "sound-bank-v1-second",  # 678 клипов — третий релиз, лимит GitHub 1000 вложений
+    "_3": "sound-bank-v1-more",    # 678 клипов
 }
 BASE = "https://github.com/davnozdu/supertonic-android/releases/download"
 

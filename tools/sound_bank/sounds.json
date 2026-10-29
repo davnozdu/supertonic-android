@@ -1,2818 +1,4750 @@
 {
- "sounds": [
-  {
-   "key": "abacus",
-   "prompt": "wooden beads sliding on an abacus",
-   "hint": "счёты",
-   "seed": 44450,
-   "seconds": 8
-  },
-  {
-   "key": "alarm",
-   "prompt": "a small alarm clock ringing on a nightstand",
-   "seed": 98508,
-   "seconds": 8,
-   "hint": "будильник"
-  },
-  {
-   "key": "anchor_chain",
-   "prompt": "an anchor chain running out over the bow",
-   "hint": "якорная цепь",
-   "seed": 69126,
-   "seconds": 8
-  },
-  {
-   "key": "animal",
-   "prompt": "an animal shifting and lowing in a stall",
-   "seed": 43944,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "anvil",
-   "prompt": "a blacksmith hammering iron on an anvil",
-   "seed": 91110,
-   "seconds": 8,
-   "hint": "наковальня"
-  },
-  {
-   "key": "applause",
-   "prompt": "applause in a hall, a dozen people",
-   "hint": "аплодисменты",
-   "seed": 1623,
-   "seconds": 8
-  },
-  {
-   "key": "argue",
-   "prompt": "two muffled voices arguing, words unintelligible",
-   "hint": "спор двух голосов",
-   "seed": 10357,
-   "seconds": 8
-  },
-  {
-   "key": "armor",
-   "prompt": "plate armor clanking with each step",
-   "seed": 63617,
-   "seconds": 8,
-   "hint": "доспехи"
-  },
-  {
-   "key": "armor_walk",
-   "prompt": "plate armour walking steadily on stone",
-   "hint": "доспехи идут",
-   "seed": 41247,
-   "seconds": 8
-  },
-  {
-   "key": "army_camp",
-   "prompt": "an army camp at night, fires and low voices",
-   "hint": "военный лагерь",
-   "seed": 17097,
-   "seconds": 8
-  },
-  {
-   "key": "arrow",
-   "prompt": "an arrow flying past and hitting wood",
-   "seed": 1955,
-   "seconds": 8,
-   "hint": "стрела"
-  },
-  {
-   "key": "arrow_impact",
-   "prompt": "an arrow hitting a wooden shield",
-   "hint": "стрела попала",
-   "seed": 80793,
-   "seconds": 8
-  },
-  {
-   "key": "axe",
-   "prompt": "an axe striking a tree trunk",
-   "seed": 52594,
-   "seconds": 8,
-   "hint": "топор"
-  },
-  {
-   "key": "baby",
-   "prompt": "a baby crying in another room",
-   "seed": 34136,
-   "seconds": 8,
-   "hint": "плач ребёнка"
-  },
-  {
-   "key": "baby_laugh",
-   "prompt": "a baby laughing",
-   "hint": "смеётся младенец",
-   "seed": 6660,
-   "seconds": 8
-  },
-  {
-   "key": "bag",
-   "prompt": "a leather bag unbuckled and set on the floor",
-   "seed": 89057,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "bag_zip",
-   "prompt": "a bag zip being pulled open",
-   "hint": "молния сумки",
-   "seed": 3742,
-   "seconds": 8
-  },
-  {
-   "key": "ballpoint",
-   "prompt": "a ballpoint pen writing steadily on paper",
-   "hint": "шариковая ручка",
-   "seed": 43996,
-   "seconds": 8
-  },
-  {
-   "key": "banner_flap",
-   "prompt": "a large banner flapping in the wind",
-   "hint": "знамя полощется",
-   "seed": 58892,
-   "seconds": 8
-  },
-  {
-   "key": "bath",
-   "prompt": "water filling a bathtub",
-   "seed": 11531,
-   "seconds": 8,
-   "hint": "ванна наполняется"
-  },
-  {
-   "key": "bed_creak",
-   "prompt": "an old bed frame creaking under weight",
-   "hint": "кровать скрипит",
-   "seed": 41256,
-   "seconds": 8
-  },
-  {
-   "key": "bees",
-   "prompt": "bees buzzing around a hive",
-   "hint": "пчёлы",
-   "seed": 49581,
-   "seconds": 8
-  },
-  {
-   "key": "bell",
-   "prompt": "a small hand bell ringing twice",
-   "seed": 55508,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "bell_peal",
-   "prompt": "church bells ringing a peal together",
-   "hint": "трезвон",
-   "seed": 82267,
-   "seconds": 8
-  },
-  {
-   "key": "bell_single",
-   "prompt": "one deep church bell strike with long decay",
-   "hint": "один удар колокола",
-   "seed": 52106,
-   "seconds": 8
-  },
-  {
-   "key": "bell_tower",
-   "prompt": "a bell tower bell swinging with a slow decay",
-   "seed": 68760,
-   "seconds": 8,
-   "hint": "колокольня"
-  },
-  {
-   "key": "bicycle_bell",
-   "prompt": "a bicycle bell ringing twice",
-   "hint": "велосипедный звонок",
-   "seed": 20343,
-   "seconds": 8
-  },
-  {
-   "key": "big_keys",
-   "prompt": "a large ring of iron keys jingling",
-   "hint": "связка больших ключей",
-   "seed": 31431,
-   "seconds": 8
-  },
-  {
-   "key": "bird",
-   "prompt": "birds fluttering up from a bush",
-   "seed": 16249,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "blade_sharpen",
-   "prompt": "a blade being sharpened on a whetstone",
-   "hint": "точат клинок",
-   "seed": 37278,
-   "seconds": 8
-  },
-  {
-   "key": "blanket",
-   "prompt": "a heavy blanket shaken out and laid down",
-   "hint": "одеяло",
-   "seed": 79964,
-   "seconds": 8
-  },
-  {
-   "key": "blotting",
-   "prompt": "a blotting sheet pressed on wet ink",
-   "hint": "промокашка",
-   "seed": 41482,
-   "seconds": 8
-  },
-  {
-   "key": "body_fall",
-   "prompt": "a body falling heavily to the floor",
-   "hint": "тело падает",
-   "seed": 8720,
-   "seconds": 8
-  },
-  {
-   "key": "boiling",
-   "prompt": "a pot of water boiling, lid rattling",
-   "seed": 41419,
-   "seconds": 8,
-   "hint": "кипит вода"
-  },
-  {
-   "key": "bolt",
-   "prompt": "an iron bolt sliding home",
-   "seed": 77515,
-   "seconds": 8,
-   "hint": "засов"
-  },
-  {
-   "key": "bolt_heavy",
-   "prompt": "a heavy iron bolt pulled back with a scrape",
-   "hint": "тяжёлый засов",
-   "seed": 53007,
-   "seconds": 8
-  },
-  {
-   "key": "book_drop",
-   "prompt": "a closed book dropped onto a desk",
-   "seed": 8237,
-   "seconds": 8,
-   "hint": "книга упала на стол"
-  },
-  {
-   "key": "book_page",
-   "prompt": "pages of a book turning slowly",
-   "seed": 54749,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "book_slam",
-   "prompt": "a thick book slammed shut",
-   "seed": 22305,
-   "seconds": 8,
-   "hint": "книга захлопнулась"
-  },
-  {
-   "key": "boots_floor",
-   "prompt": "heavy boots stepping onto a wooden floor",
-   "seed": 11111,
-   "seconds": 8,
-   "hint": "сапоги по полу"
-  },
-  {
-   "key": "bottle",
-   "prompt": "a bottle set on a table with a dull clink",
-   "seed": 53340,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "bottle_drop",
-   "prompt": "a glass bottle falling and rolling",
-   "seed": 63358,
-   "seconds": 8,
-   "hint": "бутылка падает"
-  },
-  {
-   "key": "bow_draw",
-   "prompt": "a bowstring drawn and released",
-   "hint": "натягивают лук",
-   "seed": 37567,
-   "seconds": 8
-  },
-  {
-   "key": "brake_squeal",
-   "prompt": "brakes squealing as a train slows",
-   "hint": "визг тормозов",
-   "seed": 43771,
-   "seconds": 8
-  },
-  {
-   "key": "bread_cut",
-   "prompt": "a loaf of bread being sliced",
-   "hint": "режут хлеб",
-   "seed": 80386,
-   "seconds": 8
-  },
-  {
-   "key": "breath",
-   "prompt": "heavy breathing of a tired man",
-   "seed": 70204,
-   "seconds": 8,
-   "hint": "дыхание"
-  },
-  {
-   "key": "breath_heavy",
-   "prompt": "heavy breathing after running",
-   "hint": "тяжёлое дыхание",
-   "seed": 48733,
-   "seconds": 8
-  },
-  {
-   "key": "breath_shaky",
-   "prompt": "a trembling breath of fear",
-   "hint": "дрожащее дыхание",
-   "seed": 18720,
-   "seconds": 8
-  },
-  {
-   "key": "breathing_calm",
-   "prompt": "calm breathing of a sleeping person",
-   "hint": "спокойное дыхание",
-   "seed": 12155,
-   "seconds": 8
-  },
-  {
-   "key": "broom",
-   "prompt": "a broom sweeping a wooden floor",
-   "seed": 51143,
-   "seconds": 8,
-   "hint": "метла"
-  },
-  {
-   "key": "bucket",
-   "prompt": "a metal bucket set down on stone",
-   "seed": 45307,
-   "seconds": 8,
-   "hint": "ведро"
-  },
-  {
-   "key": "bugle",
-   "prompt": "a bugle call in the distance",
-   "seed": 68877,
-   "seconds": 8,
-   "hint": "горн"
-  },
-  {
-   "key": "camera",
-   "prompt": "an old camera shutter clicking once",
-   "hint": "фотоаппарат",
-   "seed": 38009,
-   "seconds": 8
-  },
-  {
-   "key": "campfire",
-   "prompt": "a campfire crackling, logs settling",
-   "hint": "костёр",
-   "seed": 4904,
-   "seconds": 8
-  },
-  {
-   "key": "candle_blow",
-   "prompt": "a candle being blown out",
-   "seed": 41373,
-   "seconds": 8,
-   "hint": "задули свечу"
-  },
-  {
-   "key": "candle_snuff",
-   "prompt": "a candle snuffed out with a small hiss",
-   "hint": "гасят свечу",
-   "seed": 78681,
-   "seconds": 8
-  },
-  {
-   "key": "cannon",
-   "prompt": "a cannon firing far away, heavy boom",
-   "seed": 95989,
-   "seconds": 8,
-   "hint": "пушка"
-  },
-  {
-   "key": "car",
-   "prompt": "a car pulling up, its engine idling, then stopping",
-   "seed": 28641,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "car_door",
-   "prompt": "a car door opened and shut",
-   "hint": "дверца машины",
-   "seed": 49299,
-   "seconds": 8
-  },
-  {
-   "key": "car_engine",
-   "prompt": "a car engine starting and idling",
-   "hint": "двигатель машины",
-   "seed": 79448,
-   "seconds": 8
-  },
-  {
-   "key": "car_horn",
-   "prompt": "a car horn honking in traffic",
-   "seed": 84395,
-   "seconds": 8,
-   "hint": "сигнал машины"
-  },
-  {
-   "key": "car_pass",
-   "prompt": "a car passing on a wet road",
-   "hint": "машина проезжает",
-   "seed": 86751,
-   "seconds": 8
-  },
-  {
-   "key": "carriage_start",
-   "prompt": "a carriage starting to move, wheels and horse",
-   "hint": "экипаж трогается",
-   "seed": 38071,
-   "seconds": 8
-  },
-  {
-   "key": "carriage_stop",
-   "prompt": "a carriage stopping, wheels and harness",
-   "hint": "экипаж остановился",
-   "seed": 85045,
-   "seconds": 8
-  },
-  {
-   "key": "cart",
-   "prompt": "wooden wheels rumbling over cobblestones",
-   "seed": 52125,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "cash_register",
-   "prompt": "an old cash register drawer opening with a bell",
-   "seed": 52527,
-   "seconds": 8,
-   "hint": "касса"
-  },
-  {
-   "key": "cat",
-   "prompt": "a cat meowing briefly",
-   "seed": 43703,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "cattle",
-   "prompt": "cows lowing in a barn",
-   "seed": 91160,
-   "seconds": 8,
-   "hint": "скот"
-  },
-  {
-   "key": "cell_gate",
-   "prompt": "a prison gate opening slowly on iron hinges",
-   "hint": "ворота тюрьмы",
-   "seed": 55264,
-   "seconds": 8
-  },
-  {
-   "key": "censer",
-   "prompt": "a censer swinging, chains clinking softly",
-   "hint": "кадило",
-   "seed": 43541,
-   "seconds": 8
-  },
-  {
-   "key": "chain",
-   "prompt": "a heavy chain being dragged over stone",
-   "seed": 4584,
-   "seconds": 8,
-   "hint": "цепь"
-  },
-  {
-   "key": "chain_clank",
-   "prompt": "a heavy chain dropped and clanking on stone",
-   "hint": "цепь с лязгом",
-   "seed": 69098,
-   "seconds": 8
-  },
-  {
-   "key": "chair",
-   "prompt": "a chair scraping on the floor as someone sits down",
-   "seed": 30131,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "chair_scrape",
-   "prompt": "a wooden chair scraping on a stone floor",
-   "seed": 26527,
-   "seconds": 8,
-   "hint": "стул скрипнул по полу"
-  },
-  {
-   "key": "chalk",
-   "prompt": "chalk writing on a blackboard, short squeaks",
-   "hint": "мел по доске",
-   "seed": 41759,
-   "seconds": 8
-  },
-  {
-   "key": "charcoal",
-   "prompt": "a charcoal stick drawing on rough paper",
-   "hint": "уголь по бумаге",
-   "seed": 59509,
-   "seconds": 8
-  },
-  {
-   "key": "chest",
-   "prompt": "a heavy wooden chest lid being lowered",
-   "seed": 67639,
-   "seconds": 8,
-   "hint": "сундук"
-  },
-  {
-   "key": "chewing",
-   "prompt": "someone chewing close to the mic",
-   "hint": "жуёт",
-   "seed": 68689,
-   "seconds": 8
-  },
-  {
-   "key": "chicken",
-   "prompt": "hens clucking in a yard",
-   "hint": "куры",
-   "seed": 62008,
-   "seconds": 8
-  },
-  {
-   "key": "child",
-   "prompt": "a child's voice calling out",
-   "seed": 35142,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "children_play",
-   "prompt": "children playing and shouting far away",
-   "hint": "дети играют",
-   "seed": 42169,
-   "seconds": 8
-  },
-  {
-   "key": "choir",
-   "prompt": "a church choir singing softly, no words",
-   "seed": 26920,
-   "seconds": 8,
-   "hint": "хор"
-  },
-  {
-   "key": "chuckle",
-   "prompt": "a low short chuckle",
-   "hint": "усмешка",
-   "seed": 95172,
-   "seconds": 8
-  },
-  {
-   "key": "church_bell",
-   "prompt": "a deep church bell striking slowly",
-   "seed": 2142,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "church_door",
-   "prompt": "a massive church door opening with a deep echo",
-   "hint": "дверь храма",
-   "seed": 9238,
-   "seconds": 8
-  },
-  {
-   "key": "clap_single",
-   "prompt": "a single clap of the hands",
-   "hint": "один хлопок",
-   "seed": 34520,
-   "seconds": 8
-  },
-  {
-   "key": "clear_throat",
-   "prompt": "an old man clearing his throat",
-   "hint": "откашлялся",
-   "seed": 97814,
-   "seconds": 8
-  },
-  {
-   "key": "clock",
-   "prompt": "a clock ticking and then chiming the hour",
-   "seed": 62318,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "clock_strike",
-   "prompt": "a wall clock striking the hour",
-   "seed": 68932,
-   "seconds": 8,
-   "hint": "часы бьют"
-  },
-  {
-   "key": "clock_tick",
-   "prompt": "a wall clock ticking steadily",
-   "hint": "часы тикают",
-   "seed": 62620,
-   "seconds": 8
-  },
-  {
-   "key": "clock_tower",
-   "prompt": "a clock tower mechanism striking",
-   "seed": 90076,
-   "seconds": 8,
-   "hint": "часы на башне"
-  },
-  {
-   "key": "clockwork",
-   "prompt": "a small clockwork mechanism whirring",
-   "seed": 43926,
-   "seconds": 8,
-   "hint": "часовой механизм"
-  },
-  {
-   "key": "cloth",
-   "prompt": "cloth rustling as a coat is taken off",
-   "seed": 82703,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "cloth_tear",
-   "prompt": "fabric tearing",
-   "seed": 76713,
-   "seconds": 8,
-   "hint": "ткань рвётся"
-  },
-  {
-   "key": "coach_door",
-   "prompt": "a carriage door opened and slammed shut",
-   "hint": "дверца экипажа",
-   "seed": 29738,
-   "seconds": 8
-  },
-  {
-   "key": "coin",
-   "prompt": "coins clinking and being counted on a table",
-   "seed": 72312,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "coin_slide",
-   "prompt": "coins sliding across a wooden counter",
-   "seed": 31627,
-   "seconds": 8,
-   "hint": "монеты по стойке"
-  },
-  {
-   "key": "cork",
-   "prompt": "a cork popping out of a bottle",
-   "seed": 94903,
-   "seconds": 8,
-   "hint": "пробка"
-  },
-  {
-   "key": "cough",
-   "prompt": "a dry heavy cough",
-   "seed": 9139,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "crack",
-   "prompt": "a loud crack of breaking timber",
-   "seed": 63148,
-   "seconds": 8,
-   "hint": "треск"
-  },
-  {
-   "key": "crowd",
-   "prompt": "a murmur of many voices and shuffling feet",
-   "seed": 81493,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "crowd_boo",
-   "prompt": "a crowd booing and whistling",
-   "hint": "свист и неодобрение",
-   "seed": 60168,
-   "seconds": 8
-  },
-  {
-   "key": "crowd_cheer",
-   "prompt": "a crowd cheering together",
-   "hint": "толпа ликует",
-   "seed": 22089,
-   "seconds": 8
-  },
-  {
-   "key": "crowd_gasp",
-   "prompt": "a crowd gasping together",
-   "hint": "толпа ахнула",
-   "seed": 10663,
-   "seconds": 8
-  },
-  {
-   "key": "crowd_panic",
-   "prompt": "a crowd running and shouting in panic",
-   "hint": "паника в толпе",
-   "seed": 91284,
-   "seconds": 8
-  },
-  {
-   "key": "crowd_wait",
-   "prompt": "a waiting crowd murmuring in a hall",
-   "hint": "люди ждут, гул",
-   "seed": 60742,
-   "seconds": 8
-  },
-  {
-   "key": "cry",
-   "prompt": "someone crying quietly",
-   "seed": 9819,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "cry_child",
-   "prompt": "a small child crying loudly",
-   "hint": "плачет ребёнок",
-   "seed": 70496,
-   "seconds": 8
-  },
-  {
-   "key": "crying_woman_far",
-   "prompt": "a woman crying behind a wall, muffled",
-   "hint": "плач за стеной",
-   "seed": 56114,
-   "seconds": 8
-  },
-  {
-   "key": "cup",
-   "prompt": "a cup set down on a saucer with a light clink",
-   "seed": 82039,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "cupboard",
-   "prompt": "a cupboard door opening, crockery inside",
-   "seed": 3816,
-   "seconds": 8,
-   "hint": "буфет"
-  },
-  {
-   "key": "curtain",
-   "prompt": "curtain rings sliding along a rod",
-   "seed": 87204,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "curtain_close",
-   "prompt": "a heavy curtain pulled shut along its rail",
-   "hint": "задёргивают занавес",
-   "seed": 85303,
-   "seconds": 8
-  },
-  {
-   "key": "curtain_open",
-   "prompt": "a heavy curtain pulled along its rail",
-   "seed": 7002,
-   "seconds": 8,
-   "hint": "занавес"
-  },
-  {
-   "key": "cutlery",
-   "prompt": "silver cutlery being laid on a table",
-   "seed": 69317,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "dishes",
-   "prompt": "plates and cutlery clattering softly",
-   "seed": 83393,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "dishes_wash",
-   "prompt": "dishes being washed in a basin",
-   "hint": "моют посуду",
-   "seed": 96590,
-   "seconds": 8
-  },
-  {
-   "key": "dock_creak",
-   "prompt": "a wooden pier creaking underfoot",
-   "hint": "причал",
-   "seed": 59707,
-   "seconds": 8
-  },
-  {
-   "key": "dog",
-   "prompt": "a dog barking twice somewhere close",
-   "seed": 60311,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "dog_far",
-   "prompt": "a dog barking far away",
-   "hint": "собака вдалеке",
-   "seed": 69578,
-   "seconds": 8
-  },
-  {
-   "key": "door_bell",
-   "prompt": "a doorbell ringing twice inside a flat",
-   "seed": 3276,
-   "seconds": 8,
-   "hint": "дверной звонок"
-  },
-  {
-   "key": "door_close",
-   "prompt": "a door closing with a soft thud",
-   "seed": 79613,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "door_creak",
-   "prompt": "a long creak of an old door hinge",
-   "seed": 16231,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "door_grind",
-   "prompt": "a heavy door forced open with a grinding scrape",
-   "hint": "дверь с усилием",
-   "seed": 45832,
-   "seconds": 8
-  },
-  {
-   "key": "door_handle",
-   "prompt": "a door handle pressed and released with a metallic click",
-   "hint": "ручка двери",
-   "seed": 86217,
-   "seconds": 8
-  },
-  {
-   "key": "door_knock",
-   "prompt": "three sharp knocks on a wooden door",
-   "seed": 81193,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "door_lock",
-   "prompt": "a key turning in a lock with two clicks",
-   "seed": 38748,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "door_open",
-   "prompt": "a door opening with a soft creak",
-   "seed": 46649,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "door_slam",
-   "prompt": "a heavy door slams shut with a sharp bang",
-   "seed": 22532,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "door_slide",
-   "prompt": "a sliding wooden door being pulled aside",
-   "seed": 38603,
-   "seconds": 8,
-   "hint": "раздвижная дверь"
-  },
-  {
-   "key": "drawer",
-   "prompt": "a wooden drawer pulled open and shut",
-   "seed": 38833,
-   "seconds": 8,
-   "hint": "ящик"
-  },
-  {
-   "key": "drop",
-   "prompt": "a heavy object dropping and hitting the floor",
-   "seed": 25129,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "drum",
-   "prompt": "a military drum beating a slow march",
-   "seed": 77058,
-   "seconds": 8,
-   "hint": "барабан"
-  },
-  {
-   "key": "drums_march",
-   "prompt": "military drums beating a march, several drums",
-   "hint": "барабанный марш",
-   "seed": 4470,
-   "seconds": 8
-  },
-  {
-   "key": "ducks",
-   "prompt": "ducks quacking and splashing",
-   "hint": "утки",
-   "seed": 96574,
-   "seconds": 8
-  },
-  {
-   "key": "electric_switch",
-   "prompt": "an old electric switch clicking",
-   "seed": 68523,
-   "seconds": 8,
-   "hint": "выключатель"
-  },
-  {
-   "key": "elevator",
-   "prompt": "elevator doors opening with a soft chime",
-   "seed": 90091,
-   "seconds": 8,
-   "hint": "лифт"
-  },
-  {
-   "key": "elevator_ding",
-   "prompt": "an elevator arriving with a soft ding",
-   "hint": "лифт, звонок",
-   "seed": 36307,
-   "seconds": 8
-  },
-  {
-   "key": "engine",
-   "prompt": "an engine turning over and catching",
-   "seed": 72847,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "envelope",
-   "prompt": "an envelope being torn open",
-   "seed": 1276,
-   "seconds": 8,
-   "hint": "конверт"
-  },
-  {
-   "key": "escalator",
-   "prompt": "an escalator running in a mall",
-   "hint": "эскалатор",
-   "seed": 66604,
-   "seconds": 8
-  },
-  {
-   "key": "explosion_far",
-   "prompt": "a distant explosion with a rolling tail",
-   "hint": "дальний взрыв",
-   "seed": 99127,
-   "seconds": 8
-  },
-  {
-   "key": "fight",
-   "prompt": "a short scuffle, a blow and a body falling",
-   "seed": 40520,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "fire",
-   "prompt": "a fire crackling and shifting in a stove",
-   "seed": 58664,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "fire_whoosh",
-   "prompt": "fire flaring up suddenly from dry wood",
-   "seed": 49461,
-   "seconds": 8,
-   "hint": "вспышка огня"
-  },
-  {
-   "key": "flies",
-   "prompt": "flies buzzing around",
-   "seed": 93350,
-   "seconds": 8,
-   "hint": "мухи"
-  },
-  {
-   "key": "floor_creak",
-   "prompt": "a single floorboard creaking underfoot",
-   "seed": 3398,
-   "seconds": 8,
-   "hint": "половица скрипнула"
-  },
-  {
-   "key": "flush",
-   "prompt": "a toilet flushing",
-   "seed": 81269,
-   "seconds": 8,
-   "hint": "слив воды"
-  },
-  {
-   "key": "footsteps_carpet",
-   "prompt": "muffled footsteps on a thick carpet",
-   "seed": 9684,
-   "seconds": 8,
-   "hint": "шаги по ковру"
-  },
-  {
-   "key": "footsteps_gravel",
-   "prompt": "boots crunching on gravel for a few seconds",
-   "seed": 50239,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "footsteps_mud",
-   "prompt": "footsteps squelching through wet mud",
-   "seed": 69869,
-   "seconds": 8,
-   "hint": "шаги по грязи"
-  },
-  {
-   "key": "footsteps_snow",
-   "prompt": "footsteps squeaking through dry snow",
-   "seed": 44510,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "footsteps_stairs",
-   "prompt": "footsteps going up a wooden staircase",
-   "seed": 83136,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "footsteps_stairs_stone",
-   "prompt": "footsteps going up a stone staircase",
-   "seed": 3525,
-   "seconds": 8,
-   "hint": "шаги по каменной лестнице"
-  },
-  {
-   "key": "footsteps_stone",
-   "prompt": "footsteps echoing on stone slabs",
-   "seed": 39945,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "footsteps_water",
-   "prompt": "footsteps wading in shallow water",
-   "seed": 66819,
-   "seconds": 8,
-   "hint": "шаги по воде"
-  },
-  {
-   "key": "footsteps_wood",
-   "prompt": "measured footsteps on creaking wooden floorboards",
-   "seed": 44857,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "fountain",
-   "prompt": "a fountain splashing in a courtyard",
-   "hint": "фонтан",
-   "seed": 77311,
-   "seconds": 8
-  },
-  {
-   "key": "fountain_pen",
-   "prompt": "a fountain pen writing quickly on paper, fine scratching",
-   "hint": "перьевой ручкой по бумаге",
-   "seed": 94169,
-   "seconds": 8
-  },
-  {
-   "key": "frame_break",
-   "prompt": "a wooden window frame cracking apart",
-   "hint": "рама треснула",
-   "seed": 24057,
-   "seconds": 8
-  },
-  {
-   "key": "frog",
-   "prompt": "frogs croaking at a pond",
-   "hint": "лягушки",
-   "seed": 66259,
-   "seconds": 8
-  },
-  {
-   "key": "frying",
-   "prompt": "meat frying in a pan, sizzling",
-   "seed": 25519,
-   "seconds": 8,
-   "hint": "жарка"
-  },
-  {
-   "key": "furniture",
-   "prompt": "a wooden drawer pulled open and pushed shut",
-   "seed": 78555,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "gasp",
-   "prompt": "a sharp gasp of surprise",
-   "hint": "ахнул",
-   "seed": 55126,
-   "seconds": 8
-  },
-  {
-   "key": "gate",
-   "prompt": "a wooden gate swinging open and closing again",
-   "seed": 2657,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "gate_iron",
-   "prompt": "an iron gate creaking open on its hinges",
-   "seed": 22147,
-   "seconds": 8,
-   "hint": "железные ворота"
-  },
-  {
-   "key": "giggle",
-   "prompt": "a young woman giggling",
-   "hint": "хихиканье",
-   "seed": 13169,
-   "seconds": 8
-  },
-  {
-   "key": "glass_break",
-   "prompt": "glass shattering on the floor with falling shards",
-   "seed": 22502,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "glass_clink",
-   "prompt": "glass tumblers clinking together",
-   "seed": 86691,
-   "seconds": 8,
-   "hint": "стаканы"
-  },
-  {
-   "key": "glass_set_down",
-   "prompt": "a glass tumbler set down on a wooden table",
-   "hint": "стакан на стол",
-   "seed": 7397,
-   "seconds": 8
-  },
-  {
-   "key": "gramophone",
-   "prompt": "an old gramophone playing through a horn, crackly",
-   "hint": "граммофон",
-   "seed": 35889,
-   "seconds": 8
-  },
-  {
-   "key": "grass",
-   "prompt": "dry grass and hay rustling underfoot",
-   "seed": 74171,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "gravel_fall",
-   "prompt": "gravel and small stones sliding and falling down a slope",
-   "hint": "осыпается гравий, камни",
-   "seed": 23484,
-   "seconds": 8
-  },
-  {
-   "key": "gravel_slide",
-   "prompt": "boots sliding on loose gravel",
-   "seed": 30919,
-   "seconds": 8,
-   "hint": "осыпь под ногами"
-  },
-  {
-   "key": "groan",
-   "prompt": "a low groan of pain",
-   "seed": 61527,
-   "seconds": 8,
-   "hint": "стон"
-  },
-  {
-   "key": "groan_pain",
-   "prompt": "a low groan of pain",
-   "hint": "стон боли",
-   "seed": 82059,
-   "seconds": 8
-  },
-  {
-   "key": "growl",
-   "prompt": "a low angry growl in the throat",
-   "hint": "рычание",
-   "seed": 17059,
-   "seconds": 8
-  },
-  {
-   "key": "gulp",
-   "prompt": "a man drinking with a gulp",
-   "hint": "глоток",
-   "seed": 29005,
-   "seconds": 8
-  },
-  {
-   "key": "gun_reload",
-   "prompt": "a rifle bolt worked, two metallic clacks",
-   "hint": "затвор ружья",
-   "seed": 77800,
-   "seconds": 8
-  },
-  {
-   "key": "gunshot",
-   "prompt": "a single gunshot cracking in the open air",
-   "seed": 52415,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "gunshot_far",
-   "prompt": "a single gunshot far away over water",
-   "hint": "дальний выстрел",
-   "seed": 97970,
-   "seconds": 8
-  },
-  {
-   "key": "hand_press",
-   "prompt": "a hand printing press pressing once",
-   "hint": "печатный станок",
-   "seed": 12842,
-   "seconds": 8
-  },
-  {
-   "key": "hanger",
-   "prompt": "a coat hanger scraping along a rail",
-   "hint": "вешалка",
-   "seed": 81199,
-   "seconds": 8
-  },
-  {
-   "key": "harness",
-   "prompt": "harness and buckles rattling as a horse moves",
-   "hint": "сбруя звенит",
-   "seed": 47446,
-   "seconds": 8
-  },
-  {
-   "key": "heartbeat",
-   "prompt": "a slow heavy heartbeat",
-   "hint": "сердцебиение",
-   "seed": 20777,
-   "seconds": 8
-  },
-  {
-   "key": "helmet_off",
-   "prompt": "a metal helmet lifted off and set down",
-   "hint": "снимают шлем",
-   "seed": 8689,
-   "seconds": 8
-  },
-  {
-   "key": "hooves_cobbles",
-   "prompt": "hooves on cobblestones, sharp and ringing",
-   "hint": "копыта по камню",
-   "seed": 18153,
-   "seconds": 8
-  },
-  {
-   "key": "hooves_gallop",
-   "prompt": "a horse galloping past at speed",
-   "hint": "галоп",
-   "seed": 81306,
-   "seconds": 8
-  },
-  {
-   "key": "hooves_stop",
-   "prompt": "a horse braking to a stop, hooves scraping",
-   "hint": "лошадь встала",
-   "seed": 75813,
-   "seconds": 8
-  },
-  {
-   "key": "hooves_trot",
-   "prompt": "a horse trotting, rhythmic hooves",
-   "hint": "рысь",
-   "seed": 64937,
-   "seconds": 8
-  },
-  {
-   "key": "hooves_walk",
-   "prompt": "a horse walking slowly, hooves on packed dirt",
-   "hint": "шаг копыт",
-   "seed": 5656,
-   "seconds": 8
-  },
-  {
-   "key": "horn",
-   "prompt": "a distant hunting horn",
-   "seed": 82025,
-   "seconds": 8,
-   "hint": "охотничий рог"
-  },
-  {
-   "key": "horse_hooves",
-   "prompt": "hooves clipping on cobblestones and slowing to a stop",
-   "seed": 18226,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "horse_neigh",
-   "prompt": "a horse neighing once",
-   "seed": 81225,
-   "seconds": 8,
-   "hint": "лошадь ржёт"
-  },
-  {
-   "key": "horse_snort",
-   "prompt": "a horse snorting and shaking its head",
-   "hint": "лошадь фыркает",
-   "seed": 48172,
-   "seconds": 8
-  },
-  {
-   "key": "hull_groan",
-   "prompt": "a wooden hull groaning in heavy seas",
-   "hint": "корпус скрипит",
-   "seed": 12958,
-   "seconds": 8
-  },
-  {
-   "key": "hum",
-   "prompt": "a woman humming a slow tune, no words",
-   "hint": "напевает",
-   "seed": 26520,
-   "seconds": 8
-  },
-  {
-   "key": "ice",
-   "prompt": "ice cracking under a foot on a frozen lake",
-   "seed": 25970,
-   "seconds": 8,
-   "hint": "лёд трещит"
-  },
-  {
-   "key": "ink",
-   "prompt": "a pen dipped into an inkwell",
-   "seed": 3511,
-   "seconds": 8,
-   "hint": "перо в чернильницу"
-  },
-  {
-   "key": "jail_bars",
-   "prompt": "heavy iron bars sliding shut with a clang",
-   "hint": "решётка, лязг",
-   "seed": 29774,
-   "seconds": 8
-  },
-  {
-   "key": "jail_door",
-   "prompt": "a heavy steel cell door closing and locking",
-   "hint": "тюремная дверь",
-   "seed": 29223,
-   "seconds": 8
-  },
-  {
-   "key": "jar_open",
-   "prompt": "a screw jar lid twisted open with a pop",
-   "hint": "банка открывается",
-   "seed": 28328,
-   "seconds": 8
-  },
-  {
-   "key": "kettle",
-   "prompt": "a kettle beginning to whistle over a flame",
-   "seed": 49703,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "kettle_whistle",
-   "prompt": "a kettle boiling and whistling",
-   "seed": 44928,
-   "seconds": 8,
-   "hint": "чайник свистит"
-  },
-  {
-   "key": "key_insert",
-   "prompt": "a key pushed into a lock and turned once",
-   "hint": "ключ вставлен",
-   "seed": 96774,
-   "seconds": 8
-  },
-  {
-   "key": "keyboard",
-   "prompt": "a computer keyboard typing steadily",
-   "seed": 64256,
-   "seconds": 8,
-   "hint": "клавиатура"
-  },
-  {
-   "key": "keys",
-   "prompt": "a bunch of keys jingling",
-   "seed": 60895,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "keys_jingle",
-   "prompt": "a bunch of keys jingling",
-   "seed": 95418,
-   "seconds": 8,
-   "hint": "связка ключей"
-  },
-  {
-   "key": "kiss",
-   "prompt": "a soft kiss",
-   "seed": 32093,
-   "seconds": 8,
-   "hint": "поцелуй"
-  },
-  {
-   "key": "kiss_cheek",
-   "prompt": "a soft kiss on the cheek",
-   "hint": "поцелуй в щёку",
-   "seed": 45623,
-   "seconds": 8
-  },
-  {
-   "key": "knife_chop",
-   "prompt": "a knife chopping vegetables on a wooden board",
-   "hint": "нож режет",
-   "seed": 5872,
-   "seconds": 8
-  },
-  {
-   "key": "knife_sharpen",
-   "prompt": "a knife drawn across a steel sharpener",
-   "hint": "точат нож",
-   "seed": 62778,
-   "seconds": 8
-  },
-  {
-   "key": "knock_glass",
-   "prompt": "a fingernail tapping on a glass pane",
-   "hint": "стук по стеклу",
-   "seed": 21234,
-   "seconds": 8
-  },
-  {
-   "key": "knock_metal",
-   "prompt": "a knuckle rapping on a metal gate",
-   "hint": "стук по металлу",
-   "seed": 27636,
-   "seconds": 8
-  },
-  {
-   "key": "knock_wood",
-   "prompt": "two knocks on a wooden door with a fist",
-   "hint": "стук по дереву",
-   "seed": 14217,
-   "seconds": 8
-  },
-  {
-   "key": "ladder",
-   "prompt": "a wooden ladder shifted and set against a wall",
-   "hint": "лестница-стремянка",
-   "seed": 37541,
-   "seconds": 8
-  },
-  {
-   "key": "lamp",
-   "prompt": "a glass lamp chimney being lifted and set down",
-   "seed": 9221,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "lamp_glass",
-   "prompt": "the glass chimney of an oil lamp being set down",
-   "seed": 58763,
-   "seconds": 8,
-   "hint": "стекло лампы"
-  },
-  {
-   "key": "latch",
-   "prompt": "a metal latch clicking shut on a wooden door",
-   "seed": 31976,
-   "seconds": 8,
-   "hint": "щеколда"
-  },
-  {
-   "key": "laugh_bitter",
-   "prompt": "a short bitter laugh through the nose",
-   "hint": "горький смешок",
-   "seed": 38446,
-   "seconds": 8
-  },
-  {
-   "key": "laugh_loud",
-   "prompt": "a man laughing loudly and heartily",
-   "hint": "хохот",
-   "seed": 84368,
-   "seconds": 8
-  },
-  {
-   "key": "laugh_soft",
-   "prompt": "a woman laughing softly, warm and short",
-   "hint": "смех тихий",
-   "seed": 59126,
-   "seconds": 8
-  },
-  {
-   "key": "laughter",
-   "prompt": "a short burst of laughter close by",
-   "seed": 69433,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "laughter_child",
-   "prompt": "a child laughing",
-   "hint": "детский смех",
-   "seed": 49509,
-   "seconds": 8
-  },
-  {
-   "key": "laughter_far",
-   "prompt": "laughter from another room",
-   "hint": "смех вдалеке",
-   "seed": 31049,
-   "seconds": 8
-  },
-  {
-   "key": "laughter_woman",
-   "prompt": "a woman laughing out loud",
-   "hint": "женский смех",
-   "seed": 68785,
-   "seconds": 8
-  },
-  {
-   "key": "leaves",
-   "prompt": "leaves and bushes rustling in a light wind",
-   "seed": 13793,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "ledger",
-   "prompt": "thick ledger pages turned and a pen ticking",
-   "hint": "счётная книга",
-   "seed": 51265,
-   "seconds": 8
-  },
-  {
-   "key": "letter",
-   "prompt": "an envelope being torn open and paper unfolded",
-   "seed": 53189,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "letter_fold",
-   "prompt": "a letter folded in three and smoothed flat",
-   "hint": "складывают письмо",
-   "seed": 33833,
-   "seconds": 8
-  },
-  {
-   "key": "lighter",
-   "prompt": "a cigarette lighter flicked and lit",
-   "hint": "зажигалка",
-   "seed": 94945,
-   "seconds": 8
-  },
-  {
-   "key": "lock_big",
-   "prompt": "a big iron lock snapping shut with a heavy clank",
-   "hint": "лязг большого замка",
-   "seed": 82947,
-   "seconds": 8
-  },
-  {
-   "key": "lock_pick",
-   "prompt": "a lock being picked with a thin tool",
-   "seed": 5678,
-   "seconds": 8,
-   "hint": "вскрывают замок"
-  },
-  {
-   "key": "lock_rusty",
-   "prompt": "a rusty lock grinding and finally clicking",
-   "hint": "замок заедает",
-   "seed": 42087,
-   "seconds": 8
-  },
-  {
-   "key": "machine",
-   "prompt": "a machine starting up with a metallic whine",
-   "seed": 21290,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "march_steps",
-   "prompt": "many boots marching in step on gravel",
-   "hint": "шаг строя",
-   "seed": 3051,
-   "seconds": 8
-  },
-  {
-   "key": "market_far",
-   "prompt": "a distant market crowd, muffled",
-   "hint": "рынок вдалеке",
-   "seed": 75295,
-   "seconds": 8
-  },
-  {
-   "key": "match",
-   "prompt": "a match striking and flaring up",
-   "seed": 1959,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "match_strike",
-   "prompt": "a match struck and flaring",
-   "seed": 68566,
-   "seconds": 8,
-   "hint": "спичка"
-  },
-  {
-   "key": "meat_cut",
-   "prompt": "a knife cutting meat on a board",
-   "hint": "режут мясо",
-   "seed": 53458,
-   "seconds": 8
-  },
-  {
-   "key": "mirror_break",
-   "prompt": "a mirror shattering on the floor",
-   "hint": "зеркало разбилось",
-   "seed": 22485,
-   "seconds": 8
-  },
-  {
-   "key": "moan",
-   "prompt": "a faint weak moan",
-   "hint": "слабый стон",
-   "seed": 83525,
-   "seconds": 8
-  },
-  {
-   "key": "mosquito",
-   "prompt": "a mosquito buzzing near the ear",
-   "hint": "комар",
-   "seed": 36265,
-   "seconds": 8
-  },
-  {
-   "key": "motorcycle",
-   "prompt": "a motorcycle accelerating past",
-   "hint": "мотоцикл",
-   "seed": 60474,
-   "seconds": 8
-  },
-  {
-   "key": "mouse_click",
-   "prompt": "a computer mouse clicking twice",
-   "hint": "мышь",
-   "seed": 28036,
-   "seconds": 8
-  },
-  {
-   "key": "murmur",
-   "prompt": "indistinct low murmuring under the breath",
-   "hint": "бормотание",
-   "seed": 22773,
-   "seconds": 8
-  },
-  {
-   "key": "music_box",
-   "prompt": "a small music box playing a slow waltz",
-   "hint": "музыкальная шкатулка",
-   "seed": 72184,
-   "seconds": 8
-  },
-  {
-   "key": "mutter_angry",
-   "prompt": "angry muttering under the breath",
-   "hint": "ворчание",
-   "seed": 23348,
-   "seconds": 8
-  },
-  {
-   "key": "nail_hammer",
-   "prompt": "a hammer driving nails into wood, four blows",
-   "hint": "молоток, гвозди",
-   "seed": 62556,
-   "seconds": 8
-  },
-  {
-   "key": "newspaper",
-   "prompt": "a newspaper folded and rustled",
-   "hint": "газета",
-   "seed": 99717,
-   "seconds": 8
-  },
-  {
-   "key": "notebook",
-   "prompt": "a small notebook opened and pages flipped",
-   "hint": "блокнот",
-   "seed": 77327,
-   "seconds": 8
-  },
-  {
-   "key": "oars",
-   "prompt": "oars pulling in water, rhythm of rowing",
-   "seed": 36873,
-   "seconds": 8,
-   "hint": "вёсла"
-  },
-  {
-   "key": "orders_shout",
-   "prompt": "a commanding voice shouting one order, muffled",
-   "hint": "команда",
-   "seed": 74684,
-   "seconds": 8
-  },
-  {
-   "key": "organ",
-   "prompt": "a church organ playing a single deep chord",
-   "seed": 44430,
-   "seconds": 8,
-   "hint": "орган"
-  },
-  {
-   "key": "ovation",
-   "prompt": "loud applause with cheers",
-   "hint": "овация",
-   "seed": 79292,
-   "seconds": 8
-  },
-  {
-   "key": "owl",
-   "prompt": "an owl hooting twice at night",
-   "hint": "сова",
-   "seed": 11826,
-   "seconds": 8
-  },
-  {
-   "key": "padlock",
-   "prompt": "a padlock snapping shut",
-   "seed": 49306,
-   "seconds": 8,
-   "hint": "висячий замок"
-  },
-  {
-   "key": "page_turn",
-   "prompt": "a page of a book turning",
-   "seed": 70815,
-   "seconds": 8,
-   "hint": "страница"
-  },
-  {
-   "key": "pan_drop",
-   "prompt": "a metal pot dropped on a stone floor",
-   "hint": "кастрюля упала",
-   "seed": 84399,
-   "seconds": 8
-  },
-  {
-   "key": "paper",
-   "prompt": "dry paper rustling and sheets being shuffled",
-   "seed": 79797,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "paper_crumple",
-   "prompt": "paper being crumpled into a ball",
-   "seed": 42451,
-   "seconds": 8,
-   "hint": "смяли бумагу"
-  },
-  {
-   "key": "paper_money",
-   "prompt": "paper money being counted and rustled",
-   "seed": 75025,
-   "seconds": 8,
-   "hint": "бумажные деньги"
-  },
-  {
-   "key": "paper_tear",
-   "prompt": "paper torn slowly along a fold",
-   "hint": "бумага рвётся",
-   "seed": 61866,
-   "seconds": 8
-  },
-  {
-   "key": "pen",
-   "prompt": "a pen scratching quickly on paper",
-   "seed": 17899,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "pen_cap",
-   "prompt": "a pen cap pulled off and clicked back on",
-   "hint": "колпачок ручки",
-   "seed": 91535,
-   "seconds": 8
-  },
-  {
-   "key": "pencil",
-   "prompt": "a pencil writing quickly on paper",
-   "seed": 78102,
-   "seconds": 8,
-   "hint": "карандаш"
-  },
-  {
-   "key": "phone",
-   "prompt": "a telephone ringing on a desk, old ring tone",
-   "seed": 44157,
-   "seconds": 8,
-   "hint": "телефонный звонок"
-  },
-  {
-   "key": "phone_dial",
-   "prompt": "an old phone dial turning and returning",
-   "hint": "набор номера",
-   "seed": 6017,
-   "seconds": 8
-  },
-  {
-   "key": "phone_hangup",
-   "prompt": "a phone handset put down with a clack",
-   "hint": "положили трубку",
-   "seed": 85445,
-   "seconds": 8
-  },
-  {
-   "key": "phone_sms",
-   "prompt": "a phone notification tone, short",
-   "hint": "уведомление",
-   "seed": 2402,
-   "seconds": 8
-  },
-  {
-   "key": "phone_vibrate",
-   "prompt": "a phone vibrating on a wooden table",
-   "hint": "телефон вибрирует",
-   "seed": 90815,
-   "seconds": 8
-  },
-  {
-   "key": "pig",
-   "prompt": "a pig grunting in a sty",
-   "hint": "свинья",
-   "seed": 75945,
-   "seconds": 8
-  },
-  {
-   "key": "plane",
-   "prompt": "a passenger plane passing overhead",
-   "seed": 39552,
-   "seconds": 8,
-   "hint": "самолёт"
-  },
-  {
-   "key": "plates",
-   "prompt": "plates stacked together in a kitchen",
-   "seed": 87859,
-   "seconds": 8,
-   "hint": "тарелки"
-  },
-  {
-   "key": "pocket_watch",
-   "prompt": "a pocket watch clicked open and ticking",
-   "hint": "карманные часы",
-   "seed": 69934,
-   "seconds": 8
-  },
-  {
-   "key": "pots_clatter",
-   "prompt": "pots and pans clattering together",
-   "hint": "грохот посуды",
-   "seed": 71266,
-   "seconds": 8
-  },
-  {
-   "key": "pray",
-   "prompt": "a whispered prayer, words unintelligible",
-   "hint": "молитва шёпотом",
-   "seed": 94767,
-   "seconds": 8
-  },
-  {
-   "key": "printer",
-   "prompt": "an office printer working",
-   "seed": 18593,
-   "seconds": 8,
-   "hint": "принтер"
-  },
-  {
-   "key": "punch",
-   "prompt": "a fist punch landing, close",
-   "hint": "удар кулаком",
-   "seed": 97782,
-   "seconds": 8
-  },
-  {
-   "key": "purse",
-   "prompt": "coins dropped into a leather purse",
-   "seed": 48259,
-   "seconds": 8,
-   "hint": "кошелёк"
-  },
-  {
-   "key": "quill",
-   "prompt": "a quill pen scratching across paper",
-   "seed": 48047,
-   "seconds": 8,
-   "hint": "перо скрипит"
-  },
-  {
-   "key": "radio",
-   "prompt": "a radio switching on with static hiss",
-   "seed": 55973,
-   "seconds": 8,
-   "hint": "радио"
-  },
-  {
-   "key": "radio_tune",
-   "prompt": "a radio dial scanning through stations",
-   "hint": "настройка радио",
-   "seed": 19313,
-   "seconds": 8
-  },
-  {
-   "key": "rain",
-   "prompt": "rain drumming on a windowsill",
-   "seed": 51012,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "rain_heavy",
-   "prompt": "heavy rain pouring down",
-   "hint": "ливень",
-   "seed": 50080,
-   "seconds": 8
-  },
-  {
-   "key": "rain_light",
-   "prompt": "light rain falling on leaves",
-   "hint": "лёгкий дождь",
-   "seed": 12857,
-   "seconds": 8
-  },
-  {
-   "key": "rain_window",
-   "prompt": "rain running down a window pane",
-   "hint": "дождь по стеклу",
-   "seed": 58604,
-   "seconds": 8
-  },
-  {
-   "key": "rats",
-   "prompt": "small animal scratching and rustling behind a wall",
-   "seed": 80055,
-   "seconds": 8,
-   "hint": "грызуны в стене"
-  },
-  {
-   "key": "ricochet",
-   "prompt": "a bullet ricocheting with a short whine",
-   "hint": "рикошет",
-   "seed": 38297,
-   "seconds": 8
-  },
-  {
-   "key": "rigging",
-   "prompt": "ropes and sails flapping in the wind",
-   "seed": 36632,
-   "seconds": 8,
-   "hint": "снасти"
-  },
-  {
-   "key": "rooster",
-   "prompt": "a rooster crowing at dawn",
-   "hint": "петух",
-   "seed": 39447,
-   "seconds": 8
-  },
-  {
-   "key": "rope",
-   "prompt": "a rope pulled tight through a pulley",
-   "seed": 65941,
-   "seconds": 8,
-   "hint": "верёвка"
-  },
-  {
-   "key": "rope_creak",
-   "prompt": "a rope stretching and creaking under weight",
-   "hint": "верёвка скрипит",
-   "seed": 40726,
-   "seconds": 8
-  },
-  {
-   "key": "safe",
-   "prompt": "a heavy safe door swinging open",
-   "seed": 22665,
-   "seconds": 8,
-   "hint": "сейф"
-  },
-  {
-   "key": "sails_flap",
-   "prompt": "sails flapping and filling with wind",
-   "hint": "паруса",
-   "seed": 43426,
-   "seconds": 8
-  },
-  {
-   "key": "samovar",
-   "prompt": "a samovar hissing and bubbling",
-   "hint": "самовар",
-   "seed": 45119,
-   "seconds": 8
-  },
-  {
-   "key": "saw",
-   "prompt": "a hand saw cutting wood",
-   "seed": 64097,
-   "seconds": 8,
-   "hint": "пила"
-  },
-  {
-   "key": "scissors",
-   "prompt": "scissors cutting through cloth, three snips",
-   "hint": "ножницы",
-   "seed": 98997,
-   "seconds": 8
-  },
-  {
-   "key": "scream",
-   "prompt": "a frightened scream somewhere in the distance",
-   "seed": 693,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "scream_far",
-   "prompt": "a distant scream, muffled",
-   "hint": "крик вдалеке",
-   "seed": 36606,
-   "seconds": 8
-  },
-  {
-   "key": "scream_man",
-   "prompt": "a man shouting once in fear",
-   "hint": "мужской крик",
-   "seed": 30232,
-   "seconds": 8
-  },
-  {
-   "key": "scream_woman",
-   "prompt": "a woman screaming in terror, close",
-   "hint": "женский крик ужаса",
-   "seed": 74674,
-   "seconds": 8
-  },
-  {
-   "key": "scuffle",
-   "prompt": "a short scuffle, clothes and blows, no words",
-   "hint": "драка",
-   "seed": 16917,
-   "seconds": 8
-  },
-  {
-   "key": "seagulls",
-   "prompt": "seagulls calling over the water",
-   "seed": 66189,
-   "seconds": 8,
-   "hint": "чайки"
-  },
-  {
-   "key": "sewing",
-   "prompt": "a treadle sewing machine working",
-   "seed": 82000,
-   "seconds": 8,
-   "hint": "швейная машинка"
-  },
-  {
-   "key": "shackles",
-   "prompt": "iron shackles rattling as a prisoner steps",
-   "hint": "кандалы",
-   "seed": 70371,
-   "seconds": 8
-  },
-  {
-   "key": "sheep",
-   "prompt": "sheep bleating in a field",
-   "hint": "овцы",
-   "seed": 52246,
-   "seconds": 8
-  },
-  {
-   "key": "shelf",
-   "prompt": "a wooden shelf being loaded, boards creaking",
-   "seed": 24580,
-   "seconds": 8,
-   "hint": "полка скрипит"
-  },
-  {
-   "key": "shield_hit",
-   "prompt": "a blow landing on a wooden shield",
-   "hint": "удар по щиту",
-   "seed": 90529,
-   "seconds": 8
-  },
-  {
-   "key": "ship_bell",
-   "prompt": "a ship's bell ringing twice",
-   "hint": "судовой колокол",
-   "seed": 50626,
-   "seconds": 8
-  },
-  {
-   "key": "ship_creak",
-   "prompt": "an old ship's hull creaking in the swell",
-   "seed": 63591,
-   "seconds": 8,
-   "hint": "скрип корпуса"
-  },
-  {
-   "key": "shirt_rustle",
-   "prompt": "clothing rustling as a man takes off his coat",
-   "seed": 69702,
-   "seconds": 8,
-   "hint": "шорох одежды"
-  },
-  {
-   "key": "shout",
-   "prompt": "a man shouting one angry phrase, muffled",
-   "hint": "крик, окрик",
-   "seed": 88896,
-   "seconds": 8
-  },
-  {
-   "key": "shout_far",
-   "prompt": "people shouting far away",
-   "hint": "крики вдалеке",
-   "seed": 33744,
-   "seconds": 8
-  },
-  {
-   "key": "shovel",
-   "prompt": "a shovel digging into gravel",
-   "seed": 65586,
-   "seconds": 8,
-   "hint": "лопата"
-  },
-  {
-   "key": "shower",
-   "prompt": "a shower running in a tiled bathroom",
-   "hint": "душ",
-   "seed": 7065,
-   "seconds": 8
-  },
-  {
-   "key": "shriek",
-   "prompt": "a high piercing shriek",
-   "hint": "визг",
-   "seed": 88123,
-   "seconds": 8
-  },
-  {
-   "key": "shutters",
-   "prompt": "wooden shutters banging in the wind",
-   "seed": 94615,
-   "seconds": 8,
-   "hint": "ставни хлопают"
-  },
-  {
-   "key": "sigh",
-   "prompt": "a long tired sigh",
-   "seed": 12594,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "sigh_deep",
-   "prompt": "a long heavy sigh",
-   "hint": "тяжёлый вздох",
-   "seed": 49539,
-   "seconds": 8
-  },
-  {
-   "key": "sigh_relief",
-   "prompt": "a breathy sigh of relief",
-   "hint": "вздох облегчения",
-   "seed": 33180,
-   "seconds": 8
-  },
-  {
-   "key": "signature",
-   "prompt": "a pen signing a name with quick strokes",
-   "hint": "подпись",
-   "seed": 16162,
-   "seconds": 8
-  },
-  {
-   "key": "silver",
-   "prompt": "silver cutlery being laid on a table",
-   "seed": 17030,
-   "seconds": 8,
-   "hint": "серебро, приборы"
-  },
-  {
-   "key": "sing_lullaby",
-   "prompt": "a soft lullaby sung quietly, no words",
-   "hint": "колыбельная",
-   "seed": 21431,
-   "seconds": 8
-  },
-  {
-   "key": "sink_fill",
-   "prompt": "water running into a metal sink",
-   "hint": "набирается раковина",
-   "seed": 64561,
-   "seconds": 8
-  },
-  {
-   "key": "slap",
-   "prompt": "a hard slap across the face",
-   "hint": "пощёчина",
-   "seed": 94911,
-   "seconds": 8
-  },
-  {
-   "key": "sleigh_bells",
-   "prompt": "sleigh bells jingling on a moving sleigh",
-   "seed": 95758,
-   "seconds": 8,
-   "hint": "бубенцы"
-  },
-  {
-   "key": "sleigh_ride",
-   "prompt": "a sleigh gliding over snow, bells jingling",
-   "hint": "сани по снегу",
-   "seed": 33228,
-   "seconds": 8
-  },
-  {
-   "key": "sneeze",
-   "prompt": "a man sneezing",
-   "seed": 25793,
-   "seconds": 8,
-   "hint": "чихание"
-  },
-  {
-   "key": "sniffle",
-   "prompt": "a person sniffling quietly",
-   "hint": "шмыгает носом",
-   "seed": 63254,
-   "seconds": 8
-  },
-  {
-   "key": "snore",
-   "prompt": "quiet steady snoring",
-   "hint": "храп",
-   "seed": 34443,
-   "seconds": 8
-  },
-  {
-   "key": "snort",
-   "prompt": "a contemptuous snort",
-   "hint": "фырканье",
-   "seed": 20160,
-   "seconds": 8
-  },
-  {
-   "key": "snow_blizzard",
-   "prompt": "a blizzard howling around a house",
-   "hint": "метель",
-   "seed": 9136,
-   "seconds": 8
-  },
-  {
-   "key": "snow_crunch",
-   "prompt": "snow crunching underfoot",
-   "seed": 81989,
-   "seconds": 8,
-   "hint": "снег скрипит"
-  },
-  {
-   "key": "sobbing",
-   "prompt": "a woman sobbing quietly",
-   "seed": 14066,
-   "seconds": 8,
-   "hint": "всхлипывания"
-  },
-  {
-   "key": "spark",
-   "prompt": "an electric spark crackling",
-   "seed": 30835,
-   "seconds": 8,
-   "hint": "искра"
-  },
-  {
-   "key": "spoon_plate",
-   "prompt": "a spoon scraping a ceramic plate",
-   "hint": "ложка по тарелке",
-   "seed": 9079,
-   "seconds": 8
-  },
-  {
-   "key": "spoon_stir",
-   "prompt": "a spoon stirring in a cup, three turns",
-   "hint": "помешивают ложкой",
-   "seed": 94914,
-   "seconds": 8
-  },
-  {
-   "key": "spurs",
-   "prompt": "spurs jingling with each step",
-   "seed": 34069,
-   "seconds": 8,
-   "hint": "шпоры"
-  },
-  {
-   "key": "stairs_creak",
-   "prompt": "stairs creaking one after another, slow steps",
-   "seed": 97138,
-   "seconds": 8,
-   "hint": "лестница скрипит"
-  },
-  {
-   "key": "stamp",
-   "prompt": "a rubber stamp pressing onto paper",
-   "seed": 25069,
-   "seconds": 8,
-   "hint": "печать, штамп"
-  },
-  {
-   "key": "station_hall",
-   "prompt": "a large station hall, footsteps and echoes",
-   "hint": "вокзальный зал",
-   "seed": 95584,
-   "seconds": 8
-  },
-  {
-   "key": "steam",
-   "prompt": "a steam engine venting steam",
-   "seed": 36745,
-   "seconds": 8,
-   "hint": "пар"
-  },
-  {
-   "key": "steam_whistle",
-   "prompt": "a steam locomotive whistle, long and low",
-   "hint": "паровозный гудок",
-   "seed": 12020,
-   "seconds": 8
-  },
-  {
-   "key": "steps_run",
-   "prompt": "running footsteps on a wooden floor",
-   "hint": "бег",
-   "seed": 56388,
-   "seconds": 8
-  },
-  {
-   "key": "steps_slow",
-   "prompt": "slow heavy footsteps approaching",
-   "hint": "медленные шаги",
-   "seed": 89296,
-   "seconds": 8
-  },
-  {
-   "key": "stone_fall",
-   "prompt": "stones falling and tumbling down a slope",
-   "seed": 98455,
-   "seconds": 8,
-   "hint": "камнепад"
-  },
-  {
-   "key": "street_crier",
-   "prompt": "a street crier shouting one line, distant",
-   "hint": "глашатай",
-   "seed": 17004,
-   "seconds": 8
-  },
-  {
-   "key": "swallow",
-   "prompt": "a hard dry swallow in the throat",
-   "hint": "сглатывает",
-   "seed": 1536,
-   "seconds": 8
-  },
-  {
-   "key": "sword",
-   "prompt": "steel blades clashing once",
-   "seed": 67431,
-   "seconds": 8,
-   "hint": "клинки"
-  },
-  {
-   "key": "sword_draw",
-   "prompt": "a sword drawn from its scabbard with a ring",
-   "hint": "клинок из ножен",
-   "seed": 86232,
-   "seconds": 8
-  },
-  {
-   "key": "sword_sheath",
-   "prompt": "a sword pushed back into the scabbard",
-   "hint": "клинок в ножны",
-   "seed": 57975,
-   "seconds": 8
-  },
-  {
-   "key": "table",
-   "prompt": "a heavy table being pushed an inch across the floor",
-   "seed": 72388,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "table_slam",
-   "prompt": "a fist hitting a wooden table",
-   "seed": 16031,
-   "seconds": 8,
-   "hint": "удар по столу"
-  },
-  {
-   "key": "tap_drip",
-   "prompt": "a tap dripping slowly into a sink",
-   "hint": "капает вода из крана",
-   "seed": 88449,
-   "seconds": 8
-  },
-  {
-   "key": "tea_pour",
-   "prompt": "tea poured into a cup",
-   "hint": "наливают чай",
-   "seed": 44884,
-   "seconds": 8
-  },
-  {
-   "key": "teeth_chatter",
-   "prompt": "teeth chattering from cold or fear",
-   "hint": "зубы стучат",
-   "seed": 97985,
-   "seconds": 8
-  },
-  {
-   "key": "telegram",
-   "prompt": "a telegraph key tapping in a post office",
-   "seed": 45222,
-   "seconds": 8,
-   "hint": "телеграф"
-  },
-  {
-   "key": "thunder",
-   "prompt": "a distant thunder roll, low and long",
-   "seed": 45559,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "thunder_close",
-   "prompt": "a close thunderclap with a sharp crack",
-   "hint": "гром близко",
-   "seed": 77166,
-   "seconds": 8
-  },
-  {
-   "key": "thunder_far",
-   "prompt": "distant thunder rolling over the hills",
-   "seed": 10252,
-   "seconds": 8,
-   "hint": "дальний гром"
-  },
-  {
-   "key": "tool",
-   "prompt": "hammer blows on metal ringing out",
-   "seed": 66334,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "torch_flame",
-   "prompt": "a torch burning with a soft roar",
-   "hint": "факел",
-   "seed": 5220,
-   "seconds": 8
-  },
-  {
-   "key": "train",
-   "prompt": "a steam locomotive approaching and braking with a hiss",
-   "seed": 42612,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "train_arrive",
-   "prompt": "a train arriving and braking to a stop",
-   "hint": "поезд прибывает",
-   "seed": 6529,
-   "seconds": 8
-  },
-  {
-   "key": "train_pass",
-   "prompt": "a train passing close at speed, doppler",
-   "hint": "поезд проходит",
-   "seed": 8206,
-   "seconds": 8
-  },
-  {
-   "key": "tree_fall",
-   "prompt": "a big tree cracking and crashing to the ground",
-   "hint": "дерево падает",
-   "seed": 87577,
-   "seconds": 8
-  },
-  {
-   "key": "trunk",
-   "prompt": "a leather trunk lid closing",
-   "seed": 76573,
-   "seconds": 8,
-   "hint": "чемодан"
-  },
-  {
-   "key": "tv_static",
-   "prompt": "a television switching on with static",
-   "hint": "телевизор, помехи",
-   "seed": 12273,
-   "seconds": 8
-  },
-  {
-   "key": "typewriter",
-   "prompt": "a mechanical typewriter typing fast, carriage return",
-   "seed": 31894,
-   "seconds": 8,
-   "hint": "пишущая машинка"
-  },
-  {
-   "key": "wagon_door",
-   "prompt": "a sliding train wagon door pulled open",
-   "hint": "дверь вагона",
-   "seed": 65936,
-   "seconds": 8
-  },
-  {
-   "key": "wardrobe_door",
-   "prompt": "a wardrobe door opened and closed",
-   "hint": "дверца шкафа",
-   "seed": 17279,
-   "seconds": 8
-  },
-  {
-   "key": "washing",
-   "prompt": "laundry being scrubbed by hand in a basin",
-   "seed": 90209,
-   "seconds": 8,
-   "hint": "стирка"
-  },
-  {
-   "key": "water_pour",
-   "prompt": "water poured into a glass until it is full",
-   "seed": 43392,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "water_pump",
-   "prompt": "a hand water pump working, water gushing",
-   "hint": "насос",
-   "seed": 63163,
-   "seconds": 8
-  },
-  {
-   "key": "water_running",
-   "prompt": "water running steadily from a tap",
-   "seed": 42637,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "water_sea",
-   "prompt": "gentle waves lapping against a shore",
-   "seed": 78572,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "water_splash",
-   "prompt": "a single splash of water with drops falling back",
-   "seed": 8745,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "waves_slap",
-   "prompt": "a wave slapping against a wooden hull",
-   "hint": "удар волны",
-   "seed": 80383,
-   "seconds": 8
-  },
-  {
-   "key": "wax_seal",
-   "prompt": "wax being dripped onto a letter and sealed",
-   "seed": 51852,
-   "seconds": 8,
-   "hint": "сургуч"
-  },
-  {
-   "key": "weapon",
-   "prompt": "steel scraping softly as a blade leaves its sheath",
-   "seed": 12975,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "weeping",
-   "prompt": "a man weeping, quiet and heavy",
-   "hint": "плачет мужчина",
-   "seed": 92698,
-   "seconds": 8
-  },
-  {
-   "key": "well_bucket",
-   "prompt": "a bucket drawn up from a well, rope and splash",
-   "hint": "ведро в колодце",
-   "seed": 85938,
-   "seconds": 8
-  },
-  {
-   "key": "wheels",
-   "prompt": "iron carriage wheels rumbling over cobblestones",
-   "seed": 810,
-   "seconds": 8,
-   "hint": "колёса по камню"
-  },
-  {
-   "key": "whip",
-   "prompt": "a whip cracking once at close range",
-   "seed": 96591,
-   "seconds": 8,
-   "hint": "кнут"
-  },
-  {
-   "key": "whisper",
-   "prompt": "a barely audible whisper, no words",
-   "seed": 20757,
-   "seconds": 8,
-   "hint": "шёпот"
-  },
-  {
-   "key": "whisper_female",
-   "prompt": "a woman whispering, barely audible, no words",
-   "hint": "шёпот женский",
-   "seed": 54501,
-   "seconds": 8
-  },
-  {
-   "key": "whisper_male",
-   "prompt": "a man whispering close to the ear, no words",
-   "hint": "шёпот мужской",
-   "seed": 24205,
-   "seconds": 8
-  },
-  {
-   "key": "whistle",
-   "prompt": "a sharp whistle followed by a long low horn",
-   "seed": 17428,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "whistle_human",
-   "prompt": "a man whistling a short tune",
-   "hint": "человек свистит",
-   "seed": 3686,
-   "seconds": 8
-  },
-  {
-   "key": "wind",
-   "prompt": "a gust of wind rattling a window frame",
-   "seed": 80838,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "wind_gust",
-   "prompt": "a strong gust of wind buffeting a house",
-   "seed": 13860,
-   "seconds": 8,
-   "hint": "порыв ветра"
-  },
-  {
-   "key": "wind_whistle",
-   "prompt": "wind whistling through wires",
-   "hint": "ветер в проводах",
-   "seed": 12830,
-   "seconds": 8
-  },
-  {
-   "key": "window",
-   "prompt": "a window frame creaking open",
-   "seed": 21851,
-   "seconds": 8,
-   "hint": null
-  },
-  {
-   "key": "window_close",
-   "prompt": "a window sash pulled down and closing with a knock",
-   "hint": "окно закрывают",
-   "seed": 51902,
-   "seconds": 8
-  },
-  {
-   "key": "window_open",
-   "prompt": "a window sash being lifted open",
-   "seed": 96692,
-   "seconds": 8,
-   "hint": "окно открывают"
-  },
-  {
-   "key": "window_shatter",
-   "prompt": "a window shattering into pieces",
-   "hint": "стекло вдребезги",
-   "seed": 83997,
-   "seconds": 8
-  },
-  {
-   "key": "wine",
-   "prompt": "wine poured slowly into a glass",
-   "seed": 27230,
-   "seconds": 8,
-   "hint": "вино в бокал"
-  },
-  {
-   "key": "wolves",
-   "prompt": "wolves howling far away at night",
-   "seed": 85648,
-   "seconds": 8,
-   "hint": "волки"
-  },
-  {
-   "key": "wood_break",
-   "prompt": "a dry branch splitting and breaking",
-   "seed": 41900,
-   "seconds": 8,
-   "hint": "сломалось дерево"
-  },
-  {
-   "key": "yawn",
-   "prompt": "a long audible yawn",
-   "hint": "зевота",
-   "seed": 75231,
-   "seconds": 8
-  },
-  {
-   "key": "zipper",
-   "prompt": "a jacket zipper pulled up",
-   "hint": "молния",
-   "seed": 77368,
-   "seconds": 8
-  }
- ]
+  "sounds": [
+    {
+      "key": "abacus",
+      "prompt": "wooden beads sliding on an abacus",
+      "hint": "счёты",
+      "seed": 44450,
+      "seconds": 8
+    },
+    {
+      "key": "alarm",
+      "prompt": "a small alarm clock ringing on a nightstand",
+      "seed": 98508,
+      "seconds": 8,
+      "hint": "будильник"
+    },
+    {
+      "key": "anchor_chain",
+      "prompt": "an anchor chain running out over the bow",
+      "hint": "якорная цепь",
+      "seed": 69126,
+      "seconds": 8
+    },
+    {
+      "key": "animal",
+      "prompt": "an animal shifting and lowing in a stall",
+      "seed": 43944,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "anvil",
+      "prompt": "a blacksmith hammering iron on an anvil",
+      "seed": 91110,
+      "seconds": 8,
+      "hint": "наковальня"
+    },
+    {
+      "key": "applause",
+      "prompt": "applause in a hall, a dozen people",
+      "hint": "аплодисменты",
+      "seed": 1623,
+      "seconds": 8
+    },
+    {
+      "key": "argue",
+      "prompt": "two muffled voices arguing, words unintelligible",
+      "hint": "спор двух голосов",
+      "seed": 10357,
+      "seconds": 8
+    },
+    {
+      "key": "armor",
+      "prompt": "plate armor clanking with each step",
+      "seed": 63617,
+      "seconds": 8,
+      "hint": "доспехи"
+    },
+    {
+      "key": "armor_walk",
+      "prompt": "plate armour walking steadily on stone",
+      "hint": "доспехи идут",
+      "seed": 41247,
+      "seconds": 8
+    },
+    {
+      "key": "army_camp",
+      "prompt": "an army camp at night, fires and low voices",
+      "hint": "военный лагерь",
+      "seed": 17097,
+      "seconds": 8
+    },
+    {
+      "key": "arrow",
+      "prompt": "an arrow flying past and hitting wood",
+      "seed": 1955,
+      "seconds": 8,
+      "hint": "стрела"
+    },
+    {
+      "key": "arrow_impact",
+      "prompt": "an arrow hitting a wooden shield",
+      "hint": "стрела попала",
+      "seed": 80793,
+      "seconds": 8
+    },
+    {
+      "key": "axe",
+      "prompt": "an axe striking a tree trunk",
+      "seed": 52594,
+      "seconds": 8,
+      "hint": "топор"
+    },
+    {
+      "key": "baby",
+      "prompt": "a baby crying in another room",
+      "seed": 34136,
+      "seconds": 8,
+      "hint": "плач ребёнка"
+    },
+    {
+      "key": "baby_laugh",
+      "prompt": "a baby laughing",
+      "hint": "смеётся младенец",
+      "seed": 6660,
+      "seconds": 8
+    },
+    {
+      "key": "bag",
+      "prompt": "a leather bag unbuckled and set on the floor",
+      "seed": 89057,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "bag_zip",
+      "prompt": "a bag zip being pulled open",
+      "hint": "молния сумки",
+      "seed": 3742,
+      "seconds": 8
+    },
+    {
+      "key": "ballpoint",
+      "prompt": "a ballpoint pen writing steadily on paper",
+      "hint": "шариковая ручка",
+      "seed": 43996,
+      "seconds": 8
+    },
+    {
+      "key": "banner_flap",
+      "prompt": "a large banner flapping in the wind",
+      "hint": "знамя полощется",
+      "seed": 58892,
+      "seconds": 8
+    },
+    {
+      "key": "bath",
+      "prompt": "water filling a bathtub",
+      "seed": 11531,
+      "seconds": 8,
+      "hint": "ванна наполняется"
+    },
+    {
+      "key": "bed_creak",
+      "prompt": "an old bed frame creaking under weight",
+      "hint": "кровать скрипит",
+      "seed": 41256,
+      "seconds": 8
+    },
+    {
+      "key": "bees",
+      "prompt": "bees buzzing around a hive",
+      "hint": "пчёлы",
+      "seed": 49581,
+      "seconds": 8
+    },
+    {
+      "key": "bell",
+      "prompt": "a small hand bell ringing twice",
+      "seed": 55508,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "bell_peal",
+      "prompt": "church bells ringing a peal together",
+      "hint": "трезвон",
+      "seed": 82267,
+      "seconds": 8
+    },
+    {
+      "key": "bell_single",
+      "prompt": "one deep church bell strike with long decay",
+      "hint": "один удар колокола",
+      "seed": 52106,
+      "seconds": 8
+    },
+    {
+      "key": "bell_tower",
+      "prompt": "a bell tower bell swinging with a slow decay",
+      "seed": 68760,
+      "seconds": 8,
+      "hint": "колокольня"
+    },
+    {
+      "key": "bicycle_bell",
+      "prompt": "a bicycle bell ringing twice",
+      "hint": "велосипедный звонок",
+      "seed": 20343,
+      "seconds": 8
+    },
+    {
+      "key": "big_keys",
+      "prompt": "a large ring of iron keys jingling",
+      "hint": "связка больших ключей",
+      "seed": 31431,
+      "seconds": 8
+    },
+    {
+      "key": "bird",
+      "prompt": "birds fluttering up from a bush",
+      "seed": 16249,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "blade_sharpen",
+      "prompt": "a blade being sharpened on a whetstone",
+      "hint": "точат клинок",
+      "seed": 37278,
+      "seconds": 8
+    },
+    {
+      "key": "blanket",
+      "prompt": "a heavy blanket shaken out and laid down",
+      "hint": "одеяло",
+      "seed": 79964,
+      "seconds": 8
+    },
+    {
+      "key": "blotting",
+      "prompt": "a blotting sheet pressed on wet ink",
+      "hint": "промокашка",
+      "seed": 41482,
+      "seconds": 8
+    },
+    {
+      "key": "body_fall",
+      "prompt": "a body falling heavily to the floor",
+      "hint": "тело падает",
+      "seed": 8720,
+      "seconds": 8
+    },
+    {
+      "key": "boiling",
+      "prompt": "a pot of water boiling, lid rattling",
+      "seed": 41419,
+      "seconds": 8,
+      "hint": "кипит вода"
+    },
+    {
+      "key": "bolt",
+      "prompt": "an iron bolt sliding home",
+      "seed": 77515,
+      "seconds": 8,
+      "hint": "засов"
+    },
+    {
+      "key": "bolt_heavy",
+      "prompt": "a heavy iron bolt pulled back with a scrape",
+      "hint": "тяжёлый засов",
+      "seed": 53007,
+      "seconds": 8
+    },
+    {
+      "key": "book_drop",
+      "prompt": "a closed book dropped onto a desk",
+      "seed": 8237,
+      "seconds": 8,
+      "hint": "книга упала на стол"
+    },
+    {
+      "key": "book_page",
+      "prompt": "pages of a book turning slowly",
+      "seed": 54749,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "book_slam",
+      "prompt": "a thick book slammed shut",
+      "seed": 22305,
+      "seconds": 8,
+      "hint": "книга захлопнулась"
+    },
+    {
+      "key": "boots_floor",
+      "prompt": "heavy boots stepping onto a wooden floor",
+      "seed": 11111,
+      "seconds": 8,
+      "hint": "сапоги по полу"
+    },
+    {
+      "key": "bottle",
+      "prompt": "a bottle set on a table with a dull clink",
+      "seed": 53340,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "bottle_drop",
+      "prompt": "a glass bottle falling and rolling",
+      "seed": 63358,
+      "seconds": 8,
+      "hint": "бутылка падает"
+    },
+    {
+      "key": "bow_draw",
+      "prompt": "a bowstring drawn and released",
+      "hint": "натягивают лук",
+      "seed": 37567,
+      "seconds": 8
+    },
+    {
+      "key": "brake_squeal",
+      "prompt": "brakes squealing as a train slows",
+      "hint": "визг тормозов",
+      "seed": 43771,
+      "seconds": 8
+    },
+    {
+      "key": "bread_cut",
+      "prompt": "a loaf of bread being sliced",
+      "hint": "режут хлеб",
+      "seed": 80386,
+      "seconds": 8
+    },
+    {
+      "key": "breath",
+      "prompt": "heavy breathing of a tired man",
+      "seed": 70204,
+      "seconds": 8,
+      "hint": "дыхание"
+    },
+    {
+      "key": "breath_heavy",
+      "prompt": "heavy breathing after running",
+      "hint": "тяжёлое дыхание",
+      "seed": 48733,
+      "seconds": 8
+    },
+    {
+      "key": "breath_shaky",
+      "prompt": "a trembling breath of fear",
+      "hint": "дрожащее дыхание",
+      "seed": 18720,
+      "seconds": 8
+    },
+    {
+      "key": "breathing_calm",
+      "prompt": "calm breathing of a sleeping person",
+      "hint": "спокойное дыхание",
+      "seed": 12155,
+      "seconds": 8
+    },
+    {
+      "key": "broom",
+      "prompt": "a broom sweeping a wooden floor",
+      "seed": 51143,
+      "seconds": 8,
+      "hint": "метла"
+    },
+    {
+      "key": "bucket",
+      "prompt": "a metal bucket set down on stone",
+      "seed": 45307,
+      "seconds": 8,
+      "hint": "ведро"
+    },
+    {
+      "key": "bugle",
+      "prompt": "a bugle call in the distance",
+      "seed": 68877,
+      "seconds": 8,
+      "hint": "горн"
+    },
+    {
+      "key": "camera",
+      "prompt": "an old camera shutter clicking once",
+      "hint": "фотоаппарат",
+      "seed": 38009,
+      "seconds": 8
+    },
+    {
+      "key": "campfire",
+      "prompt": "a campfire crackling, logs settling",
+      "hint": "костёр",
+      "seed": 4904,
+      "seconds": 8
+    },
+    {
+      "key": "candle_blow",
+      "prompt": "a candle being blown out",
+      "seed": 41373,
+      "seconds": 8,
+      "hint": "задули свечу"
+    },
+    {
+      "key": "candle_snuff",
+      "prompt": "a candle snuffed out with a small hiss",
+      "hint": "гасят свечу",
+      "seed": 78681,
+      "seconds": 8
+    },
+    {
+      "key": "cannon",
+      "prompt": "a cannon firing far away, heavy boom",
+      "seed": 95989,
+      "seconds": 8,
+      "hint": "пушка"
+    },
+    {
+      "key": "car",
+      "prompt": "a car pulling up, its engine idling, then stopping",
+      "seed": 28641,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "car_door",
+      "prompt": "a car door opened and shut",
+      "hint": "дверца машины",
+      "seed": 49299,
+      "seconds": 8
+    },
+    {
+      "key": "car_engine",
+      "prompt": "a car engine starting and idling",
+      "hint": "двигатель машины",
+      "seed": 79448,
+      "seconds": 8
+    },
+    {
+      "key": "car_horn",
+      "prompt": "a car horn honking in traffic",
+      "seed": 84395,
+      "seconds": 8,
+      "hint": "сигнал машины"
+    },
+    {
+      "key": "car_pass",
+      "prompt": "a car passing on a wet road",
+      "hint": "машина проезжает",
+      "seed": 86751,
+      "seconds": 8
+    },
+    {
+      "key": "carriage_start",
+      "prompt": "a carriage starting to move, wheels and horse",
+      "hint": "экипаж трогается",
+      "seed": 38071,
+      "seconds": 8
+    },
+    {
+      "key": "carriage_stop",
+      "prompt": "a carriage stopping, wheels and harness",
+      "hint": "экипаж остановился",
+      "seed": 85045,
+      "seconds": 8
+    },
+    {
+      "key": "cart",
+      "prompt": "wooden wheels rumbling over cobblestones",
+      "seed": 52125,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "cash_register",
+      "prompt": "an old cash register drawer opening with a bell",
+      "seed": 52527,
+      "seconds": 8,
+      "hint": "касса"
+    },
+    {
+      "key": "cat",
+      "prompt": "a cat meowing briefly",
+      "seed": 43703,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "cattle",
+      "prompt": "cows lowing in a barn",
+      "seed": 91160,
+      "seconds": 8,
+      "hint": "скот"
+    },
+    {
+      "key": "cell_gate",
+      "prompt": "a prison gate opening slowly on iron hinges",
+      "hint": "ворота тюрьмы",
+      "seed": 55264,
+      "seconds": 8
+    },
+    {
+      "key": "censer",
+      "prompt": "a censer swinging, chains clinking softly",
+      "hint": "кадило",
+      "seed": 43541,
+      "seconds": 8
+    },
+    {
+      "key": "chain",
+      "prompt": "a heavy chain being dragged over stone",
+      "seed": 4584,
+      "seconds": 8,
+      "hint": "цепь"
+    },
+    {
+      "key": "chain_clank",
+      "prompt": "a heavy chain dropped and clanking on stone",
+      "hint": "цепь с лязгом",
+      "seed": 69098,
+      "seconds": 8
+    },
+    {
+      "key": "chair",
+      "prompt": "a chair scraping on the floor as someone sits down",
+      "seed": 30131,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "chair_scrape",
+      "prompt": "a wooden chair scraping on a stone floor",
+      "seed": 26527,
+      "seconds": 8,
+      "hint": "стул скрипнул по полу"
+    },
+    {
+      "key": "chalk",
+      "prompt": "chalk writing on a blackboard, short squeaks",
+      "hint": "мел по доске",
+      "seed": 41759,
+      "seconds": 8
+    },
+    {
+      "key": "charcoal",
+      "prompt": "a charcoal stick drawing on rough paper",
+      "hint": "уголь по бумаге",
+      "seed": 59509,
+      "seconds": 8
+    },
+    {
+      "key": "chest",
+      "prompt": "a heavy wooden chest lid being lowered",
+      "seed": 67639,
+      "seconds": 8,
+      "hint": "сундук"
+    },
+    {
+      "key": "chewing",
+      "prompt": "someone chewing close to the mic",
+      "hint": "жуёт",
+      "seed": 68689,
+      "seconds": 8
+    },
+    {
+      "key": "chicken",
+      "prompt": "hens clucking in a yard",
+      "hint": "куры",
+      "seed": 62008,
+      "seconds": 8
+    },
+    {
+      "key": "child",
+      "prompt": "a child's voice calling out",
+      "seed": 35142,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "children_play",
+      "prompt": "children playing and shouting far away",
+      "hint": "дети играют",
+      "seed": 42169,
+      "seconds": 8
+    },
+    {
+      "key": "choir",
+      "prompt": "a church choir singing softly, no words",
+      "seed": 26920,
+      "seconds": 8,
+      "hint": "хор"
+    },
+    {
+      "key": "chuckle",
+      "prompt": "a low short chuckle",
+      "hint": "усмешка",
+      "seed": 95172,
+      "seconds": 8
+    },
+    {
+      "key": "church_bell",
+      "prompt": "a deep church bell striking slowly",
+      "seed": 2142,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "church_door",
+      "prompt": "a massive church door opening with a deep echo",
+      "hint": "дверь храма",
+      "seed": 9238,
+      "seconds": 8
+    },
+    {
+      "key": "clap_single",
+      "prompt": "a single clap of the hands",
+      "hint": "один хлопок",
+      "seed": 34520,
+      "seconds": 8
+    },
+    {
+      "key": "clear_throat",
+      "prompt": "an old man clearing his throat",
+      "hint": "откашлялся",
+      "seed": 97814,
+      "seconds": 8
+    },
+    {
+      "key": "clock",
+      "prompt": "a clock ticking and then chiming the hour",
+      "seed": 62318,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "clock_strike",
+      "prompt": "a wall clock striking the hour",
+      "seed": 68932,
+      "seconds": 8,
+      "hint": "часы бьют"
+    },
+    {
+      "key": "clock_tick",
+      "prompt": "a wall clock ticking steadily",
+      "hint": "часы тикают",
+      "seed": 62620,
+      "seconds": 8
+    },
+    {
+      "key": "clock_tower",
+      "prompt": "a clock tower mechanism striking",
+      "seed": 90076,
+      "seconds": 8,
+      "hint": "часы на башне"
+    },
+    {
+      "key": "clockwork",
+      "prompt": "a small clockwork mechanism whirring",
+      "seed": 43926,
+      "seconds": 8,
+      "hint": "часовой механизм"
+    },
+    {
+      "key": "cloth",
+      "prompt": "cloth rustling as a coat is taken off",
+      "seed": 82703,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "cloth_tear",
+      "prompt": "fabric tearing",
+      "seed": 76713,
+      "seconds": 8,
+      "hint": "ткань рвётся"
+    },
+    {
+      "key": "coach_door",
+      "prompt": "a carriage door opened and slammed shut",
+      "hint": "дверца экипажа",
+      "seed": 29738,
+      "seconds": 8
+    },
+    {
+      "key": "coin",
+      "prompt": "coins clinking and being counted on a table",
+      "seed": 72312,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "coin_slide",
+      "prompt": "coins sliding across a wooden counter",
+      "seed": 31627,
+      "seconds": 8,
+      "hint": "монеты по стойке"
+    },
+    {
+      "key": "cork",
+      "prompt": "a cork popping out of a bottle",
+      "seed": 94903,
+      "seconds": 8,
+      "hint": "пробка"
+    },
+    {
+      "key": "cough",
+      "prompt": "a dry heavy cough",
+      "seed": 9139,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "crack",
+      "prompt": "a loud crack of breaking timber",
+      "seed": 63148,
+      "seconds": 8,
+      "hint": "треск"
+    },
+    {
+      "key": "crowd",
+      "prompt": "a murmur of many voices and shuffling feet",
+      "seed": 81493,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "crowd_boo",
+      "prompt": "a crowd booing and whistling",
+      "hint": "свист и неодобрение",
+      "seed": 60168,
+      "seconds": 8
+    },
+    {
+      "key": "crowd_cheer",
+      "prompt": "a crowd cheering together",
+      "hint": "толпа ликует",
+      "seed": 22089,
+      "seconds": 8
+    },
+    {
+      "key": "crowd_gasp",
+      "prompt": "a crowd gasping together",
+      "hint": "толпа ахнула",
+      "seed": 10663,
+      "seconds": 8
+    },
+    {
+      "key": "crowd_panic",
+      "prompt": "a crowd running and shouting in panic",
+      "hint": "паника в толпе",
+      "seed": 91284,
+      "seconds": 8
+    },
+    {
+      "key": "crowd_wait",
+      "prompt": "a waiting crowd murmuring in a hall",
+      "hint": "люди ждут, гул",
+      "seed": 60742,
+      "seconds": 8
+    },
+    {
+      "key": "cry",
+      "prompt": "someone crying quietly",
+      "seed": 9819,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "cry_child",
+      "prompt": "a small child crying loudly",
+      "hint": "плачет ребёнок",
+      "seed": 70496,
+      "seconds": 8
+    },
+    {
+      "key": "crying_woman_far",
+      "prompt": "a woman crying behind a wall, muffled",
+      "hint": "плач за стеной",
+      "seed": 56114,
+      "seconds": 8
+    },
+    {
+      "key": "cup",
+      "prompt": "a cup set down on a saucer with a light clink",
+      "seed": 82039,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "cupboard",
+      "prompt": "a cupboard door opening, crockery inside",
+      "seed": 3816,
+      "seconds": 8,
+      "hint": "буфет"
+    },
+    {
+      "key": "curtain",
+      "prompt": "curtain rings sliding along a rod",
+      "seed": 87204,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "curtain_close",
+      "prompt": "a heavy curtain pulled shut along its rail",
+      "hint": "задёргивают занавес",
+      "seed": 85303,
+      "seconds": 8
+    },
+    {
+      "key": "curtain_open",
+      "prompt": "a heavy curtain pulled along its rail",
+      "seed": 7002,
+      "seconds": 8,
+      "hint": "занавес"
+    },
+    {
+      "key": "cutlery",
+      "prompt": "silver cutlery being laid on a table",
+      "seed": 69317,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "dishes",
+      "prompt": "plates and cutlery clattering softly",
+      "seed": 83393,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "dishes_wash",
+      "prompt": "dishes being washed in a basin",
+      "hint": "моют посуду",
+      "seed": 96590,
+      "seconds": 8
+    },
+    {
+      "key": "dock_creak",
+      "prompt": "a wooden pier creaking underfoot",
+      "hint": "причал",
+      "seed": 59707,
+      "seconds": 8
+    },
+    {
+      "key": "dog",
+      "prompt": "a dog barking twice somewhere close",
+      "seed": 60311,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "dog_far",
+      "prompt": "a dog barking far away",
+      "hint": "собака вдалеке",
+      "seed": 69578,
+      "seconds": 8
+    },
+    {
+      "key": "door_bell",
+      "prompt": "a doorbell ringing twice inside a flat",
+      "seed": 3276,
+      "seconds": 8,
+      "hint": "дверной звонок"
+    },
+    {
+      "key": "door_close",
+      "prompt": "a door closing with a soft thud",
+      "seed": 79613,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "door_creak",
+      "prompt": "a long creak of an old door hinge",
+      "seed": 16231,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "door_grind",
+      "prompt": "a heavy door forced open with a grinding scrape",
+      "hint": "дверь с усилием",
+      "seed": 45832,
+      "seconds": 8
+    },
+    {
+      "key": "door_handle",
+      "prompt": "a door handle pressed and released with a metallic click",
+      "hint": "ручка двери",
+      "seed": 86217,
+      "seconds": 8
+    },
+    {
+      "key": "door_knock",
+      "prompt": "three sharp knocks on a wooden door",
+      "seed": 81193,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "door_lock",
+      "prompt": "a key turning in a lock with two clicks",
+      "seed": 38748,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "door_open",
+      "prompt": "a door opening with a soft creak",
+      "seed": 46649,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "door_slam",
+      "prompt": "a heavy door slams shut with a sharp bang",
+      "seed": 22532,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "door_slide",
+      "prompt": "a sliding wooden door being pulled aside",
+      "seed": 38603,
+      "seconds": 8,
+      "hint": "раздвижная дверь"
+    },
+    {
+      "key": "drawer",
+      "prompt": "a wooden drawer pulled open and shut",
+      "seed": 38833,
+      "seconds": 8,
+      "hint": "ящик"
+    },
+    {
+      "key": "drop",
+      "prompt": "a heavy object dropping and hitting the floor",
+      "seed": 25129,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "drum",
+      "prompt": "a military drum beating a slow march",
+      "seed": 77058,
+      "seconds": 8,
+      "hint": "барабан"
+    },
+    {
+      "key": "drums_march",
+      "prompt": "military drums beating a march, several drums",
+      "hint": "барабанный марш",
+      "seed": 4470,
+      "seconds": 8
+    },
+    {
+      "key": "ducks",
+      "prompt": "ducks quacking and splashing",
+      "hint": "утки",
+      "seed": 96574,
+      "seconds": 8
+    },
+    {
+      "key": "electric_switch",
+      "prompt": "an old electric switch clicking",
+      "seed": 68523,
+      "seconds": 8,
+      "hint": "выключатель"
+    },
+    {
+      "key": "elevator",
+      "prompt": "elevator doors opening with a soft chime",
+      "seed": 90091,
+      "seconds": 8,
+      "hint": "лифт"
+    },
+    {
+      "key": "elevator_ding",
+      "prompt": "an elevator arriving with a soft ding",
+      "hint": "лифт, звонок",
+      "seed": 36307,
+      "seconds": 8
+    },
+    {
+      "key": "engine",
+      "prompt": "an engine turning over and catching",
+      "seed": 72847,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "envelope",
+      "prompt": "an envelope being torn open",
+      "seed": 1276,
+      "seconds": 8,
+      "hint": "конверт"
+    },
+    {
+      "key": "escalator",
+      "prompt": "an escalator running in a mall",
+      "hint": "эскалатор",
+      "seed": 66604,
+      "seconds": 8
+    },
+    {
+      "key": "explosion_far",
+      "prompt": "a distant explosion with a rolling tail",
+      "hint": "дальний взрыв",
+      "seed": 99127,
+      "seconds": 8
+    },
+    {
+      "key": "fight",
+      "prompt": "a short scuffle, a blow and a body falling",
+      "seed": 40520,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "fire",
+      "prompt": "a fire crackling and shifting in a stove",
+      "seed": 58664,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "fire_whoosh",
+      "prompt": "fire flaring up suddenly from dry wood",
+      "seed": 49461,
+      "seconds": 8,
+      "hint": "вспышка огня"
+    },
+    {
+      "key": "flies",
+      "prompt": "flies buzzing around",
+      "seed": 93350,
+      "seconds": 8,
+      "hint": "мухи"
+    },
+    {
+      "key": "floor_creak",
+      "prompt": "a single floorboard creaking underfoot",
+      "seed": 3398,
+      "seconds": 8,
+      "hint": "половица скрипнула"
+    },
+    {
+      "key": "flush",
+      "prompt": "a toilet flushing",
+      "seed": 81269,
+      "seconds": 8,
+      "hint": "слив воды"
+    },
+    {
+      "key": "footsteps_carpet",
+      "prompt": "muffled footsteps on a thick carpet",
+      "seed": 9684,
+      "seconds": 8,
+      "hint": "шаги по ковру"
+    },
+    {
+      "key": "footsteps_gravel",
+      "prompt": "boots crunching on gravel for a few seconds",
+      "seed": 50239,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "footsteps_mud",
+      "prompt": "footsteps squelching through wet mud",
+      "seed": 69869,
+      "seconds": 8,
+      "hint": "шаги по грязи"
+    },
+    {
+      "key": "footsteps_snow",
+      "prompt": "footsteps squeaking through dry snow",
+      "seed": 44510,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "footsteps_stairs",
+      "prompt": "footsteps going up a wooden staircase",
+      "seed": 83136,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "footsteps_stairs_stone",
+      "prompt": "footsteps going up a stone staircase",
+      "seed": 3525,
+      "seconds": 8,
+      "hint": "шаги по каменной лестнице"
+    },
+    {
+      "key": "footsteps_stone",
+      "prompt": "footsteps echoing on stone slabs",
+      "seed": 39945,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "footsteps_water",
+      "prompt": "footsteps wading in shallow water",
+      "seed": 66819,
+      "seconds": 8,
+      "hint": "шаги по воде"
+    },
+    {
+      "key": "footsteps_wood",
+      "prompt": "measured footsteps on creaking wooden floorboards",
+      "seed": 44857,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "fountain",
+      "prompt": "a fountain splashing in a courtyard",
+      "hint": "фонтан",
+      "seed": 77311,
+      "seconds": 8
+    },
+    {
+      "key": "fountain_pen",
+      "prompt": "a fountain pen writing quickly on paper, fine scratching",
+      "hint": "перьевой ручкой по бумаге",
+      "seed": 94169,
+      "seconds": 8
+    },
+    {
+      "key": "frame_break",
+      "prompt": "a wooden window frame cracking apart",
+      "hint": "рама треснула",
+      "seed": 24057,
+      "seconds": 8
+    },
+    {
+      "key": "frog",
+      "prompt": "frogs croaking at a pond",
+      "hint": "лягушки",
+      "seed": 66259,
+      "seconds": 8
+    },
+    {
+      "key": "frying",
+      "prompt": "meat frying in a pan, sizzling",
+      "seed": 25519,
+      "seconds": 8,
+      "hint": "жарка"
+    },
+    {
+      "key": "furniture",
+      "prompt": "a wooden drawer pulled open and pushed shut",
+      "seed": 78555,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "gasp",
+      "prompt": "a sharp gasp of surprise",
+      "hint": "ахнул",
+      "seed": 55126,
+      "seconds": 8
+    },
+    {
+      "key": "gate",
+      "prompt": "a wooden gate swinging open and closing again",
+      "seed": 2657,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "gate_iron",
+      "prompt": "an iron gate creaking open on its hinges",
+      "seed": 22147,
+      "seconds": 8,
+      "hint": "железные ворота"
+    },
+    {
+      "key": "giggle",
+      "prompt": "a young woman giggling",
+      "hint": "хихиканье",
+      "seed": 13169,
+      "seconds": 8
+    },
+    {
+      "key": "glass_break",
+      "prompt": "glass shattering on the floor with falling shards",
+      "seed": 22502,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "glass_clink",
+      "prompt": "glass tumblers clinking together",
+      "seed": 86691,
+      "seconds": 8,
+      "hint": "стаканы"
+    },
+    {
+      "key": "glass_set_down",
+      "prompt": "a glass tumbler set down on a wooden table",
+      "hint": "стакан на стол",
+      "seed": 7397,
+      "seconds": 8
+    },
+    {
+      "key": "gramophone",
+      "prompt": "an old gramophone playing through a horn, crackly",
+      "hint": "граммофон",
+      "seed": 35889,
+      "seconds": 8
+    },
+    {
+      "key": "grass",
+      "prompt": "dry grass and hay rustling underfoot",
+      "seed": 74171,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "gravel_fall",
+      "prompt": "gravel and small stones sliding and falling down a slope",
+      "hint": "осыпается гравий, камни",
+      "seed": 23484,
+      "seconds": 8
+    },
+    {
+      "key": "gravel_slide",
+      "prompt": "boots sliding on loose gravel",
+      "seed": 30919,
+      "seconds": 8,
+      "hint": "осыпь под ногами"
+    },
+    {
+      "key": "groan",
+      "prompt": "a low groan of pain",
+      "seed": 61527,
+      "seconds": 8,
+      "hint": "стон"
+    },
+    {
+      "key": "groan_pain",
+      "prompt": "a low groan of pain",
+      "hint": "стон боли",
+      "seed": 82059,
+      "seconds": 8
+    },
+    {
+      "key": "growl",
+      "prompt": "a low angry growl in the throat",
+      "hint": "рычание",
+      "seed": 17059,
+      "seconds": 8
+    },
+    {
+      "key": "gulp",
+      "prompt": "a man drinking with a gulp",
+      "hint": "глоток",
+      "seed": 29005,
+      "seconds": 8
+    },
+    {
+      "key": "gun_reload",
+      "prompt": "a rifle bolt worked, two metallic clacks",
+      "hint": "затвор ружья",
+      "seed": 77800,
+      "seconds": 8
+    },
+    {
+      "key": "gunshot",
+      "prompt": "a single gunshot cracking in the open air",
+      "seed": 52415,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "gunshot_far",
+      "prompt": "a single gunshot far away over water",
+      "hint": "дальний выстрел",
+      "seed": 97970,
+      "seconds": 8
+    },
+    {
+      "key": "hand_press",
+      "prompt": "a hand printing press pressing once",
+      "hint": "печатный станок",
+      "seed": 12842,
+      "seconds": 8
+    },
+    {
+      "key": "hanger",
+      "prompt": "a coat hanger scraping along a rail",
+      "hint": "вешалка",
+      "seed": 81199,
+      "seconds": 8
+    },
+    {
+      "key": "harness",
+      "prompt": "harness and buckles rattling as a horse moves",
+      "hint": "сбруя звенит",
+      "seed": 47446,
+      "seconds": 8
+    },
+    {
+      "key": "heartbeat",
+      "prompt": "a slow heavy heartbeat",
+      "hint": "сердцебиение",
+      "seed": 20777,
+      "seconds": 8
+    },
+    {
+      "key": "helmet_off",
+      "prompt": "a metal helmet lifted off and set down",
+      "hint": "снимают шлем",
+      "seed": 8689,
+      "seconds": 8
+    },
+    {
+      "key": "hooves_cobbles",
+      "prompt": "hooves on cobblestones, sharp and ringing",
+      "hint": "копыта по камню",
+      "seed": 18153,
+      "seconds": 8
+    },
+    {
+      "key": "hooves_gallop",
+      "prompt": "a horse galloping past at speed",
+      "hint": "галоп",
+      "seed": 81306,
+      "seconds": 8
+    },
+    {
+      "key": "hooves_stop",
+      "prompt": "a horse braking to a stop, hooves scraping",
+      "hint": "лошадь встала",
+      "seed": 75813,
+      "seconds": 8
+    },
+    {
+      "key": "hooves_trot",
+      "prompt": "a horse trotting, rhythmic hooves",
+      "hint": "рысь",
+      "seed": 64937,
+      "seconds": 8
+    },
+    {
+      "key": "hooves_walk",
+      "prompt": "a horse walking slowly, hooves on packed dirt",
+      "hint": "шаг копыт",
+      "seed": 5656,
+      "seconds": 8
+    },
+    {
+      "key": "horn",
+      "prompt": "a distant hunting horn",
+      "seed": 82025,
+      "seconds": 8,
+      "hint": "охотничий рог"
+    },
+    {
+      "key": "horse_hooves",
+      "prompt": "hooves clipping on cobblestones and slowing to a stop",
+      "seed": 18226,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "horse_neigh",
+      "prompt": "a horse neighing once",
+      "seed": 81225,
+      "seconds": 8,
+      "hint": "лошадь ржёт"
+    },
+    {
+      "key": "horse_snort",
+      "prompt": "a horse snorting and shaking its head",
+      "hint": "лошадь фыркает",
+      "seed": 48172,
+      "seconds": 8
+    },
+    {
+      "key": "hull_groan",
+      "prompt": "a wooden hull groaning in heavy seas",
+      "hint": "корпус скрипит",
+      "seed": 12958,
+      "seconds": 8
+    },
+    {
+      "key": "hum",
+      "prompt": "a woman humming a slow tune, no words",
+      "hint": "напевает",
+      "seed": 26520,
+      "seconds": 8
+    },
+    {
+      "key": "ice",
+      "prompt": "ice cracking under a foot on a frozen lake",
+      "seed": 25970,
+      "seconds": 8,
+      "hint": "лёд трещит"
+    },
+    {
+      "key": "ink",
+      "prompt": "a pen dipped into an inkwell",
+      "seed": 3511,
+      "seconds": 8,
+      "hint": "перо в чернильницу"
+    },
+    {
+      "key": "jail_bars",
+      "prompt": "heavy iron bars sliding shut with a clang",
+      "hint": "решётка, лязг",
+      "seed": 29774,
+      "seconds": 8
+    },
+    {
+      "key": "jail_door",
+      "prompt": "a heavy steel cell door closing and locking",
+      "hint": "тюремная дверь",
+      "seed": 29223,
+      "seconds": 8
+    },
+    {
+      "key": "jar_open",
+      "prompt": "a screw jar lid twisted open with a pop",
+      "hint": "банка открывается",
+      "seed": 28328,
+      "seconds": 8
+    },
+    {
+      "key": "kettle",
+      "prompt": "a kettle beginning to whistle over a flame",
+      "seed": 49703,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "kettle_whistle",
+      "prompt": "a kettle boiling and whistling",
+      "seed": 44928,
+      "seconds": 8,
+      "hint": "чайник свистит"
+    },
+    {
+      "key": "key_insert",
+      "prompt": "a key pushed into a lock and turned once",
+      "hint": "ключ вставлен",
+      "seed": 96774,
+      "seconds": 8
+    },
+    {
+      "key": "keyboard",
+      "prompt": "a computer keyboard typing steadily",
+      "seed": 64256,
+      "seconds": 8,
+      "hint": "клавиатура"
+    },
+    {
+      "key": "keys",
+      "prompt": "a bunch of keys jingling",
+      "seed": 60895,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "keys_jingle",
+      "prompt": "a bunch of keys jingling",
+      "seed": 95418,
+      "seconds": 8,
+      "hint": "связка ключей"
+    },
+    {
+      "key": "kiss",
+      "prompt": "a soft kiss",
+      "seed": 32093,
+      "seconds": 8,
+      "hint": "поцелуй"
+    },
+    {
+      "key": "kiss_cheek",
+      "prompt": "a soft kiss on the cheek",
+      "hint": "поцелуй в щёку",
+      "seed": 45623,
+      "seconds": 8
+    },
+    {
+      "key": "knife_chop",
+      "prompt": "a knife chopping vegetables on a wooden board",
+      "hint": "нож режет",
+      "seed": 5872,
+      "seconds": 8
+    },
+    {
+      "key": "knife_sharpen",
+      "prompt": "a knife drawn across a steel sharpener",
+      "hint": "точат нож",
+      "seed": 62778,
+      "seconds": 8
+    },
+    {
+      "key": "knock_glass",
+      "prompt": "a fingernail tapping on a glass pane",
+      "hint": "стук по стеклу",
+      "seed": 21234,
+      "seconds": 8
+    },
+    {
+      "key": "knock_metal",
+      "prompt": "a knuckle rapping on a metal gate",
+      "hint": "стук по металлу",
+      "seed": 27636,
+      "seconds": 8
+    },
+    {
+      "key": "knock_wood",
+      "prompt": "two knocks on a wooden door with a fist",
+      "hint": "стук по дереву",
+      "seed": 14217,
+      "seconds": 8
+    },
+    {
+      "key": "ladder",
+      "prompt": "a wooden ladder shifted and set against a wall",
+      "hint": "лестница-стремянка",
+      "seed": 37541,
+      "seconds": 8
+    },
+    {
+      "key": "lamp",
+      "prompt": "a glass lamp chimney being lifted and set down",
+      "seed": 9221,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "lamp_glass",
+      "prompt": "the glass chimney of an oil lamp being set down",
+      "seed": 58763,
+      "seconds": 8,
+      "hint": "стекло лампы"
+    },
+    {
+      "key": "latch",
+      "prompt": "a metal latch clicking shut on a wooden door",
+      "seed": 31976,
+      "seconds": 8,
+      "hint": "щеколда"
+    },
+    {
+      "key": "laugh_bitter",
+      "prompt": "a short bitter laugh through the nose",
+      "hint": "горький смешок",
+      "seed": 38446,
+      "seconds": 8
+    },
+    {
+      "key": "laugh_loud",
+      "prompt": "a man laughing loudly and heartily",
+      "hint": "хохот",
+      "seed": 84368,
+      "seconds": 8
+    },
+    {
+      "key": "laugh_soft",
+      "prompt": "a woman laughing softly, warm and short",
+      "hint": "смех тихий",
+      "seed": 59126,
+      "seconds": 8
+    },
+    {
+      "key": "laughter",
+      "prompt": "a short burst of laughter close by",
+      "seed": 69433,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "laughter_child",
+      "prompt": "a child laughing",
+      "hint": "детский смех",
+      "seed": 49509,
+      "seconds": 8
+    },
+    {
+      "key": "laughter_far",
+      "prompt": "laughter from another room",
+      "hint": "смех вдалеке",
+      "seed": 31049,
+      "seconds": 8
+    },
+    {
+      "key": "laughter_woman",
+      "prompt": "a woman laughing out loud",
+      "hint": "женский смех",
+      "seed": 68785,
+      "seconds": 8
+    },
+    {
+      "key": "leaves",
+      "prompt": "leaves and bushes rustling in a light wind",
+      "seed": 13793,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "ledger",
+      "prompt": "thick ledger pages turned and a pen ticking",
+      "hint": "счётная книга",
+      "seed": 51265,
+      "seconds": 8
+    },
+    {
+      "key": "letter",
+      "prompt": "an envelope being torn open and paper unfolded",
+      "seed": 53189,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "letter_fold",
+      "prompt": "a letter folded in three and smoothed flat",
+      "hint": "складывают письмо",
+      "seed": 33833,
+      "seconds": 8
+    },
+    {
+      "key": "lighter",
+      "prompt": "a cigarette lighter flicked and lit",
+      "hint": "зажигалка",
+      "seed": 94945,
+      "seconds": 8
+    },
+    {
+      "key": "lock_big",
+      "prompt": "a big iron lock snapping shut with a heavy clank",
+      "hint": "лязг большого замка",
+      "seed": 82947,
+      "seconds": 8
+    },
+    {
+      "key": "lock_pick",
+      "prompt": "a lock being picked with a thin tool",
+      "seed": 5678,
+      "seconds": 8,
+      "hint": "вскрывают замок"
+    },
+    {
+      "key": "lock_rusty",
+      "prompt": "a rusty lock grinding and finally clicking",
+      "hint": "замок заедает",
+      "seed": 42087,
+      "seconds": 8
+    },
+    {
+      "key": "machine",
+      "prompt": "a machine starting up with a metallic whine",
+      "seed": 21290,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "march_steps",
+      "prompt": "many boots marching in step on gravel",
+      "hint": "шаг строя",
+      "seed": 3051,
+      "seconds": 8
+    },
+    {
+      "key": "market_far",
+      "prompt": "a distant market crowd, muffled",
+      "hint": "рынок вдалеке",
+      "seed": 75295,
+      "seconds": 8
+    },
+    {
+      "key": "match",
+      "prompt": "a match striking and flaring up",
+      "seed": 1959,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "match_strike",
+      "prompt": "a match struck and flaring",
+      "seed": 68566,
+      "seconds": 8,
+      "hint": "спичка"
+    },
+    {
+      "key": "meat_cut",
+      "prompt": "a knife cutting meat on a board",
+      "hint": "режут мясо",
+      "seed": 53458,
+      "seconds": 8
+    },
+    {
+      "key": "mirror_break",
+      "prompt": "a mirror shattering on the floor",
+      "hint": "зеркало разбилось",
+      "seed": 22485,
+      "seconds": 8
+    },
+    {
+      "key": "moan",
+      "prompt": "a faint weak moan",
+      "hint": "слабый стон",
+      "seed": 83525,
+      "seconds": 8
+    },
+    {
+      "key": "mosquito",
+      "prompt": "a mosquito buzzing near the ear",
+      "hint": "комар",
+      "seed": 36265,
+      "seconds": 8
+    },
+    {
+      "key": "motorcycle",
+      "prompt": "a motorcycle accelerating past",
+      "hint": "мотоцикл",
+      "seed": 60474,
+      "seconds": 8
+    },
+    {
+      "key": "mouse_click",
+      "prompt": "a computer mouse clicking twice",
+      "hint": "мышь",
+      "seed": 28036,
+      "seconds": 8
+    },
+    {
+      "key": "murmur",
+      "prompt": "indistinct low murmuring under the breath",
+      "hint": "бормотание",
+      "seed": 22773,
+      "seconds": 8
+    },
+    {
+      "key": "music_box",
+      "prompt": "a small music box playing a slow waltz",
+      "hint": "музыкальная шкатулка",
+      "seed": 72184,
+      "seconds": 8
+    },
+    {
+      "key": "mutter_angry",
+      "prompt": "angry muttering under the breath",
+      "hint": "ворчание",
+      "seed": 23348,
+      "seconds": 8
+    },
+    {
+      "key": "nail_hammer",
+      "prompt": "a hammer driving nails into wood, four blows",
+      "hint": "молоток, гвозди",
+      "seed": 62556,
+      "seconds": 8
+    },
+    {
+      "key": "newspaper",
+      "prompt": "a newspaper folded and rustled",
+      "hint": "газета",
+      "seed": 99717,
+      "seconds": 8
+    },
+    {
+      "key": "notebook",
+      "prompt": "a small notebook opened and pages flipped",
+      "hint": "блокнот",
+      "seed": 77327,
+      "seconds": 8
+    },
+    {
+      "key": "oars",
+      "prompt": "oars pulling in water, rhythm of rowing",
+      "seed": 36873,
+      "seconds": 8,
+      "hint": "вёсла"
+    },
+    {
+      "key": "orders_shout",
+      "prompt": "a commanding voice shouting one order, muffled",
+      "hint": "команда",
+      "seed": 74684,
+      "seconds": 8
+    },
+    {
+      "key": "organ",
+      "prompt": "a church organ playing a single deep chord",
+      "seed": 44430,
+      "seconds": 8,
+      "hint": "орган"
+    },
+    {
+      "key": "ovation",
+      "prompt": "loud applause with cheers",
+      "hint": "овация",
+      "seed": 79292,
+      "seconds": 8
+    },
+    {
+      "key": "owl",
+      "prompt": "an owl hooting twice at night",
+      "hint": "сова",
+      "seed": 11826,
+      "seconds": 8
+    },
+    {
+      "key": "padlock",
+      "prompt": "a padlock snapping shut",
+      "seed": 49306,
+      "seconds": 8,
+      "hint": "висячий замок"
+    },
+    {
+      "key": "page_turn",
+      "prompt": "a page of a book turning",
+      "seed": 70815,
+      "seconds": 8,
+      "hint": "страница"
+    },
+    {
+      "key": "pan_drop",
+      "prompt": "a metal pot dropped on a stone floor",
+      "hint": "кастрюля упала",
+      "seed": 84399,
+      "seconds": 8
+    },
+    {
+      "key": "paper",
+      "prompt": "dry paper rustling and sheets being shuffled",
+      "seed": 79797,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "paper_crumple",
+      "prompt": "paper being crumpled into a ball",
+      "seed": 42451,
+      "seconds": 8,
+      "hint": "смяли бумагу"
+    },
+    {
+      "key": "paper_money",
+      "prompt": "paper money being counted and rustled",
+      "seed": 75025,
+      "seconds": 8,
+      "hint": "бумажные деньги"
+    },
+    {
+      "key": "paper_tear",
+      "prompt": "paper torn slowly along a fold",
+      "hint": "бумага рвётся",
+      "seed": 61866,
+      "seconds": 8
+    },
+    {
+      "key": "pen",
+      "prompt": "a pen scratching quickly on paper",
+      "seed": 17899,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "pen_cap",
+      "prompt": "a pen cap pulled off and clicked back on",
+      "hint": "колпачок ручки",
+      "seed": 91535,
+      "seconds": 8
+    },
+    {
+      "key": "pencil",
+      "prompt": "a pencil writing quickly on paper",
+      "seed": 78102,
+      "seconds": 8,
+      "hint": "карандаш"
+    },
+    {
+      "key": "phone",
+      "prompt": "a telephone ringing on a desk, old ring tone",
+      "seed": 44157,
+      "seconds": 8,
+      "hint": "телефонный звонок"
+    },
+    {
+      "key": "phone_dial",
+      "prompt": "an old phone dial turning and returning",
+      "hint": "набор номера",
+      "seed": 6017,
+      "seconds": 8
+    },
+    {
+      "key": "phone_hangup",
+      "prompt": "a phone handset put down with a clack",
+      "hint": "положили трубку",
+      "seed": 85445,
+      "seconds": 8
+    },
+    {
+      "key": "phone_sms",
+      "prompt": "a phone notification tone, short",
+      "hint": "уведомление",
+      "seed": 2402,
+      "seconds": 8
+    },
+    {
+      "key": "phone_vibrate",
+      "prompt": "a phone vibrating on a wooden table",
+      "hint": "телефон вибрирует",
+      "seed": 90815,
+      "seconds": 8
+    },
+    {
+      "key": "pig",
+      "prompt": "a pig grunting in a sty",
+      "hint": "свинья",
+      "seed": 75945,
+      "seconds": 8
+    },
+    {
+      "key": "plane",
+      "prompt": "a passenger plane passing overhead",
+      "seed": 39552,
+      "seconds": 8,
+      "hint": "самолёт"
+    },
+    {
+      "key": "plates",
+      "prompt": "plates stacked together in a kitchen",
+      "seed": 87859,
+      "seconds": 8,
+      "hint": "тарелки"
+    },
+    {
+      "key": "pocket_watch",
+      "prompt": "a pocket watch clicked open and ticking",
+      "hint": "карманные часы",
+      "seed": 69934,
+      "seconds": 8
+    },
+    {
+      "key": "pots_clatter",
+      "prompt": "pots and pans clattering together",
+      "hint": "грохот посуды",
+      "seed": 71266,
+      "seconds": 8
+    },
+    {
+      "key": "pray",
+      "prompt": "a whispered prayer, words unintelligible",
+      "hint": "молитва шёпотом",
+      "seed": 94767,
+      "seconds": 8
+    },
+    {
+      "key": "printer",
+      "prompt": "an office printer working",
+      "seed": 18593,
+      "seconds": 8,
+      "hint": "принтер"
+    },
+    {
+      "key": "punch",
+      "prompt": "a fist punch landing, close",
+      "hint": "удар кулаком",
+      "seed": 97782,
+      "seconds": 8
+    },
+    {
+      "key": "purse",
+      "prompt": "coins dropped into a leather purse",
+      "seed": 48259,
+      "seconds": 8,
+      "hint": "кошелёк"
+    },
+    {
+      "key": "quill",
+      "prompt": "a quill pen scratching across paper",
+      "seed": 48047,
+      "seconds": 8,
+      "hint": "перо скрипит"
+    },
+    {
+      "key": "radio",
+      "prompt": "a radio switching on with static hiss",
+      "seed": 55973,
+      "seconds": 8,
+      "hint": "радио"
+    },
+    {
+      "key": "radio_tune",
+      "prompt": "a radio dial scanning through stations",
+      "hint": "настройка радио",
+      "seed": 19313,
+      "seconds": 8
+    },
+    {
+      "key": "rain",
+      "prompt": "rain drumming on a windowsill",
+      "seed": 51012,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "rain_heavy",
+      "prompt": "heavy rain pouring down",
+      "hint": "ливень",
+      "seed": 50080,
+      "seconds": 8
+    },
+    {
+      "key": "rain_light",
+      "prompt": "light rain falling on leaves",
+      "hint": "лёгкий дождь",
+      "seed": 12857,
+      "seconds": 8
+    },
+    {
+      "key": "rain_window",
+      "prompt": "rain running down a window pane",
+      "hint": "дождь по стеклу",
+      "seed": 58604,
+      "seconds": 8
+    },
+    {
+      "key": "rats",
+      "prompt": "small animal scratching and rustling behind a wall",
+      "seed": 80055,
+      "seconds": 8,
+      "hint": "грызуны в стене"
+    },
+    {
+      "key": "ricochet",
+      "prompt": "a bullet ricocheting with a short whine",
+      "hint": "рикошет",
+      "seed": 38297,
+      "seconds": 8
+    },
+    {
+      "key": "rigging",
+      "prompt": "ropes and sails flapping in the wind",
+      "seed": 36632,
+      "seconds": 8,
+      "hint": "снасти"
+    },
+    {
+      "key": "rooster",
+      "prompt": "a rooster crowing at dawn",
+      "hint": "петух",
+      "seed": 39447,
+      "seconds": 8
+    },
+    {
+      "key": "rope",
+      "prompt": "a rope pulled tight through a pulley",
+      "seed": 65941,
+      "seconds": 8,
+      "hint": "верёвка"
+    },
+    {
+      "key": "rope_creak",
+      "prompt": "a rope stretching and creaking under weight",
+      "hint": "верёвка скрипит",
+      "seed": 40726,
+      "seconds": 8
+    },
+    {
+      "key": "safe",
+      "prompt": "a heavy safe door swinging open",
+      "seed": 22665,
+      "seconds": 8,
+      "hint": "сейф"
+    },
+    {
+      "key": "sails_flap",
+      "prompt": "sails flapping and filling with wind",
+      "hint": "паруса",
+      "seed": 43426,
+      "seconds": 8
+    },
+    {
+      "key": "samovar",
+      "prompt": "a samovar hissing and bubbling",
+      "hint": "самовар",
+      "seed": 45119,
+      "seconds": 8
+    },
+    {
+      "key": "saw",
+      "prompt": "a hand saw cutting wood",
+      "seed": 64097,
+      "seconds": 8,
+      "hint": "пила"
+    },
+    {
+      "key": "scissors",
+      "prompt": "scissors cutting through cloth, three snips",
+      "hint": "ножницы",
+      "seed": 98997,
+      "seconds": 8
+    },
+    {
+      "key": "scream",
+      "prompt": "a frightened scream somewhere in the distance",
+      "seed": 693,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "scream_far",
+      "prompt": "a distant scream, muffled",
+      "hint": "крик вдалеке",
+      "seed": 36606,
+      "seconds": 8
+    },
+    {
+      "key": "scream_man",
+      "prompt": "a man shouting once in fear",
+      "hint": "мужской крик",
+      "seed": 30232,
+      "seconds": 8
+    },
+    {
+      "key": "scream_woman",
+      "prompt": "a woman screaming in terror, close",
+      "hint": "женский крик ужаса",
+      "seed": 74674,
+      "seconds": 8
+    },
+    {
+      "key": "scuffle",
+      "prompt": "a short scuffle, clothes and blows, no words",
+      "hint": "драка",
+      "seed": 16917,
+      "seconds": 8
+    },
+    {
+      "key": "seagulls",
+      "prompt": "seagulls calling over the water",
+      "seed": 66189,
+      "seconds": 8,
+      "hint": "чайки"
+    },
+    {
+      "key": "sewing",
+      "prompt": "a treadle sewing machine working",
+      "seed": 82000,
+      "seconds": 8,
+      "hint": "швейная машинка"
+    },
+    {
+      "key": "shackles",
+      "prompt": "iron shackles rattling as a prisoner steps",
+      "hint": "кандалы",
+      "seed": 70371,
+      "seconds": 8
+    },
+    {
+      "key": "sheep",
+      "prompt": "sheep bleating in a field",
+      "hint": "овцы",
+      "seed": 52246,
+      "seconds": 8
+    },
+    {
+      "key": "shelf",
+      "prompt": "a wooden shelf being loaded, boards creaking",
+      "seed": 24580,
+      "seconds": 8,
+      "hint": "полка скрипит"
+    },
+    {
+      "key": "shield_hit",
+      "prompt": "a blow landing on a wooden shield",
+      "hint": "удар по щиту",
+      "seed": 90529,
+      "seconds": 8
+    },
+    {
+      "key": "ship_bell",
+      "prompt": "a ship's bell ringing twice",
+      "hint": "судовой колокол",
+      "seed": 50626,
+      "seconds": 8
+    },
+    {
+      "key": "ship_creak",
+      "prompt": "an old ship's hull creaking in the swell",
+      "seed": 63591,
+      "seconds": 8,
+      "hint": "скрип корпуса"
+    },
+    {
+      "key": "shirt_rustle",
+      "prompt": "clothing rustling as a man takes off his coat",
+      "seed": 69702,
+      "seconds": 8,
+      "hint": "шорох одежды"
+    },
+    {
+      "key": "shout",
+      "prompt": "a man shouting one angry phrase, muffled",
+      "hint": "крик, окрик",
+      "seed": 88896,
+      "seconds": 8
+    },
+    {
+      "key": "shout_far",
+      "prompt": "people shouting far away",
+      "hint": "крики вдалеке",
+      "seed": 33744,
+      "seconds": 8
+    },
+    {
+      "key": "shovel",
+      "prompt": "a shovel digging into gravel",
+      "seed": 65586,
+      "seconds": 8,
+      "hint": "лопата"
+    },
+    {
+      "key": "shower",
+      "prompt": "a shower running in a tiled bathroom",
+      "hint": "душ",
+      "seed": 7065,
+      "seconds": 8
+    },
+    {
+      "key": "shriek",
+      "prompt": "a high piercing shriek",
+      "hint": "визг",
+      "seed": 88123,
+      "seconds": 8
+    },
+    {
+      "key": "shutters",
+      "prompt": "wooden shutters banging in the wind",
+      "seed": 94615,
+      "seconds": 8,
+      "hint": "ставни хлопают"
+    },
+    {
+      "key": "sigh",
+      "prompt": "a long tired sigh",
+      "seed": 12594,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "sigh_deep",
+      "prompt": "a long heavy sigh",
+      "hint": "тяжёлый вздох",
+      "seed": 49539,
+      "seconds": 8
+    },
+    {
+      "key": "sigh_relief",
+      "prompt": "a breathy sigh of relief",
+      "hint": "вздох облегчения",
+      "seed": 33180,
+      "seconds": 8
+    },
+    {
+      "key": "signature",
+      "prompt": "a pen signing a name with quick strokes",
+      "hint": "подпись",
+      "seed": 16162,
+      "seconds": 8
+    },
+    {
+      "key": "silver",
+      "prompt": "silver cutlery being laid on a table",
+      "seed": 17030,
+      "seconds": 8,
+      "hint": "серебро, приборы"
+    },
+    {
+      "key": "sing_lullaby",
+      "prompt": "a soft lullaby sung quietly, no words",
+      "hint": "колыбельная",
+      "seed": 21431,
+      "seconds": 8
+    },
+    {
+      "key": "sink_fill",
+      "prompt": "water running into a metal sink",
+      "hint": "набирается раковина",
+      "seed": 64561,
+      "seconds": 8
+    },
+    {
+      "key": "slap",
+      "prompt": "a hard slap across the face",
+      "hint": "пощёчина",
+      "seed": 94911,
+      "seconds": 8
+    },
+    {
+      "key": "sleigh_bells",
+      "prompt": "sleigh bells jingling on a moving sleigh",
+      "seed": 95758,
+      "seconds": 8,
+      "hint": "бубенцы"
+    },
+    {
+      "key": "sleigh_ride",
+      "prompt": "a sleigh gliding over snow, bells jingling",
+      "hint": "сани по снегу",
+      "seed": 33228,
+      "seconds": 8
+    },
+    {
+      "key": "sneeze",
+      "prompt": "a man sneezing",
+      "seed": 25793,
+      "seconds": 8,
+      "hint": "чихание"
+    },
+    {
+      "key": "sniffle",
+      "prompt": "a person sniffling quietly",
+      "hint": "шмыгает носом",
+      "seed": 63254,
+      "seconds": 8
+    },
+    {
+      "key": "snore",
+      "prompt": "quiet steady snoring",
+      "hint": "храп",
+      "seed": 34443,
+      "seconds": 8
+    },
+    {
+      "key": "snort",
+      "prompt": "a contemptuous snort",
+      "hint": "фырканье",
+      "seed": 20160,
+      "seconds": 8
+    },
+    {
+      "key": "snow_blizzard",
+      "prompt": "a blizzard howling around a house",
+      "hint": "метель",
+      "seed": 9136,
+      "seconds": 8
+    },
+    {
+      "key": "snow_crunch",
+      "prompt": "snow crunching underfoot",
+      "seed": 81989,
+      "seconds": 8,
+      "hint": "снег скрипит"
+    },
+    {
+      "key": "sobbing",
+      "prompt": "a woman sobbing quietly",
+      "seed": 14066,
+      "seconds": 8,
+      "hint": "всхлипывания"
+    },
+    {
+      "key": "spark",
+      "prompt": "an electric spark crackling",
+      "seed": 30835,
+      "seconds": 8,
+      "hint": "искра"
+    },
+    {
+      "key": "spoon_plate",
+      "prompt": "a spoon scraping a ceramic plate",
+      "hint": "ложка по тарелке",
+      "seed": 9079,
+      "seconds": 8
+    },
+    {
+      "key": "spoon_stir",
+      "prompt": "a spoon stirring in a cup, three turns",
+      "hint": "помешивают ложкой",
+      "seed": 94914,
+      "seconds": 8
+    },
+    {
+      "key": "spurs",
+      "prompt": "spurs jingling with each step",
+      "seed": 34069,
+      "seconds": 8,
+      "hint": "шпоры"
+    },
+    {
+      "key": "stairs_creak",
+      "prompt": "stairs creaking one after another, slow steps",
+      "seed": 97138,
+      "seconds": 8,
+      "hint": "лестница скрипит"
+    },
+    {
+      "key": "stamp",
+      "prompt": "a rubber stamp pressing onto paper",
+      "seed": 25069,
+      "seconds": 8,
+      "hint": "печать, штамп"
+    },
+    {
+      "key": "station_hall",
+      "prompt": "a large station hall, footsteps and echoes",
+      "hint": "вокзальный зал",
+      "seed": 95584,
+      "seconds": 8
+    },
+    {
+      "key": "steam",
+      "prompt": "a steam engine venting steam",
+      "seed": 36745,
+      "seconds": 8,
+      "hint": "пар"
+    },
+    {
+      "key": "steam_whistle",
+      "prompt": "a steam locomotive whistle, long and low",
+      "hint": "паровозный гудок",
+      "seed": 12020,
+      "seconds": 8
+    },
+    {
+      "key": "steps_run",
+      "prompt": "running footsteps on a wooden floor",
+      "hint": "бег",
+      "seed": 56388,
+      "seconds": 8
+    },
+    {
+      "key": "steps_slow",
+      "prompt": "slow heavy footsteps approaching",
+      "hint": "медленные шаги",
+      "seed": 89296,
+      "seconds": 8
+    },
+    {
+      "key": "stone_fall",
+      "prompt": "stones falling and tumbling down a slope",
+      "seed": 98455,
+      "seconds": 8,
+      "hint": "камнепад"
+    },
+    {
+      "key": "street_crier",
+      "prompt": "a street crier shouting one line, distant",
+      "hint": "глашатай",
+      "seed": 17004,
+      "seconds": 8
+    },
+    {
+      "key": "swallow",
+      "prompt": "a hard dry swallow in the throat",
+      "hint": "сглатывает",
+      "seed": 1536,
+      "seconds": 8
+    },
+    {
+      "key": "sword",
+      "prompt": "steel blades clashing once",
+      "seed": 67431,
+      "seconds": 8,
+      "hint": "клинки"
+    },
+    {
+      "key": "sword_draw",
+      "prompt": "a sword drawn from its scabbard with a ring",
+      "hint": "клинок из ножен",
+      "seed": 86232,
+      "seconds": 8
+    },
+    {
+      "key": "sword_sheath",
+      "prompt": "a sword pushed back into the scabbard",
+      "hint": "клинок в ножны",
+      "seed": 57975,
+      "seconds": 8
+    },
+    {
+      "key": "table",
+      "prompt": "a heavy table being pushed an inch across the floor",
+      "seed": 72388,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "table_slam",
+      "prompt": "a fist hitting a wooden table",
+      "seed": 16031,
+      "seconds": 8,
+      "hint": "удар по столу"
+    },
+    {
+      "key": "tap_drip",
+      "prompt": "a tap dripping slowly into a sink",
+      "hint": "капает вода из крана",
+      "seed": 88449,
+      "seconds": 8
+    },
+    {
+      "key": "tea_pour",
+      "prompt": "tea poured into a cup",
+      "hint": "наливают чай",
+      "seed": 44884,
+      "seconds": 8
+    },
+    {
+      "key": "teeth_chatter",
+      "prompt": "teeth chattering from cold or fear",
+      "hint": "зубы стучат",
+      "seed": 97985,
+      "seconds": 8
+    },
+    {
+      "key": "telegram",
+      "prompt": "a telegraph key tapping in a post office",
+      "seed": 45222,
+      "seconds": 8,
+      "hint": "телеграф"
+    },
+    {
+      "key": "thunder",
+      "prompt": "a distant thunder roll, low and long",
+      "seed": 45559,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "thunder_close",
+      "prompt": "a close thunderclap with a sharp crack",
+      "hint": "гром близко",
+      "seed": 77166,
+      "seconds": 8
+    },
+    {
+      "key": "thunder_far",
+      "prompt": "distant thunder rolling over the hills",
+      "seed": 10252,
+      "seconds": 8,
+      "hint": "дальний гром"
+    },
+    {
+      "key": "tool",
+      "prompt": "hammer blows on metal ringing out",
+      "seed": 66334,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "torch_flame",
+      "prompt": "a torch burning with a soft roar",
+      "hint": "факел",
+      "seed": 5220,
+      "seconds": 8
+    },
+    {
+      "key": "train",
+      "prompt": "a steam locomotive approaching and braking with a hiss",
+      "seed": 42612,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "train_arrive",
+      "prompt": "a train arriving and braking to a stop",
+      "hint": "поезд прибывает",
+      "seed": 6529,
+      "seconds": 8
+    },
+    {
+      "key": "train_pass",
+      "prompt": "a train passing close at speed, doppler",
+      "hint": "поезд проходит",
+      "seed": 8206,
+      "seconds": 8
+    },
+    {
+      "key": "tree_fall",
+      "prompt": "a big tree cracking and crashing to the ground",
+      "hint": "дерево падает",
+      "seed": 87577,
+      "seconds": 8
+    },
+    {
+      "key": "trunk",
+      "prompt": "a leather trunk lid closing",
+      "seed": 76573,
+      "seconds": 8,
+      "hint": "чемодан"
+    },
+    {
+      "key": "tv_static",
+      "prompt": "a television switching on with static",
+      "hint": "телевизор, помехи",
+      "seed": 12273,
+      "seconds": 8
+    },
+    {
+      "key": "typewriter",
+      "prompt": "a mechanical typewriter typing fast, carriage return",
+      "seed": 31894,
+      "seconds": 8,
+      "hint": "пишущая машинка"
+    },
+    {
+      "key": "wagon_door",
+      "prompt": "a sliding train wagon door pulled open",
+      "hint": "дверь вагона",
+      "seed": 65936,
+      "seconds": 8
+    },
+    {
+      "key": "wardrobe_door",
+      "prompt": "a wardrobe door opened and closed",
+      "hint": "дверца шкафа",
+      "seed": 17279,
+      "seconds": 8
+    },
+    {
+      "key": "washing",
+      "prompt": "laundry being scrubbed by hand in a basin",
+      "seed": 90209,
+      "seconds": 8,
+      "hint": "стирка"
+    },
+    {
+      "key": "water_pour",
+      "prompt": "water poured into a glass until it is full",
+      "seed": 43392,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "water_pump",
+      "prompt": "a hand water pump working, water gushing",
+      "hint": "насос",
+      "seed": 63163,
+      "seconds": 8
+    },
+    {
+      "key": "water_running",
+      "prompt": "water running steadily from a tap",
+      "seed": 42637,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "water_sea",
+      "prompt": "gentle waves lapping against a shore",
+      "seed": 78572,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "water_splash",
+      "prompt": "a single splash of water with drops falling back",
+      "seed": 8745,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "waves_slap",
+      "prompt": "a wave slapping against a wooden hull",
+      "hint": "удар волны",
+      "seed": 80383,
+      "seconds": 8
+    },
+    {
+      "key": "wax_seal",
+      "prompt": "wax being dripped onto a letter and sealed",
+      "seed": 51852,
+      "seconds": 8,
+      "hint": "сургуч"
+    },
+    {
+      "key": "weapon",
+      "prompt": "steel scraping softly as a blade leaves its sheath",
+      "seed": 12975,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "weeping",
+      "prompt": "a man weeping, quiet and heavy",
+      "hint": "плачет мужчина",
+      "seed": 92698,
+      "seconds": 8
+    },
+    {
+      "key": "well_bucket",
+      "prompt": "a bucket drawn up from a well, rope and splash",
+      "hint": "ведро в колодце",
+      "seed": 85938,
+      "seconds": 8
+    },
+    {
+      "key": "wheels",
+      "prompt": "iron carriage wheels rumbling over cobblestones",
+      "seed": 810,
+      "seconds": 8,
+      "hint": "колёса по камню"
+    },
+    {
+      "key": "whip",
+      "prompt": "a whip cracking once at close range",
+      "seed": 96591,
+      "seconds": 8,
+      "hint": "кнут"
+    },
+    {
+      "key": "whisper",
+      "prompt": "a barely audible whisper, no words",
+      "seed": 20757,
+      "seconds": 8,
+      "hint": "шёпот"
+    },
+    {
+      "key": "whisper_female",
+      "prompt": "a woman whispering, barely audible, no words",
+      "hint": "шёпот женский",
+      "seed": 54501,
+      "seconds": 8
+    },
+    {
+      "key": "whisper_male",
+      "prompt": "a man whispering close to the ear, no words",
+      "hint": "шёпот мужской",
+      "seed": 24205,
+      "seconds": 8
+    },
+    {
+      "key": "whistle",
+      "prompt": "a sharp whistle followed by a long low horn",
+      "seed": 17428,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "whistle_human",
+      "prompt": "a man whistling a short tune",
+      "hint": "человек свистит",
+      "seed": 3686,
+      "seconds": 8
+    },
+    {
+      "key": "wind",
+      "prompt": "a gust of wind rattling a window frame",
+      "seed": 80838,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "wind_gust",
+      "prompt": "a strong gust of wind buffeting a house",
+      "seed": 13860,
+      "seconds": 8,
+      "hint": "порыв ветра"
+    },
+    {
+      "key": "wind_whistle",
+      "prompt": "wind whistling through wires",
+      "hint": "ветер в проводах",
+      "seed": 12830,
+      "seconds": 8
+    },
+    {
+      "key": "window",
+      "prompt": "a window frame creaking open",
+      "seed": 21851,
+      "seconds": 8,
+      "hint": null
+    },
+    {
+      "key": "window_close",
+      "prompt": "a window sash pulled down and closing with a knock",
+      "hint": "окно закрывают",
+      "seed": 51902,
+      "seconds": 8
+    },
+    {
+      "key": "window_open",
+      "prompt": "a window sash being lifted open",
+      "seed": 96692,
+      "seconds": 8,
+      "hint": "окно открывают"
+    },
+    {
+      "key": "window_shatter",
+      "prompt": "a window shattering into pieces",
+      "hint": "стекло вдребезги",
+      "seed": 83997,
+      "seconds": 8
+    },
+    {
+      "key": "wine",
+      "prompt": "wine poured slowly into a glass",
+      "seed": 27230,
+      "seconds": 8,
+      "hint": "вино в бокал"
+    },
+    {
+      "key": "wolves",
+      "prompt": "wolves howling far away at night",
+      "seed": 85648,
+      "seconds": 8,
+      "hint": "волки"
+    },
+    {
+      "key": "wood_break",
+      "prompt": "a dry branch splitting and breaking",
+      "seed": 41900,
+      "seconds": 8,
+      "hint": "сломалось дерево"
+    },
+    {
+      "key": "yawn",
+      "prompt": "a long audible yawn",
+      "hint": "зевота",
+      "seed": 75231,
+      "seconds": 8
+    },
+    {
+      "key": "zipper",
+      "prompt": "a jacket zipper pulled up",
+      "hint": "молния",
+      "seed": 77368,
+      "seconds": 8
+    },
+    {
+      "key": "window_vent",
+      "prompt": "a small ventilation pane opening with a wooden squeak",
+      "hint": "форточка открывается",
+      "seed": 1990,
+      "seconds": 8
+    },
+    {
+      "key": "vent_close",
+      "prompt": "a ventilation pane snapping shut",
+      "hint": "форточка захлопнулась",
+      "seed": 43556,
+      "seconds": 8
+    },
+    {
+      "key": "shutters_bang",
+      "prompt": "wooden shutters banging against the wall in the wind",
+      "hint": "ставни бьются о стену",
+      "seed": 81296,
+      "seconds": 8
+    },
+    {
+      "key": "shutters_close",
+      "prompt": "wooden shutters pulled closed and latched",
+      "hint": "ставни закрывают",
+      "seed": 43463,
+      "seconds": 8
+    },
+    {
+      "key": "blind_pull",
+      "prompt": "a roller blind pulled down with a rattle",
+      "hint": "штора-роллета с треском",
+      "seed": 76184,
+      "seconds": 8
+    },
+    {
+      "key": "hinge_squeal",
+      "prompt": "a stiff iron hinge squealing as a door is pushed",
+      "hint": "петли скрипят пронзительно",
+      "seed": 48990,
+      "seconds": 8
+    },
+    {
+      "key": "door_latch_click",
+      "prompt": "a door latch clicking shut",
+      "hint": "щёлкнула дверная защёлка",
+      "seed": 74210,
+      "seconds": 8
+    },
+    {
+      "key": "key_turn",
+      "prompt": "a key turning in a lock with two heavy clicks",
+      "hint": "ключ поворачивается в замке",
+      "seed": 12851,
+      "seconds": 8
+    },
+    {
+      "key": "bolt_slide",
+      "prompt": "an iron door bolt sliding and dropping into place",
+      "hint": "задвижка засова",
+      "seed": 1532,
+      "seconds": 8
+    },
+    {
+      "key": "chain_rattle_door",
+      "prompt": "a door chain rattling against wood",
+      "hint": "цепочка на двери звякает",
+      "seed": 83668,
+      "seconds": 8
+    },
+    {
+      "key": "attic_stairs",
+      "prompt": "a narrow wooden staircase creaking under careful steps",
+      "hint": "скрип лестницы на чердак",
+      "seed": 20607,
+      "seconds": 8
+    },
+    {
+      "key": "pipe_knock_hot",
+      "prompt": "water pipes knocking and ticking in a heating system",
+      "hint": "трубы стучат и щёлкают",
+      "seed": 8785,
+      "seconds": 8
+    },
+    {
+      "key": "radiator_hiss",
+      "prompt": "a radiator hissing and ticking as it heats",
+      "hint": "радиатор шипит",
+      "seed": 37789,
+      "seconds": 8
+    },
+    {
+      "key": "faucet_open",
+      "prompt": "a faucet opened, water rushing into a basin",
+      "hint": "открыли кран",
+      "seed": 26968,
+      "seconds": 8
+    },
+    {
+      "key": "drain_gurgle",
+      "prompt": "a sink drain gurgling away",
+      "hint": "вода уходит в слив с бульканьем",
+      "seed": 78280,
+      "seconds": 8
+    },
+    {
+      "key": "washing_scrub",
+      "prompt": "a stiff brush scrubbing a floor with water",
+      "hint": "трут пол щёткой",
+      "seed": 46549,
+      "seconds": 8
+    },
+    {
+      "key": "mop_squeeze",
+      "prompt": "a wet mop squeezed and slapped on the floor",
+      "hint": "отжимают швабру",
+      "seed": 53290,
+      "seconds": 8
+    },
+    {
+      "key": "cupboard_door",
+      "prompt": "a kitchen cupboard door opening and closing",
+      "hint": "дверца шкафчика",
+      "seed": 34092,
+      "seconds": 8
+    },
+    {
+      "key": "oven_door",
+      "prompt": "an iron oven door opened with a scrape and a clang",
+      "hint": "дверца печи с лязгом",
+      "seed": 17058,
+      "seconds": 8
+    },
+    {
+      "key": "stove_lit",
+      "prompt": "a wood stove catching fire, crackling and drawing air",
+      "hint": "растапливают печь",
+      "seed": 74701,
+      "seconds": 8
+    },
+    {
+      "key": "pot_lid",
+      "prompt": "a heavy pot lid lifted and set down with a clatter",
+      "hint": "крышка кастрюли",
+      "seed": 74601,
+      "seconds": 8
+    },
+    {
+      "key": "bottle_uncork",
+      "prompt": "a cork pulled out of a bottle with a soft pop",
+      "hint": "вынимают пробку из бутылки",
+      "seed": 67695,
+      "seconds": 8
+    },
+    {
+      "key": "cork_pop",
+      "prompt": "a cork popping out of a bottle",
+      "hint": "пробка хлопнула",
+      "seed": 1265,
+      "seconds": 8
+    },
+    {
+      "key": "ice_glass",
+      "prompt": "ice cubes dropped into a glass with a clink",
+      "hint": "лёд в стакане звякнул",
+      "seed": 69014,
+      "seconds": 8
+    },
+    {
+      "key": "sugar_stir",
+      "prompt": "a spoon stirring sugar in a cup",
+      "hint": "размешивают сахар в чашке",
+      "seed": 25049,
+      "seconds": 8
+    },
+    {
+      "key": "tea_sip",
+      "prompt": "a sip of hot tea with a small slurp",
+      "hint": "прихлёбывают чай",
+      "seed": 74163,
+      "seconds": 8
+    },
+    {
+      "key": "bread_dough",
+      "prompt": "dough kneaded on a wooden table",
+      "hint": "месят тесто",
+      "seed": 25192,
+      "seconds": 8
+    },
+    {
+      "key": "flour_pour",
+      "prompt": "flour poured into a bowl",
+      "hint": "насыпают муку",
+      "seed": 53807,
+      "seconds": 8
+    },
+    {
+      "key": "egg_crack",
+      "prompt": "an egg cracked against the rim of a bowl",
+      "hint": "разбивают яйцо",
+      "seed": 56065,
+      "seconds": 8
+    },
+    {
+      "key": "dishes_stack",
+      "prompt": "plates stacked on each other with a clatter",
+      "hint": "ставят тарелки стопкой",
+      "seed": 81465,
+      "seconds": 8
+    },
+    {
+      "key": "towel_wring",
+      "prompt": "a wet towel wrung out with a soft splash",
+      "hint": "отжимают мокрое полотенце",
+      "seed": 80435,
+      "seconds": 8
+    },
+    {
+      "key": "blanket_fold",
+      "prompt": "a wool blanket shaken out and folded",
+      "hint": "складывают шерстяное одеяло",
+      "seed": 59575,
+      "seconds": 8
+    },
+    {
+      "key": "drawer_stuck",
+      "prompt": "a stuck wooden drawer yanked open with a scrape",
+      "hint": "заевший ящик дёргают",
+      "seed": 296,
+      "seconds": 8
+    },
+    {
+      "key": "furniture_drag",
+      "prompt": "a heavy piece of furniture dragged across a wooden floor",
+      "hint": "двигают тяжёлую мебель",
+      "seed": 27602,
+      "seconds": 8
+    },
+    {
+      "key": "chair_fold",
+      "prompt": "a folding chair snapped open",
+      "hint": "складной стул раскрывают",
+      "seed": 36953,
+      "seconds": 8
+    },
+    {
+      "key": "rug_beat",
+      "prompt": "a dust rug beaten with a stick",
+      "hint": "выбивают ковёр",
+      "seed": 44183,
+      "seconds": 8
+    },
+    {
+      "key": "clock_wind",
+      "prompt": "a mechanical clock being wound up with a ratchet",
+      "hint": "заводят часы",
+      "seed": 71686,
+      "seconds": 8
+    },
+    {
+      "key": "lamp_oil",
+      "prompt": "an oil lamp glass chimney set on with a glassy clink",
+      "hint": "ставят стекло лампы",
+      "seed": 77948,
+      "seconds": 8
+    },
+    {
+      "key": "candle_lit",
+      "prompt": "a candle wick catching light with a soft flare",
+      "hint": "зажигают свечу",
+      "seed": 62917,
+      "seconds": 8
+    },
+    {
+      "key": "inkwell_dip",
+      "prompt": "a pen dipped into an inkwell",
+      "hint": "обмакивают перо в чернильницу",
+      "seed": 71639,
+      "seconds": 8
+    },
+    {
+      "key": "umbrella_open",
+      "prompt": "an umbrella opened with a snap",
+      "hint": "раскрывают зонт",
+      "seed": 53451,
+      "seconds": 8
+    },
+    {
+      "key": "cane_tap",
+      "prompt": "a walking cane tapping on stone",
+      "hint": "стук трости по камню",
+      "seed": 54316,
+      "seconds": 8
+    },
+    {
+      "key": "glove_pull",
+      "prompt": "leather gloves being pulled on",
+      "hint": "натягивают перчатки",
+      "seed": 9714,
+      "seconds": 8
+    },
+    {
+      "key": "belt_buckle",
+      "prompt": "a leather belt buckled with a click",
+      "hint": "застёгивают ремень",
+      "seed": 37226,
+      "seconds": 8
+    },
+    {
+      "key": "buttons_fasten",
+      "prompt": "buttons fastened through a shirt",
+      "hint": "застёгивают пуговицы",
+      "seed": 75153,
+      "seconds": 8
+    },
+    {
+      "key": "silk_rustle",
+      "prompt": "silk skirts rustling with movement",
+      "hint": "шелест шёлковых юбок",
+      "seed": 38840,
+      "seconds": 8
+    },
+    {
+      "key": "coat_off",
+      "prompt": "a heavy coat taken off and shaken out",
+      "hint": "снимают тяжёлое пальто",
+      "seed": 9991,
+      "seconds": 8
+    },
+    {
+      "key": "hat_set",
+      "prompt": "a hat set down on a table",
+      "hint": "ставят шляпу на стол",
+      "seed": 80801,
+      "seconds": 8
+    },
+    {
+      "key": "mirror_wipe",
+      "prompt": "a cloth wiped over a mirror",
+      "hint": "протирают зеркало",
+      "seed": 20382,
+      "seconds": 8
+    },
+    {
+      "key": "razor_strop",
+      "prompt": "a razor stropped on a leather belt",
+      "hint": "правят бритву на ремне",
+      "seed": 15396,
+      "seconds": 8
+    },
+    {
+      "key": "knitting",
+      "prompt": "knitting needles clicking together",
+      "hint": "стучат спицы",
+      "seed": 57405,
+      "seconds": 8
+    },
+    {
+      "key": "shoe_polish",
+      "prompt": "a brush polishing a leather shoe",
+      "hint": "чистят обувь щёткой",
+      "seed": 39276,
+      "seconds": 8
+    },
+    {
+      "key": "boiler_rumble",
+      "prompt": "a boiler rumbling deep in the basement",
+      "hint": "гудит котельная в подвале",
+      "seed": 20412,
+      "seconds": 8
+    },
+    {
+      "key": "steam_valve",
+      "prompt": "a steam valve releasing pressure with a sharp hiss",
+      "hint": "паровой клапан шипит",
+      "seed": 14404,
+      "seconds": 8
+    },
+    {
+      "key": "tram_bell",
+      "prompt": "an old tram bell ringing twice",
+      "hint": "звонок трамвая",
+      "seed": 51441,
+      "seconds": 8
+    },
+    {
+      "key": "tram_pass",
+      "prompt": "a tram passing on rails with a steel squeal",
+      "hint": "трамвай проезжает",
+      "seed": 69527,
+      "seconds": 8
+    },
+    {
+      "key": "car_pass_gravel",
+      "prompt": "a car passing on gravel, tires crunching",
+      "hint": "машина по гравию",
+      "seed": 34455,
+      "seconds": 8
+    },
+    {
+      "key": "cabbie_shout",
+      "prompt": "a cab driver shouting at his horse and clicking his tongue",
+      "hint": "извозчик кричит на лошадь",
+      "seed": 7364,
+      "seconds": 8
+    },
+    {
+      "key": "street_organ",
+      "prompt": "a street organ grinding a short barrel tune",
+      "hint": "шарманка на улице",
+      "seed": 12937,
+      "seconds": 8
+    },
+    {
+      "key": "newsboy",
+      "prompt": "a newsboy shouting headlines on a corner",
+      "hint": "газетчик выкрикивает",
+      "seed": 43581,
+      "seconds": 8
+    },
+    {
+      "key": "station_announce",
+      "prompt": "a station bell followed by a muffled loudspeaker announcement",
+      "hint": "объявление на вокзале",
+      "seed": 60542,
+      "seconds": 8
+    },
+    {
+      "key": "bicycle_pass",
+      "prompt": "a bicycle rolling past with a ticking freewheel",
+      "hint": "велосипед проезжает",
+      "seed": 44430,
+      "seconds": 8
+    },
+    {
+      "key": "hail_storm",
+      "prompt": "hail drumming on a tin roof",
+      "hint": "град бьёт по железу",
+      "seed": 81344,
+      "seconds": 8
+    },
+    {
+      "key": "sleet_rain",
+      "prompt": "sleet hissing on a windowsill",
+      "hint": "мокрый снег шипит на подоконнике",
+      "seed": 30226,
+      "seconds": 8
+    },
+    {
+      "key": "ice_crack",
+      "prompt": "ice cracking under a boot",
+      "hint": "лёд трещит под ногой",
+      "seed": 53549,
+      "seconds": 8
+    },
+    {
+      "key": "puddle_step",
+      "prompt": "a boot splashing through a puddle",
+      "hint": "шаг в лужу",
+      "seed": 82970,
+      "seconds": 8
+    },
+    {
+      "key": "crickets_night",
+      "prompt": "crickets chirping on a summer night",
+      "hint": "сверчки ночью",
+      "seed": 86286,
+      "seconds": 8
+    },
+    {
+      "key": "cicadas",
+      "prompt": "cicadas buzzing in the summer heat",
+      "hint": "цикады",
+      "seed": 51610,
+      "seconds": 8
+    },
+    {
+      "key": "crows",
+      "prompt": "crows cawing in the distance",
+      "hint": "каркают вороны",
+      "seed": 11203,
+      "seconds": 8
+    },
+    {
+      "key": "pigeons",
+      "prompt": "pigeons flapping up from a square",
+      "hint": "взлетают голуби",
+      "seed": 39936,
+      "seconds": 8
+    },
+    {
+      "key": "owl_call",
+      "prompt": "an owl calling twice in the dark",
+      "hint": "крик совы",
+      "seed": 69197,
+      "seconds": 8
+    },
+    {
+      "key": "geese",
+      "prompt": "geese honking and flapping",
+      "hint": "гогочут гуси",
+      "seed": 82132,
+      "seconds": 8
+    },
+    {
+      "key": "cow_bell",
+      "prompt": "a cowbell clanking as cattle move",
+      "hint": "бренчит колокольчик коровы",
+      "seed": 81703,
+      "seconds": 8
+    },
+    {
+      "key": "sheep_flock",
+      "prompt": "sheep bleating in a flock",
+      "hint": "блеют овцы",
+      "seed": 34125,
+      "seconds": 8
+    },
+    {
+      "key": "tree_wind",
+      "prompt": "wind moving through leaves overhead",
+      "hint": "ветер в листве",
+      "seed": 46651,
+      "seconds": 8
+    },
+    {
+      "key": "leaves_step",
+      "prompt": "dry leaves rustled by footsteps",
+      "hint": "шаги по сухим листьям",
+      "seed": 73286,
+      "seconds": 8
+    },
+    {
+      "key": "fire_flare",
+      "prompt": "a fire flaring up and spitting sparks",
+      "hint": "огонь вспыхивает",
+      "seed": 53188,
+      "seconds": 8
+    },
+    {
+      "key": "coal_drop",
+      "prompt": "coal poured into a bucket with a heavy rattle",
+      "hint": "угли падают в ведро",
+      "seed": 77655,
+      "seconds": 8
+    },
+    {
+      "key": "log_drop",
+      "prompt": "a log dropped onto a woodpile",
+      "hint": "полено падает",
+      "seed": 43281,
+      "seconds": 8
+    },
+    {
+      "key": "bucket_swing",
+      "prompt": "an empty tin bucket swinging on its handle",
+      "hint": "ведро качается",
+      "seed": 80060,
+      "seconds": 8
+    },
+    {
+      "key": "wood_plane",
+      "prompt": "a carpenter's plane pushing a shaving off a board",
+      "hint": "рубанок по доске",
+      "seed": 60471,
+      "seconds": 8
+    },
+    {
+      "key": "chisel_mallet",
+      "prompt": "a chisel struck by a wooden mallet",
+      "hint": "стамеска под киянкой",
+      "seed": 31909,
+      "seconds": 8
+    },
+    {
+      "key": "metal_file",
+      "prompt": "a metal file scraping a piece of steel",
+      "hint": "напильник по металлу",
+      "seed": 79689,
+      "seconds": 8
+    },
+    {
+      "key": "sandpaper",
+      "prompt": "sandpaper rubbed on wood",
+      "hint": "шкурка по дереву",
+      "seed": 49398,
+      "seconds": 8
+    },
+    {
+      "key": "grinder",
+      "prompt": "a grinding wheel sparking against metal",
+      "hint": "точильный круг",
+      "seed": 42525,
+      "seconds": 8
+    },
+    {
+      "key": "bellows",
+      "prompt": "blacksmith's bellows blowing air into a forge",
+      "hint": "мехи раздувают горн",
+      "seed": 76100,
+      "seconds": 8
+    },
+    {
+      "key": "forge_hammer",
+      "prompt": "a hammer striking hot iron on an anvil with a ringing blow",
+      "hint": "удар по раскалённому железу",
+      "seed": 53895,
+      "seconds": 8
+    },
+    {
+      "key": "drill_hand",
+      "prompt": "a hand drill turning with a ratchet",
+      "hint": "ручная дрель",
+      "seed": 39759,
+      "seconds": 8
+    },
+    {
+      "key": "scythe",
+      "prompt": "a scythe cutting grass in long strokes",
+      "hint": "коса косит траву",
+      "seed": 86516,
+      "seconds": 8
+    },
+    {
+      "key": "rake_gravel",
+      "prompt": "a rake dragging over gravel",
+      "hint": "грабли по гравию",
+      "seed": 70781,
+      "seconds": 8
+    },
+    {
+      "key": "wheelbarrow",
+      "prompt": "a wheelbarrow rolling over rough ground",
+      "hint": "тачка по неровной земле",
+      "seed": 8358,
+      "seconds": 8
+    },
+    {
+      "key": "ladder_step",
+      "prompt": "a wooden ladder creaking under a step",
+      "hint": "скрип лестницы-стремянки",
+      "seed": 89969,
+      "seconds": 8
+    },
+    {
+      "key": "winch",
+      "prompt": "a winch ratchet cranking and a rope tightening",
+      "hint": "лебёдка с трещоткой",
+      "seed": 15189,
+      "seconds": 8
+    },
+    {
+      "key": "pulley_squeal",
+      "prompt": "a pulley squealing as a weight rises",
+      "hint": "блок скрипит под грузом",
+      "seed": 54445,
+      "seconds": 8
+    },
+    {
+      "key": "blade_clash",
+      "prompt": "two steel blades clashing",
+      "hint": "лязг скрещённых клинков",
+      "seed": 88841,
+      "seconds": 8
+    },
+    {
+      "key": "blade_slice",
+      "prompt": "a blade slicing through cloth and air",
+      "hint": "клинок рассекает воздух",
+      "seed": 32796,
+      "seconds": 8
+    },
+    {
+      "key": "bowstring",
+      "prompt": "a bowstring released with a deep twang",
+      "hint": "спуск тетивы",
+      "seed": 30054,
+      "seconds": 8
+    },
+    {
+      "key": "arrow_whiz",
+      "prompt": "an arrow passing close by with a whiz",
+      "hint": "стрела пролетает",
+      "seed": 39280,
+      "seconds": 8
+    },
+    {
+      "key": "gun_cock",
+      "prompt": "a revolver hammer cocked with two clicks",
+      "hint": "взвод курка",
+      "seed": 43120,
+      "seconds": 8
+    },
+    {
+      "key": "shell_drop",
+      "prompt": "brass shell casings dropping on a stone floor",
+      "hint": "гильзы падают на камень",
+      "seed": 54517,
+      "seconds": 8
+    },
+    {
+      "key": "spear_thrust",
+      "prompt": "a spear thrust into wood with a split and thud",
+      "hint": "удар копьём",
+      "seed": 4905,
+      "seconds": 8
+    },
+    {
+      "key": "dagger_draw",
+      "prompt": "a dagger pulled from a leather sheath",
+      "hint": "кинжал из ножен",
+      "seed": 85565,
+      "seconds": 8
+    },
+    {
+      "key": "club_blow",
+      "prompt": "a club striking a wooden door with a heavy thud",
+      "hint": "удар дубиной по двери",
+      "seed": 7051,
+      "seconds": 8
+    },
+    {
+      "key": "chain_whip",
+      "prompt": "a chain whipping through the air and cracking",
+      "hint": "цепь рассекает воздух",
+      "seed": 59191,
+      "seconds": 8
+    },
+    {
+      "key": "cursing",
+      "prompt": "a man cursing angrily under his breath",
+      "hint": "ругань сквозь зубы",
+      "seed": 53523,
+      "seconds": 8
+    },
+    {
+      "key": "laugh_hysterical",
+      "prompt": "hysterical laughter rising and breaking",
+      "hint": "истерический смех",
+      "seed": 61796,
+      "seconds": 8
+    },
+    {
+      "key": "sob_muffled",
+      "prompt": "muffled sobbing into hands",
+      "hint": "сдавленное всхлипывание",
+      "seed": 83563,
+      "seconds": 8
+    },
+    {
+      "key": "scream_child",
+      "prompt": "a child screaming in fear",
+      "hint": "детский крик",
+      "seed": 47336,
+      "seconds": 8
+    },
+    {
+      "key": "sigh_tired",
+      "prompt": "a long tired sigh",
+      "hint": "усталый вздох",
+      "seed": 81632,
+      "seconds": 8
+    },
+    {
+      "key": "squeal_fear",
+      "prompt": "a frightened squeal",
+      "hint": "визг от страха",
+      "seed": 46479,
+      "seconds": 8
+    },
+    {
+      "key": "moan_relief",
+      "prompt": "a low moan of relief",
+      "hint": "стон облегчения",
+      "seed": 5340,
+      "seconds": 8
+    },
+    {
+      "key": "cat_hiss",
+      "prompt": "a cat hissing",
+      "hint": "кошка шипит",
+      "seed": 36258,
+      "seconds": 8
+    },
+    {
+      "key": "mouse_squeak",
+      "prompt": "a mouse squeaking",
+      "hint": "мышь пищит",
+      "seed": 25838,
+      "seconds": 8
+    },
+    {
+      "key": "horse_drink",
+      "prompt": "a horse drinking from a trough",
+      "hint": "лошадь пьёт из колоды",
+      "seed": 55780,
+      "seconds": 8
+    },
+    {
+      "key": "ball_bounce",
+      "prompt": "a ball bouncing on a wooden floor",
+      "hint": "мяч скачет по полу",
+      "seed": 66974,
+      "seconds": 8
+    },
+    {
+      "key": "jump_rope",
+      "prompt": "a skipping rope whipping the floor",
+      "hint": "скакалка бьёт по полу",
+      "seed": 80716,
+      "seconds": 8
+    },
+    {
+      "key": "piano_keys",
+      "prompt": "a few piano keys pressed",
+      "hint": "несколько нот рояля",
+      "seed": 18744,
+      "seconds": 8
+    },
+    {
+      "key": "guitar_strum",
+      "prompt": "a guitar strummed once",
+      "hint": "гитарный аккорд",
+      "seed": 12720,
+      "seconds": 8
+    },
+    {
+      "key": "violin_tune",
+      "prompt": "a violin being tuned with short bow strokes",
+      "hint": "настройка скрипки",
+      "seed": 18652,
+      "seconds": 8
+    },
+    {
+      "key": "accordion",
+      "prompt": "an accordion breathing a short chord",
+      "hint": "аккордеон",
+      "seed": 15841,
+      "seconds": 8
+    },
+    {
+      "key": "flute_note",
+      "prompt": "a flute playing a short phrase",
+      "hint": "флейта",
+      "seed": 81438,
+      "seconds": 8
+    },
+    {
+      "key": "cymbals",
+      "prompt": "cymbals crashing once",
+      "hint": "тарелки",
+      "seed": 65387,
+      "seconds": 8
+    },
+    {
+      "key": "tambourine",
+      "prompt": "a tambourine shaken",
+      "hint": "бубен",
+      "seed": 65024,
+      "seconds": 8
+    },
+    {
+      "key": "funeral_bell",
+      "prompt": "a single slow funeral bell tolling",
+      "hint": "погребальный звон",
+      "seed": 39628,
+      "seconds": 8
+    },
+    {
+      "key": "prayer_murmur",
+      "prompt": "many voices murmuring a low prayer",
+      "hint": "молитва вполголоса",
+      "seed": 80721,
+      "seconds": 8
+    },
+    {
+      "key": "telegraph_key",
+      "prompt": "a telegraph key tapping out a message",
+      "hint": "телеграфный ключ",
+      "seed": 71208,
+      "seconds": 8
+    },
+    {
+      "key": "poker_fire",
+      "prompt": "an iron poker stirring coals in a fireplace",
+      "hint": "кочерга в камине",
+      "seed": 1510,
+      "seconds": 8
+    },
+    {
+      "key": "embers_sizzle",
+      "prompt": "embers hissing and settling in a fireplace",
+      "hint": "угли шипят",
+      "seed": 85938,
+      "seconds": 8
+    },
+    {
+      "key": "wind_chime",
+      "prompt": "glass wind chimes tinkling in a breeze",
+      "hint": "стеклянные подвески звенят",
+      "seed": 41405,
+      "seconds": 8
+    },
+    {
+      "key": "soap_wash",
+      "prompt": "hands washed with soap in a basin of water",
+      "hint": "моют руки с мылом",
+      "seed": 7508,
+      "seconds": 8
+    },
+    {
+      "key": "basin_pour",
+      "prompt": "water poured from a jug into a wash basin",
+      "hint": "льют воду из кувшина",
+      "seed": 76833,
+      "seconds": 8
+    },
+    {
+      "key": "towel_snap",
+      "prompt": "a towel snapped open",
+      "hint": "встряхивают полотенце",
+      "seed": 45067,
+      "seconds": 8
+    },
+    {
+      "key": "sheets_rustle",
+      "prompt": "bedsheets rustling as someone turns over",
+      "hint": "шуршат простыни",
+      "seed": 53839,
+      "seconds": 8
+    },
+    {
+      "key": "mattress_straw",
+      "prompt": "a straw mattress rustling under a body",
+      "hint": "соломенный тюфяк шуршит",
+      "seed": 66065,
+      "seconds": 8
+    },
+    {
+      "key": "sit_down_chair",
+      "prompt": "a chair creaking as someone sits down",
+      "hint": "садятся на стул — скрип",
+      "seed": 51781,
+      "seconds": 8
+    },
+    {
+      "key": "stand_up_chair",
+      "prompt": "a chair scraping back as someone stands",
+      "hint": "встают — стул скрипнул",
+      "seed": 42174,
+      "seconds": 8
+    },
+    {
+      "key": "stumble_furniture",
+      "prompt": "someone stumbling into a table with a thud",
+      "hint": "наткнулись на стол",
+      "seed": 51509,
+      "seconds": 8
+    },
+    {
+      "key": "box_open",
+      "prompt": "a wooden box lid opened with a creak",
+      "hint": "открывают деревянную шкатулку",
+      "seed": 12871,
+      "seconds": 8
+    },
+    {
+      "key": "box_close",
+      "prompt": "a wooden box lid closed with a clap",
+      "hint": "захлопывают шкатулку",
+      "seed": 52203,
+      "seconds": 8
+    },
+    {
+      "key": "chest_lid",
+      "prompt": "a heavy chest lid falling shut",
+      "hint": "крышка сундука падает",
+      "seed": 13942,
+      "seconds": 8
+    },
+    {
+      "key": "trunk_lock",
+      "prompt": "a trunk lock snapping shut",
+      "hint": "замок сундука щёлкает",
+      "seed": 67264,
+      "seconds": 8
+    },
+    {
+      "key": "razor_shave",
+      "prompt": "a straight razor scraping stubble",
+      "hint": "бреются опасной бритвой",
+      "seed": 52627,
+      "seconds": 8
+    },
+    {
+      "key": "comb_hair",
+      "prompt": "a comb pulled through hair",
+      "hint": "расчёсывают волосы",
+      "seed": 44405,
+      "seconds": 8
+    },
+    {
+      "key": "boot_pull_on",
+      "prompt": "a boot pulled on with a grunt of leather",
+      "hint": "натягивают сапог",
+      "seed": 11391,
+      "seconds": 8
+    },
+    {
+      "key": "cloak_fasten",
+      "prompt": "a cloak fastened at the shoulder",
+      "hint": "застёгивают плащ",
+      "seed": 30183,
+      "seconds": 8
+    },
+    {
+      "key": "parasol_open",
+      "prompt": "a parasol snapped open",
+      "hint": "раскрывают зонтик от солнца",
+      "seed": 73103,
+      "seconds": 8
+    },
+    {
+      "key": "fan_flutter",
+      "prompt": "a paper fan fluttering shut",
+      "hint": "веер складывается",
+      "seed": 40837,
+      "seconds": 8
+    },
+    {
+      "key": "necklace_clink",
+      "prompt": "a necklace of beads rattled",
+      "hint": "звенят бусы",
+      "seed": 90011,
+      "seconds": 8
+    },
+    {
+      "key": "bracelet_clink",
+      "prompt": "a bracelet clinking on a wrist",
+      "hint": "звенят браслеты",
+      "seed": 88305,
+      "seconds": 8
+    },
+    {
+      "key": "glass_toast",
+      "prompt": "glasses clinking together in a toast",
+      "hint": "чокаются бокалами",
+      "seed": 85808,
+      "seconds": 8
+    },
+    {
+      "key": "wine_pour",
+      "prompt": "wine poured into a glass",
+      "hint": "наливают вино",
+      "seed": 75707,
+      "seconds": 8
+    },
+    {
+      "key": "bottle_set",
+      "prompt": "a bottle set down on a table",
+      "hint": "ставят бутылку на стол",
+      "seed": 67462,
+      "seconds": 8
+    },
+    {
+      "key": "decanter_stopper",
+      "prompt": "a glass decanter stopper lifted with a pop",
+      "hint": "пробка графина",
+      "seed": 1738,
+      "seconds": 8
+    },
+    {
+      "key": "fork_plate",
+      "prompt": "a fork scraping a plate",
+      "hint": "вилка скребёт по тарелке",
+      "seed": 19432,
+      "seconds": 8
+    },
+    {
+      "key": "napkin_shake",
+      "prompt": "a napkin shaken out",
+      "hint": "встряхивают салфетку",
+      "seed": 48617,
+      "seconds": 8
+    },
+    {
+      "key": "bread_break",
+      "prompt": "a crusty loaf broken in half",
+      "hint": "ломают хлеб",
+      "seed": 18048,
+      "seconds": 8
+    },
+    {
+      "key": "coffee_grind",
+      "prompt": "coffee beans ground in a hand mill",
+      "hint": "мелют кофе",
+      "seed": 14555,
+      "seconds": 8
+    },
+    {
+      "key": "kettle_set_down",
+      "prompt": "a kettle set down on a stove with a clang",
+      "hint": "ставят чайник на плиту",
+      "seed": 82010,
+      "seconds": 8
+    },
+    {
+      "key": "water_spill",
+      "prompt": "a bucket of water spilled across a floor",
+      "hint": "разливают воду",
+      "seed": 73961,
+      "seconds": 8
+    },
+    {
+      "key": "laundry_beat",
+      "prompt": "wet laundry slapped against a washboard",
+      "hint": "стирают на доске",
+      "seed": 2347,
+      "seconds": 8
+    },
+    {
+      "key": "clothesline_wind",
+      "prompt": "laundry flapping on a line in the wind",
+      "hint": "бельё хлопает на ветру",
+      "seed": 35518,
+      "seconds": 8
+    },
+    {
+      "key": "gate_latch",
+      "prompt": "a garden gate latch clicking open",
+      "hint": "щеколда калитки",
+      "seed": 9447,
+      "seconds": 8
+    },
+    {
+      "key": "gate_swing",
+      "prompt": "a wooden gate swinging on its hinges",
+      "hint": "калитка качается",
+      "seed": 53343,
+      "seconds": 8
+    },
+    {
+      "key": "fence_creak",
+      "prompt": "a wooden fence creaking in the wind",
+      "hint": "забор скрипит",
+      "seed": 4178,
+      "seconds": 8
+    },
+    {
+      "key": "shutter_latch",
+      "prompt": "an iron shutter latch lifted",
+      "hint": "поднимают засов ставни",
+      "seed": 39376,
+      "seconds": 8
+    },
+    {
+      "key": "door_handle_turn",
+      "prompt": "a door handle turned and released",
+      "hint": "поворачивают ручку двери",
+      "seed": 41987,
+      "seconds": 8
+    },
+    {
+      "key": "knock_window",
+      "prompt": "a knock on a window pane",
+      "hint": "стучат в окно",
+      "seed": 88633,
+      "seconds": 8
+    },
+    {
+      "key": "knock_desk",
+      "prompt": "knuckles rapping on a wooden desk",
+      "hint": "стучат по столу костяшками",
+      "seed": 37389,
+      "seconds": 8
+    },
+    {
+      "key": "heel_stone",
+      "prompt": "heels clicking on a stone pavement",
+      "hint": "каблуки по камню",
+      "seed": 88576,
+      "seconds": 8
+    },
+    {
+      "key": "shoes_squeak",
+      "prompt": "wet shoes squeaking on a polished floor",
+      "hint": "обувь скрипит по паркету",
+      "seed": 45172,
+      "seconds": 8
+    },
+    {
+      "key": "factory_whistle",
+      "prompt": "a factory steam whistle signalling the end of a shift",
+      "hint": "гудок завода",
+      "seed": 52434,
+      "seconds": 8
+    },
+    {
+      "key": "factory_hum",
+      "prompt": "machinery humming behind a factory wall",
+      "hint": "гул машин за стеной",
+      "seed": 71840,
+      "seconds": 8
+    },
+    {
+      "key": "printing_press",
+      "prompt": "a printing press stamping and rolling",
+      "hint": "типографский станок",
+      "seed": 18103,
+      "seconds": 8
+    },
+    {
+      "key": "street_sweeper",
+      "prompt": "a broom scraping along a street",
+      "hint": "метут улицу",
+      "seed": 20849,
+      "seconds": 8
+    },
+    {
+      "key": "water_cart",
+      "prompt": "a water cart rolling with sloshing",
+      "hint": "бочка с водой катится",
+      "seed": 3232,
+      "seconds": 8
+    },
+    {
+      "key": "omnibus_pass",
+      "prompt": "a horse-drawn omnibus rattling past",
+      "hint": "омнибус проезжает",
+      "seed": 6120,
+      "seconds": 8
+    },
+    {
+      "key": "carriage_cobbles",
+      "prompt": "carriage wheels rattling over cobblestones",
+      "hint": "колёса по булыжнику",
+      "seed": 26122,
+      "seconds": 8
+    },
+    {
+      "key": "cab_door_slam",
+      "prompt": "a cab door slammed shut",
+      "hint": "дверца экипажа хлопнула",
+      "seed": 41485,
+      "seconds": 8
+    },
+    {
+      "key": "ferry_horn",
+      "prompt": "a ferry horn sounding over water",
+      "hint": "гудок парома",
+      "seed": 4369,
+      "seconds": 8
+    },
+    {
+      "key": "anchor_drop",
+      "prompt": "an anchor chain running out with a splash",
+      "hint": "якорная цепь с плеском",
+      "seed": 17505,
+      "seconds": 8
+    },
+    {
+      "key": "ship_horn",
+      "prompt": "a ship's deep horn sounding in fog",
+      "hint": "гудок парохода в тумане",
+      "seed": 84405,
+      "seconds": 8
+    },
+    {
+      "key": "harbour_crowd",
+      "prompt": "dockworkers shouting over water",
+      "hint": "крики в порту",
+      "seed": 60737,
+      "seconds": 8
+    },
+    {
+      "key": "market_trader",
+      "prompt": "a trader calling out prices",
+      "hint": "торговец выкрикивает цены",
+      "seed": 12389,
+      "seconds": 8
+    },
+    {
+      "key": "beggar_voice",
+      "prompt": "a beggar whining for alms",
+      "hint": "нищий просит подаяние",
+      "seed": 88772,
+      "seconds": 8
+    },
+    {
+      "key": "street_children",
+      "prompt": "children shouting in a street",
+      "hint": "дети кричат на улице",
+      "seed": 53898,
+      "seconds": 8
+    },
+    {
+      "key": "church_crowd",
+      "prompt": "a congregation rising with shuffling and coughs",
+      "hint": "прихожане поднимаются",
+      "seed": 47148,
+      "seconds": 8
+    },
+    {
+      "key": "school_bell",
+      "prompt": "a school handbell ringing",
+      "hint": "звонок в школе",
+      "seed": 64331,
+      "seconds": 8
+    },
+    {
+      "key": "class_room",
+      "prompt": "a classroom murmuring with papers and voices",
+      "hint": "шум класса",
+      "seed": 48236,
+      "seconds": 8
+    },
+    {
+      "key": "courtroom_murmur",
+      "prompt": "a courtroom murmuring before a gavel bang",
+      "hint": "гул в зале суда",
+      "seed": 63346,
+      "seconds": 8
+    },
+    {
+      "key": "gavel",
+      "prompt": "a gavel striking a wooden desk",
+      "hint": "удар молотка судьи",
+      "seed": 28968,
+      "seconds": 8
+    },
+    {
+      "key": "ball_dance",
+      "prompt": "dance music and feet turning in a ballroom",
+      "hint": "бал: музыка и шаги",
+      "seed": 26980,
+      "seconds": 8
+    },
+    {
+      "key": "waiter_steps",
+      "prompt": "a waiter's quick steps with rattling dishes",
+      "hint": "официант спешит с посудой",
+      "seed": 58655,
+      "seconds": 8
+    },
+    {
+      "key": "restaurant_murmur",
+      "prompt": "a busy restaurant murmuring with cutlery",
+      "hint": "шум ресторана",
+      "seed": 60960,
+      "seconds": 8
+    },
+    {
+      "key": "tavern_noise",
+      "prompt": "a tavern full of voices and clinking mugs",
+      "hint": "шум трактира",
+      "seed": 61427,
+      "seconds": 8
+    },
+    {
+      "key": "mug_set_down",
+      "prompt": "a heavy beer mug set down on wood",
+      "hint": "кружка пива на стол",
+      "seed": 42708,
+      "seconds": 8
+    },
+    {
+      "key": "cards_shuffle",
+      "prompt": "a deck of cards being shuffled",
+      "hint": "тасуют карты",
+      "seed": 66566,
+      "seconds": 8
+    },
+    {
+      "key": "dice_roll",
+      "prompt": "dice rolling and clicking on a table",
+      "hint": "костяшки катятся",
+      "seed": 70593,
+      "seconds": 8
+    },
+    {
+      "key": "billiard_balls",
+      "prompt": "billiard balls clicking together",
+      "hint": "шары на бильярде",
+      "seed": 41474,
+      "seconds": 8
+    },
+    {
+      "key": "brook_flow",
+      "prompt": "a stream running over stones",
+      "hint": "ручей по камням",
+      "seed": 7430,
+      "seconds": 8
+    },
+    {
+      "key": "waterfall",
+      "prompt": "a waterfall roaring",
+      "hint": "шум водопада",
+      "seed": 58459,
+      "seconds": 8
+    },
+    {
+      "key": "river_flow",
+      "prompt": "a wide river flowing past",
+      "hint": "река течёт",
+      "seed": 70326,
+      "seconds": 8
+    },
+    {
+      "key": "mud_squelch",
+      "prompt": "boots squelching through deep mud",
+      "hint": "чавканье в грязи",
+      "seed": 81877,
+      "seconds": 8
+    },
+    {
+      "key": "tent_flap_wind",
+      "prompt": "a canvas tent flap flapping in the wind",
+      "hint": "полог палатки хлопает",
+      "seed": 67531,
+      "seconds": 8
+    },
+    {
+      "key": "rain_canvas",
+      "prompt": "rain drumming on canvas",
+      "hint": "дождь по брезенту",
+      "seed": 71803,
+      "seconds": 8
+    },
+    {
+      "key": "storm_approach",
+      "prompt": "a storm building with distant rolling thunder",
+      "hint": "буря приближается",
+      "seed": 23507,
+      "seconds": 8
+    },
+    {
+      "key": "branch_break",
+      "prompt": "a dry branch snapping underfoot",
+      "hint": "ветка хрустнула",
+      "seed": 56444,
+      "seconds": 8
+    },
+    {
+      "key": "thaw_drip",
+      "prompt": "melting icicles dripping steadily",
+      "hint": "капель с сосулек",
+      "seed": 56540,
+      "seconds": 8
+    },
+    {
+      "key": "frogs_pond",
+      "prompt": "frogs croaking in a pond",
+      "hint": "лягушки в пруду",
+      "seed": 60385,
+      "seconds": 8
+    },
+    {
+      "key": "wasp_buzz",
+      "prompt": "a wasp buzzing close to the ear",
+      "hint": "оса жужжит",
+      "seed": 73710,
+      "seconds": 8
+    },
+    {
+      "key": "mosquitoes",
+      "prompt": "mosquitoes whining near an ear",
+      "hint": "комары пищат",
+      "seed": 81738,
+      "seconds": 8
+    },
+    {
+      "key": "birds_morning",
+      "prompt": "birds singing at dawn",
+      "hint": "птицы на рассвете",
+      "seed": 31332,
+      "seconds": 8
+    },
+    {
+      "key": "magpie",
+      "prompt": "a magpie chattering",
+      "hint": "стрекочет сорока",
+      "seed": 7289,
+      "seconds": 8
+    },
+    {
+      "key": "squirrel",
+      "prompt": "a squirrel scampering up bark",
+      "hint": "белка карабкается по коре",
+      "seed": 74286,
+      "seconds": 8
+    },
+    {
+      "key": "fox_scream",
+      "prompt": "a fox screaming at night",
+      "hint": "крик лисицы",
+      "seed": 5808,
+      "seconds": 8
+    },
+    {
+      "key": "dog_howl",
+      "prompt": "a dog howling far away",
+      "hint": "собака воет вдалеке",
+      "seed": 55825,
+      "seconds": 8
+    },
+    {
+      "key": "horse_stamp",
+      "prompt": "a horse stamping in a stall",
+      "hint": "лошадь бьёт копытом",
+      "seed": 17534,
+      "seconds": 8
+    },
+    {
+      "key": "cattle_low",
+      "prompt": "a cow lowing low and long",
+      "hint": "корова мычит",
+      "seed": 85466,
+      "seconds": 8
+    },
+    {
+      "key": "goat_bleat",
+      "prompt": "a goat bleating",
+      "hint": "блеет козa",
+      "seed": 19433,
+      "seconds": 8
+    },
+    {
+      "key": "pig_squeal",
+      "prompt": "a pig squealing",
+      "hint": "визжит свинья",
+      "seed": 50010,
+      "seconds": 8
+    },
+    {
+      "key": "leaves_whirl",
+      "prompt": "leaves swirling on a gust of wind",
+      "hint": "листья кружатся",
+      "seed": 13389,
+      "seconds": 8
+    },
+    {
+      "key": "heartbeat_fast",
+      "prompt": "a heartbeat quickening",
+      "hint": "стук сердца частит",
+      "seed": 3104,
+      "seconds": 8
+    },
+    {
+      "key": "stomach_rumble",
+      "prompt": "a stomach rumbling",
+      "hint": "урчит в животе",
+      "seed": 11369,
+      "seconds": 8
+    },
+    {
+      "key": "hiccup",
+      "prompt": "a single hiccup",
+      "hint": "икота",
+      "seed": 70910,
+      "seconds": 8
+    },
+    {
+      "key": "spit",
+      "prompt": "a man spitting on the ground",
+      "hint": "плюют на землю",
+      "seed": 6585,
+      "seconds": 8
+    },
+    {
+      "key": "whisper_close",
+      "prompt": "a whisper right next to the ear",
+      "hint": "шёпот над самым ухом",
+      "seed": 86688,
+      "seconds": 8
+    },
+    {
+      "key": "cry_baby",
+      "prompt": "a baby crying",
+      "hint": "плачет младенец",
+      "seed": 61858,
+      "seconds": 8
+    },
+    {
+      "key": "scream_pain",
+      "prompt": "a scream of pain",
+      "hint": "крик от боли",
+      "seed": 35767,
+      "seconds": 8
+    },
+    {
+      "key": "groan_sleep",
+      "prompt": "a groan in sleep",
+      "hint": "стон во сне",
+      "seed": 33719,
+      "seconds": 8
+    },
+    {
+      "key": "battle_cry",
+      "prompt": "a battle cry from many throats",
+      "hint": "боевой клич",
+      "seed": 41577,
+      "seconds": 8
+    },
+    {
+      "key": "rifle_bolt",
+      "prompt": "a rifle bolt worked and a cartridge ejected",
+      "hint": "затвор винтовки",
+      "seed": 39238,
+      "seconds": 8
+    },
+    {
+      "key": "bayonet_charge",
+      "prompt": "boots charging with a shout",
+      "hint": "атака в штыки",
+      "seed": 26349,
+      "seconds": 8
+    },
+    {
+      "key": "armor_clank",
+      "prompt": "armor plates clanking as a man walks",
+      "hint": "лязг доспехов",
+      "seed": 9214,
+      "seconds": 8
+    },
+    {
+      "key": "shield_block",
+      "prompt": "a shield taking a heavy blow",
+      "hint": "удар в щит",
+      "seed": 5272,
+      "seconds": 8
+    },
+    {
+      "key": "arrow_hit",
+      "prompt": "an arrow thudding into wood",
+      "hint": "стрела втыкается в дерево",
+      "seed": 52444,
+      "seconds": 8
+    },
+    {
+      "key": "cannon_shot",
+      "prompt": "a cannon firing with a deep boom",
+      "hint": "пушечный выстрел",
+      "seed": 76576,
+      "seconds": 8
+    },
+    {
+      "key": "musket_cock",
+      "prompt": "a musket hammer cocked",
+      "hint": "взвод мушкета",
+      "seed": 34943,
+      "seconds": 8
+    },
+    {
+      "key": "powder_flash",
+      "prompt": "powder flashing in a pan with a hiss",
+      "hint": "вспышка пороха на полке",
+      "seed": 56483,
+      "seconds": 8
+    },
+    {
+      "key": "flare_whistle",
+      "prompt": "a signal rocket whistling up",
+      "hint": "сигнальная ракета",
+      "seed": 82456,
+      "seconds": 8
+    },
+    {
+      "key": "loom",
+      "prompt": "a hand loom clacking",
+      "hint": "стучит ткацкий станок",
+      "seed": 48454,
+      "seconds": 8
+    },
+    {
+      "key": "pottery_wheel",
+      "prompt": "a pottery wheel turning with wet clay",
+      "hint": "гончарный круг",
+      "seed": 66736,
+      "seconds": 8
+    },
+    {
+      "key": "basket_weave",
+      "prompt": "reeds being woven into a basket",
+      "hint": "плетут корзину",
+      "seed": 37408,
+      "seconds": 8
+    },
+    {
+      "key": "leather_stitch",
+      "prompt": "an awl and thread pulled through leather",
+      "hint": "шорная игла с дратвой",
+      "seed": 50318,
+      "seconds": 8
+    },
+    {
+      "key": "glass_blow",
+      "prompt": "a glassblower shaping a vessel",
+      "hint": "стеклодув формует",
+      "seed": 78093,
+      "seconds": 8
+    },
+    {
+      "key": "mill_stones",
+      "prompt": "millstones grinding grain",
+      "hint": "жернова мелют",
+      "seed": 83071,
+      "seconds": 8
+    },
+    {
+      "key": "pump_handle",
+      "prompt": "a hand pump worked with a gush of water",
+      "hint": "качают насос",
+      "seed": 72366,
+      "seconds": 8
+    },
+    {
+      "key": "axe_chop_wood",
+      "prompt": "an axe splitting a log",
+      "hint": "колют дрова",
+      "seed": 24628,
+      "seconds": 8
+    },
+    {
+      "key": "saw_branch",
+      "prompt": "a saw cutting through a branch",
+      "hint": "пилят ветку",
+      "seed": 58132,
+      "seconds": 8
+    },
+    {
+      "key": "rope_coil",
+      "prompt": "a rope dropped and coiled on the floor",
+      "hint": "бросают и сматывают верёвку",
+      "seed": 21862,
+      "seconds": 8
+    },
+    {
+      "key": "sack_drop",
+      "prompt": "a heavy sack dropped on the floor",
+      "hint": "мешок падает на пол",
+      "seed": 39194,
+      "seconds": 8
+    },
+    {
+      "key": "crate_drag",
+      "prompt": "a wooden crate dragged over stone",
+      "hint": "тащат ящик по камню",
+      "seed": 73564,
+      "seconds": 8
+    },
+    {
+      "key": "nails_pour",
+      "prompt": "a handful of nails poured on a bench",
+      "hint": "насыпают гвозди",
+      "seed": 53691,
+      "seconds": 8
+    },
+    {
+      "key": "pen_scratch",
+      "prompt": "a pen scratching quickly across paper",
+      "hint": "быстро пишут пером",
+      "seed": 58221,
+      "seconds": 8
+    },
+    {
+      "key": "folder_close",
+      "prompt": "a folder closed with a slap",
+      "hint": "папка захлопывается",
+      "seed": 10556,
+      "seconds": 8
+    },
+    {
+      "key": "map_unroll",
+      "prompt": "a map unrolled on a table",
+      "hint": "разворачивают карту",
+      "seed": 41204,
+      "seconds": 8
+    },
+    {
+      "key": "ledger_open",
+      "prompt": "a heavy ledger opened and pages turned",
+      "hint": "раскрывают счётную книгу",
+      "seed": 17414,
+      "seconds": 8
+    },
+    {
+      "key": "ink_splash",
+      "prompt": "a pen shaken with ink spattering",
+      "hint": "брызги чернил",
+      "seed": 17449,
+      "seconds": 8
+    },
+    {
+      "key": "church_hymn",
+      "prompt": "a congregation singing a hymn",
+      "hint": "поют псалом",
+      "seed": 60093,
+      "seconds": 8
+    },
+    {
+      "key": "wedding_bells",
+      "prompt": "wedding bells ringing joyfully",
+      "hint": "свадебный звон",
+      "seed": 54198,
+      "seconds": 8
+    },
+    {
+      "key": "funeral_organ",
+      "prompt": "a funeral organ chord held long",
+      "hint": "траурный аккорд органа",
+      "seed": 59369,
+      "seconds": 8
+    },
+    {
+      "key": "train_depart",
+      "prompt": "a train pulling away with steam and wheels",
+      "hint": "поезд трогается",
+      "seed": 86758,
+      "seconds": 8
+    },
+    {
+      "key": "train_brake",
+      "prompt": "train brakes squealing to a stop",
+      "hint": "поезд тормозит",
+      "seed": 9455,
+      "seconds": 8
+    },
+    {
+      "key": "tram_stop",
+      "prompt": "a tram stopping with a bell and brakes",
+      "hint": "трамвай останавливается",
+      "seed": 35340,
+      "seconds": 8
+    },
+    {
+      "key": "bicycle_chain",
+      "prompt": "a bicycle chain clicking as it rolls",
+      "hint": "цепь велосипеда",
+      "seed": 15473,
+      "seconds": 8
+    },
+    {
+      "key": "car_door_slam",
+      "prompt": "a car door slammed shut",
+      "hint": "дверца машины хлопнула",
+      "seed": 84601,
+      "seconds": 8
+    },
+    {
+      "key": "corset_creak",
+      "prompt": "a corset lacing pulled tight",
+      "hint": "затягивают корсет",
+      "seed": 58084,
+      "seconds": 8
+    },
+    {
+      "key": "ring_tap",
+      "prompt": "a ring tapped on a table",
+      "hint": "стучат кольцом по столу",
+      "seed": 77376,
+      "seconds": 8
+    },
+    {
+      "key": "spectacles_case",
+      "prompt": "spectacles folded into a case",
+      "hint": "складывают очки в футляр",
+      "seed": 55041,
+      "seconds": 8
+    },
+    {
+      "key": "snuffbox",
+      "prompt": "a snuff box snapped open",
+      "hint": "табакерка открывается",
+      "seed": 34406,
+      "seconds": 8
+    },
+    {
+      "key": "pipe_lit",
+      "prompt": "a pipe lit with a drawing puff",
+      "hint": "раскуривают трубку",
+      "seed": 67060,
+      "seconds": 8
+    },
+    {
+      "key": "cigar_cut",
+      "prompt": "a cigar cut and lit",
+      "hint": "обрезают и зажигают сигару",
+      "seed": 12767,
+      "seconds": 8
+    },
+    {
+      "key": "smoke_exhale",
+      "prompt": "a long exhale of smoke",
+      "hint": "выдох дыма",
+      "seed": 55883,
+      "seconds": 8
+    },
+    {
+      "key": "spittoon",
+      "prompt": "a spit into a brass spittoon",
+      "hint": "плевок в плевательницу",
+      "seed": 14998,
+      "seconds": 8
+    },
+    {
+      "key": "harmonica",
+      "prompt": "a harmonica played in short notes",
+      "hint": "губная гармоника",
+      "seed": 77158,
+      "seconds": 8
+    },
+    {
+      "key": "balalaika",
+      "prompt": "a balalaika strummed",
+      "hint": "балалайка",
+      "seed": 23520,
+      "seconds": 8
+    },
+    {
+      "key": "brass_band_far",
+      "prompt": "a brass band playing far away",
+      "hint": "духовой оркестр вдали",
+      "seed": 63015,
+      "seconds": 8
+    },
+    {
+      "key": "audience_laugh",
+      "prompt": "an audience laughing together",
+      "hint": "смех публики",
+      "seed": 54715,
+      "seconds": 8
+    }
+  ]
 }
