@@ -234,7 +234,9 @@ internal object AmbiencePlayer {
             } catch (e: Exception) { AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}") }
         }
         pending += run
-        handler.postDelayed(run, delayMs.coerceIn(0, 20_000))
+        // Абзац у читалки бывает и на минуту: событие в его конце должно ждать свои секунды, а не сваливаться
+        // в общую кучу на 20-й секунде (тогда играет одно, остальные отбрасываются как наложение).
+        handler.postDelayed(run, delayMs.coerceIn(0, 180_000))
     }
     private val shots = ArrayList<Voice>()
     /** Когда закончится звучащий сейчас звук события: следующий ранее этого не начинается. */

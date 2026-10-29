@@ -169,6 +169,8 @@ object BackgroundMusic {
                 val at = (moment.word * per).toLong()
                 if (at - lastAt < MIN_EVENT_GAP_MS) continue
                 lastAt = at
+                com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx,
+                    "event ${moment.file.name} at word ${moment.word} → ${at} ms (${"%.0f".format(per)} ms/word)")
                 player.oneShot(ctx, moment.file, at, level)
             }
         }
