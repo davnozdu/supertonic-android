@@ -218,7 +218,7 @@ object SoundBank {
     /** Скачивает архивы базы и раскладывает клипы в папку базы. Прогресс — в байтах. */
     private fun unzipAll(context: Context, progress: (Int, Int, String) -> Unit): Boolean {
         val dir = dir(context).apply { mkdirs() }
-        val total = archives.sumOf { it.bytes }.takeIf { it > 0 } ?: archives.size
+        val total = archives.sumOf { it.bytes }.takeIf { it > 0 } ?: archives.size.toLong()
         var done = 0L
         for ((n, a) in archives.withIndex()) {
             val zip = File(context.cacheDir, a.name)
@@ -230,7 +230,7 @@ object SoundBank {
                 } else done += zip.length()
                 if (a.sha.isNotEmpty()) {
                     val sha = java.security.MessageDigest.getInstance("SHA-256").digest(zip.readBytes())
-                        .joinToString("") { "%02x".format(it) }
+                        .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
                     if (!sha.equals(a.sha, ignoreCase = true)) {
                         Log.w("SoundBank", "архив ${zip.name}: sha не совпал, качаю заново")
                         zip.delete()
