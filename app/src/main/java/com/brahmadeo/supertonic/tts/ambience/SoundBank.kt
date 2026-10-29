@@ -16,6 +16,9 @@ import java.net.URL
 object SoundBank {
     private const val BASE = "https://github.com/davnozdu/supertonic-android/releases/download/sound-bank-v1"
     private const val FORMAT = "m4a"
+    /** Сколько файлов тянем одновременно. 8 — телефон держит без ошибок, 4 заметно медленнее. */
+    private const val PARALLEL = 8
+
     private const val MAX_CLIP = 4L * 1024 * 1024
 
     /** Один из вариантов клипа вида: разные seed, чтобы частый звук не повторялся одинаково. */
@@ -145,28 +148,39 @@ object SoundBank {
     }
 
     /** Скачать всю базу сразу (по желанию): каждый файл отдельно, sha256 проверяется. Возвращает число видов,
-     * у которых на телефоне есть клип. [progress] получает счётчик ФАЙЛОВ (сколько готово и сколько всего) и вид,
-     * который качается сейчас, — по нему рисуется полоса загрузки: 678 видов это 2034 файла, по видам прогресс
-     * замирал бы на трёх шагах подряд. */
+     * у которых на телефоне есть клип.
+     *
+     * Файлов 2034 (678 видов × 3), и по одному запросу подряд это ~15 минут — слишком долго для человека, который
+     * смотрит на полосу. Поэтому качаем [PARALLEL] потоками: телефон тянет 6–8 соединений без проблем, а GitHub
+     * отдаёт файл за 100–300 мс. Порядок не важен, sha256 каждого файла проверяется как раньше.
+     * [progress] получает счётчик ФАЙЛОВ (готово, всего) и вид — по видам полоса замирала бы на трёх шагах подряд. */
     fun downloadAll(context: Context, progress: (Int, Int, String) -> Unit = { _, _, _ -> }): Int {
         val list = manifest(context, refresh = true)
-        val total = list.values.sumOf { it.all().size }
-        var taken = 0
-        var kinds = 0
-        for ((kind, entry) in list) {
-            var any = false
-            for (variant in entry.all()) {
-                val target = File(dir(context), variant.file)
-                if (target.isFile && target.length() > 0L) any = true
-                else if (download(context, variant) != null) any = true
-                taken++
-                progress(taken, total, kind)
+        val variants = list.flatMap { (kind, entry) -> entry.all().map { kind to it } }
+        val total = variants.size
+        val taken = java.util.concurrent.atomic.AtomicInteger(0)
+        val kinds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(PARALLEL)
+        try {
+            val queue = java.util.concurrent.LinkedBlockingQueue(variants)
+            val workers = (1..PARALLEL).map {
+                pool.submit {
+                    while (true) {
+                        val (kind, variant) = queue.poll() ?: break
+                        val target = File(dir(context), variant.file)
+                        val ok = if (target.isFile && target.length() > 0L) true else download(context, variant) != null
+                        if (ok) kinds.add(kind)
+                        progress(taken.incrementAndGet(), total, kind)
+                    }
+                }
             }
-            if (any) kinds++
+            workers.forEach { it.get() }
+        } finally {
+            pool.shutdown()
         }
         progress(total, total, "")
-        Log.i("SoundBank", "download: $taken из $total файлов, видов с клипом $kinds")
-        return kinds
+        Log.i("SoundBank", "download: ${taken.get()} из $total файлов, видов с клипом ${kinds.size}, потоков $PARALLEL")
+        return kinds.size
     }
 
     /** «Выгрузить базу»: все клипы базы одним zip (manifest.json + <вид>.m4a) в выбранный пользователем файл. */
