@@ -38,6 +38,12 @@ object KoreaderAhead {
     @Volatile private var readerVoice: String? = null
     @Volatile private var readerRate = 0f
 
+    /** Докачать буфер: вызывается на каждый файловый запрос читалки, а не только на перелистывание страницы. */
+    fun pump(context: Context) {
+        val ctx = context.applicationContext
+        audio.execute { runCatching { feedAudio(ctx) } }
+    }
+
     /** The reader's own synthesis request: ahead audio is made with the same voice and rate. */
     fun observe(voiceName: String?, rate: Float) { readerVoice = voiceName; readerRate = rate }
 

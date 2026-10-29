@@ -129,6 +129,9 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                         "file request: gap $gap ms, chars ${text.length}")
                     com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context,
                         (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L), caller, text, fileMode = true)
+                    // Аудио впрок делается только для известной читалки: файловый запрос — тоже её голос и темп.
+                    com.brahmadeo.supertonic.tts.llm.KoreaderAhead.readerUid = getCallingUid()
+                    com.brahmadeo.supertonic.tts.llm.KoreaderAhead.pump(context)
                 }
             } catch (_: Exception) { Log.w("LlmPreparation", "File synthesis observation unavailable; using ordinary synthesis") }
             finally { data.setDataPosition(position) }
