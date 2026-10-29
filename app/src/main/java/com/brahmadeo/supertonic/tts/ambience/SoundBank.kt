@@ -144,20 +144,29 @@ object SoundBank {
         }.onFailure { Log.w("SoundBank", "store $kind: ${it.javaClass.simpleName}") }
     }
 
-    /** Скачать всю базу сразу (по желанию): каждый файл отдельно, sha256 проверяется. Возвращает число взятых. */
+    /** Скачать всю базу сразу (по желанию): каждый файл отдельно, sha256 проверяется. Возвращает число видов,
+     * у которых на телефоне есть клип. [progress] получает счётчик ФАЙЛОВ (сколько готово и сколько всего) и вид,
+     * который качается сейчас, — по нему рисуется полоса загрузки: 678 видов это 2034 файла, по видам прогресс
+     * замирал бы на трёх шагах подряд. */
     fun downloadAll(context: Context, progress: (Int, Int, String) -> Unit = { _, _, _ -> }): Int {
         val list = manifest(context, refresh = true)
-        var done = 0
+        val total = list.values.sumOf { it.all().size }
+        var taken = 0
+        var kinds = 0
         for ((kind, entry) in list) {
-            progress(done, list.size, kind)
+            var any = false
             for (variant in entry.all()) {
-                if (File(dir(context), variant.file).let { it.isFile && it.length() > 0L }) continue
-                download(context, variant)
+                val target = File(dir(context), variant.file)
+                if (target.isFile && target.length() > 0L) any = true
+                else if (download(context, variant) != null) any = true
+                taken++
+                progress(taken, total, kind)
             }
-            if (File(dir(context), entry.file).isFile) done++
+            if (any) kinds++
         }
-        progress(done, list.size, "")
-        return done
+        progress(total, total, "")
+        Log.i("SoundBank", "download: $taken из $total файлов, видов с клипом $kinds")
+        return kinds
     }
 
     /** «Выгрузить базу»: все клипы базы одним zip (manifest.json + <вид>.m4a) в выбранный пользователем файл. */

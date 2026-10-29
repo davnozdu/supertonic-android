@@ -1,6 +1,7 @@
 package com.brahmadeo.supertonic.tts
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -331,6 +332,10 @@ class BackgroundMusicActivity : ComponentActivity() {
                         var bankCount by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)) }
                         var bankBusy by remember { mutableStateOf(false) }
                         var bankNote by remember { mutableStateOf("") }
+                        // Полоса загрузки: 678 видов — это 2034 файла, поэтому считаем файлы, а не виды.
+                        var bankDone by remember { mutableStateOf(0) }
+                        var bankTotal by remember { mutableStateOf(0) }
+                        var bankKind by remember { mutableStateOf("") }
                         var bankOn by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.soundBank(prefs)) }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("База готовых звуков событий",Modifier.weight(1f))
@@ -345,16 +350,34 @@ class BackgroundMusicActivity : ComponentActivity() {
                             "упомянуто в книге один раз; если его нет — новый вид создаётся при двух и более упоминаниях и " +
                             "дописывается в базу с пометкой «сделан для книги». Фон локаций в базу не входит — он делается " +
                             "на телефоне.", style=MaterialTheme.typography.bodySmall)
+                        val startedAt=remember { longArrayOf(0L) }
                         Button(enabled=!bankBusy,onClick={
-                            bankBusy=true; bankNote=""
+                            bankBusy=true; bankNote=""; bankDone=0; bankTotal=0; bankKind=""
+                            startedAt[0]=android.os.SystemClock.elapsedRealtime()
                             scope.launch {
                                 val n=runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    com.brahmadeo.supertonic.tts.ambience.SoundBank.downloadAll(this@BackgroundMusicActivity) } }
+                                    com.brahmadeo.supertonic.tts.ambience.SoundBank.downloadAll(this@BackgroundMusicActivity) { done, total, kind ->
+                                        bankDone=done; bankTotal=total; bankKind=kind
+                                        if (done>0 && done%200==0) Log.i("SoundBank","прогресс $done/$total")
+                                    } } }
                                 bankBusy=false
+                                val secs=((android.os.SystemClock.elapsedRealtime()-startedAt[0])/1000).toInt()
                                 bankCount=com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)
-                                bankNote=n.fold({ "Скачано: $it клипов" }, { "Не удалось: ${it.message ?: it.javaClass.simpleName}" })
+                                bankNote=n.fold({ "Готово: в базе $it видов, файлов $bankDone из $bankTotal, ${secs} с" },
+                                    { "Не удалось: ${it.message ?: it.javaClass.simpleName} (взято $bankDone из $bankTotal)" })
                             }
-                        }) { Text(if (bankBusy) "Скачивание…" else if (bankCount > 0) "Обновить список базы" else "Скачать список базы") }
+                        }) { Text(when {
+                            bankBusy && bankTotal>0 -> "Скачивание… $bankDone из $bankTotal"
+                            bankBusy -> "Скачивание…"
+                            bankCount > 0 -> "Обновить список базы"
+                            else -> "Скачать список базы" }) }
+                        if (bankBusy && bankTotal > 0) {
+                            LinearProgressIndicator(progress={ bankDone.toFloat()/bankTotal.coerceAtLeast(1) },
+                                modifier=Modifier.fillMaxWidth())
+                            Text("Файлов: $bankDone из $bankTotal" + (if (bankKind.isNotEmpty()) " · $bankKind" else "") +
+                                " · " + "${((bankDone.toLong()*100)/bankTotal.coerceAtLeast(1))} %",
+                                style=MaterialTheme.typography.bodySmall)
+                        }
                         if (bankNote.isNotEmpty()) Text(bankNote,style=MaterialTheme.typography.bodySmall)
                         // «Выгрузить базу» — все клипы одним zip; «Импортировать базу» — zip со слиянием или заменой.
                         var askImport by remember { mutableStateOf<android.net.Uri?>(null) }
