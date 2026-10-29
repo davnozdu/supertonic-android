@@ -171,6 +171,16 @@ object BackgroundMusic {
         }
         refresh()
     }
+    /** Читалка сообщила паузу: не ждём эвристику «между фразами», гасим фон сразу. */
+    fun readerPaused() {
+        handler.post {
+            holdUntil = 0L; gapUntil = 0L
+            handler.removeCallbacks(holdEnd); handler.removeCallbacks(gapEnd); handler.removeCallbacks(speechEnd)
+            speaking = false
+            com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.speaking(false)
+            update()
+        }
+    }
     fun stopTts() {
         pendingTag.values.forEach { handler.removeCallbacks(it.release) }; pendingTag.clear()
         reading.stopTts(); endGap(); refresh()
