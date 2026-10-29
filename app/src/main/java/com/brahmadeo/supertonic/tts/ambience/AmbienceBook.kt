@@ -106,6 +106,15 @@ object AmbienceBook {
         if (files.isEmpty()) return
         val known = readManifest(context, sha)
         if (known.length() == 0) return
+        // База звуков переехала на новую версию (клипы выровнены по громкости): старые копии в книге выкидываем —
+        // подготовка возьмёт из базы новые, без генерации.
+        val bank = SoundBank.version(context)
+        if (SoundBank.on(context) && known.optInt("bank", 1) != bank) {
+            val old = files.count { it.name.startsWith("k_") && it.delete() }
+            known.put("bank", bank)
+            runCatching { manifest(context, sha).writeText(known.toString()) }
+            Log.i("Ambience", "база версии $bank: старых звуков событий удалено $old, возьмём новые")
+        }
         // Made at another loudness (before −14 LUFS): all of them again.
         if (known.optDouble(LUFS_KEY, -20.0) != Loudness.TARGET_LUFS) { files.forEach { it.delete() }; manifest(context, sha).delete(); return }
         val current = jobs(context, scenes).associate { it.id to it.recipe }

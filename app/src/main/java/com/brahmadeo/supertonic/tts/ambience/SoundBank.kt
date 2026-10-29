@@ -20,6 +20,10 @@ object SoundBank {
     private const val PARALLEL = 8
 
     private const val MAX_CLIP = 4L * 1024 * 1024
+    /** Версия содержимого базы. Клипы 1-й версии сделаны одно-проходным loudnorm и вышли на 10–25 дБ тише цели
+     * (−27 LUFS в среднем вместо −14): такие файлы нельзя опознать по имени, поэтому при смене версии в manifest
+     * старая папка вычищается и база скачивается заново. */
+    private const val VERSION_KEY = "sound_bank_version"
 
     /** Один из вариантов клипа вида: разные seed, чтобы частый звук не повторялся одинаково. */
     data class Variant(val file: String, val sha: String, val url: String)
@@ -48,7 +52,17 @@ object SoundBank {
             if (text != null) runCatching { dir(context).mkdirs(); file.writeText(String(text, Charsets.UTF_8)) }
         }
         val parsed = if (!file.isFile) emptyMap() else runCatching {
-            val sounds = JSONObject(file.readText()).optJSONArray("sounds") ?: return emptyMap()
+            val root = JSONObject(file.readText())
+            val version = root.optInt("bank", 1)
+            val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
+            if (prefs.getInt(VERSION_KEY, 1) != version) {
+                // Другая версия содержимого: старые клипы тихие/не такие — выкидываем, скачивание возьмёт новые.
+                val old = dir(context).listFiles()?.count { it.name.endsWith(".$FORMAT") } ?: 0
+                dir(context).listFiles()?.filter { it.name.endsWith(".$FORMAT") }?.forEach { it.delete() }
+                prefs.edit().putInt(VERSION_KEY, version).apply()
+                Log.i("SoundBank", "новая версия базы $version: старых клипов удалено $old")
+            }
+            val sounds = root.optJSONArray("sounds") ?: return emptyMap()
             (0 until sounds.length()).mapNotNull { i ->
                 val s = sounds.optJSONObject(i) ?: return@mapNotNull null
                 val key = s.optString("key").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
@@ -66,6 +80,12 @@ object SoundBank {
         cache = parsed
         return parsed
     }
+
+    /** Версия содержимого базы без сети: книги, собранные на прежней версии, перекопируют клипы из новой. */
+    fun version(context: Context): Int = runCatching {
+        val f = File(dir(context), "manifest.json")
+        if (f.isFile) JSONObject(f.readText()).optInt("bank", 1) else 1
+    }.getOrDefault(1)
 
     /** Есть ли такой вид в базе (скачанный или свой): такой звук берётся даже при одном упоминании. */
     fun known(context: Context, kind: String): Boolean =

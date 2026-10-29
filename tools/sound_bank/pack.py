@@ -81,11 +81,14 @@ def main() -> int:
             "variants": variants,
         })
     manifest = {
+        # Версия содержимого для приложения: 2 — клипы пере-нормализованы двумя проходами loudnorm (линейно),
+        # в 1-й версии одно-проходный режим пропускал короткие клипы, и база вышла на 10–25 дБ тише цели.
+        "bank": 2,
         "version": VERSION,
         "model": spec.get("model"),
         "steps": spec.get("steps"),
         "decoder": spec.get("decoder"),
-        "format": "m4a/aac 96 kbps 44100 Hz stereo, -14 LUFS, 8 s",
+        "format": "m4a/aac 128 kbps 44100 Hz stereo, -14 LUFS, 8 s",
         "sounds": made,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
