@@ -19,7 +19,7 @@ internal object AmbiencePlayer {
     }
 
     private const val CROSSFADE_MS = 3000L
-    private const val SCENE_FADE_MS = 2500L
+    private const val SCENE_FADE_MS = 1500L
     private const val TICK_MS = 50L
     private val handler = Handler(Looper.getMainLooper())
 

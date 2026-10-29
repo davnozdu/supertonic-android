@@ -54,6 +54,8 @@ object BackgroundMusic {
     private const val GAP_MS = 4000L
     /** Two event sounds of one utterance start at least this far apart. */
     private const val MIN_EVENT_GAP_MS = 1200L
+    /** Событие звучит на столько раньше своих слов: клип слышен одновременно с текстом, а не после него. */
+    private const val EVENT_LEAD_MS = 500L
     @Volatile private var gapUntil = 0L
     private val gapEnd = Runnable { update() }
     /** A reader that synthesizes to files and plays them itself (KOReader's audiobook plugin) never says when its
@@ -166,7 +168,8 @@ object BackgroundMusic {
             // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere).
             var lastAt = -MIN_EVENT_GAP_MS
             for (moment in tag.events) {
-                val at = (moment.word * per).toLong()
+                // Полсекунды вперёд: звук должен начаться до того, как голос назовёт действие, а не после.
+                val at = (moment.word * per - EVENT_LEAD_MS).toLong().coerceAtLeast(0L)
                 if (at - lastAt < MIN_EVENT_GAP_MS) continue
                 lastAt = at
                 com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx,
