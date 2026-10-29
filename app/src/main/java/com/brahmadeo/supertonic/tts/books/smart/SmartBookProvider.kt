@@ -57,6 +57,14 @@ class SmartBookProvider : ContentProvider() {
                 }
                 Bundle()
             }
+            // The sentence whose audio the reader has just started playing (file mode: it writes sentences ahead, and
+            // its scene and its sound cues must wait for this moment, not for the request). arg: the sentence text.
+            "playing" -> {
+                val uid = android.os.Binder.getCallingUid()
+                val reader = ctx.packageManager.getPackagesForUid(uid).orEmpty().any { it.startsWith("org.koreader") }
+                if (reader) com.brahmadeo.supertonic.tts.music.BackgroundMusic.playingNow(arg.orEmpty())
+                Bundle()
+            }
             "pause", "resume", "stop", "replay" -> {
                 onMain {
                     when (method) {

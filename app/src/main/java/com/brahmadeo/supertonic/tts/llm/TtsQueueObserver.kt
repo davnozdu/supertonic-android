@@ -127,7 +127,8 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                     lastFileAt = now
                     if (gap > 0) com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(context,
                         "file request: gap $gap ms, chars ${text.length}")
-                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context, (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L), caller, text)
+                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.hold(context,
+                        (chars * FILE_SPEECH_MS_PER_CHAR + 4_000L).coerceAtMost(60_000L), caller, text, fileMode = true)
                 }
             } catch (_: Exception) { Log.w("LlmPreparation", "File synthesis observation unavailable; using ordinary synthesis") }
             finally { data.setDataPosition(position) }

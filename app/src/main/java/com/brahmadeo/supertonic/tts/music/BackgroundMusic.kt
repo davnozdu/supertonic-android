@@ -50,7 +50,10 @@ object BackgroundMusic {
     /** «Музыка по настроению» of the sounding utterance: played instead of the track where there is no scene. */
     @Volatile private var mood: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
     /** Scene and sounds of a file-mode sentence that has not started playing yet. */
-    private val pendingMoment = HashMap<Any, Runnable>()
+    private class Pending(val tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, val text: String?, val release: Runnable)
+    private val pendingTag = HashMap<Any, Pending>()
+    /** Fallback for a reader that never reports its playback start: release the held cues after this long. */
+    private const val FILE_RELEASE_MS = 6_000L
     /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
      * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
     private const val GAP_MS = 4000L
@@ -101,20 +104,20 @@ object BackgroundMusic {
         refresh()
     }
     fun rejected(owner: Any, token: Long) { reading.reject(owner,token); refresh() }
-    /** [startInMs]: file-mode readers (KOReader) write a sentence ahead of its playback — its scene and its sounds
-     * wait that long, so they come with the words and not with the request. */
-    fun hold(ctx: Context, ms: Long, owner: Any? = null, text: String? = null, startInMs: Long = 0L) {
+    /** [fileMode]: the reader writes sentences ahead and plays them itself (KOReader) — its scene and its sounds
+     * wait for their own «playing» call (or, with an older plugin, a few seconds), so they come with the words. */
+    fun hold(ctx: Context, ms: Long, owner: Any? = null, text: String? = null, fileMode: Boolean = false) {
         initialize(ctx)
         if (owner != null) {
-            val apply = Runnable {
-                pendingMoment.remove(owner)
-                val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
-                scene = tag.scene; mood = tag.mood
-                // Файловый режим пишет предложения вперёд (плагин KOReader): запас «раньше текста» здесь не нужен.
-                handler.post { playMoments(tag, owner, 0f) }
+            val tag = com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.tag(ctx, owner, text)
+            if (fileMode) {
+                val release = Runnable { applyTag(owner, tag, true) }
+                pendingTag.remove(owner)?.let { handler.removeCallbacks(it.release) }
+                pendingTag[owner] = Pending(tag, text, release)
+                handler.postDelayed(release, FILE_RELEASE_MS)
+            } else {
+                applyTag(owner, tag, false)
             }
-            pendingMoment.remove(owner)?.let { handler.removeCallbacks(it) }
-            if (startInMs > 300L) { pendingMoment[owner] = apply; handler.postDelayed(apply, startInMs) } else apply.run()
         }
         handler.post {
             holdUntil = maxOf(holdUntil, android.os.SystemClock.uptimeMillis() + ms)
@@ -124,8 +127,29 @@ object BackgroundMusic {
     }
     /** KOReader's plugin also calls stop() before every sentence it synthesizes: a held track keeps 1.5 s for the
      * next request (0.8 s), so a real pause still silences it. */
+    /** Applies the scene and the sound cues of [tag] now: the sentence is sounding (queue) or the reader said so. */
+    private fun applyTag(owner: Any, tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, fileMode: Boolean) {
+        pendingTag.remove(owner)?.let { handler.removeCallbacks(it.release) }
+        scene = tag.scene; mood = tag.mood
+        // Файловый режим идёт с упреждением: запас «раньше текста» здесь только усилил бы сдвиг.
+        handler.post { playMoments(tag, owner, if (fileMode) 0f else -1f) }
+    }
+    /** The reader reports the sentence that has just started sounding: release its held scene and cues. */
+    fun playingNow(text: String) {
+        handler.post {
+            val want = text.trim().take(40)
+            var hit: Any? = null
+            for ((o, pending) in pendingTag) {
+                val have = pending.text?.trim()?.take(40)
+                if (want.isNotEmpty() && have != null && have == want) { hit = o; break }
+            }
+            val owner = hit ?: pendingTag.keys.firstOrNull() ?: return@post
+            val pending = pendingTag[owner] ?: return@post
+            applyTag(owner, pending.tag, true)
+            context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "playing: held cues released") }
+        }
+    }
     fun stop(owner: Any) {
-        pendingMoment.remove(owner)?.let { handler.removeCallbacks(it) }
         reading.stop(owner)
         scenes.keys.removeAll { it.first === owner } // utterances that will never sound
         startedNotes.keys.removeAll { it.first === owner }
@@ -136,7 +160,10 @@ object BackgroundMusic {
         }
         refresh()
     }
-    fun stopTts() { reading.stopTts(); endGap(); refresh() }
+    fun stopTts() {
+        pendingTag.values.forEach { handler.removeCallbacks(it.release) }; pendingTag.clear()
+        reading.stopTts(); endGap(); refresh()
+    }
     fun app(ctx: Context, playing: Boolean) { initialize(ctx); reading.app(playing); if (!playing) endGap(); refresh() }
     private fun endGap() { handler.post { gapUntil = 0L; holdUntil = 0L; handler.removeCallbacks(gapEnd); handler.removeCallbacks(holdEnd) } }
     fun volumePreview(percent: Int) { handler.post { previewVolume = percent.coerceIn(0,100); updateVolume() } }
