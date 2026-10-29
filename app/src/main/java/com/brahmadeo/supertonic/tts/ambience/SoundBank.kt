@@ -250,6 +250,7 @@ object SoundBank {
                 }
                 zip.delete()
                 Log.i("SoundBank", "архив ${a.name} разложен")
+                true
             }.getOrElse { Log.w("SoundBank", "архив ${a.name}: ${it.javaClass.simpleName}: ${it.message}"); false }
             if (!ok) return false
         }
