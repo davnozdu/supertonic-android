@@ -535,7 +535,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                             checked=keepModels,
                             onCheckedChange={ v -> keepModels=v; keepPrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.KEEP_MODELS,v).apply() },
                             modifier=Modifier.padding(top=16.dp))
-                        Text("Держать модель в памяти при подготовке книги", fontWeight=FontWeight.SemiBold)
+                        Text("Держать модель в памяти при подготовке книги", fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
                         Text("Включено: генератор не перезагружает свои части перед каждым звуком — клип готовится примерно " +
                             "вдвое быстрее, но во время подготовки занято примерно на 650 МБ памяти больше. Выключено: " +
                             "память освобождается после каждого звука, зато каждый звук идёт на 4 секунды дольше.",
