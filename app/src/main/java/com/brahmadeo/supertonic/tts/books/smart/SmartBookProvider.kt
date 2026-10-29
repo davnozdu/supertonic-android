@@ -17,6 +17,8 @@ class SmartBookProvider : ContentProvider() {
     /** One at a time, in the order KOReader sent them. */
     private val background = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "SmartBookProvider").apply { isDaemon = true } }
 
+    private val koreaderUid = java.util.concurrent.ConcurrentHashMap<Int, Boolean>()
+
     override fun onCreate() = true
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
@@ -61,7 +63,10 @@ class SmartBookProvider : ContentProvider() {
             // its scene and its sound cues must wait for this moment, not for the request). arg: the sentence text.
             "playing" -> {
                 val uid = android.os.Binder.getCallingUid()
-                val reader = ctx.packageManager.getPackagesForUid(uid).orEmpty().any { it.startsWith("org.koreader") }
+                // Одна проверка на uid: вызов идёт на каждое предложение, лишние запросы к packagemanager там не нужны.
+                val reader = koreaderUid.getOrPut(uid) {
+                    ctx.packageManager.getPackagesForUid(uid).orEmpty().any { it.startsWith("org.koreader") }
+                }
                 if (reader) com.brahmadeo.supertonic.tts.music.BackgroundMusic.playingNow(arg.orEmpty())
                 Bundle()
             }
