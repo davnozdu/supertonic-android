@@ -194,7 +194,8 @@ internal object AmbiencePlayer {
                 p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 p.setDataSource(clip.path); p.prepare()
                 val v = Voice(p, Scene(clip.name, clip.name, listOf(clip)), 0, tameable = false)
-                p.setVolume(volume, volume)
+                // Плавное появление: 4 шага по 20 мс от нуля — нет щелчка в начале клипа.
+                p.setVolume(0f, 0f)
                 shots += v
                 // Сколько звучит клип — столько следующий и ждёт (длительность иногда 0 сразу после prepare).
                 // В базе клип 8 с — это запас на затухание; звучит столько, сколько выбрано в настройках.
@@ -208,10 +209,16 @@ internal object AmbiencePlayer {
                     if (shots.isEmpty()) shotUntil = 0L
                 } }
                 p.start()
-                // Длинный клип обрезаем: плавное затухание и стоп, чтобы шорох не тянулся за пределы выбранной длины.
+                val inSteps = 4
+                val inStep = 20L
+                for (i in 1..inSteps) handler.postDelayed({
+                    val k = volume * i / inSteps
+                    runCatching { p.setVolume(k, k) }
+                }, inStep * i)
+                // Длинный клип обрезаем: плавное затухание 400 мс и стоп, чтобы шорох не тянулся за пределы выбранной длины.
                 if (limit < length) {
                     val steps = 10
-                    val step = 30L
+                    val step = 40L
                     for (i in 1..steps) handler.postDelayed({
                         val k = volume * (1f - i / steps.toFloat())
                         runCatching { p.setVolume(k, k) }
