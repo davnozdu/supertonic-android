@@ -54,6 +54,11 @@ object AmbienceSettings {
     const val NPU_NIGHT = "ambience_npu_night"
     fun npuNight(prefs: SharedPreferences) = prefs.getBoolean(NPU_NIGHT, false)
 
+    /** Генератор держит три графа открытыми всю подготовку книги: +650 МБ памяти, зато ~4 с с каждого клипа.
+     * Включено по умолчанию — памяти на телефоне с избытком, а клипов на книгу десятки. */
+    const val KEEP_MODELS = "ambience_keep_models"
+    fun keepModels(prefs: SharedPreferences) = prefs.getBoolean(KEEP_MODELS, true)
+
     fun enabled(prefs: SharedPreferences) = prefs.getBoolean(ENABLED, false)
     /** Since 5.0.6-beta42 the sounds have +10 dB of headroom: a volume set before (100 % was just audible) is moved
      * once to the new default, so the update does not make them 10 dB louder. */

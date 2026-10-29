@@ -175,7 +175,10 @@ object AmbienceBook {
                     npu?.close()
                     npu = AmbienceModel.npuDit(context, music = job.music,
                         onCompile = { k, n -> progress(done, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
-                    generator = if (job.music) AmbienceModel.musicGenerator(context, threads, npu) else Sa3Generator(AmbienceModel.root(context), threads, npu)
+                    generator?.close()
+                    val keep = AmbienceSettings.keepModels(context.getSharedPreferences("SupertonicPrefs", 0))
+                    generator = if (job.music) AmbienceModel.musicGenerator(context, threads, npu, keep)
+                        else Sa3Generator(AmbienceModel.root(context), threads, npu, keep = keep)
                     musicMode = job.music
                 }
                 val pcm = generator!!.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
@@ -191,6 +194,6 @@ object AmbienceBook {
                 Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS}, music=${job.music})")
             }
             progress(ordered.size, ordered.size, "")
-        } finally { npu?.close() }
+        } finally { generator?.close(); npu?.close() }
     }
 }

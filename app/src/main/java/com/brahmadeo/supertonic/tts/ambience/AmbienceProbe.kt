@@ -34,7 +34,7 @@ object AmbienceProbe {
             val dit = AmbienceModel.npuDit(context) ?: return null.also { Log.e(TAG, "NPU DiT unavailable") }
             Log.i(TAG, "NPU LOAD wallMs=${android.os.SystemClock.elapsedRealtime() - wall} cpuMs=${android.os.Process.getElapsedCpuTime() - cpu}")
             memory("after-npu-load")
-            val (hidden, mask) = Sa3Generator(AmbienceModel.root(context), threads).encodeText(prompt)
+            val (hidden, mask) = Sa3Generator(AmbienceModel.root(context), threads).use { it.encodeText(prompt) }
             memory("after-t5")
             val rng = java.util.Random(1)
             val x = FloatArray(Sa3Generator.LATENT_CH * AmbienceModel.NPU_LENGTH) { rng.nextGaussian().toFloat() }
@@ -111,6 +111,7 @@ object AmbienceProbe {
                 results.put(JSONObject().put("run", run).put("name", name).put("error", "${e.javaClass.simpleName}: ${e.message}"))
             }
         }
+        generator.close()
         npuDit?.close()
         File(out, "probe.json").writeText(results.toString(1))
         Log.i(TAG, "PROBE DONE ${results.length()}")

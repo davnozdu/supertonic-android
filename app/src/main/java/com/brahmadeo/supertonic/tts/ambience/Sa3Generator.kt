@@ -24,7 +24,11 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
                    /** The DiT's rung lengths (the small and the medium models differ). */
                    private val ditRungs: IntArray = SMALL_RUNGS,
                    /** SAME-S (dec_w8a8) or SAME-L (dec_l_w8a8): the same latents. */
-                   private val decFile: String = "dec_w8a8.tflite") {
+                   private val decFile: String = "dec_w8a8.tflite",
+                   /** Keep the three graphs open for the whole book (the default): the encoder (563 MB) and the
+                    * decoder (89 MB) then stop being reloaded for every clip, which took ~4 s of the 8 per clip.
+                    * Costs about +650 MB of RSS while the book is being prepared; freed with [close]. */
+                   private val keep: Boolean = true) : AutoCloseable {
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
      * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
@@ -102,11 +106,26 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
             cpuOptions = CompiledModel.CpuOptions(threads, null, if (cache) File(dir, "$name.xnnwc").path else null)
         })
 
+    /** Resident graphs ([keep]): one object per file, all of its rung signatures inside it. */
+    private val resident = HashMap<String, CompiledModel>()
+
+    private fun <T> withModel(name: String, cache: Boolean, block: (CompiledModel) -> T): T {
+        if (!keep) return model(name, cache).use(block)
+        val m = resident.getOrPut(name) { model(name, cache) }
+        return block(m)
+    }
+
+    /** Frees the resident graphs; the NPU session is closed by its owner (AmbienceBook). */
+    override fun close() {
+        resident.values.forEach { runCatching { it.close() } }
+        resident.clear()
+    }
+
     fun encodeText(prompt: String): Pair<FloatArray, FloatArray> {
         val tokens = tokenizer.encode(prompt).take(COND_TOKENS)
         val ids = IntArray(COND_TOKENS); val mask = IntArray(COND_TOKENS)
         tokens.forEachIndexed { i, id -> ids[i] = id; mask[i] = 1 }
-        return model("encoder_fp16.tflite", cache = false).use { m ->
+        return withModel("encoder_fp16.tflite", cache = false) { m ->
             val sig = "serving_default"
             val inputs = mapOf("args_0" to m.createInputBuffer("args_0", sig).apply { writeInt(ids) },
                 "args_1" to m.createInputBuffer("args_1", sig).apply { writeInt(mask) })
@@ -122,7 +141,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
         npuDit?.takeIf { it.length == length }?.let { dit -> return pingpong(length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) } }
         val rung = ditRungs.first { it >= length }
         val sig = "s$rung"
-        return model(ditFile, cache = true).use { m ->
+        return withModel(ditFile, cache = true) { m ->
             val buffers = (0..6).associate { "args_$it" to m.createInputBuffer("args_$it", sig) }
             val out = m.createOutputBuffer("output_0", sig)
             val gIn = (0..1).map { m.createInputBuffer("args_$it", "gcond") }
@@ -186,7 +205,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
         val rung = candidates.minWithOrNull(compareBy<Triple<Int, Int, Int>> { it.first }.thenBy { it.second })?.third
             ?: DEC_RUNGS.first { it >= even }
         val out = FloatArray(even * SAMPLES_PER_LATENT * 2)
-        model(decFile, cache = true).use { m ->
+        withModel(decFile, cache = true) { m ->
             val sig = "s$rung"
             val input = m.createInputBuffers(sig); val output = m.createOutputBuffers(sig)
             try {

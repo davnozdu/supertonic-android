@@ -529,6 +529,17 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 finally { ambienceReady=AmbienceModel.ready(this@BackgroundMusicActivity); busy=false }
                             }
                         }) { Text("Удалить генератор звуков") }
+                        val keepPrefs=androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("SupertonicPrefs",0)
+                        var keepModels by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.keepModels(keepPrefs)) }
+                        Switch(
+                            checked=keepModels,
+                            onCheckedChange={ v -> keepModels=v; keepPrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.KEEP_MODELS,v).apply() },
+                            modifier=Modifier.padding(top=16.dp))
+                        Text("Держать модель в памяти при подготовке книги", fontWeight=FontWeight.SemiBold)
+                        Text("Включено: генератор не перезагружает свои части перед каждым звуком — клип готовится примерно " +
+                            "вдвое быстрее, но во время подготовки занято примерно на 650 МБ памяти больше. Выключено: " +
+                            "память освобождается после каждого звука, зато каждый звук идёт на 4 секунды дольше.",
+                            style=MaterialTheme.typography.bodySmall)
                         Text("Генератор нужен только чтобы создать звуки при подготовке книги; книги со звуками играют и без него. " +
                             "Модель Stable Audio 3 Small SFX. Powered by Stability AI. Лицензия Stability AI Community License; " +
                             "текстовый энкодер — Gemma Terms of Use.",style=MaterialTheme.typography.bodySmall)

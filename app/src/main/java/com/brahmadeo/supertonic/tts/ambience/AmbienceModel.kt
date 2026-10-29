@@ -90,8 +90,8 @@ object AmbienceModel {
     fun musicNpuReady(context: Context) = musicReady(context) && music(context).let { it.npuAssets.isNotEmpty() && complete(context, it.npuAssets, it.npuMarker) }
     private fun musicNpuMissing(context: Context) = music(context).npuAssets.isNotEmpty() && !musicNpuReady(context)
     /** A generator for music with the chosen model and decoder. */
-    fun musicGenerator(context: Context, threads: Int, npu: Sa3Generator.NpuDit?) = music(context).let {
-        Sa3Generator(root(context), threads, npu, it.ditFile, it.rungs, musicDecoder(context))
+    fun musicGenerator(context: Context, threads: Int, npu: Sa3Generator.NpuDit?, keep: Boolean = true) = music(context).let {
+        Sa3Generator(root(context), threads, npu, it.ditFile, it.rungs, musicDecoder(context), keep)
     }
     private fun musicWanted(context: Context) = AmbienceSettings.moodMusic(context.getSharedPreferences("SupertonicPrefs", 0))
 
