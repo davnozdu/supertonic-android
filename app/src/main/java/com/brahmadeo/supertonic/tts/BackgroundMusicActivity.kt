@@ -51,6 +51,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
                 var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
                 var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
+                var eventLead by remember { mutableIntStateOf(AmbienceSettings.eventLead(prefs)) }
                 var eventsDensity by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,
                     com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.DEFAULT_DENSITY)) }
                 var moodMusic by remember { mutableStateOf(AmbienceSettings.moodMusic(prefs)) }
@@ -314,6 +315,14 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.EVENTS_VOLUME,eventsVolume).apply() },
                                 valueRange=0f..100f,steps=99)
                             Text("Отдельно от звуков локаций; по умолчанию 40 % — чуть выше фона. Действует сразу.",style=MaterialTheme.typography.bodySmall)
+                            Text("Звук раньше текста: ${if (eventLead == 0) "прямо сейчас" else "за ${"%.1f".format(eventLead / 1000f)} с"}",
+                                style=MaterialTheme.typography.titleMedium)
+                            Slider(value=eventLead.toFloat(),onValueChange={ eventLead=it.roundToInt() },
+                                onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.EVENT_LEAD,eventLead).apply() },
+                                valueRange=0f..2000f,steps=19)
+                            Text("Насколько раньше своих слов начинается звук: «прямо сейчас» — ровно со словом, 1–2 с — " +
+                                "звук успевает начаться до действия (полезно, если он слышится с запозданием). Действует сразу.",
+                                style=MaterialTheme.typography.bodySmall)
                             Text("Длина звука события: ${"%.1f".format(eventSeconds)} с",style=MaterialTheme.typography.titleMedium)
                             Slider(value=eventSeconds,onValueChange={ eventSeconds=it },
                                 onValueChangeFinished={ prefs.edit().putFloat(AmbienceSettings.EVENT_SECONDS,eventSeconds).apply() },

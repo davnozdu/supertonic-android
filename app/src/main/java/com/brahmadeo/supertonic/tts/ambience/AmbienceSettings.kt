@@ -43,6 +43,12 @@ object AmbienceSettings {
     fun eventSeconds(prefs: SharedPreferences) =
         prefs.getFloat(EVENT_SECONDS, DEFAULT_EVENT_SECONDS).coerceIn(1f, 8f)
 
+    /** «Звук раньше текста», мс: событие начинает звучать раньше своих слов, чтобы слышаться вместе с действием
+     * (0 — ровно со словом). Клип у базы короткий только по воспроизведению, начало важнее. */
+    const val EVENT_LEAD = "ambience_event_lead"
+    const val DEFAULT_EVENT_LEAD = 500
+    fun eventLead(prefs: SharedPreferences) = prefs.getInt(EVENT_LEAD, DEFAULT_EVENT_LEAD).coerceIn(0, 2000)
+
     /** «Музыка по настроению»: outside scenes the music of the passage's mood, generated for the book. Off by default. */
     const val MOOD_MUSIC = "ambience_mood_music"
     /** "scene" (default) — the mood of each passage; "chapter" — one mood per chapter. */
