@@ -374,9 +374,11 @@ class BackgroundMusicActivity : ComponentActivity() {
                         if (bankBusy && bankTotal > 0) {
                             LinearProgressIndicator(progress={ bankDone.toFloat()/bankTotal.coerceAtLeast(1) },
                                 modifier=Modifier.fillMaxWidth())
-                            Text("Файлов: $bankDone из $bankTotal" + (if (bankKind.isNotEmpty()) " · $bankKind" else "") +
-                                " · " + "${((bankDone.toLong()*100)/bankTotal.coerceAtLeast(1))} %",
-                                style=MaterialTheme.typography.bodySmall)
+                            val pct=(bankDone.toLong()*100)/bankTotal.coerceAtLeast(1)
+                            val line=if (bankKind.startsWith("архив"))
+                                "Скачано ${bankDone/1024} из ${bankTotal/1024} МБ · $bankKind · $pct %"
+                            else "Файлов: $bankDone из $bankTotal" + (if (bankKind.isNotEmpty()) " · $bankKind" else "") + " · $pct %"
+                            Text(line, style=MaterialTheme.typography.bodySmall)
                         }
                         if (bankNote.isNotEmpty()) Text(bankNote,style=MaterialTheme.typography.bodySmall)
                         // «Выгрузить базу» — все клипы одним zip; «Импортировать базу» — zip со слиянием или заменой.

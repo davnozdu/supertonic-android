@@ -35,6 +35,9 @@ object SoundBank {
     }
 
     private var cache: Map<String, Entry>? = null
+    /** Архивы базы (по одному на релиз): телефон скачивает три файла вместо 2034 запросов к GitHub. */
+    class Archive(val name: String, val url: String, val bytes: Long, val sha: String)
+    private var archives: List<Archive> = emptyList()
 
     fun dir(context: Context): File = File(context.filesDir, "sound-bank")
 
@@ -62,6 +65,14 @@ object SoundBank {
                 prefs.edit().putInt(VERSION_KEY, version).apply()
                 Log.i("SoundBank", "новая версия базы $version: старых клипов удалено $old")
             }
+            archives = root.optJSONObject("zip")?.let { z ->
+                listOf("base", "second", "more").mapNotNull { k ->
+                    val url = z.optString(k).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                    val bytes = z.optJSONObject("bytes")?.optLong(k, 0L) ?: 0L
+                    val sha = z.optJSONObject("sha256")?.optString(k).orEmpty()
+                    Archive(url.substringAfterLast('/'), url, bytes, sha)
+                }
+            }.orEmpty()
             val sounds = root.optJSONArray("sounds") ?: return emptyMap()
             (0 until sounds.length()).mapNotNull { i ->
                 val s = sounds.optJSONObject(i) ?: return@mapNotNull null
@@ -176,6 +187,7 @@ object SoundBank {
      * [progress] получает счётчик ФАЙЛОВ (готово, всего) и вид — по видам полоса замирала бы на трёх шагах подряд. */
     fun downloadAll(context: Context, progress: (Int, Int, String) -> Unit = { _, _, _ -> }): Int {
         val list = manifest(context, refresh = true)
+        if (archives.isNotEmpty() && unzipAll(context, progress)) return list.size
         val variants = list.flatMap { (kind, entry) -> entry.all().map { kind to it } }
         val total = variants.size
         val taken = java.util.concurrent.atomic.AtomicInteger(0)
@@ -201,6 +213,49 @@ object SoundBank {
         progress(total, total, "")
         Log.i("SoundBank", "download: ${taken.get()} из $total файлов, видов с клипом ${kinds.size}, потоков $PARALLEL")
         return kinds.size
+    }
+
+    /** Скачивает архивы базы и раскладывает клипы в папку базы. Прогресс — в байтах. */
+    private fun unzipAll(context: Context, progress: (Int, Int, String) -> Unit): Boolean {
+        val dir = dir(context).apply { mkdirs() }
+        val total = archives.sumOf { it.bytes }.takeIf { it > 0 } ?: archives.size
+        var done = 0L
+        for ((n, a) in archives.withIndex()) {
+            val zip = File(context.cacheDir, a.name)
+            val ok = runCatching {
+                if (!zip.isFile || (a.bytes > 0 && zip.length() != a.bytes)) {
+                    zip.delete()
+                    download(a.url, zip, { read -> done += read; progress((done / 1024).toInt(), (total / 1024).toInt(),
+                        "архив ${n + 1} из ${archives.size}") }) ?: return false
+                } else done += zip.length()
+                if (a.sha.isNotEmpty()) {
+                    val sha = java.security.MessageDigest.getInstance("SHA-256").digest(zip.readBytes())
+                        .joinToString("") { "%02x".format(it) }
+                    if (!sha.equals(a.sha, ignoreCase = true)) {
+                        Log.w("SoundBank", "архив ${zip.name}: sha не совпал, качаю заново")
+                        zip.delete()
+                        return false
+                    }
+                }
+                java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zin ->
+                    while (true) {
+                        val e = zin.nextEntry ?: break
+                        if (e.isDirectory) continue
+                        val name = File(e.name).name
+                        if (name == "manifest.json" || !name.endsWith(".$FORMAT")) continue
+                        val out = File(dir, name)
+                        if (out.isFile && out.length() > 0L) continue
+                        out.outputStream().buffered().use { o -> zin.copyTo(o) }
+                    }
+                }
+                zip.delete()
+                Log.i("SoundBank", "архив ${a.name} разложен")
+            }.getOrElse { Log.w("SoundBank", "архив ${a.name}: ${it.javaClass.simpleName}: ${it.message}"); false }
+            if (!ok) return false
+        }
+        val got = dir.listFiles()?.count { it.name.endsWith(".$FORMAT") } ?: 0
+        Log.i("SoundBank", "база из архивов: $got клипов")
+        return got > 0
     }
 
     /** «Выгрузить базу»: все клипы базы одним zip (manifest.json + <вид>.m4a) в выбранный пользователем файл. */
@@ -278,6 +333,29 @@ object SoundBank {
             .onFailure { Log.w("SoundBank", "save ${variant.file}: ${it.javaClass.simpleName}") }
             .getOrNull()
     }
+
+    /** Качает файл в [target] потоком, отдавая прочитанные байты: архивы базы по 85 МБ в память не берём. */
+    private fun download(url: String, target: File, onBytes: (Int) -> Unit): File? = runCatching {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = 15_000
+            readTimeout = 120_000
+        }
+        try {
+            if (connection.responseCode !in 200..299) return null
+            val tmp = File(target.path + ".part").apply { delete() }
+            connection.inputStream.use { input -> tmp.outputStream().buffered().use { out ->
+                val buf = ByteArray(128 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n <= 0) break
+                    out.write(buf, 0, n); onBytes(n)
+                }
+            } }
+            if (!tmp.renameTo(target)) return null
+            target
+        } finally { connection.disconnect() }
+    }.onFailure { Log.w("SoundBank", "download $url: ${it.javaClass.simpleName}: ${it.message}") }.getOrNull()
 
     private fun fetch(url: String, limit: Long): ByteArray? = runCatching {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
