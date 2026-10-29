@@ -136,8 +136,8 @@ object BackgroundMusic {
     private fun applyTag(owner: Any, tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, fileMode: Boolean) {
         pendingTag.remove(owner)?.let { handler.removeCallbacks(it.release) }
         scene = tag.scene; mood = tag.mood
-        // Файловый режим идёт с упреждением: запас «раньше текста» здесь только усилил бы сдвиг.
-        handler.post { playMoments(tag, owner, if (fileMode) 0f else -1f) }
+        // Плагин сообщает точный момент старта фразы, поэтому упреждение «раньше текста» работает и в файловом режиме.
+        handler.post { playMoments(tag, owner) }
     }
     /** The reader reports the sentence that has just started sounding: release its held scene and cues. */
     fun playingNow(text: String) {

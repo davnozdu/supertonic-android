@@ -211,8 +211,20 @@ object LlmPreparation {
             if (!retainForPlayback) release(entry)
             result
         } catch (_: Exception) {
-            entry.textReady?.takeIf { !entry.cancelled && !entry.future.isCancelled }?.let {
-                Log.i("MultiVoice","Roles pending; delivering validated LLM text with author voice chars=${it.text.length}")
+            entry.textReady?.takeIf { !entry.cancelled && !entry.future.isCancelled }?.let { ready ->
+                // Голоса персонажей приходят на доли секунды позже текста. Если сразу отдать авторский голос, звук
+                // посчитается ещё раз, когда роли доедут (второй раз — уже с ролями), и синтез идёт вдвое дольше.
+                // Один раз ждём роли до секунды: первая, упреждающая копия станет правильной, а вторая возьмётся из кэша.
+                var it = ready
+                if (!it.rolesReady && LlmSettings.multiVoiceEnabled(ctx) && roleWaitFirstSight(ctx, text)) {
+                    val deadline = System.currentTimeMillis() + 1_000L
+                    while (System.currentTimeMillis() < deadline && !entry.cancelled) {
+                        val now = entry.textReady
+                        if (now != null && now.rolesReady) { it = now; break }
+                        try { Thread.sleep(40) } catch (_: InterruptedException) { break }
+                    }
+                }
+                Log.i("MultiVoice","Roles pending; delivering validated LLM text with author voice chars=${it.text.length} roles=${it.rolesReady}")
                 if (!retainForPlayback) release(entry)
                 return it
             }
@@ -223,6 +235,18 @@ object LlmPreparation {
             Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
+    /** Первое появление текста за последние 3 с: только тогда ждём роли, иначе упреждающая копия задерживала бы звук. */
+    private val roleWaitSeen = HashMap<String, Long>()
+    private fun roleWaitFirstSight(ctx: Context, text: String): Boolean {
+        val now = System.currentTimeMillis()
+        synchronized(roleWaitSeen) {
+            if (roleWaitSeen.size > 64) roleWaitSeen.entries.removeAll { now - it.value > 60_000L }
+            val last = roleWaitSeen[text]
+            roleWaitSeen[text] = now
+            return last == null || now - last > 3_000L
+        }
+    }
+
     /** Diagnostics (StressProbe): validated LLM text per source, before names, offline fill and arbitration. */
     @Volatile internal var probeRaw: MutableMap<String, String>? = null
     private val verifyPool = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "LLM-stress-check").apply { isDaemon = true } }
