@@ -97,9 +97,8 @@ object SoundBank {
         return download(context, pick)
     }
 
-    /** Клип по виду, а если такого вида в базе нет — по смыслу описания: слова описания сравниваются со словами
-     * описаний базы (не меньше двух третей общих, ничья — не угадываем). Так книга не платит генерацией за то же
-     * самое действие, названное иначе. */
+    /** Клип по виду, а если такого вида в базе нет — по смыслу описания, но осторожно: слова описания книги и
+     * описания базы должны совпасть почти целиком (иначе — ничего, звук будет сделан заново). */
     fun find(context: Context, kind: String, prompt: String, salt: Int = 0): File? {
         clip(context, kind, salt)?.let { return it }
         val words = tokens("$kind $prompt")
@@ -108,12 +107,14 @@ object SoundBank {
             val other = tokens("$key ${entry.prompt}")
             if (other.isEmpty()) return@mapNotNull null
             val common = words.count { it in other }
-            val score = if (common == minOf(words.size, other.size)) 1f else common.toFloat() / maxOf(words.size, other.size)
-            key to score
+            if (common == 0) return@mapNotNull null
+            // Совпадение по объединению слов: одно лишнее слово уже снижает оценку, два — почти всегда отказ.
+            key to common.toFloat() / (words.size + other.size - common)
         }.sortedByDescending { it.second }.toList()
         val best = scored.firstOrNull() ?: return null
-        if (best.second < 0.6f) return null
-        if (scored.count { it.second == best.second } > 1) return null
+        if (best.second < 0.7f) return null
+        // Второй кандидат почти так же хорош — не угадываем.
+        if ((scored.getOrNull(1)?.second ?: 0f) >= best.second - 0.15f) return null
         return clip(context, best.first, salt)
     }
 

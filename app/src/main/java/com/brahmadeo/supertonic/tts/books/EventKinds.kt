@@ -466,13 +466,17 @@ object EventKinds {
     /** Канонический вид ключа: слова в нижнем регистре, синонимы сведены, порядок не важен.
      * «open_door», «door_opening», «door_open» → одно и то же. */
     fun canon(key: String): String = key.lowercase()
-        .split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+        .split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() && it !in NOISE }
         .map { WORDS[it] ?: it }.sorted().joinToString("_")
+
+    /** Служебные слова названий: на смысл звука не влияют («walking on gravel» = «gravel footsteps»). */
+    private val NOISE = setOf("on", "in", "of", "the", "a", "an", "at", "with", "by", "to", "and")
 
     private val byCanon: Map<String, Kind> by lazy { ALL.filter { it.key != OTHER }.associateBy { canon(it.key) } }
 
-    /** Вид по названию, как его написала модель: точное совпадение, затем порядок слов и синонимы, затем
-     * пересечение слов (не меньше двух третей). null — такого вида в списке нет. */
+    /** Вид по названию, как его написала модель. Подход осторожный: точное совпадение, порядок слов, синонимы —
+     * берём сразу; всё остальное принимается, только если отличаются одни лишь слова силы/темпа (тихо, громко,
+     * быстро…). Любое другое расхождение — null: лучше сделать новый звук, чем подставить не тот. */
     fun resolve(raw: String?): String? {
         val text = raw?.trim()?.lowercase() ?: return null
         if (text.isEmpty()) return null
@@ -482,20 +486,26 @@ object EventKinds {
         byCanon[canon(text)]?.let { return it.key }
         val words = canon(text).split('_').filter { it.isNotEmpty() }.toSet()
         if (words.isEmpty()) return null
-        val scored = ALL.asSequence().filter { it.key != OTHER }.mapNotNull { kind ->
+        val candidates = ALL.asSequence().filter { it.key != OTHER }.mapNotNull { kind ->
             val other = canon(kind.key).split('_').filter { it.isNotEmpty() }.toSet()
             if (other.isEmpty()) return@mapNotNull null
-            val common = words.count { it in other }
-            // Одно название целиком входит в другое («hooves» в «horse_hooves») — это тот же звук.
-            val score = if (common == minOf(words.size, other.size)) 1f else common.toFloat() / maxOf(words.size, other.size)
-            kind to score
-        }.sortedByDescending { it.second }.toList()
-        val best = scored.firstOrNull() ?: return null
-        if (best.second < 0.66f) return null
-        // Ничья между разными видами («door») — не угадываем: пусть решает второй проход.
-        if (scored.count { it.second == best.second } > 1) return null
-        return best.first.key
+            val common = words.filter { it in other }
+            if (common.isEmpty()) return@mapNotNull null
+            // Расхождение допускается только в словах силы/темпа: они не меняют, ЧТО за звук.
+            val extraA = words.filter { it !in other }
+            val extraB = other.filter { it !in words }
+            if (extraA.any { it !in MODIFIERS } || extraB.any { it !in MODIFIERS }) return@mapNotNull null
+            kind
+        }.toList()
+        // Одно название подходит к нескольким видам — не угадываем.
+        return candidates.singleOrNull()?.key
     }
+
+    /** Слова, которые меняют только манеру звучания, а не сам звук (дверь тихо/громко — всё равно дверь). */
+    private val MODIFIERS = setOf(
+        "loud", "quiet", "soft", "hard", "heavy", "light", "quick", "slow", "brief", "short", "long",
+        "deep", "sharp", "dull", "faint", "distant", "near", "single", "shortly", "quickly", "slowly", "repeated",
+    )
 
     /** The whole list for the prompt: «door_open — дверь открывается; …» (one line, the model copies a key exactly). */
     fun promptList(): String = ALL.joinToString("; ") { "${it.key} — ${it.hint}" }

@@ -58,8 +58,11 @@ internal object SceneMarking {
         "Для каждой группы дай kind (короткое английское имя в snake_case, например door_slam), hint (по-русски, что это) " +
         "и sound (одно английское описание звука для генератора, 6–20 слов). Если звук подходит к известному виду, " +
         "верни его ключ из списка известных видов (например footsteps_gravel) — для такого вида новый клип не нужен. " +
-        "Новое имя в snake_case давай только для звука, которого в списке нет. Описание, которое непонятно или не " +
-        "является звуком, не включай ни в одну группу. Ответ — только JSON."
+        "Новое имя в snake_case давай только для звука, которого в списке нет. Если действие — тот же самый звук, " +
+        "что уже есть в списке, но называется иначе, поставь в same_as ключ из списка, а в kind — своё название " +
+        "(приложение запомнит его как синоним). Подход осторожный: если не уверен, что это тот же звук, same_as не " +
+        "ставь и дай новое имя — лучше сделать отдельный звук, чем подставить чужой. Описание, которое непонятно " +
+        "или не является звуком, не включай ни в одну группу. Ответ — только JSON."
 
     fun groupSchema() = JSONObject("""{"type":"object","properties":{"groups":{"type":"array","items":{"type":"object","properties":{"kind":{"type":"string"},"hint":{"type":"string"},"sound":{"type":"string"},"items":{"type":"array","items":{"type":"integer"}}},"required":["kind","sound","items"],"additionalProperties":false}}},"required":["groups"],"additionalProperties":false}""")
 
@@ -378,12 +381,15 @@ internal object SceneMarking {
             val group = groups.optJSONObject(g) ?: continue
             // Второй проход тоже может назвать по-своему: сначала ищем известный вид, иначе берём его имя как новое.
             val rawKind = group.optString("kind")
-            val kind = com.brahmadeo.supertonic.tts.books.EventKinds.resolve(rawKind)
+            // Модель сама может сказать, что это тот же звук, что уже есть («same_as»): тогда берём готовый вид.
+            val same = com.brahmadeo.supertonic.tts.books.EventKinds.resolve(group.optString("same_as"))
+                ?.takeIf { com.brahmadeo.supertonic.tts.books.EventKinds.proper(it) }
+            val kind = same ?: com.brahmadeo.supertonic.tts.books.EventKinds.resolve(rawKind)
                 ?: rawKind.trim().lowercase()
                     .takeIf { com.brahmadeo.supertonic.tts.books.EventKinds.KEY.matches(it) &&
                         it != com.brahmadeo.supertonic.tts.books.EventKinds.OTHER }
                 ?: continue
-            if (!rawKind.trim().equals(kind, ignoreCase = true))
+            if (!rawKind.trim().equals(kind, ignoreCase = true) && com.brahmadeo.supertonic.tts.books.EventKinds.proper(kind))
                 com.brahmadeo.supertonic.tts.books.Aliases.learn(rawKind, kind)
             val sound = forGenerator(group.optString("sound"), 6, 200, { null })
                 ?: com.brahmadeo.supertonic.tts.books.EventKinds.sound(kind) ?: continue

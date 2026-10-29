@@ -126,17 +126,30 @@ class AmbienceEventsTest {
         assertEquals(setOf("k_chisel_clatter"), result.index.events.events.map { EventIndex.fileKey(it) }.toSet())
     }
 
-    @Test fun aNewNameForAKnownSoundTakesTheExistingClip() {
-        // «щёлкнула задвижка» — уже есть вид latch: нового клипа не нужно, попадание по смыслу, а не по букве.
+    @Test fun theModelItselfSaysTheSoundIsAlreadyKnown() {
+        // Осторожный подход: по словам «задвижка щёлкнула» к виду latch не подводим — решает модель через same_as.
         val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
             "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a latch clicking shut"},
                       {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a latch clicking shut"}]}"""
-        val group = """{"groups":[{"kind":"latch_click","hint":"щёлкнула задвижка",
+        val group = """{"groups":[{"kind":"latch_click","same_as":"latch","hint":"щёлкнула задвижка",
             "sound":"a small brass latch clicking shut once","items":[1,2]}]}"""
         val result = SceneMarking.mark(paragraphs, { ans }, group = { group })
         assertEquals(2, result.events)
         assertEquals(setOf("latch"), result.kindPrompts.keys)
         assertEquals(setOf("k_latch"), result.index.events.events.map { EventIndex.fileKey(it) }.toSet())
+        // и синоним запомнился: в следующих книгах это название уже само даёт вид
+        assertEquals("latch", EventKinds.resolve("latch_click"))
+    }
+
+    @Test fun anUnsureNameIsNotFittedToASimilarOne() {
+        // «задвижка» без same_as от модели: не подставляем похожий вид, делаем свой (правило «не уверен — заново»).
+        val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a latch clicking shut"},
+                      {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a latch clicking shut"}]}"""
+        val group = """{"groups":[{"kind":"deadbolt_click","hint":"щёлкнул засов",
+            "sound":"a heavy deadbolt sliding and clicking","items":[1,2]}]}"""
+        val result = SceneMarking.mark(paragraphs, { ans }, group = { group })
+        assertEquals(setOf("deadbolt_click"), result.kindPrompts.keys)
     }
 
     @Test fun aLoneUnnamedActionIsDroppedInsteadOfPlayingSomethingElse() {
