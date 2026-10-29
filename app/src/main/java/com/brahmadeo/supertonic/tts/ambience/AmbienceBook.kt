@@ -72,21 +72,29 @@ object AmbienceBook {
         return places + events + chapter + music
     }
 
-    /** Copies the clip of [job] from the shared bank into the book (true when the book already has it now). */
+    /** Copies the clips of [job] from the shared bank into the book — all variants of the kind, so the same action
+     * sounds different each time (k_door_slam.m4a, k_door_slam_2.m4a, k_door_slam_3.m4a). */
     private fun adoptFromBank(context: Context, dir: File, job: Job, salt: Int = 0): Boolean {
         if (!job.id.startsWith("k_")) return false
         if (!SoundBank.on(context)) return false
         val target = File(dir, job.file)
         if (target.isFile && target.length() > 0L) return true
-        val source = SoundBank.find(context, job.id.removePrefix("k_"), job.prompt, salt) ?: return false
-        return runCatching { source.copyTo(target, overwrite = true); true }
-            .onFailure { Log.w("Ambience", "bank copy ${job.id}: ${it.javaClass.simpleName}") }
-            .getOrDefault(false)
+        val sources = SoundBank.all(context, job.id.removePrefix("k_"), job.prompt)
+        var taken = false
+        for ((n, source) in sources.withIndex()) {
+            val file = if (n == 0) target else File(dir, "${job.id}_${n + 1}.m4a")
+            val ok = runCatching { if (!file.isFile || file.length() == 0L) source.copyTo(file, overwrite = true); true }
+                .onFailure { Log.w("Ambience", "bank copy ${file.name}: ${it.javaClass.simpleName}") }
+                .getOrDefault(false)
+            taken = taken || ok
+        }
+        return taken
     }
 
     /** l3_0.m4a -> l3; m2_1.m4a -> m2; e5.m4a -> e5; k_door_slam.m4a -> k_door_slam (a clip of a kind of action). */
     private fun idOf(file: File) = when {
-        file.name.startsWith("k_") -> file.name.substringBeforeLast('.')
+        // k_door_slam_2.m4a -> k_door_slam: варианты одного вида чистятся вместе с ним.
+        file.name.startsWith("k_") -> file.name.substringBeforeLast('.').removeSuffix("_2").removeSuffix("_3")
         file.name.startsWith("e") -> file.name.substringBefore('.')
         else -> file.name.substringBefore('_')
     }

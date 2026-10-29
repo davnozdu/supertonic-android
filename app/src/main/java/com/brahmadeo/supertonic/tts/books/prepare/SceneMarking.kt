@@ -9,9 +9,9 @@ import org.json.JSONObject
  * Places without a clear setting (reflections, summaries) stay without a location: the music plays there. */
 internal object SceneMarking {
     const val BATCH_CHARS = 6000
-    /** «Часто» asks for 1–2 events in every paragraph with an action: a batch the size of 6000 characters is too
-     * much text for that, the model skips paragraphs. Smaller batches give noticeably more moments per book. */
-    const val BATCH_CHARS_DENSE = 3000
+    /** Measured: 3000-character batches gave FEWER moments (33 vs 39 on the same 60 paragraphs) and more refusals at
+     * 14 requests instead of 9 — the model does not read longer text worse, it just finds what it finds. */
+    const val BATCH_CHARS_DENSE = 6000
     /** Most-read places get sounds; a place of a single paragraph is not worth a sound. */
     const val MAX_LOCATIONS = 64
     private const val MIN_PARAGRAPHS = 2
@@ -44,7 +44,8 @@ internal object SceneMarking {
             "деньги, дверь, посуда, книга, листва); в среднем одно на 100–150 знаков, в абзаце с действием — 1–2 события. " +
             "Считай и небольшие действия: встал, сел, подошёл, обернулся, взял, положил, открыл, закрыл, зажёг, погасил, " +
             "написал, перелистнул, — каждое из них слышно." +
-            if (chars > 0) " В этом пакете ($chars знаков) — около ${maxOf(3, chars / 125)} событий." else ""
+            if (chars > 0) " В этом пакете ($chars знаков) слышимого хватает на ${maxOf(3, chars / 125)} событий; " +
+                "если получилось заметно меньше, часть слышимого пропущена — перечитай абзацы и добавь." else ""
     }
 
     private val ACOUSTICS = setOf("outdoor", "room", "large_room", "hall", "bathroom", "vehicle", "cave", "tunnel")
@@ -124,6 +125,9 @@ internal object SceneMarking {
         appendLine("случилось давно и в другом месте.")
         appendLine("at — номер абзаца; quote — точные 3–6 слов ИМЕННО того действия, которое звучит, а не фразы, где предмет")
         appendLine("только упомянут («отворил дверь и прислушался», «что-то со стуком упало на пол»);")
+        appendLine("Если точного ключа нет, назови действие сам коротким английским именем в snake_case (например latch_click):")
+        appendLine("событие не теряется — такие действия соберутся в группы отдельным проходом. Не пропускай событие из-за того,")
+        appendLine("что подходящего ключа не нашлось.")
         appendLine("kind — вид действия, ОДИН ключ из списка, по тому, что реально слышно в этом месте (нет двери в отрывке —")
         appendLine("не door_*; упавший предмет — drop). Один вид в разных местах книги — тот же ключ: звук для него создаётся")
         appendLine("один раз и звучит везде, поэтому повторы не описывай заново:")
@@ -131,6 +135,8 @@ internal object SceneMarking {
         appendLine("sound — описание звука по-английски (6–20 слов), без речи и музыки, узнаваемое без текста: что звучит, из какого")
         appendLine("материала, как долго и как меняется (boots crunching on gravel for a few seconds). Для одного kind — то же описание.")
         appendLine("Звук события длится до 8 с — описывай действие целиком, а не один щелчок. ${eventRule(density, batchChars)}.")
+        if (density >= 3) appendLine("Слышимое в репликах — тоже событие: усмехнулся, вздохнул, кашлянул, охнул, хлопнул по столу,")
+        if (density >= 3) appendLine("поставил чашку, звякнул ложкой, скрипнул стулом, отодвинул кресло, шуршит одежда. Каждый такой звук отмечай.")
         appendLine("Прогони абзацы ещё раз перед ответом: где герой входит, выходит, идёт, садится, берёт или ставит предмет,")
         appendLine("пишет, открывает и закрывает — там есть событие. Пустой список — только если в тексте нет ни одного действия.")
         appendLine("Нет событий — [].")
@@ -294,8 +300,11 @@ internal object SceneMarking {
                 if (kind.isNotEmpty() && !rawKind.trim().equals(kind, ignoreCase = true))
                     com.brahmadeo.supertonic.tts.books.Aliases.learn(rawKind, kind)
                 val given = e.optString("sound").takeIf { !e.isNull("sound") }?.trim().orEmpty()
-                if (at !in batch.first()..batch.last() || quote.length !in 3..80) { dropped++; continue }
-                val quoteWords = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(quote)
+                if (at !in batch.first()..batch.last()) { dropped++; continue }
+                // Цитата нужна только как якорь времени: «дверь хлопнула» из двух слов — тоже событие, а длинную
+                // модель иногда переписывает целым абзацем. Раньше отбрасывалось всё короче 3 и длиннее 80 ЗНАКОВ.
+                val allWords = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(quote)
+                val quoteWords = if (allWords.size > 16) allWords.take(16) else allWords
                 if (quoteWords.isEmpty() ||
                     com.brahmadeo.supertonic.tts.books.EventIndex.anchorStart(
                         com.brahmadeo.supertonic.tts.books.ReplyIndex.words(paragraphs[at].text), quoteWords) == null) { dropped++; continue }

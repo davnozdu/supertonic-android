@@ -160,6 +160,23 @@ internal object AmbiencePlayer {
     /** A one-shot sound (an event, the chapter transition) over the background after [delayMs], with the headroom and
      * the limiter of the scene sounds but without their compressor: an event is what the listener should notice, not an
      * accent to be levelled into the bed. Its loudness is the events' own slider. Released when it ends. */
+    /** Разнообразие: у вида до трёх вариантов клипа (k_door_slam.m4a, _2, _3) — каждый раз берём следующий по кругу,
+     * чтобы один и тот же скрип не звучал одинаково. */
+    private val turns = HashMap<String, Int>()
+
+    private fun variant(file: java.io.File): java.io.File {
+        val name = file.name
+        if (!name.startsWith("k_") || !name.endsWith(".m4a")) return file
+        val base = name.removeSuffix(".m4a")
+        val dir = file.parentFile ?: return file
+        val all = listOf(file, java.io.File(dir, "${base}_2.m4a"), java.io.File(dir, "${base}_3.m4a"))
+            .filter { it.isFile && it.length() > 0L }
+        if (all.size < 2) return file
+        val n = turns[base] ?: 0
+        turns[base] = (n + 1) % all.size
+        return all[n % all.size]
+    }
+
     fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float) {
         lateinit var run: Runnable
         run = Runnable {
@@ -171,11 +188,12 @@ internal object AmbiencePlayer {
                 AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous")
                 return@Runnable
             }
+            val clip = variant(file)
             try {
                 val p = MediaPlayer()
                 p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                p.setDataSource(file.path); p.prepare()
-                val v = Voice(p, Scene(file.name, file.name, listOf(file)), 0, tameable = false)
+                p.setDataSource(clip.path); p.prepare()
+                val v = Voice(p, Scene(clip.name, clip.name, listOf(clip)), 0, tameable = false)
                 p.setVolume(volume, volume)
                 shots += v
                 // Сколько звучит клип — столько следующий и ждёт (длительность иногда 0 сразу после prepare).
@@ -200,6 +218,7 @@ internal object AmbiencePlayer {
 
     /** Pause, stop: the events and chapter sounds still waiting are dropped and the sounding ones stop. Main thread. */
     private fun cancelShots() {
+        turns.clear()
         pending.forEach { handler.removeCallbacks(it) }; pending.clear()
         shots.forEach { runCatching { it.player.setVolume(0f, 0f) }; it.release() }; shots.clear()
         shotUntil = 0L

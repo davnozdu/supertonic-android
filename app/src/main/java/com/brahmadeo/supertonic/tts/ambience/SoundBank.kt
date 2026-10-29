@@ -101,6 +101,22 @@ object SoundBank {
         return download(context, pick)
     }
 
+    /** Все клипы вида (до трёх вариантов), скачивая недостающие: в книге они звучат по кругу, чтобы одно и то же
+     * действие не повторялось одним и тем же звуком. Консервативно: вида нет в базе — пусто (клип будет свой). */
+    fun all(context: Context, kind: String, prompt: String): List<File> {
+        local(context)[kind]?.let { name -> File(dir(context), name).takeIf { it.isFile && it.length() > 0L } }
+            ?.let { return listOf(it) }
+        val key = manifest(context)[kind]?.let { kind } ?: run {
+            val words = BankText.tokens("$kind $prompt")
+            if (words.isEmpty()) null else BankText.pick(words, manifest(context).mapValues { (k, e) -> "$k ${e.prompt}" })?.first
+        } ?: return emptyList()
+        val entry = manifest(context)[key] ?: return emptyList()
+        val here = dir(context).apply { mkdirs() }
+        return entry.all().mapNotNull { v ->
+            File(here, v.file).takeIf { it.isFile && it.length() > 0L } ?: download(context, v)
+        }
+    }
+
     /** Клип по виду, а если такого вида в базе нет — по смыслу описания, но осторожно: слова описания книги и
      * описания базы должны совпасть почти целиком (иначе — ничего, звук будет сделан заново). */
     fun find(context: Context, kind: String, prompt: String, salt: Int = 0): File? {
