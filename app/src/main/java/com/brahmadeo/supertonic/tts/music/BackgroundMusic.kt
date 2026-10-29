@@ -54,6 +54,11 @@ object BackgroundMusic {
     private val pendingTag = HashMap<Any, Pending>()
     /** Fallback for a reader that never reports its playback start: release the held cues after this long. */
     private const val FILE_RELEASE_MS = 6_000L
+    /** File-mode speech end: the reader never says «finished», so the duck is released by an estimate. */
+    private val speechEnd = Runnable {
+        speaking = false
+        com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.speaking(false)
+    }
     /** A reader that hands over one utterance at a time (Readest: QUEUE_FLUSH per sentence) leaves the queue empty
      * between sentences: the music plays through such a gap. An explicit stop, pause, timer or call stops it at once. */
     private const val GAP_MS = 4000L
@@ -146,6 +151,12 @@ object BackgroundMusic {
             val owner = hit ?: pendingTag.keys.firstOrNull() ?: return@post
             val pending = pendingTag[owner] ?: return@post
             applyTag(owner, pending.tag, true)
+            // Голос под файл-режимом: приглушаем фон под речью, как в очереди (иначе «дыхание звука» не работает).
+            com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.speaking(true)
+            speaking = true
+            handler.removeCallbacks(speechEnd)
+            val ms = ((pending.text?.length ?: 0) * 30L + 400L).coerceIn(600L, 30_000L)
+            handler.postDelayed(speechEnd, ms)
             context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "playing: held cues released") }
         }
     }
