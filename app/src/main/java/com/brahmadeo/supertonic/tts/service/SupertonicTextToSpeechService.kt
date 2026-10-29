@@ -391,7 +391,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         // Keep several sentences of already generated PCM in RAM while the
         // framework drains earlier audio. The next Android TTS request itself
         // is also observed when the reader queues it through the Binder proxy.
-        val ttsChannel = kotlinx.coroutines.channels.Channel<ByteArray>(capacity = 500)
+        val ttsChannel = kotlinx.coroutines.channels.Channel<Feed>(capacity = 500)
         val streamingListener = object : SupertonicTTS.ProgressListener {
             override fun onProgress(sessionId: Long, current: Int, total: Int) {}
             override fun onAudioChunk(sessionId: Long, data: ByteArray) {
@@ -400,7 +400,7 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                 // for the same pattern + rationale (no CPU burn vs the old
                 // 50 Hz trySend poll loop).
                 try {
-                    runBlocking { ttsChannel.send(data) }
+                    runBlocking { ttsChannel.send(Feed.Audio(data)) }
                 } catch (_: kotlinx.coroutines.channels.ClosedSendChannelException) {
                     // Producer closed the channel — fine.
                 } catch (_: InterruptedException) {
@@ -420,6 +420,8 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                 try {
                     val parts = if (voicePreview || com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.single(requestedVoice)) listOf(com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.Route(rawText, stylePath, false)) else com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.routes(this@SupertonicTextToSpeechService,
                         rawText, aheadText?.voicePlan ?: preparation?.voicePlan.orEmpty(), stylePath)
+                    // Подсветка в читалке: диапазоны фраз в тексте, который прислала читалка.
+                    val aligner = if (voicePreview || foreign) null else Aligner(incomingText)
                     val sentences = parts.flatMap { route -> textNormalizer.splitIntoSentences(
                         route.text, requestedLang, preservePunctuation = AssetManager.isRussianModel(this@SupertonicTextToSpeechService)
                     ).map { Triple(it, route.style, route.dialogue) } }
@@ -428,6 +430,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                         // "* * *", a lone quote or dash: nothing to voice. Never let it end the utterance.
                         if (sentence.none { it.isLetterOrDigit() }) continue
                         val isAdvancedEnabled = prefs.getBoolean("is_advanced_normalization", false)
+                        aligner?.locate(sentence)?.let { (start, end) ->
+                            runCatching { runBlocking { ttsChannel.send(Feed.Mark(start, end)) } }
+                        }
                         val normalizedText = textNormalizer.normalize(sentence, requestedLang, isAdvancedEnabled, skipStress=preserveMarks, sileroOnly=recap)
                         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Synth trace source=$traceId input=${com.brahmadeo.supertonic.tts.llm.SpeechTextTrace.fingerprint(normalizedText)} skipDictionary=$preserveMarks model=${AssetManager.getModelType(this@SupertonicTextToSpeechService)}")
                         val result = SupertonicTTS.asDialogue(line) { SupertonicTTS.generateAudio(
@@ -450,8 +455,16 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
                 }
             }
             // Android requires audioAvailable on this synthesis thread.
-            for (data in ttsChannel) {
+            for (item in ttsChannel) {
                 if (stopped()) { success = false; ttsChannel.close(); break }
+                if (item is Feed.Mark) {
+                    // Точный диапазон текста для подсветки: кадр, с которого он звучит.
+                    if (!voicePreview && android.os.Build.VERSION.SDK_INT >= 26) runCatching {
+                        callback.rangeStart(item.start, item.end, (deliveredBytes / 2).toInt())
+                    }
+                    continue
+                }
+                val data = (item as Feed.Audio).data
                 deliveredBytes += data.size
                 if (!firstAudioLogged) {
                     firstAudioAt = android.os.SystemClock.elapsedRealtime()
@@ -485,5 +498,42 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (foreignMessage) ForeignSpeech.end(deliveredBytes * 1000L / (SupertonicTTS.getAudioSampleRate() * 2L).coerceAtLeast(1L),
             if (firstAudioAt > 0) firstAudioAt else android.os.SystemClock.elapsedRealtime())
         } finally { activeVoicePreview = false }
+    }
+
+    /** Что идёт в канал синтеза: звук или отметка «эта фраза текста звучит с этого кадра». */
+    private sealed class Feed {
+        class Audio(val data: ByteArray) : Feed()
+        class Mark(val start: Int, val end: Int) : Feed()
+    }
+
+    /** Сопоставляет фразы синтеза исходному тексту читалки (LLM переписывает ударения и ё, буквы те же):
+     * подсветка в Moon+/Readest идёт по этим диапазонам, иначе внутри длинного абзаца она стоит на месте. */
+    private class Aligner(private val text: String) {
+        private val norm = StringBuilder()
+        private val map = ArrayList<Int>()
+        private var cursor = 0
+        init {
+            for (i in text.indices) {
+                val l = text[i].lowercaseChar()
+                when {
+                    l == 'ё' -> { norm.append('е'); map.add(i) }
+                    l.isLetterOrDigit() -> { norm.append(l); map.add(i) }
+                }
+            }
+        }
+        private fun clean(sentence: String) = buildString {
+            for (c in sentence) { val l = c.lowercaseChar(); if (l == 'ё') append('е') else if (l.isLetterOrDigit()) append(l) }
+        }
+        /** Диапазон [sentence] в исходном тексте начиная с прошлой фразы; null — не нашли (тогда метку не шлём). */
+        fun locate(sentence: String): Pair<Int, Int>? {
+            val needle = clean(sentence).take(24)
+            if (needle.isEmpty()) return null
+            val at = norm.indexOf(needle, cursor)
+            if (at < 0) return null
+            cursor = at + needle.length
+            val start = map[at]
+            val end = minOf(text.length, start + sentence.length)
+            return start to end
+        }
     }
 }
