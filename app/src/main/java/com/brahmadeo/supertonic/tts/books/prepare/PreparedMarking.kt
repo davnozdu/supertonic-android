@@ -17,7 +17,7 @@ object PreparedMarking {
                       /** Отпечаток предложения → готовый текст: идёт в book.json. */
                       val store: Map<Long, String>)
 
-    fun mark(ctx: Context, plan: BookPreparationPlan, source: BookPreparation.Source,
+    internal fun mark(ctx: Context, plan: BookPreparationPlan, source: BookPreparation.Source,
              folder: File, cancel: LlmProviders.CloudCancellation, startedAt: Long,
              progress: (stage: String, done: Int, all: Int) -> Unit): Result {
         val paragraphs = plan.paragraphs.filter { it.text.isNotBlank() }
