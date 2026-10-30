@@ -65,6 +65,7 @@ class BooksActivity : ComponentActivity() {
                 var repliesOn by remember { mutableStateOf(prepPrefs.getBoolean("replies", true)) }
                 var smartOn by remember { mutableStateOf(prepPrefs.getBoolean("smart", false)) }
                 var scenesOn by remember { mutableStateOf(prepPrefs.getBoolean("scenes", false)) }
+                var textOn by remember { mutableStateOf(prepPrefs.getBoolean("text", false)) }
                 var nightQueue by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.prepare.BookQueue.nightOn(this@BooksActivity)) }
                 val queue by com.brahmadeo.supertonic.tts.books.prepare.BookQueue.entries.collectAsState()
                 LaunchedEffect(Unit) { withContext(Dispatchers.IO) { com.brahmadeo.supertonic.tts.books.prepare.BookQueue.refresh(this@BooksActivity) } }
@@ -135,7 +136,7 @@ class BooksActivity : ComponentActivity() {
                     confirmButton = { TextButton(onClick = {
                         val uri = pendingUri!!; val source = pendingSource!!
                         pendingUri = null; pendingSource = null
-                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn, smart = smartOn, scenes = scenesOn)) message = "Подготовка другой книги уже идёт." else allowBackground() }
+                        try { if (!BookPreparation.start(this@BooksActivity, uri, source, replies = repliesOn, smart = smartOn, scenes = scenesOn, text = textOn)) message = "Подготовка другой книги уже идёт." else allowBackground() }
                         catch (_: Exception) { message = "Не удалось запустить подготовку. Выберите книгу снова." }
                     }) { Text("Подготовить") } },
                     dismissButton = { TextButton(onClick = { pendingUri = null; pendingSource = null }) { Text("Отмена") } }
@@ -205,6 +206,18 @@ class BooksActivity : ComponentActivity() {
                                     }
                                     Switch(checked = scenesOn, enabled = !preparation.running, onCheckedChange = {
                                         scenesOn = it; prepPrefs.edit().putBoolean("scenes", it).apply()
+                                    })
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("Готовить текст с ударениями")
+                                        Text("Ударения, буква ё и пунктуация считаются для всей книги заранее и сохраняются в её файле. " +
+                                            "Потом при чтении этой книги нейросеть не нужна вовсе: текст берётся из файла, и без интернета " +
+                                            "ничего не теряется. В облако уходит весь текст книги частями по 2400 знаков — это долго: " +
+                                            "около 5–8 с на пакет. Несовпавшие куски читаются словарями, а при интернете — облаком.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked = textOn, enabled = !preparation.running, onCheckedChange = {
+                                        textOn = it; prepPrefs.edit().putBoolean("text", it).apply()
                                     })
                                 }
                                 Text("Обработка может занять 10–15 минут. Продолжается в фоне и при выключенном экране. " +

@@ -194,6 +194,9 @@ object LlmPreparation {
             com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reader without a queue: dictionaries, no LLM wait chars=${text.length} voices=${plan.size}")
             return Result(text, "словарь", 0, true, "Читалка без очереди", voicePlan = plan, rolesReady = plan.isNotEmpty(), roleProvider = "local")
         }
+        // Книга подготовлена целиком: текст с ударениями, ё и пунктуацией уже в файле, голоса — в разметке реплик.
+        // Тогда нейросеть не нужна вовсе: ни запроса, ни ожидания.
+        preparedBook(ctx, text)?.let { return it }
         if (!enabled(ctx)) return Result(text,"автономно",0,true)
         initialize(ctx)
         val entry = synchronized(lock) {
@@ -238,6 +241,24 @@ object LlmPreparation {
             Result(text,"словарь",timeoutMs,true,"LLM не успела ответить")
         }
     }
+    /** Готовый текст книги (PreparedText): ударения, ё и пунктуация посчитаны заранее при подготовке. Возвращает
+     * null, если книга не узнана, файла нет или хотя бы одно предложение не совпало по буквам — тогда обычный путь. */
+    private fun preparedBook(ctx: Context, text: String): Result? {
+        if (text.length > 6000 || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
+        val position = com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value ?: return null
+        val sha = runCatching { com.brahmadeo.supertonic.tts.books.BookLibrary.contentSha(ctx, position.book) }.getOrNull() ?: return null
+        val started = SystemClock.elapsedRealtime()
+        val ready = com.brahmadeo.supertonic.tts.books.PreparedText.lookup(ctx, sha, text) ?: return null
+        val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, position) }.getOrNull()
+        val plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
+            runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" ")).firstOrNull() }.getOrNull()
+        else null
+        com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
+            "Готовый текст книги: LLM не нужна chars=${text.length} book=${position.book} roles=${plan?.joinToString { it.role.name }}")
+        return Result(ready, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
+            voicePlan = plan.orEmpty(), rolesReady = plan != null, roleProvider = if (plan != null) "book" else null)
+    }
+
     /** Первое появление текста за последние 3 с: только тогда ждём роли, иначе упреждающая копия задерживала бы звук. */
     private val roleWaitSeen = HashMap<String, Long>()
     private fun roleWaitFirstSight(ctx: Context, text: String): Boolean {

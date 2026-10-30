@@ -64,7 +64,7 @@ object BookPreparation {
      * [smart]: «Умная книга» — the text and short content of its sections go into the file;
      * [scenes]: «Фоновые звуки локаций» — places of the scenes by the LLM, then their sounds (when the generator is installed). */
     @Synchronized fun start(context: Context, uri: Uri, source: Source, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false,
-                            scenes: Boolean = false): Boolean {
+                            scenes: Boolean = false, text: Boolean = false): Boolean {
         if (job != null || mutable.value.running) return false
         val ctx = context.applicationContext
         // A queued book is a file of the app (no permission to keep).
@@ -74,7 +74,7 @@ object BookPreparation {
         try {
             // A file:// URI may not travel in an intent's data (FileUriExposedException): a queued book goes as a path.
             ContextCompat.startForegroundService(ctx, Intent(ctx, BookPreparationService::class.java)
-                .apply { if (uri.scheme == "file") putExtra("queue_file", uri.path) else setData(uri) }.putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor).putExtra("smart", smart).putExtra("scenes", scenes))
+                .apply { if (uri.scheme == "file") putExtra("queue_file", uri.path) else setData(uri) }.putExtra("thinking", source.thinking).putExtra("replies", replies).putExtra("replies_for", repliesFor).putExtra("smart", smart).putExtra("scenes", scenes).putExtra("text", text))
         } catch (t: Exception) {
             pendingSource = null; mutable.value = State(message = "Не удалось запустить фоновую подготовку; откройте MyTTS и повторите.")
             throw t
@@ -84,7 +84,7 @@ object BookPreparation {
 
     /** Called by the foreground service, also when Android redelivers its intent after process death. */
     @Synchronized internal fun execute(context: Context, uri: Uri, thinking: Boolean, replies: Boolean = true, repliesFor: Long = -1, smart: Boolean = false,
-                                       scenes: Boolean = false) {
+                                       scenes: Boolean = false, text: Boolean = false) {
         if (job != null) return
         val ctx = context.applicationContext
         val source = pendingSource ?: try { source(ctx).withThinking(thinking) } catch (_: Exception) {
@@ -136,6 +136,15 @@ object BookPreparation {
                     if (replies) {
                         marking = markReplies(plan, BookPackage.parse(json), folder, source, cancel, startedAt)
                         json = JSONObject(json).put("replies", marking.replies).toString()
+                    }
+                    var preparedSentences = 0
+                    if (text) {
+                        val counts = PreparedMarking.mark(ctx, plan, plan.contentSha, source, folder, cancel, startedAt) { stage, done, all ->
+                            mutable.value = State(true, stage, done, all, startedAt = startedAt)
+                        }
+                        preparedSentences = counts.sentences
+                        com.brahmadeo.supertonic.tts.utils.DiagLog.i("BookPrep",
+                            "Готовый текст: предложений $preparedSentences, не удалось ${counts.failed}")
                     }
                     var smartSections = 0
                     if (smart) {
