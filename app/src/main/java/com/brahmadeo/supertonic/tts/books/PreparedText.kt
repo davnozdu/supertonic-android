@@ -76,6 +76,10 @@ object PreparedText {
     /** Готовый текст [text] книги или null, если хотя бы одно предложение не найдено или разошлось по буквам. */
     fun prepare(store: Map<Long, String>, text: String): String? {
         if (store.isEmpty() || text.isBlank()) return null
+        // Целый абзац одной записью: так ложатся абзацы, где модель слила или разбила предложения.
+        store[key(text)]?.let { whole ->
+            if (BookFingerprint.letters(whole) == BookFingerprint.letters(text)) return whole
+        }
         val parts = pieces(text)
         if (parts.isEmpty()) return null
         val out = StringBuilder(text.length + text.length / 5)
