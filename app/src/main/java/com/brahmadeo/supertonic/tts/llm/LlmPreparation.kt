@@ -258,8 +258,18 @@ object LlmPreparation {
         else null
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
             "Готовый текст книги: LLM не нужна chars=${text.length} book=${position.book} roles=${plan?.joinToString { it.role.name }}")
-        return Result(ready, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
+        val result = Result(ready, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
             voicePlan = plan.orEmpty(), rolesReady = plan != null, roleProvider = if (plan != null) "book" else null)
+        // Если фрагмент уже стоит в очереди (её успели поставить до того, как книга была узнана), закрываем его
+        // здесь же: иначе рабочий поток отправит тот же текст в облако и заплатит за это временем.
+        synchronized(lock) {
+            for (entry in entries.values) {
+                if (entry.text != text || entry.processing) continue
+                entry.textReady = result
+                if (!entry.future.isDone) entry.future.complete(result)
+            }
+        }
+        return result
     }
 
     /** Первое появление текста за последние 3 с: только тогда ждём роли, иначе упреждающая копия задерживала бы звук. */
@@ -409,14 +419,15 @@ object LlmPreparation {
                     val batchLimit = if (config.mode == LlmMode.LOCAL) 1000 else 2400
                     var bulk = false
                     val batch = synchronized(lock) {
-                        val first = entries.values.firstOrNull { !it.processing && !it.future.isDone } ?: return@execute
+                        // Готовый текст книги в очередь не попадает: результат уже есть, запрос не нужен.
+                        val first = entries.values.firstOrNull { !it.processing && !it.future.isDone && it.textReady == null } ?: return@execute
                         // KOReader's pages prepared ahead: nobody waits for them, so twice the text per request and
                         // a longer cloud deadline — half the requests to the provider.
                         bulk = first.caller === KoreaderAhead.caller && config.mode != LlmMode.LOCAL
                         val limit = if (bulk) batchLimit * 2 else batchLimit
                         var count = 0
                         // One batch = one book section: its characters go into the role request.
-                        entries.values.filter { it.caller == first.caller && it.book == first.book && !it.processing && !it.future.isDone }
+                        entries.values.filter { it.caller == first.caller && it.book == first.book && !it.processing && !it.future.isDone && it.textReady == null }
                             .takeWhile { count += it.text.length; count <= limit || count == it.text.length }
                             .onEach { it.processing = true }
                     }
