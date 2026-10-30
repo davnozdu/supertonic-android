@@ -251,7 +251,7 @@ object LlmPreparation {
         val ready = com.brahmadeo.supertonic.tts.books.PreparedText.lookup(ctx, sha, text) ?: return null
         val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, position) }.getOrNull()
         val plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
-            runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" ")).firstOrNull() }.getOrNull()
+            runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()
         else null
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
             "Готовый текст книги: LLM не нужна chars=${text.length} book=${position.book} roles=${plan?.joinToString { it.role.name }}")

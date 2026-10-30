@@ -53,7 +53,7 @@ object PreparedText {
             val map = HashMap<Long, String>(texts.length() * 2)
             for (key in texts.keys()) {
                 val value = texts.optString(key)
-                val hash = key.toULongOrNull(16L)?.toLong() ?: continue
+                val hash = key.toLongOrNull(16) ?: continue
                 if (value.isNotBlank()) map[hash] = value
             }
             map

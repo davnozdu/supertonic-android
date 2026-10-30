@@ -14,7 +14,7 @@ object PreparedMarking {
     private const val CHARS = 2400
     data class Result(val paragraphs: Int, val sentences: Int, val failed: Int)
 
-    fun mark(ctx: Context, plan: BookPreparationPlan, contentSha: String, source: BookPreparation.Source,
+    internal fun mark(ctx: Context, plan: BookPreparationPlan, contentSha: String, source: BookPreparation.Source,
              folder: File, cancel: LlmProviders.CloudCancellation, startedAt: Long,
              progress: (stage: String, done: Int, all: Int) -> Unit): Result {
         val paragraphs = plan.paragraphs.filter { it.text.isNotBlank() }
