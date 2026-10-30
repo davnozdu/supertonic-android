@@ -113,6 +113,21 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                     return@withContext
                 }
                 if (intent.getBooleanExtra("ambienceProbe", false)) {
+                    // В сервисе, а не в активности: иначе процесс уходит в фоновую группу, как только окно
+                    // перестаёт быть видимым, и декодер замедляется втрое-вчетверо.
+                    if (intent.getBooleanExtra("ambienceService", false)) {
+                        val svc = android.content.Intent(this@SpeechDiagnosticsActivity,
+                            com.brahmadeo.supertonic.tts.ambience.SoundGenService::class.java).putExtras(intent)
+                        try {
+                            androidx.core.content.ContextCompat.startForegroundService(this@SpeechDiagnosticsActivity, svc)
+                            Log.i("AmbienceProbe", "batch started in SoundGenService")
+                            running.set(false)
+                            withContext(kotlinx.coroutines.Dispatchers.Main) { finish() }
+                            return@withContext
+                        } catch (e: Exception) {
+                            Log.e("AmbienceProbe", "service start refused (${e.javaClass.simpleName}), running here", e)
+                        }
+                    }
                     try { com.brahmadeo.supertonic.tts.ambience.AmbienceProbe.run(this@SpeechDiagnosticsActivity, intent) } finally { running.set(false) }
                     return@withContext
                 }
