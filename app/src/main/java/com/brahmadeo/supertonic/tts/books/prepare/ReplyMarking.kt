@@ -59,6 +59,9 @@ internal object ReplyMarking {
         return out
     }
 
+    /** Складывает разметку модели и локальных правил (см. [RoleMerge]). */
+    fun merge(model: List<VoiceRoleText>?, local: List<VoiceRoleText>?): List<VoiceRoleText>? = RoleMerge.merge(model, local)
+
     /** Runs [batches] through [ask] (one at a time; an answer that cannot be parsed counts its paragraphs as failed). */
     fun mark(paragraphs: List<EpubBook.Paragraph>, batches: List<Batch>, pkg: BookPackage, ask: (Batch) -> String,
              progress: (Int, Int) -> Unit = { _, _ -> }, check: () -> Unit = {}): Result {
@@ -78,8 +81,27 @@ internal object ReplyMarking {
             }
         }
         progress(batches.size, batches.size)
+        // Локальные правила (без сети) страхуют разметку: модель иногда оставляет целую реплику за автором,
+        // и тогда персонаж читается голосом рассказчика. Правила знают тире, ремарки и очерёдность реплик.
+        val local = com.brahmadeo.supertonic.tts.llm.LocalSpeakers()
+        // «Я» в повествовании: тогда «— сказал я» — автор, а не персонаж (как и при чтении без книги).
+        val sectionsFirstPerson = HashMap<Int, Boolean>()
+        for (p in paragraphs) sectionsFirstPerson.getOrPut(p.section) { false }
+        for (key in sectionsFirstPerson.keys.toList())
+            sectionsFirstPerson[key] = firstPerson(paragraphs.filter { it.section == key }.map { it.text })
+        var section = -1
         val builder = ReplyIndex.Companion.Builder()
-        for ((i, p) in paragraphs.withIndex()) builder.add(p.text, plans[i])
+        for ((i, p) in paragraphs.withIndex()) {
+            if (p.section != section) { section = p.section; local.reset() }
+            val cast = pkg.sections.getOrNull(p.section)?.id?.let { pkg.castOf(it) }
+            val persons = cast?.characters?.map {
+                com.brahmadeo.supertonic.tts.llm.LocalSpeakers.Person(it.id, it.gender, it.forms)
+            }.orEmpty()
+            val localPlan = if (ReplyIndex.isDialogue(p.text)) runCatching {
+                local.plan(p.text, persons, sectionsFirstPerson[p.section] ?: false)
+            }.getOrNull() else null
+            builder.add(p.text, merge(plans[i], localPlan))
+        }
         val (codes, index) = builder.export()
         return Result(JSONObject().put("algorithm", ReplyIndex.ALGORITHM).put("codes", JSONArray(codes)).put("index", index),
             marked, failed, builder.size)
