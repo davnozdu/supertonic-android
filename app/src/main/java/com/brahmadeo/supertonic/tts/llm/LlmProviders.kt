@@ -58,7 +58,10 @@ object LlmProviders {
 
     /** Diagnostics only (StressProbe): a cloud text instruction tried without rebuilding the app. */
     @Volatile internal var cloudInstructionOverride: String? = null
-    private fun instruction(c: LlmConfig): String = (cloudInstructionOverride ?: INSTRUCTION) + "\n" +
+    /** Built-in texts, so the settings screen can show and restore them. */
+    internal val builtInTextInstruction: String get() = INSTRUCTION
+    internal val builtInStressCheck: String get() = STRESS_CHECK
+    private fun instruction(c: LlmConfig): String = (cloudInstructionOverride ?: PromptOverrides.get("stress")) + "\n" +
         (if (c.restoreYo) "Восстанавливай пропущенную ё вместо е только по контексту, а не по списку слов. Примеры: «Всё уже готово», но «Все ученики пришли»; «Он узна́ет ответ завтра» (будущее), но «Сейчас он узнаёт знакомого» (настоящее). Учитывай время глагола и значение всего предложения. При неоднозначности оставляй е. Уже написанную ё сохраняй. Никакие другие буквы не меняй." else "Не заменяй е на ё. Уже написанную ё сохраняй.") +
         (if (!c.stress) "\nРасстановка ударений выключена: новых U+0301 не добавляй." else "") +
         (if (!c.punctuation) "\nИзменение пунктуации выключено: копируй все знаки точно." else "")
@@ -75,9 +78,10 @@ object LlmProviders {
         fun cancel() { cancelled = true; connections.forEach { runCatching { it.disconnect() } } }
     }
     private fun http(url: String, key: String, body: JSONObject? = null, gemini: Boolean = false, deadlineMs: Long = 12000,
-                     cancellation: CloudCancellation? = null): JSONObject {
+                     cancellation: CloudCancellation? = null, allowHttp: Boolean = false): JSONObject {
         cancellation?.check()
-        require(URL(url).protocol == "https") { "Нужен HTTPS адрес" }
+        // Свой сервер может стоять рядом в локальной сети без сертификата; облачные провайдеры — только HTTPS.
+        require(URL(url).protocol == "https" || (allowHttp && URL(url).protocol == "http")) { "Нужен адрес http:// или https://" }
         val connection = URL(url).openConnection() as HttpURLConnection
         if (cancellation == null && body != null) activeHttp.add(connection)
         val expired = java.util.concurrent.atomic.AtomicBoolean()
@@ -117,6 +121,11 @@ object LlmProviders {
         return out.toByteArray()
     }
     fun models(c: LlmConfig, gemini: Boolean, provider: String = if (gemini) "gemini" else "ollama"): List<String> {
+        if (provider == "custom") {
+            require(c.customEndpoint.isNotBlank()) { "Введите адрес сервера" }
+            val response = http(OpenAiCompatApi.url(c.customEndpoint, "/models"), c.customKey, deadlineMs = 15000, allowHttp = true)
+            return OpenAiCompatApi.models(response).ifEmpty { throw IllegalStateException("Сервер не вернул список моделей") }
+        }
         if (provider == "deepseek") {
             require(c.deepseekKey.isNotBlank()) { "Введите ключ DeepSeek" }
             return DeepSeekApi.models(http(DeepSeekApi.ENDPOINT + "/models", c.deepseekKey))
@@ -183,7 +192,9 @@ object LlmProviders {
      * up to 40 items in one list DeepSeek miscounted ("изменено число ответов") and a whole batch lost its check. */
     fun verifyStress(c: LlmConfig, items: List<StressCheck.Item>, gemini: Boolean, stopped: () -> Boolean = { false }, provider: String = if (gemini) "gemini" else "ollama"): List<Int?> {
         val thinking = verifyThinkingOverride ?: false
-        lastVerifier = (if (provider == "tokenharbor") c.tokenharborModel else if (provider == "apinex") c.apinexModel else if (provider == "deepseek") c.deepseekModel else if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
+        lastVerifier = (if (provider == "tokenharbor") c.tokenharborModel else if (provider == "apinex") c.apinexModel
+            else if (provider == "deepseek") c.deepseekModel else if (provider == "custom") c.customModel
+            else if (gemini) c.geminiModel else c.ollamaModel) + if (thinking) "+thinking" else ""
         val out = arrayOfNulls<Int>(items.size)
         for (from in items.indices step STRESS_CHECK_CHUNK) {
             // A cancelled batch or changed settings: no further judge requests.
@@ -191,7 +202,7 @@ object LlmProviders {
             val chunk = items.subList(from, minOf(items.size, from + STRESS_CHECK_CHUNK))
             val judgeStarted = SystemClock.elapsedRealtime()
             val answer = cloudRequest(c.withCloudThinking(thinking), stressItems(chunk),
-                STRESS_CHECK, stressCheckSchema(), gemini,
+                PromptOverrides.get("verify"), stressCheckSchema(), gemini,
                 tokens = 64 + chunk.size * 16 + (if (thinking) 4096 else 0),
                 // ~5 s cut Gemini judges off mid-answer (IOException: Canceled); the check runs ahead of playback.
                 deadlineMs = if (thinking) 60_000L else 15_000L, provider = provider)
@@ -236,7 +247,7 @@ object LlmProviders {
             val chunk = items.subList(from, minOf(items.size, from + STRESS_CHECK_CHUNK))
             val judgeStarted = SystemClock.elapsedRealtime()
             val answer = local(context, c.copy(localThinking = false), listOf(stressItems(chunk)), deadlineMs = 4000L + chunk.size * 1500L,
-                protocol = STRESS_PROTOCOL, diagnosticInstruction = STRESS_CHECK, outputTokenLimit = 64 + chunk.size * 16).single()
+                protocol = STRESS_PROTOCOL, diagnosticInstruction = PromptOverrides.get("verify"), outputTokenLimit = 64 + chunk.size * 16).single()
             val answered = stressChoices(answer, chunk.size, out, from)
             Log.i("LlmPreparation", "Stress judge gemma items=${chunk.size} answered=$answered ms=${SystemClock.elapsedRealtime() - judgeStarted}")
         }
@@ -249,7 +260,12 @@ object LlmProviders {
         cancellation?.check()
         val started = SystemClock.elapsedRealtime()
         fun remaining() = (deadlineMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)
-        return if (provider == "tokenharbor") {
+        return if (provider == "custom") {
+            require(c.customEndpoint.isNotBlank() && c.customModel.isNotBlank()) { "Укажите адрес сервера и модель" }
+            val body = OpenAiCompatApi.request(c.customModel, system, prompt, tokens, temperature, c.customThinking)
+            DeepSeekApi.content(http(OpenAiCompatApi.url(c.customEndpoint, "/chat/completions"), c.customKey, body,
+                deadlineMs = remaining(), cancellation = cancellation, allowHttp = true))
+        } else if (provider == "tokenharbor") {
             require(c.tokenharborKey.isNotBlank()) { "Введите ключ TokenHarbor" }
             val body = DeepSeekApi.request(c.tokenharborModel, c.tokenharborThinking, system, prompt, tokens, temperature, effort)
             DeepSeekApi.content(http(TokenHarborApi.ENDPOINT + "/chat/completions", c.tokenharborKey, body,
@@ -321,6 +337,19 @@ object LlmProviders {
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", system))
             .put(JSONObject().put("role", "user").put("content", prompt))
         when (provider) {
+            "custom" -> {
+                val body = JSONObject().put("model", c.customModel).put("stream", true)
+                    .put("temperature", temperature).put("max_tokens", tokens).put("messages", messages)
+                if (c.customThinking) body.put("reasoning_effort", "medium")
+                httpStream(OpenAiCompatApi.url(c.customEndpoint, "/chat/completions"), c.customKey, body, false, remaining(),
+                    cancellation, allowHttp = true) { line ->
+                    val data = line.removePrefix("data:").trim()
+                    if (line.startsWith("data:") && data != "[DONE]") JSONObject(data).optJSONArray("choices")?.optJSONObject(0)?.let { choice ->
+                        piece(choice.optJSONObject("delta")?.optString("content").orEmpty())
+                        if (choice.optString("finish_reason") == "length") throw CloudOutputLimitException()
+                    }
+                }
+            }
             "apinex", "deepseek", "tokenharbor" -> {
                 val apinex = provider == "apinex"
                 val harbor = provider == "tokenharbor"
@@ -425,14 +454,14 @@ object LlmProviders {
         if (provider == "local") {
             val (prompt,pieces) = LocalVoiceRoleProtocol.prompt(texts,preceding,firstPerson)
             val answer = local(context,c,listOf(prompt),deadlineMs=deadlineMs,protocol="roles-local",
-                diagnosticInstruction=LocalVoiceRoleProtocol.INSTRUCTION,
+                diagnosticInstruction=PromptOverrides.get("roles-local"),
                 outputTokenLimit=(pieces.sumOf { it.size }*8+16).coerceIn(64,272)).single()
             // Local Gemma names no characters, but the book's own narrator / «прочие» voices still apply.
             return LocalVoiceRoleProtocol.parse(answer,pieces).map { plan -> plan?.map { it.copy(voice = book?.voiceOf(it.role, null)) } }
         }
         // Local Gemma keeps the plain three roles: the character list is for the cloud request only.
         val prompt = VoiceRoleProtocol.prompt(texts, preceding, book, firstPerson)
-        return VoiceRoleProtocol.parseValidated(cloudRequest(c, prompt, VoiceRoleProtocol.INSTRUCTION,
+        return VoiceRoleProtocol.parseValidated(cloudRequest(c, prompt, PromptOverrides.get("roles"),
             VoiceRoleProtocol.schema(), provider == "gemini", 2400, deadlineMs, provider = provider), texts, book)
     }
     /** Diagnostics only (StressProbe): a local text instruction tried without rebuilding the app. */

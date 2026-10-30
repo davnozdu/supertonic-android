@@ -476,7 +476,7 @@ object LlmPreparation {
         LlmMode.LOCAL -> listOf("local")
         LlmMode.OLLAMA -> listOf("ollama", "local")
         LlmMode.GEMINI -> listOf("gemini", "local")
-        LlmMode.DEEPSEEK, LlmMode.APINEX, LlmMode.TOKENHARBOR, LlmMode.AUTO -> c.cloudOrder() + "local"
+        LlmMode.DEEPSEEK, LlmMode.APINEX, LlmMode.TOKENHARBOR, LlmMode.CUSTOM, LlmMode.AUTO -> c.cloudOrder() + "local"
     }
     private fun needsRoleRecovery(c: LlmConfig, results: List<Result>): Boolean =
         c.multiVoice && c.mode !in listOf(LlmMode.OFF, LlmMode.LOCAL) && results.any {
@@ -617,7 +617,7 @@ object LlmPreparation {
             LlmMode.LOCAL -> listOf("local")
             LlmMode.OLLAMA -> listOf("ollama", "local")
             LlmMode.GEMINI -> listOf("gemini", "local")
-            LlmMode.DEEPSEEK, LlmMode.APINEX, LlmMode.TOKENHARBOR, LlmMode.AUTO -> c.cloudOrder() + "local"
+            LlmMode.DEEPSEEK, LlmMode.APINEX, LlmMode.TOKENHARBOR, LlmMode.CUSTOM, LlmMode.AUTO -> c.cloudOrder() + "local"
         }
         for (provider in providers) {
             if (results.any { it != null } && results.any { it == null }) beforeRetry(results.toList())

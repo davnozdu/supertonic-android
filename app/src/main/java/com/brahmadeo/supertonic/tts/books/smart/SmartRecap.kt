@@ -201,7 +201,7 @@ object SmartRecap {
         fun speech(prompt: String, tokens: Int): String {
             val got = StringBuilder()
             try {
-                val text = LlmProviders.cloudStream(source.config, SmartPrompts.plain(prompt), SmartPrompts.SYSTEM_PLAIN, source.provider,
+                val text = LlmProviders.cloudStream(source.config, SmartPrompts.plain(prompt), PromptOverrides.get("smart-plain"), source.provider,
                     tokens, 3 * 60 * 1000L, cancel) { piece ->
                     got.append(piece)
                     mutable.value = mutable.value.copy(stage = "Пересказ", partial = got.toString())
@@ -225,7 +225,8 @@ object SmartRecap {
         for (attempt in 1..3) {
             cancel.check()
             try {
-                val raw = LlmProviders.cloudRequest(source.config, prompt, if (multi) SmartPrompts.SYSTEM_SEVERAL else SmartPrompts.SYSTEM,
+                val own = PromptOverrides.get("smart")
+                val raw = LlmProviders.cloudRequest(source.config, prompt, if (multi) SmartPrompts.severalOf(own) else own,
                     if (multi) SmartPrompts.severalSchema else SmartPrompts.schema, source.gemini,
                     tokens = tokens, deadlineMs = 3 * 60 * 1000L, cancellation = cancel, provider = source.provider, temperature = 0.3)
                 if (multi) { if (raw.contains("\"summaries\"")) return raw } else SmartPrompts.answer(raw)?.let { return it }

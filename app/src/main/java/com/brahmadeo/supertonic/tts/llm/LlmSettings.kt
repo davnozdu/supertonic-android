@@ -12,7 +12,8 @@ import javax.crypto.spec.GCMParameterSpec
 
 enum class LlmMode(val title: String) {
     OFF("Выключено"), AUTO("Авто: облако → Gemma 4"), OLLAMA("Ollama Cloud"),
-    GEMINI("Gemini"), DEEPSEEK("DeepSeek"), APINEX("APInex"), TOKENHARBOR("TokenHarbor"), LOCAL("Автономно: Gemma 4")
+    GEMINI("Gemini"), DEEPSEEK("DeepSeek"), APINEX("APInex"), TOKENHARBOR("TokenHarbor"),
+    CUSTOM("Свой сервер (OpenAI-совместимый)"), LOCAL("Автономно: Gemma 4")
 }
 
 data class LlmConfig(
@@ -35,6 +36,12 @@ data class LlmConfig(
     val tokenharborKey: String = "",
     val tokenharborThinking: Boolean = false,
     val preferTokenharbor: Boolean = false,
+    /** Свой OpenAI-совместимый сервер: адрес вида https://host/v1, ключ (может быть пустым) и модель. */
+    val customEndpoint: String = "",
+    val customKey: String = "",
+    val customModel: String = "",
+    val customThinking: Boolean = false,
+    val preferCustom: Boolean = false,
     val ollamaThinking: Boolean = false,
     val geminiThinking: Boolean = false,
     val localThinking: Boolean = false,
@@ -57,9 +64,12 @@ fun LlmConfig.cloudOrder(): List<String> = when (mode) {
     LlmMode.DEEPSEEK -> listOf("deepseek")
     LlmMode.APINEX -> listOf("apinex")
     LlmMode.TOKENHARBOR -> listOf("tokenharbor")
+    LlmMode.CUSTOM -> listOf("custom")
     LlmMode.AUTO -> {
-        val all = listOf("ollama", "gemini", "deepseek", "apinex", "tokenharbor")
-        val first = if (preferTokenharbor) "tokenharbor" else if (preferApinex) "apinex" else if (preferDeepseek) "deepseek" else if (preferGemini) "gemini" else "ollama"
+        val all = listOf("ollama", "gemini", "deepseek", "apinex", "tokenharbor") +
+            (if (customEndpoint.isNotBlank() && customModel.isNotBlank()) listOf("custom") else emptyList())
+        val first = if (preferTokenharbor) "tokenharbor" else if (preferApinex) "apinex" else if (preferCustom) "custom"
+            else if (preferDeepseek) "deepseek" else if (preferGemini) "gemini" else "ollama"
         listOf(first) + (all - first)
     }
 }
@@ -71,6 +81,8 @@ fun LlmConfig.cloudReady(provider: String): Boolean = when (provider) {
     "deepseek" -> deepseekKey.isNotBlank() && deepseekModel.isNotBlank()
     "apinex" -> apinexKey.isNotBlank() && apinexModel.isNotBlank()
     "tokenharbor" -> tokenharborKey.isNotBlank() && tokenharborModel.isNotBlank()
+    // У своего сервера ключ не обязателен: локальный сервер часто работает без него.
+    "custom" -> customEndpoint.isNotBlank() && customModel.isNotBlank()
     else -> false
 }
 
@@ -142,6 +154,11 @@ object LlmSettings {
             tokenharborKey = decrypt(p.getString("tokenharbor_key", "")!!),
             tokenharborThinking = p.getBoolean("tokenharbor_thinking", false),
             preferTokenharbor = p.getBoolean("prefer_tokenharbor", false),
+            customEndpoint = p.getString("custom_endpoint", "")!!,
+            customKey = decrypt(p.getString("custom_key", "")!!),
+            customModel = p.getString("custom_model", "")!!,
+            customThinking = p.getBoolean("custom_thinking", false),
+            preferCustom = p.getBoolean("prefer_custom", false),
             preferGemini = p.getBoolean("prefer_gemini", false), gpu = p.getBoolean("gpu", true),
             ollamaThinking = p.getBoolean("ollama_thinking", false),
             geminiThinking = p.getBoolean("gemini_thinking", false),
@@ -165,6 +182,9 @@ object LlmSettings {
             .putBoolean("apinex_thinking", c.apinexThinking).putBoolean("prefer_apinex", c.preferApinex)
             .putString("tokenharbor_model", c.tokenharborModel.trim()).putString("tokenharbor_key", encrypt(c.tokenharborKey.trim()))
             .putBoolean("tokenharbor_thinking", c.tokenharborThinking).putBoolean("prefer_tokenharbor", c.preferTokenharbor)
+            .putString("custom_endpoint", c.customEndpoint.trim().trimEnd('/')).putString("custom_key", encrypt(c.customKey.trim()))
+            .putString("custom_model", c.customModel.trim())
+            .putBoolean("custom_thinking", c.customThinking).putBoolean("prefer_custom", c.preferCustom)
             .putBoolean("prefer_gemini", c.preferGemini).putBoolean("gpu", c.gpu)
             .putBoolean("ollama_thinking", c.ollamaThinking)
             .putBoolean("gemini_thinking", c.geminiThinking)

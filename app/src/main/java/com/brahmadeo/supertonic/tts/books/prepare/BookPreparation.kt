@@ -22,6 +22,7 @@ import com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.brahmadeo.supertonic.tts.llm.PromptOverrides
 import org.json.JSONObject
 import com.brahmadeo.supertonic.tts.llm.VoiceRoleProtocol
 import java.io.File
@@ -265,7 +266,7 @@ object BookPreparation {
      * places of the next request). */
     private fun markScenes(ctx: Context, plan: BookPreparationPlan, folder: File, source: Source, cancel: LlmProviders.CloudCancellation,
                            startedAt: Long): SceneMarking.Result =
-        SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, SceneMarking.INSTRUCTION, SceneMarking.schema(), null, source, cancel) },
+        SceneMarking.mark(plan.paragraphs, { prompt -> jsonRequest(folder, "scenes", prompt, PromptOverrides.get("scenes"), SceneMarking.schema(), null, source, cancel) },
             { done, all -> mutable.value = State(true, "Локации сцен", done, all, startedAt = startedAt) }, cancel::check, plan.sections.map { it.id },
             ctx.getSharedPreferences("SupertonicPrefs", 0).getInt(SceneMarking.EVENTS_DENSITY, SceneMarking.DEFAULT_DENSITY),
             // The generator knows English only: a description the model wrote in Russian (or another language) is
@@ -273,13 +274,13 @@ object BookPreparation {
             translate = { text -> runCatching { com.brahmadeo.supertonic.tts.ambience.MusicPrompt.englishSound(ctx, text) }.getOrNull() },
             // Second pass: the descriptions of the actions no kind of the closed list could name are grouped into kinds
             // of their own (one request per book); a lone action is dropped instead of played as «something else».
-            group = { prompt -> jsonRequest(folder, "event-kinds", prompt, SceneMarking.GROUP_INSTRUCTION,
+            group = { prompt -> jsonRequest(folder, "event-kinds", prompt, PromptOverrides.get("event-kinds"),
                 SceneMarking.groupSchema(), "groups", source, cancel) },
             // «Есть в базе звуков» — тоже известный вид: такое действие берётся даже при одном упоминании.
             known = { k -> com.brahmadeo.supertonic.tts.books.EventKinds.proper(k) ||
                 com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) },
             // Добивка: абзацы, где событий не нашлось вовсе, идут отдельными короткими запросами.
-            fill = { prompt -> jsonRequest(folder, "scene-fill", prompt, SceneMarking.INSTRUCTION, SceneMarking.fillSchema(), null, source, cancel) })
+            fill = { prompt -> jsonRequest(folder, "scene-fill", prompt, PromptOverrides.get("scenes"), SceneMarking.fillSchema(), null, source, cancel) })
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */
@@ -311,7 +312,7 @@ object BookPreparation {
 
     /** One role request, cached by its prompt: up to three attempts on network or server errors. */
     private fun roleRequest(folder: File, prompt: String, source: Source, cancel: LlmProviders.CloudCancellation): String =
-        jsonRequest(folder, "roles", prompt, VoiceRoleProtocol.INSTRUCTION, VoiceRoleProtocol.schema(), "paragraphs", source, cancel)
+        jsonRequest(folder, "roles", prompt, PromptOverrides.get("roles"), VoiceRoleProtocol.schema(), "paragraphs", source, cancel)
 
     /** One JSON request without thinking, cached by its prompt under [kind]; saved only when it has [field]
      * (null: the scene list [SceneMarking.scenes] can be read from it). */

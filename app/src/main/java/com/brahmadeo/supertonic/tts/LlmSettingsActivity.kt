@@ -72,6 +72,13 @@ class LlmSettingsActivity : ComponentActivity() {
                     val a = org.json.JSONArray(getSharedPreferences("llm_models", MODE_PRIVATE).getString("tokenharbor", "[]"))
                     (0 until a.length()).map { a.getString(it) }
                 }.getOrDefault(emptyList())) }
+                var customStatus by remember { mutableStateOf("") }
+                var customRevision by remember { mutableIntStateOf(0) }
+                var customBusy by remember { mutableStateOf(false) }
+                var customModels by remember { mutableStateOf(runCatching {
+                    val a = org.json.JSONArray(getSharedPreferences("llm_models", MODE_PRIVATE).getString("custom", "[]"))
+                    (0 until a.length()).map { a.getString(it) }
+                }.getOrDefault(emptyList())) }
                 var ollamaRevision by remember { mutableIntStateOf(0) }
                 var geminiRevision by remember { mutableIntStateOf(0) }
                 var refreshing by remember { mutableStateOf<Boolean?>(null) }
@@ -289,6 +296,84 @@ class LlmSettingsActivity : ComponentActivity() {
                         Text("API может вернуть также модели звука и изображений. Для подготовки текста выберите текстовую LLM.", style = MaterialTheme.typography.bodySmall)
                         Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it, preferDeepseek = if (it) false else config.preferDeepseek, preferApinex = if (it) false else config.preferApinex, preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider()
+                        Text("Свой сервер (OpenAI-совместимый)", style = MaterialTheme.typography.titleLarge)
+                        OutlinedTextField(config.customEndpoint, { config = config.copy(customEndpoint = it) },
+                            label = { Text("Адрес API, например https://api.example.com/v1") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(config.customKey, { config = config.copy(customKey = it) },
+                            label = { Text("Ключ API (можно оставить пустым)") },
+                            visualTransformation = PasswordVisualTransformation(), singleLine = true,
+                            modifier = Modifier.fillMaxWidth())
+                        Button(onClick = {
+                            val snapshot = config
+                            busy = true; customBusy = true; customStatus = "Получение списка моделей…"
+                            scope.launch {
+                                try {
+                                    LlmSettings.save(this@LlmSettingsActivity, snapshot)
+                                    val models = withContext(Dispatchers.IO) { LlmProviders.models(snapshot, false, "custom") }
+                                    customModels = models; customRevision++
+                                    getSharedPreferences("llm_models", MODE_PRIVATE).edit().putString("custom", org.json.JSONArray(models).toString()).apply()
+                                    customStatus = "Получено моделей: ${models.size}. Выберите модель ниже или впишите её имя вручную."
+                                } catch (e: Exception) { customStatus = "Не удалось получить модели: ${e.message?.take(160)}" }
+                                finally { busy = false; customBusy = false }
+                            }
+                        }, enabled = !busy) { Text("Считать модели") }
+                        if (customBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (customStatus.isNotEmpty()) Text(customStatus)
+                        if (customModels.isNotEmpty()) {
+                            Choice("Модель своего сервера", config.customModel.ifBlank { "Выберите модель" }, customModels, customRevision) {
+                                config = config.copy(customModel = it); save()
+                            }
+                        }
+                        OutlinedTextField(config.customModel, { config = config.copy(customModel = it) },
+                            label = { Text("Имя модели (если списка нет)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Toggle("Размышление на своём сервере (медленнее)", config.customThinking) { config = config.copy(customThinking = it); save() }
+                        Toggle("В авторежиме сначала свой сервер", config.preferCustom) { config = config.copy(preferCustom = it,
+                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek,
+                            preferApinex = if (it) false else config.preferApinex,
+                            preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
+                        Text("Подходит любой сервер с ChatGPT-совместимым API: llama.cpp, vLLM, LM Studio, OpenRouter и подобные. " +
+                            "Адрес можно указывать с /v1 и без него. Работает и http:// — для сервера в своей сети; в этом случае ключ " +
+                            "идёт по сети открытым текстом, поэтому в интернете используйте https. Ключ хранится зашифрованным в Android Keystore. " +
+                            "Размышление отправляется как reasoning_effort и подходит не всем серверам — если модель не понимает это поле, оставьте выключенным.",
+                            style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider()
+                        var promptsOpen by remember { mutableStateOf(false) }
+                        OutlinedButton(onClick = { promptsOpen = !promptsOpen }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (promptsOpen) "Скрыть свои инструкции для модели" else "Свои инструкции для модели")
+                        }
+                        if (promptsOpen) {
+                            Text("Здесь лежат системные инструкции, которые MyTTS отправляет модели. Каждую можно заменить своим текстом; " +
+                                "пустое поле или «Вернуть исходный» возвращают встроенную. Правила формата ответа (JSON, нумерация) менять " +
+                                "можно, но при другом формате приложение не примет ответ и перейдёт на резервный путь.",
+                                style = MaterialTheme.typography.bodySmall)
+                            PromptOverrides.ENTRIES.forEach { entry ->
+                                key(entry.key) {
+                                    var open by remember { mutableStateOf(false) }
+                                    var own by remember { mutableStateOf(PromptOverrides.changed(this@LlmSettingsActivity, entry.key)) }
+                                    var text by remember { mutableStateOf(PromptOverrides.get(entry.key)) }
+                                    OutlinedButton(onClick = { open = !open }, modifier = Modifier.fillMaxWidth()) {
+                                        Text((if (own) "своя · " else "") + entry.title)
+                                    }
+                                    if (open) {
+                                        Text(entry.about, style = MaterialTheme.typography.bodySmall)
+                                        OutlinedTextField(text, { text = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Button(enabled = text.isNotBlank(), onClick = {
+                                                PromptOverrides.save(this@LlmSettingsActivity, entry.key, text)
+                                                own = PromptOverrides.changed(this@LlmSettingsActivity, entry.key)
+                                            }) { Text("Сохранить") }
+                                            OutlinedButton(onClick = {
+                                                PromptOverrides.reset(this@LlmSettingsActivity, entry.key)
+                                                text = PromptOverrides.builtIn(entry.key)
+                                                own = false
+                                            }) { Text("Вернуть исходный") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         HorizontalDivider()
                         Text("Локальная Gemma 4 E2B", style = MaterialTheme.typography.titleLarge)
                         val llmPrefs = remember { getSharedPreferences("llm_settings", MODE_PRIVATE) }

@@ -1,6 +1,7 @@
 package com.brahmadeo.supertonic.tts.books.prepare
 
 import com.brahmadeo.supertonic.tts.books.SceneIndex
+import com.brahmadeo.supertonic.tts.llm.PromptOverrides
 import org.json.JSONObject
 
 /** «Фоновые звуки локаций» of a prepared book: the LLM reads every paragraph in batches (in reading order, one
@@ -72,7 +73,7 @@ internal object SceneMarking {
 
     /** The request of the second pass: the numbered descriptions and the rule above. */
     fun groupPrompt(descriptions: List<String>) = buildString {
-        appendLine(GROUP_INSTRUCTION)
+        appendLine(PromptOverrides.get("event-kinds"))
         appendLine()
         appendLine("Известные виды: " + com.brahmadeo.supertonic.tts.books.EventKinds.ALL
             .filter { it.key != com.brahmadeo.supertonic.tts.books.EventKinds.OTHER }.joinToString("; ") { it.key })

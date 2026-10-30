@@ -25,6 +25,9 @@ object SmartPrompts {
     val SYSTEM_SEVERAL = SYSTEM.substringBefore(" Верни только JSON") + " Верни только JSON {\"summaries\": […]}."
     /** System of a streamed retelling: plain text, read aloud as it comes. */
     val SYSTEM_PLAIN = SYSTEM.substringBefore(" Верни только JSON") + " Ответ — только сам пересказ, без кавычек, заголовков и пояснений."
+    /** Свой или встроенный промпт пересказа, приведённый к форме нескольких ответов и к форме «только пересказ». */
+    fun severalOf(base: String) = base.substringBefore(" Верни только JSON") + " Верни только JSON {\"summaries\": […]}."
+    fun plainOf(base: String) = base.substringBefore(" Верни только JSON") + " Ответ — только сам пересказ, без кавычек, заголовков и пояснений."
     /** The same prompt for a streamed plain-text answer. */
     fun plain(prompt: String) = prompt.replace(" $JSON", " Ответ — только сам пересказ, без кавычек, заголовков и пояснений.")
 
