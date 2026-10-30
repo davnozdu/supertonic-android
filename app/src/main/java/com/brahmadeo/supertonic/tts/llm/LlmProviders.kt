@@ -262,9 +262,15 @@ object LlmProviders {
         fun remaining() = (deadlineMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)
         return if (provider == "custom") {
             require(c.customEndpoint.isNotBlank() && c.customModel.isNotBlank()) { "Укажите адрес сервера и модель" }
-            val body = OpenAiCompatApi.request(c.customModel, system, prompt, tokens, temperature, c.customThinking)
-            DeepSeekApi.content(http(OpenAiCompatApi.url(c.customEndpoint, "/chat/completions"), c.customKey, body,
-                deadlineMs = remaining(), cancellation = cancellation, allowHttp = true))
+            val url = OpenAiCompatApi.url(c.customEndpoint, "/chat/completions")
+            fun ask(tokenField: String): String {
+                val body = OpenAiCompatApi.request(c.customModel, system, prompt, tokens, temperature, c.customThinking, tokenField)
+                return DeepSeekApi.content(http(url, c.customKey, body, deadlineMs = remaining(), cancellation = cancellation, allowHttp = true))
+            }
+            // Новые модели OpenAI на max_tokens отвечают 400: повторяем с max_completion_tokens.
+            try { ask("max_tokens") } catch (e: Exception) {
+                if (e.message.orEmpty().startsWith("API HTTP 400")) ask("max_completion_tokens") else throw e
+            }
         } else if (provider == "tokenharbor") {
             require(c.tokenharborKey.isNotBlank()) { "Введите ключ TokenHarbor" }
             val body = DeepSeekApi.request(c.tokenharborModel, c.tokenharborThinking, system, prompt, tokens, temperature, effort)
@@ -338,16 +344,23 @@ object LlmProviders {
             .put(JSONObject().put("role", "user").put("content", prompt))
         when (provider) {
             "custom" -> {
-                val body = JSONObject().put("model", c.customModel).put("stream", true)
-                    .put("temperature", temperature).put("max_tokens", tokens).put("messages", messages)
-                if (c.customThinking) body.put("reasoning_effort", "medium")
-                httpStream(OpenAiCompatApi.url(c.customEndpoint, "/chat/completions"), c.customKey, body, false, remaining(),
-                    cancellation, allowHttp = true) { line ->
-                    val data = line.removePrefix("data:").trim()
-                    if (line.startsWith("data:") && data != "[DONE]") JSONObject(data).optJSONArray("choices")?.optJSONObject(0)?.let { choice ->
-                        piece(choice.optJSONObject("delta")?.optString("content").orEmpty())
-                        if (choice.optString("finish_reason") == "length") throw CloudOutputLimitException()
+                require(c.customEndpoint.isNotBlank() && c.customModel.isNotBlank()) { "Укажите адрес сервера и модель" }
+                val url = OpenAiCompatApi.url(c.customEndpoint, "/chat/completions")
+                fun go(tokenField: String) {
+                    val body = JSONObject().put("model", c.customModel).put("stream", true)
+                        .put("temperature", temperature).put(tokenField, tokens).put("messages", messages)
+                    if (c.customThinking) body.put("reasoning_effort", "medium")
+                    httpStream(url, c.customKey, body, false, remaining(), cancellation, allowHttp = true) { line ->
+                        val data = line.removePrefix("data:").trim()
+                        if (line.startsWith("data:") && data != "[DONE]") JSONObject(data).optJSONArray("choices")?.optJSONObject(0)?.let { choice ->
+                            piece(choice.optJSONObject("delta")?.optString("content").orEmpty())
+                            if (choice.optString("finish_reason") == "length") throw CloudOutputLimitException()
+                        }
                     }
+                }
+                // Ничего ещё не прочитано вслух — можно повторить с полем, которое понимает новая модель OpenAI.
+                try { go("max_tokens") } catch (e: Exception) {
+                    if (out.isEmpty() && e.message.orEmpty().startsWith("API HTTP 400")) go("max_completion_tokens") else throw e
                 }
             }
             "apinex", "deepseek", "tokenharbor" -> {

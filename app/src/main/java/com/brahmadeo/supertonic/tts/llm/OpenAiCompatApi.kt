@@ -26,11 +26,14 @@ object OpenAiCompatApi {
         }.distinct().sorted()
     }
 
-    /** Тело запроса. Поле «thinking» шлём только по просьбе: незнакомые поля часть серверов отвергает. */
-    fun request(model: String, system: String, prompt: String, tokens: Int, temperature: Double, thinking: Boolean): JSONObject {
+    /** Тело запроса. [tokenField]: старые серверы понимают max_tokens, новые модели OpenAI — только
+     * max_completion_tokens и отвечают 400 на незнакомое поле. Поле «размышления» шлём только по просьбе:
+     * незнакомые поля часть серверов отвергает. */
+    fun request(model: String, system: String, prompt: String, tokens: Int, temperature: Double, thinking: Boolean,
+                tokenField: String = "max_tokens"): JSONObject {
         require(model.isNotBlank()) { "Выберите модель своего сервера" }
         return JSONObject().put("model", model).put("stream", false).put("temperature", temperature)
-            .put("max_tokens", tokens)
+            .put(tokenField, tokens)
             .apply { if (thinking) put("reasoning_effort", "medium") }
             .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))
                 .put(JSONObject().put("role", "user").put("content", prompt)))
