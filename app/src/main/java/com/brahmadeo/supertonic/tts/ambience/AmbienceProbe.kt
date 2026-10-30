@@ -60,6 +60,57 @@ object AmbienceProbe {
         }
     }
 
+    /** Writes a clip where the driver expects it: cache/ambience by default, or a shared folder under Downloads
+     * (MediaStore, no permissions on Android 10+) when the extra ambienceOutDir names one. */
+    private fun save(context: Context, fallback: File, name: String, pcm: FloatArray, dir: String?): String {
+        val tmp = File(fallback.parentFile, ".tmp-$name.wav")
+        Sa3Generator.writeWav(tmp, pcm)
+        try {
+            if (dir.isNullOrBlank()) {
+                val target = File(fallback.parentFile, name + ".wav")
+                if (!tmp.renameTo(target)) { tmp.copyTo(target, overwrite = true); tmp.delete() }
+                return target.absolutePath
+            }
+            val resolver = context.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$name.wav")
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_DOWNLOADS + "/" + dir)
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw java.io.IOException("MediaStore refused $name")
+            resolver.openOutputStream(uri)!!.use { out -> tmp.inputStream().use { it.copyTo(out) } }
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                resolver.update(uri, android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                }, null, null)
+            }
+            return uri.toString()
+        } finally { tmp.delete() }
+    }
+
+    /** Same place as the clips, but for a small text file: lets the driver see completion without root. */
+    private fun saveText(context: Context, name: String, text: String, dir: String) {
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                    android.os.Environment.DIRECTORY_DOWNLOADS + "/" + dir)
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        val uri = context.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return
+        context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
+        if (android.os.Build.VERSION.SDK_INT >= 29) context.contentResolver.update(uri, android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+        }, null, null)
+    }
+
     /** PSS split by kind (summary.* from Debug.MemoryInfo, MB): where a big NPU footprint sits. */
     private fun memory(tag: String) {
         val mi = Debug.MemoryInfo(); Debug.getMemoryInfo(mi)
@@ -116,7 +167,8 @@ object AmbienceProbe {
                 val pcm = result.pcm
                 var peak = 0f; var sum = 0.0; var nan = 0
                 for (v in pcm) { if (v.isNaN()) nan++ else { peak = maxOf(peak, abs(v)); sum += v * v } }
-                val file = File(out, "${model}_${name}_run$run.wav"); Sa3Generator.writeWav(file, pcm)
+                val where = save(context, File(out, "${model}_${name}_run$run.wav"),
+                    "${model}_${name}_run$run", pcm, intent.getStringExtra("ambienceOutDir"))
                 if (!intent.getBooleanExtra("ambienceNoAac", false)) {
                     val aac = File(out, "${model}_${name}_run$run.m4a"); val enc = android.os.SystemClock.elapsedRealtime()
                     AacFile.write(aac, pcm)
@@ -124,7 +176,7 @@ object AmbienceProbe {
                 }
                 val row = JSONObject().put("model", model).put("run", run).put("name", name).put("threads", threads)
                     .put("npu", generator.usedNpu).put("npuLoaded", npuDit != null).put("seconds", seconds)
-                    .put("wallMs", wall).put("cpuMs", cpuMs).put("peakPssMb", peakPss.get() / 1024)
+                    .put("wallMs", wall).put("cpuMs", cpuMs).put("peakPssMb", peakPss.get() / 1024).put("file", where)
                     .put("peak", peak.toDouble()).put("rms", sqrt(sum / pcm.size)).put("nan", nan)
                     .put("stages", JSONArray(result.stages.map { JSONObject().put("name", it.name).put("wallMs", it.wallMs).put("cpuMs", it.cpuMs) }))
                 results.put(row)
@@ -138,6 +190,9 @@ object AmbienceProbe {
         generator.close()
         npuDit?.close()
         File(out, "probe.json").writeText(results.toString(1))
+        intent.getStringExtra("ambienceOutDir")?.takeIf { it.isNotBlank() }?.let {
+            saveText(context, "last-run.txt", results.toString(1), it)
+        }
         Log.i(TAG, "PROBE DONE ${results.length()}")
     }
 }
