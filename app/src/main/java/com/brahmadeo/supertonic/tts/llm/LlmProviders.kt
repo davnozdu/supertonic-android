@@ -421,9 +421,9 @@ object LlmProviders {
 
     /** Like [http], but the reply is read line by line as it arrives (server-sent events / NDJSON). */
     private fun httpStream(url: String, key: String, body: JSONObject, gemini: Boolean, deadlineMs: Long,
-                           cancellation: CloudCancellation, line: (String) -> Unit) {
+                           cancellation: CloudCancellation, allowHttp: Boolean = false, line: (String) -> Unit) {
         cancellation.check()
-        require(URL(url).protocol == "https") { "Нужен HTTPS адрес" }
+        require(URL(url).protocol == "https" || (allowHttp && URL(url).protocol == "http")) { "Нужен адрес http:// или https://" }
         val connection = URL(url).openConnection() as HttpURLConnection
         val expired = java.util.concurrent.atomic.AtomicBoolean()
         val watchdog = timer.schedule({ expired.set(true); runCatching { connection.disconnect() } }, deadlineMs, java.util.concurrent.TimeUnit.MILLISECONDS)
