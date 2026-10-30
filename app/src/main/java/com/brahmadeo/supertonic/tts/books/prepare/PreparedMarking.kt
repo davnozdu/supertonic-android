@@ -4,6 +4,7 @@ import android.content.Context
 import com.brahmadeo.supertonic.tts.books.BookFingerprint
 import com.brahmadeo.supertonic.tts.books.PreparedText
 import com.brahmadeo.supertonic.tts.llm.LlmProviders
+import com.brahmadeo.supertonic.tts.llm.PreparedTextValidator
 import java.io.File
 
 /** Готовит текст книги заранее: те же ударения, ё и пунктуация, что при чтении, но посчитанные один раз при
@@ -32,9 +33,11 @@ object PreparedMarking {
             progress("Готовый текст", done, paragraphs.size)
             val pairs = try {
                 val prepared = prepare(batch, folder, source, cancel)
-                batch.zip(prepared).filter { (a, b) ->
-                    // Только дословные ответы: ударения и ё, ни одного изменённого слова.
-                    BookFingerprint.letters(a) == BookFingerprint.letters(b)
+                // Та же проверка, что на чтении: слова, числа, кавычки и скобки на месте, авторские точки, запятые,
+                // тире и многоточия не потеряны (модель может добавить, но не убрать), ударения есть.
+                batch.zip(prepared).mapNotNull { (a, b) ->
+                    val checked = PreparedTextValidator.validate(a, b) ?: return@mapNotNull null
+                    if (BookFingerprint.letters(a) == BookFingerprint.letters(checked)) a to checked else null
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

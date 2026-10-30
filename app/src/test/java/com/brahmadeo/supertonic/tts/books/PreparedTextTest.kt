@@ -38,11 +38,19 @@ class PreparedTextTest {
         assertEquals(marked, PreparedText.prepare(store, para))
     }
 
-    /** Разное число предложений: сохраняется весь абзац одной записью, лишь бы слова совпали. */
-    @Test fun differentSentenceCountKeepsWholeParagraph() {
-        val store = PreparedText.pairs("Он вошёл. Она молчала.", "Он вошёл, она́ молча́ла.").toMap()
-        assertEquals(1, store.size)
-        assertEquals("Он вошёл, она́ молча́ла.", PreparedText.prepare(store, "Он вошёл. Она молчала."))
+    /** Абзац, записанный целиком: находится, пока авторские знаки на месте. */
+    @Test fun wholeParagraphEntryIsFoundWhenPunctuationKept() {
+        val source = "Он вошёл. Она молчала."
+        val marked = "Он вошёл. Она́ молча́ла."
+        val store = mapOf(PreparedText.key(source) to marked)
+        assertEquals(marked, PreparedText.prepare(store, source))
+    }
+
+    /** Модель склеила два предложения и заменила авторскую точку запятой — это подмена пунктуации, не годится. */
+    @Test fun mergedSentencesAreRejected() {
+        val source = "Он вошёл. Она молчала."
+        val store = mapOf(PreparedText.key(source) to "Он вошёл, она́ молча́ла.")
+        assertNull(store.toString(), PreparedText.prepare(store, source))
     }
 
     /** Чужие или потерянные слова не принимаются никогда: лучше прочитать обычным путём, чем подменить текст. */
@@ -76,6 +84,19 @@ class PreparedTextTest {
     @Test fun alreadyMarkedSourceIsUnchanged() {
         val store = PreparedText.pairs(marked, marked).toMap()
         assertEquals(marked, PreparedText.prepare(store, marked))
+    }
+
+    /** Авторские знаки — часть текста: точка, запятая, тире, многоточие не могут исчезнуть, иначе интонация и паузы
+     * перестают быть авторскими. Добавленный знак не мешает. */
+    @Test fun authorPunctuationIsNeverLost() {
+        val source = "— Я не знаю, — сказала она. — Спроси у Ивана…"
+        assertTrue(PreparedText.keepsPunctuation(source, "— Я не зна́ю, — сказа́ла она́. — Спроси́ у Ива́на…"))
+        assertTrue("добавленная запятая не портит", PreparedText.keepsPunctuation(source, "— Я не зна́ю, — сказа́ла она́, — и ушла́. — Спроси́ у Ива́на…"))
+        assertTrue("потерянная запятая ловится только по порядку знаков", !PreparedText.keepsPunctuation(source, "— Я не зна́ю — сказа́ла она́. — Спроси́ у Ива́на"))
+        assertTrue("потерянное тире", !PreparedText.keepsPunctuation(source, "Я не зна́ю, — сказа́ла она́. — Спроси́ у Ива́на…"))
+        assertTrue("потерянное многоточие", !PreparedText.keepsPunctuation(source, "— Я не зна́ю, — сказа́ла она́. — Спроси́ у Ива́на."))
+        val store = mapOf(PreparedText.key(source) to "— Я не зна́ю — сказа́ла она́. — Спроси́ у Ива́на")
+        assertNull("подмена без запятых не принимается", PreparedText.prepare(store, source))
     }
 
     @Test fun shortRepliesAreFound() {

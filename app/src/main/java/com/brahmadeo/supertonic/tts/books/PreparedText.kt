@@ -29,6 +29,22 @@ object PreparedText {
         return out
     }
 
+    /** Авторские знаки: точка, запятая, тире, двоеточие, точка с запятой, многоточие, вопросительный и восклицательный.
+     * Модель может добавить свой знак, но ни один авторский пропасть не должен — он и есть интонация и паузы. */
+    private const val MARKS = ",;:—–.!?…"
+
+    /** Все авторские знаки на месте и в том же порядке (добавленные между ними не мешают). */
+    fun keepsPunctuation(source: String, stored: String): Boolean {
+        var j = 0
+        for (ch in source) {
+            if (ch !in MARKS) continue
+            while (j < stored.length && stored[j] != ch) j++
+            if (j >= stored.length) return false
+            j++
+        }
+        return true
+    }
+
     /** Отпечаток предложения по всем его буквам: короткие реплики («—») тоже получают свой ключ. */
     fun key(sentence: String): Long = BookFingerprint.hash(BookFingerprint.letters(sentence))
 
@@ -78,7 +94,7 @@ object PreparedText {
         if (store.isEmpty() || text.isBlank()) return null
         // Целый абзац одной записью: так ложатся абзацы, где модель слила или разбила предложения.
         store[key(text)]?.let { whole ->
-            if (BookFingerprint.letters(whole) == BookFingerprint.letters(text)) return whole
+            if (BookFingerprint.letters(whole) == BookFingerprint.letters(text) && keepsPunctuation(text, whole)) return whole
         }
         val parts = pieces(text)
         if (parts.isEmpty()) return null
@@ -87,6 +103,8 @@ object PreparedText {
             val got = store[key(part.text)] ?: return null
             // Слова и буквы обязаны совпасть: иначе это ответ для другого издания или испорченный файл.
             if (BookFingerprint.letters(got) != BookFingerprint.letters(part.text)) return null
+            // И авторская пунктуация — тоже: точка, запятая, тире не могут исчезнуть по дороге.
+            if (!keepsPunctuation(part.text, got)) return null
             out.append(got).append(part.separator)
         }
         return out.toString()
