@@ -40,6 +40,13 @@ object BookArchive {
                 if (BookFiles.validSourceName(name)) runCatching { zip.getInputStream(e).use { BookFiles.saveSource(context, sha, name, it, MAX_SOURCE) } }
                     .onFailure { android.util.Log.w("BookArchive", "Book file not kept: ${it.javaClass.simpleName}") }
             }
+            entries.firstOrNull { it.name == "prepared/text.json.gz" }?.let { e ->
+                runCatching {
+                    val target = com.brahmadeo.supertonic.tts.books.PreparedText.file(context, sha)
+                    target.parentFile?.mkdirs()
+                    zip.getInputStream(e).use { input -> target.outputStream().use { input.copyTo(it) } }
+                }.onFailure { android.util.Log.w("BookArchive", "Prepared text not kept: ${it.javaClass.simpleName}") }
+            }
             val sounds = entries.filter { it.name.startsWith("ambience/") && BookFiles.SOUND.matches(it.name.removePrefix("ambience/")) }.take(MAX_SOUNDS)
             for (e in sounds) runCatching { zip.getInputStream(e).use { BookFiles.saveSound(context, sha, e.name.removePrefix("ambience/"), it) } }
                 .onFailure { android.util.Log.w("BookArchive", "Sound not kept: ${it.javaClass.simpleName}") }
@@ -62,6 +69,11 @@ object BookArchive {
                 }
                 for (s in BookFiles.sounds(context, sha)) {
                     zip.putNextEntry(ZipEntry("ambience/${s.name}")); s.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
+                }
+                // Готовый текст книги (ударения, ё, пунктуация): с ним книга читается без нейросети и без интернета.
+                val prepared = com.brahmadeo.supertonic.tts.books.PreparedText.file(context, sha)
+                if (prepared.isFile && prepared.length() > 0L) {
+                    zip.putNextEntry(ZipEntry("prepared/text.json.gz")); prepared.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
                 }
             }
             check(tmp.renameTo(target)) { "Не удалось сохранить файл книги" }
