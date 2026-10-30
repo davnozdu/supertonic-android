@@ -520,7 +520,8 @@ object LlmPreparation {
                 roleRequest?.invoke(provider, parts, before) ?: LlmProviders.voiceRoles(ctx, c, parts, before, provider,
                     minOf(8000L, (if(provider=="local") deadline else cloudDeadline) - SystemClock.elapsedRealtime()).coerceAtLeast(1), book)
             }, failed = { provider, error ->
-                val pause = if (Regex("API HTTP (401|403|429)").containsMatchIn(error.message.orEmpty())) 60_000 else 10_000
+                val pause = if (Regex("API HTTP 402").containsMatchIn(error.message.orEmpty())) 30 * 60_000
+                    else if (Regex("API HTTP (401|403|429)").containsMatchIn(error.message.orEmpty())) 60_000 else 10_000
                 roleCooldown[provider] = SystemClock.elapsedRealtime() + pause
                 Log.w("MultiVoice", "Role request failed provider=$provider error=${error.javaClass.simpleName}; trying next provider")
             }, resolved = { index, plan, provider ->
@@ -749,7 +750,9 @@ object LlmPreparation {
                 // Network blips and timeouts recover quickly; only auth/quota errors need a long pause.
                 // A slow local fragment is not an outage: Gemma stays available for the next batch.
                 if (!(provider == "local" && failure.orEmpty().startsWith("LLM локальная: превышен лимит")))
-                    cooldown[provider] = SystemClock.elapsedRealtime() + if (Regex("API HTTP (401|403|429)").containsMatchIn(failure.orEmpty())) 60_000 else 15_000
+                    cooldown[provider] = SystemClock.elapsedRealtime() +
+                        (if (Regex("API HTTP 402").containsMatchIn(failure.orEmpty())) 30 * 60_000
+                        else if (Regex("API HTTP (401|403|429)").containsMatchIn(failure.orEmpty())) 60_000 else 15_000)
                 Log.w("LlmPreparation", "Provider $provider failed: $failure; trying fallback")
             } catch (_: LinkageError) {
                 failure = "Локальная среда выполнения не поддерживается"

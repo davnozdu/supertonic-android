@@ -98,7 +98,7 @@ fun LlmConfig.cloudReady(provider: String): Boolean = when (provider) {
 /** The same reasoning switch for every cloud provider. */
 fun LlmConfig.withCloudThinking(enabled: Boolean) =
     copy(ollamaThinking = enabled, geminiThinking = enabled, deepseekThinking = enabled, apinexThinking = enabled,
-        tokenharborThinking = enabled)
+        tokenharborThinking = enabled, customThinking = enabled)
 
 object LlmSettings {
     private const val PREFS = "llm_settings"

@@ -50,11 +50,12 @@ object BookPreparation {
         val ollama = c.ollamaModel.isNotBlank() && c.ollamaEndpoint.startsWith("https://") &&
             (c.ollamaKey.isNotBlank() || !java.net.URL(c.ollamaEndpoint).host.equals("ollama.com", true))
         val gemini = c.geminiKey.isNotBlank() && c.geminiModel.isNotBlank()
-        val available = mapOf("ollama" to ollama, "gemini" to gemini, "deepseek" to c.cloudReady("deepseek"), "apinex" to c.cloudReady("apinex"), "tokenharbor" to c.cloudReady("tokenharbor"))
+        val available = mapOf("ollama" to ollama, "gemini" to gemini, "deepseek" to c.cloudReady("deepseek"), "apinex" to c.cloudReady("apinex"),
+            "tokenharbor" to c.cloudReady("tokenharbor"), "custom" to c.cloudReady("custom"))
         // Gemma and «off» still prepare books with a cloud: the first one set up, in the AUTO order.
         val order = if (c.mode in listOf(LlmMode.OFF, LlmMode.LOCAL)) c.copy(mode = LlmMode.AUTO).cloudOrder() else c.cloudOrder()
         val provider = order.firstOrNull { available[it] == true }
-        require(provider != null) { "Настройте выбранное облако: Ollama, Gemini, DeepSeek, APInex или TokenHarbor в настройках LLM" }
+        require(provider != null) { "Настройте облако в настройках LLM: Ollama, Gemini, DeepSeek, APInex, TokenHarbor или свой сервер" }
         return Source(c.withCloudThinking(true), provider == "gemini", provider)
     }
 

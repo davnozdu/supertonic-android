@@ -105,6 +105,7 @@ object LlmProviders {
             // Never put provider response bodies (potential secrets/text) in errors or logs.
             require(code in 200..299) { when (code) {
                 401, 403 -> "API HTTP $code: сервер отказал в доступе; проверьте ключ и разрешения аккаунта"
+                402 -> "API HTTP 402: на счёте этого сервера закончились средства; пополните баланс или выберите другой сервер"
                 429 -> "API HTTP 429: лимит запросов; повторите позже"
                 else -> "API HTTP $code"
             } }
@@ -443,6 +444,7 @@ object LlmProviders {
             val code = connection.responseCode
             require(code in 200..299) { when (code) {
                 401, 403 -> "API HTTP $code: сервер отказал в доступе; проверьте ключ и разрешения аккаунта"
+                402 -> "API HTTP 402: на счёте этого сервера закончились средства; пополните баланс или выберите другой сервер"
                 429 -> "API HTTP 429: лимит запросов; повторите позже"
                 else -> "API HTTP $code"
             } }
