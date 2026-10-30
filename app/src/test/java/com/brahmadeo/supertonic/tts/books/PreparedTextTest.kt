@@ -32,6 +32,13 @@ class PreparedTextTest {
         assertEquals(PreparedText.key("Кня́зь Мы́шкин"), PreparedText.key("Князь Мышкин"))
     }
 
+    /** Разные знаки — разные предложения, даже когда буквы совпадают. */
+    @Test fun keySeparatesDifferentPunctuation() {
+        assertTrue(PreparedText.key("Анна!") != PreparedText.key("Анна»"))
+        assertTrue(PreparedText.key("Да.") != PreparedText.key("Да?"))
+        assertEquals("тире реплики не в счёт", PreparedText.key("— Да."), PreparedText.key("Да."))
+    }
+
     @Test fun paragraphIsAssembledFromPreparedSentences() {
         val store = PreparedText.pairs(para, marked).toMap()
         assertEquals(4, store.size)
@@ -93,10 +100,19 @@ class PreparedTextTest {
         assertTrue(PreparedText.keepsPunctuation(source, "— Я не зна́ю, — сказа́ла она́. — Спроси́ у Ива́на…"))
         assertTrue("добавленная запятая не портит", PreparedText.keepsPunctuation(source, "— Я не зна́ю, — сказа́ла она́, — и ушла́. — Спроси́ у Ива́на…"))
         assertTrue("потерянная запятая ловится только по порядку знаков", !PreparedText.keepsPunctuation(source, "— Я не зна́ю — сказа́ла она́. — Спроси́ у Ива́на"))
-        assertTrue("потерянное тире", !PreparedText.keepsPunctuation(source, "Я не зна́ю, — сказа́ла она́. — Спроси́ у Ива́на…"))
+        assertTrue("потерянное внутреннее тире", !PreparedText.keepsPunctuation(source, "— Я не зна́ю, сказа́ла она́. — Спроси́ у Ива́на…"))
         assertTrue("потерянное многоточие", !PreparedText.keepsPunctuation(source, "— Я не зна́ю, — сказа́ла она́. — Спроси́ у Ива́на."))
         val store = mapOf(PreparedText.key(source) to "— Я не зна́ю — сказа́ла она́. — Спроси́ у Ива́на")
         assertNull("подмена без запятых не принимается", PreparedText.prepare(store, source))
+    }
+
+    /** Читалки присылают реплику и с тире, и без него: тире в начале строки — знак реплики, а не авторская пунктуация. */
+    @Test fun leadingDialogueDashMayComeAndGo() {
+        assertTrue(PreparedText.keepsPunctuation("— Да.", "Да."))
+        assertTrue(PreparedText.keepsPunctuation("Да.", "— Да."))
+        assertTrue("запятая внутри всё равно обязательна", !PreparedText.keepsPunctuation("— Да, князь.", "Да князь."))
+        val store = mapOf(PreparedText.key("— Да, князь.") to "Да, князь.")
+        assertEquals("Да, князь.", PreparedText.prepare(store, "— Да, князь."))
     }
 
     @Test fun shortRepliesAreFound() {
