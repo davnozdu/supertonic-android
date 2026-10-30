@@ -246,9 +246,9 @@ object LlmPreparation {
     private fun preparedBook(ctx: Context, text: String): Result? {
         if (text.length > 6000 || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
         val position = com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value ?: return null
-        val sha = runCatching { com.brahmadeo.supertonic.tts.books.BookLibrary.contentSha(ctx, position.book) }.getOrNull() ?: return null
+        val pkg = runCatching { com.brahmadeo.supertonic.tts.books.BookLibrary.get(ctx, position.book) }.getOrNull() ?: return null
         val started = SystemClock.elapsedRealtime()
-        val ready = com.brahmadeo.supertonic.tts.books.PreparedText.lookup(ctx, sha, text) ?: return null
+        val ready = com.brahmadeo.supertonic.tts.books.PreparedText.prepare(pkg.prepared, text) ?: return null
         val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, position) }.getOrNull()
         val plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
             runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()

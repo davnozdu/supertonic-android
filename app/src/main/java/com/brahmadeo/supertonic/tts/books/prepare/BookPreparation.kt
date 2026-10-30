@@ -139,12 +139,14 @@ object BookPreparation {
                     }
                     var preparedSentences = 0
                     if (text) {
-                        val counts = PreparedMarking.mark(ctx, plan, plan.contentSha, source, folder, cancel, startedAt) { stage, done, all ->
+                        val counts = PreparedMarking.mark(ctx, plan, source, folder, cancel, startedAt) { stage, done, all ->
                             mutable.value = State(true, stage, done, all, startedAt = startedAt)
                         }
                         preparedSentences = counts.sentences
+                        if (counts.store.isNotEmpty())
+                            json = JSONObject(json).put("prepared", com.brahmadeo.supertonic.tts.books.PreparedText.toJson(counts.store)).toString()
                         com.brahmadeo.supertonic.tts.utils.DiagLog.i("BookPrep",
-                            "Готовый текст: предложений $preparedSentences, не удалось ${counts.failed}")
+                            "Готовый текст: предложений $preparedSentences, не удалось ${counts.failed}, размер файла ${json.length}")
                     }
                     var smartSections = 0
                     if (smart) {

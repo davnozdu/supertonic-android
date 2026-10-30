@@ -89,7 +89,6 @@ object BookLibrary {
         // The text saved with this book («Умная книга») goes with it; a copy from the books folder stays.
         contentSha(context, id)?.let { sha ->
             BookFiles.remove(context, sha) // its book file and location sounds
-            com.brahmadeo.supertonic.tts.books.PreparedText.forget(context, sha) // its prepared text (ударения, ё)
             val smart = com.brahmadeo.supertonic.tts.books.smart.SmartLibrary
             if (smart.book(context, sha)?.source == smart.PREPARED) { smart.remove(context, sha); com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.forget(context, sha) }
         }

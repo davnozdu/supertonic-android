@@ -22,7 +22,7 @@ data class BookPreparationPlan(val title: String, val author: String, val fileSh
         require(casts.size == requests.size)
         val all = casts.flatMapIndexed { i, list -> list.map { it to requests[i] } }
         val sectionCast = all.flatMapIndexed { index, (cast, _) -> cast.sections.map { it to index } }.toMap()
-        return JSONObject().put("format", "mytts-book").put("version", 1)
+        return JSONObject().put("format", "mytts-book").put("version", 2)
             .put("book", JSONObject().put("title", title).put("author", author).put("file_sha256", fileSha).put("content_sha256", contentSha))
             .put("scope", if (collection) "section" else "book").put("voice_model", "")
             .put("sections", JSONArray(sections.map { JSONObject().put("id", it.id).put("title", it.title).put("cast", sectionCast[it.id] ?: JSONObject.NULL) }))

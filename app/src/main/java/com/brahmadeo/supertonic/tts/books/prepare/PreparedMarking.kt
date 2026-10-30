@@ -7,19 +7,23 @@ import com.brahmadeo.supertonic.tts.llm.LlmProviders
 import java.io.File
 
 /** Готовит текст книги заранее: те же ударения, ё и пунктуация, что при чтении, но посчитанные один раз при
- * подготовке книги и сохранённые рядом с ней ([PreparedText]). Пакеты по [CHARS] знаков — как на чтении, поэтому
+ * подготовке и записанные в файл книги ([PreparedText]). Пакеты по [CHARS] знаков — как на чтении, поэтому
  * результат совпадает. Каждый пакет кэшируется по своему тексту: повторная подготовка ничего не пересчитывает.
- * Сбой облака не портит книгу: что успело посчитаться, то и сохранится, остальное при чтении пойдёт обычным путём. */
+ * Сбой облака не портит книгу: что успело посчитаться, то и попадёт в файл, остальное при чтении пойдёт обычным
+ * путём — облаком, если оно есть, или словарями. */
 object PreparedMarking {
     private const val CHARS = 2400
-    data class Result(val paragraphs: Int, val sentences: Int, val failed: Int)
+    data class Result(val paragraphs: Int, val sentences: Int, val failed: Int,
+                      /** Отпечаток предложения → готовый текст: идёт в book.json. */
+                      val store: Map<Long, String>)
 
-    internal fun mark(ctx: Context, plan: BookPreparationPlan, contentSha: String, source: BookPreparation.Source,
+    fun mark(ctx: Context, plan: BookPreparationPlan, source: BookPreparation.Source,
              folder: File, cancel: LlmProviders.CloudCancellation, startedAt: Long,
              progress: (stage: String, done: Int, all: Int) -> Unit): Result {
         val paragraphs = plan.paragraphs.filter { it.text.isNotBlank() }
-        if (paragraphs.isEmpty()) return Result(0, 0, 0)
+        if (paragraphs.isEmpty()) return Result(0, 0, 0, emptyMap())
         val batches = batch(paragraphs.map { it.text })
+        val store = HashMap<Long, String>(paragraphs.size * 4)
         var done = 0
         var sentences = 0
         var failed = 0
@@ -38,11 +42,13 @@ object PreparedMarking {
                 failed += batch.size
                 emptyList()
             }
-            if (pairs.isNotEmpty()) sentences += PreparedText.put(ctx, contentSha, pairs.flatMap { (a, b) -> sentences(a, b) })
+            for ((source, prepared) in pairs) for ((hash, value) in PreparedText.pairs(source, prepared)) {
+                if (store.put(hash, value) == null) sentences++
+            }
             done += batch.size
         }
         progress("Готовый текст", paragraphs.size, paragraphs.size)
-        return Result(paragraphs.size, sentences, failed)
+        return Result(paragraphs.size, sentences, failed, store)
     }
 
     /** Пакеты не длиннее [CHARS]: одно и то же деление и при повторной подготовке, и при дозаписи. */
@@ -75,13 +81,5 @@ object PreparedMarking {
             if (!tmp.renameTo(cache)) { tmp.copyTo(cache, overwrite = true); tmp.delete() }
         }
         return prepared
-    }
-
-    /** Предложения абзаца: исходное и подготовленное — по ним [PreparedText] ищет текст при чтении. */
-    private fun sentences(source: String, prepared: String): List<Pair<String, String>> {
-        val from = PreparedText.pieces(source)
-        val to = PreparedText.pieces(prepared)
-        if (from.size != to.size) return listOf(source to prepared.replace("\n", " "))
-        return from.indices.map { from[it].text to to[it].text }
     }
 }

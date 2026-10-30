@@ -73,7 +73,7 @@ class BooksActivity : ComponentActivity() {
                     if (uris.isNotEmpty()) scope.launch {
                         var added = 0; var failed = 0
                         withContext(Dispatchers.IO) { for (u in uris) runCatching {
-                            com.brahmadeo.supertonic.tts.books.prepare.BookQueue.add(this@BooksActivity, u, repliesOn, smartOn, scenesOn, thinking)
+                            com.brahmadeo.supertonic.tts.books.prepare.BookQueue.add(this@BooksActivity, u, repliesOn, smartOn, scenesOn, thinking, textOn)
                         }.onSuccess { added++ }.onFailure { failed++ } }
                         message = "В очередь добавлено книг: $added" + (if (failed > 0) ", не удалось: $failed" else "") +
                             ". Подготовка — ночью (00:00–06:00), когда телефон заряжается и не используется."

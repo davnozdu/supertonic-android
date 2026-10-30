@@ -20,7 +20,7 @@ import java.util.Calendar
  * while the phone charges and nobody uses it ([BookNightJob]); a book once started is finished even after 06:00. */
 object BookQueue {
     data class Entry(val id: String, val name: String, val file: File, val replies: Boolean, val smart: Boolean, val scenes: Boolean,
-                     val thinking: Boolean, val failures: Int)
+                     val thinking: Boolean, val failures: Int, val text: Boolean = false)
     const val NIGHT_KEY = "book_queue_night"
     const val NIGHT_FROM = 0
     const val NIGHT_TO = 6
@@ -38,14 +38,14 @@ object BookQueue {
             val o = JSONObject(File(d, "entry.json").readText())
             val file = File(d, o.getString("name")).takeIf { it.isFile } ?: return@runCatching null
             Entry(d.name, o.getString("name"), file, o.optBoolean("replies", true), o.optBoolean("smart"), o.optBoolean("scenes"),
-                o.optBoolean("thinking", true), o.optInt("failures"))
+                o.optBoolean("thinking", true), o.optInt("failures"), o.optBoolean("text"))
         }.getOrNull() }?.sortedBy { it.id }.orEmpty()
         mutable.value = list
         return list
     }
 
     /** Copies [uri] into the queue (≤ 50 MB) with the current options. */
-    fun add(context: Context, uri: Uri, replies: Boolean, smart: Boolean, scenes: Boolean, thinking: Boolean): Entry {
+    fun add(context: Context, uri: Uri, replies: Boolean, smart: Boolean, scenes: Boolean, thinking: Boolean, text: Boolean = false): Entry {
         val name = runCatching { context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null } }.getOrNull()?.trim()
             ?.takeIf { com.brahmadeo.supertonic.tts.books.BookFiles.validSourceName(it) } ?: "book.epub"
@@ -58,7 +58,7 @@ object BookQueue {
                     require(size <= EpubBook.MAX_BYTES) { "Файл книги больше 50 МБ" }; out.write(buf, 0, n) }
             } } ?: error("Не удалось открыть книгу")
             File(d, "entry.json").writeText(JSONObject().put("name", name).put("replies", replies).put("smart", smart)
-                .put("scenes", scenes).put("thinking", thinking).toString())
+                .put("scenes", scenes).put("thinking", thinking).put("text", text).toString())
         } catch (t: Throwable) { d.deleteRecursively(); throw t }
         refresh(context); BookNightJob.schedule(context)
         return requireNotNull(mutable.value.firstOrNull { it.id == d.name })
@@ -75,7 +75,8 @@ object BookQueue {
         if (com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.value.running) return false
         val next = refresh(context).firstOrNull { it.failures < MAX_FAILURES } ?: return false
         val source = runCatching { BookPreparation.source(context).withThinking(next.thinking) }.getOrNull() ?: return false
-        return runCatching { BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies, smart = next.smart, scenes = next.scenes) }
+        return runCatching { BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies, smart = next.smart,
+            scenes = next.scenes, text = next.text) }
             .getOrDefault(false).also { if (it) running = next.id }
     }
 

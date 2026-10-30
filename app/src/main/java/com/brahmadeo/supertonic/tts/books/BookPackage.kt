@@ -3,7 +3,9 @@ package com.brahmadeo.supertonic.tts.books
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** A prepared book (`.mytts-book` v1): characters per section and sentence fingerprints, no book text.
+/** A prepared book (`.mytts-book`): characters per section, sentence fingerprints and, for a book prepared with
+ * «Готовить текст с ударениями», the prepared text itself (stress marks, ё, punctuation) by sentence fingerprint —
+ * such a book is read without any LLM at all.
  * Made by tools/characters/book_characters.py export; shared between users as a file. */
 data class BookPackage(
     val title: String,
@@ -18,6 +20,8 @@ data class BookPackage(
     val replies: ReplyIndex = ReplyIndex.EMPTY,
     /** «Фоновые звуки локаций» (optional): where each part takes place ([SceneIndex]); the sounds live next to the book. */
     val scenes: SceneIndex = SceneIndex.EMPTY,
+    /** Готовый текст (optional): отпечаток предложения → текст с ударениями, ё и пунктуацией ([PreparedText]). */
+    val prepared: Map<Long, String> = emptyMap(),
 ) {
     data class Section(val id: String, val title: String, val cast: Int?)
     data class Cast(val sections: List<String>, val characters: List<Character>, val other: List<String>)
@@ -65,7 +69,8 @@ data class BookPackage(
         fun parse(json: String): BookPackage {
             val o = JSONObject(json)
             require(o.optString("format") == "mytts-book") { "Это не файл подготовленной книги MyTTS" }
-            require(o.optInt("version") == 1) { "Неподдерживаемая версия файла: ${o.opt("version")}" }
+            // v2 добавила «prepared» — готовый текст книги; файлы v1 читаются как раньше, только без него.
+            require(o.optInt("version") in 1..2) { "Неподдерживаемая версия файла: ${o.opt("version")}" }
             val fp = o.getJSONObject("fingerprint")
             require(fp.getString("algorithm") == BookFingerprint.ALGORITHM && fp.getInt("min_letters") == BookFingerprint.MIN_LETTERS) {
                 "Неизвестный способ отпечатков: ${fp.optString("algorithm")}"
@@ -100,8 +105,9 @@ data class BookPackage(
                 ReplyIndex.parse(r.getJSONArray("codes").strings(), r.getString("index"))
             } ?: ReplyIndex.EMPTY
             val scenes = o.optJSONObject("ambience")?.let { SceneIndex.parse(it) } ?: SceneIndex.EMPTY
+            val prepared = PreparedText.parse(o.optJSONObject("prepared"))
             return BookPackage(book.getString("title"), book.optString("author"), book.optString("file_sha256"),
-                book.getString("content_sha256"), o.optString("scope", "book"), sections, casts, fingerprints, replies, scenes)
+                book.getString("content_sha256"), o.optString("scope", "book"), sections, casts, fingerprints, replies, scenes, prepared)
         }
 
         private fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }
