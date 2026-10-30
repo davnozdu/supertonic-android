@@ -169,6 +169,25 @@ class LlmSettingsActivity : ComponentActivity() {
                         if (message.isNotEmpty()) Text(message)
                         }
                         if (section == Section.MODELS) {
+                        Text("Очередь серверов", style = MaterialTheme.typography.titleLarge)
+                        Text("Первый пункт — основной. Если он не ответил, MyTTS пробует резерв 1, потом резерв 2, затем " +
+                            "остальные настроенные серверы, затем Gemma 4 и в конце обычную обработку словарями. " +
+                            "Пустые пункты и серверы без модели или ключа пропускаются, поэтому можно заполнить только один пункт.",
+                            style = MaterialTheme.typography.bodySmall)
+                        val queueTitles = listOf("не задан") + CLOUD_TITLES.values.toList()
+                        fun queueLabel(key: String) = CLOUD_TITLES[key] ?: "не задан"
+                        fun setQueue(index: Int, title: String) {
+                            val key = CLOUD_TITLES.entries.firstOrNull { it.value == title }?.key.orEmpty()
+                            val list = config.priority.toMutableList()
+                            while (list.size < 3) list.add("")
+                            for (j in list.indices) if (j != index && list[j] == key) list[j] = ""
+                            list[index] = key
+                            config = config.copy(priority = list); save()
+                        }
+                        Choice("Основной сервер", queueLabel(config.priority.getOrNull(0).orEmpty()), queueTitles) { setQueue(0, it) }
+                        Choice("Резерв 1", queueLabel(config.priority.getOrNull(1).orEmpty()), queueTitles) { setQueue(1, it) }
+                        Choice("Резерв 2", queueLabel(config.priority.getOrNull(2).orEmpty()), queueTitles) { setQueue(2, it) }
+                        HorizontalDivider()
                         Text("Ollama Cloud", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.ollamaEndpoint, { config = config.copy(ollamaEndpoint = it) }, label = { Text("Адрес API (HTTPS)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(config.ollamaKey, { config = config.copy(ollamaKey = it) }, label = { Text("Ключ Ollama") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -205,9 +224,6 @@ class LlmSettingsActivity : ComponentActivity() {
                         }
                         Toggle("Размышление в DeepSeek (медленнее)", config.deepseekThinking) { config = config.copy(deepseekThinking = it); save() }
                         Text("По умолчанию DeepSeek 4.1 Flash, размышление выключено. Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала DeepSeek", config.preferDeepseek) { config = config.copy(preferDeepseek = it,
-                            preferGemini = if (it) false else config.preferGemini, preferApinex = if (it) false else config.preferApinex,
-                            preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
                         HorizontalDivider()
                         Text("APInex", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.apinexKey, { config = config.copy(apinexKey = it) }, label = { Text("Ключ APInex (sk-apx…)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -241,9 +257,6 @@ class LlmSettingsActivity : ComponentActivity() {
                             "Лимит запросов в минуту (бесплатный план — 15) MyTTS берёт из API APInex и сам выдерживает интервал. Для пересказа " +
                             "«Умной книги» этого хватает с запасом; при постоянной подготовке текста во время чтения часть абзацев может пойти по словарям. " +
                             "Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала APInex", config.preferApinex) { config = config.copy(preferApinex = it,
-                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek,
-                            preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
                         HorizontalDivider()
                         Text("TokenHarbor", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.tokenharborKey, { config = config.copy(tokenharborKey = it) }, label = { Text("Ключ TokenHarbor (thk_…)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -275,9 +288,6 @@ class LlmSettingsActivity : ComponentActivity() {
                             color = MaterialTheme.colorScheme.error)
                         Text("Шлюз-посредник: текст уходит TokenHarbor, а от него — поставщику модели. Бесплатный аккаунт — 60 запросов в минуту, " +
                             "MyTTS столько не отправляет. Ключ хранится зашифрованным в Android Keystore.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала TokenHarbor", config.preferTokenharbor) { config = config.copy(preferTokenharbor = it,
-                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek,
-                            preferApinex = if (it) false else config.preferApinex); save() }
                         HorizontalDivider()
                         Text("Gemini", style = MaterialTheme.typography.titleLarge)
                         OutlinedTextField(config.geminiKey, { config = config.copy(geminiKey = it) }, label = { Text("Ключ Gemini API") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -294,7 +304,6 @@ class LlmSettingsActivity : ComponentActivity() {
                             Text("Для этой модели API не предоставляет известной настройки размышления; тумблер к ней не применяется.", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("API может вернуть также модели звука и изображений. Для подготовки текста выберите текстовую LLM.", style = MaterialTheme.typography.bodySmall)
-                        Toggle("В авторежиме сначала Gemini", config.preferGemini) { config = config.copy(preferGemini = it, preferDeepseek = if (it) false else config.preferDeepseek, preferApinex = if (it) false else config.preferApinex, preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
                         Text("Авто пробует настроенные облака по порядку, затем скачанную Gemma 4. Ручной выбор облака имеет приоритет; при его сбое используется Gemma 4. Автономный режим никогда не обращается к облакам.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("Свой сервер (OpenAI-совместимый)", style = MaterialTheme.typography.titleLarge)
@@ -329,10 +338,6 @@ class LlmSettingsActivity : ComponentActivity() {
                         OutlinedTextField(config.customModel, { config = config.copy(customModel = it) },
                             label = { Text("Имя модели (если списка нет)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Toggle("Размышление на своём сервере (медленнее)", config.customThinking) { config = config.copy(customThinking = it); save() }
-                        Toggle("В авторежиме сначала свой сервер", config.preferCustom) { config = config.copy(preferCustom = it,
-                            preferGemini = if (it) false else config.preferGemini, preferDeepseek = if (it) false else config.preferDeepseek,
-                            preferApinex = if (it) false else config.preferApinex,
-                            preferTokenharbor = if (it) false else config.preferTokenharbor); save() }
                         Text("Подходит любой сервер с ChatGPT-совместимым API: llama.cpp, vLLM, LM Studio, OpenRouter и подобные. " +
                             "Адрес можно указывать с /v1 и без него. Работает и http:// — для сервера в своей сети; в этом случае ключ " +
                             "идёт по сети открытым текстом, поэтому в интернете используйте https. Ключ хранится зашифрованным в Android Keystore. " +

@@ -42,6 +42,8 @@ data class LlmConfig(
     val customModel: String = "",
     val customThinking: Boolean = false,
     val preferCustom: Boolean = false,
+    /** Очередь облачных серверов: основной, резерв 1, резерв 2. Пустые пункты пропускаются. */
+    val priority: List<String> = emptyList(),
     val ollamaThinking: Boolean = false,
     val geminiThinking: Boolean = false,
     val localThinking: Boolean = false,
@@ -56,22 +58,29 @@ data class LlmConfig(
     val firstPerson: Boolean = false
 )
 
-/** Cloud providers in the order they are tried: the chosen one, or in AUTO the preferred one first. */
-fun LlmConfig.cloudOrder(): List<String> = when (mode) {
-    LlmMode.OFF, LlmMode.LOCAL -> emptyList()
-    LlmMode.OLLAMA -> listOf("ollama")
-    LlmMode.GEMINI -> listOf("gemini")
-    LlmMode.DEEPSEEK -> listOf("deepseek")
-    LlmMode.APINEX -> listOf("apinex")
-    LlmMode.TOKENHARBOR -> listOf("tokenharbor")
-    LlmMode.CUSTOM -> listOf("custom")
-    LlmMode.AUTO -> {
-        val all = listOf("ollama", "gemini", "deepseek", "apinex", "tokenharbor") +
-            (if (customEndpoint.isNotBlank() && customModel.isNotBlank()) listOf("custom") else emptyList())
-        val first = if (preferTokenharbor) "tokenharbor" else if (preferApinex) "apinex" else if (preferCustom) "custom"
-            else if (preferDeepseek) "deepseek" else if (preferGemini) "gemini" else "ollama"
-        listOf(first) + (all - first)
+/** Все облачные серверы, которые умеет приложение, с названиями для настроек. */
+val CLOUD_TITLES: Map<String, String> = linkedMapOf(
+    "ollama" to "Ollama Cloud", "gemini" to "Gemini", "deepseek" to "DeepSeek",
+    "apinex" to "APInex", "tokenharbor" to "TokenHarbor", "custom" to "Свой сервер"
+)
+
+/** Cloud providers in the order they are tried: the chosen one (manual mode), then the queue from the settings
+ * (основной → резерв 1 → резерв 2), then every other configured server. Empty slots and servers without a model
+ * or a key are skipped by the caller, so the chain runs down to Gemma 4 or the offline dictionaries. */
+fun LlmConfig.cloudOrder(): List<String> {
+    if (mode == LlmMode.OFF || mode == LlmMode.LOCAL) return emptyList()
+    val chosen = when (mode) {
+        LlmMode.OLLAMA -> "ollama"
+        LlmMode.GEMINI -> "gemini"
+        LlmMode.DEEPSEEK -> "deepseek"
+        LlmMode.APINEX -> "apinex"
+        LlmMode.TOKENHARBOR -> "tokenharbor"
+        LlmMode.CUSTOM -> "custom"
+        else -> null
     }
+    val queue = priority.map { it.trim() }.filter { it.isNotEmpty() && CLOUD_TITLES.containsKey(it) }
+    val configured = CLOUD_TITLES.keys.filter { cloudReady(it) }
+    return (listOfNotNull(chosen) + queue + configured).distinct()
 }
 
 /** A cloud provider with what it needs (model, key). Network is checked separately. */
@@ -159,6 +168,17 @@ object LlmSettings {
             customModel = p.getString("custom_model", "")!!,
             customThinking = p.getBoolean("custom_thinking", false),
             preferCustom = p.getBoolean("prefer_custom", false),
+            // Старые тумблеры «в авторежиме сначала …» переносятся в очередь один раз.
+            priority = p.getString("cloud_priority", "")!!.split(';').filter { it.isNotBlank() }.ifEmpty {
+                when {
+                    p.getBoolean("prefer_custom", false) -> listOf("custom")
+                    p.getBoolean("prefer_tokenharbor", false) -> listOf("tokenharbor")
+                    p.getBoolean("prefer_apinex", false) -> listOf("apinex")
+                    p.getBoolean("prefer_deepseek", false) -> listOf("deepseek")
+                    p.getBoolean("prefer_gemini", false) -> listOf("gemini")
+                    else -> listOf("ollama")
+                }
+            },
             preferGemini = p.getBoolean("prefer_gemini", false), gpu = p.getBoolean("gpu", true),
             ollamaThinking = p.getBoolean("ollama_thinking", false),
             geminiThinking = p.getBoolean("gemini_thinking", false),
@@ -185,6 +205,7 @@ object LlmSettings {
             .putString("custom_endpoint", c.customEndpoint.trim().trimEnd('/')).putString("custom_key", encrypt(c.customKey.trim()))
             .putString("custom_model", c.customModel.trim())
             .putBoolean("custom_thinking", c.customThinking).putBoolean("prefer_custom", c.preferCustom)
+            .putString("cloud_priority", c.priority.map { it.trim() }.filter { it.isNotBlank() }.take(3).joinToString(";"))
             .putBoolean("prefer_gemini", c.preferGemini).putBoolean("gpu", c.gpu)
             .putBoolean("ollama_thinking", c.ollamaThinking)
             .putBoolean("gemini_thinking", c.geminiThinking)
