@@ -81,7 +81,12 @@ object AmbienceProbe {
                     put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
                 }
             }
-            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            val collection = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            // Одноимённый файл от прошлого запуска MediaStore переименовал бы в "имя (1).wav" и сломал съём.
+            resolver.delete(collection, "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME}=? AND " +
+                "${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
+                arrayOf("$name.wav", "%/$dir/%"))
+            val uri = resolver.insert(collection, values)
                 ?: throw java.io.IOException("MediaStore refused $name")
             resolver.openOutputStream(uri)!!.use { out -> tmp.inputStream().use { it.copyTo(out) } }
             if (android.os.Build.VERSION.SDK_INT >= 29) {
@@ -190,9 +195,7 @@ object AmbienceProbe {
         generator.close()
         npuDit?.close()
         File(out, "probe.json").writeText(results.toString(1))
-        intent.getStringExtra("ambienceOutDir")?.takeIf { it.isNotBlank() }?.let {
-            saveText(context, "last-run.txt", results.toString(1), it)
-        }
+        // Отчёт в общую папку не пишем: он оставлял там мусорные .pending-файлы, а драйверу он не нужен.
         Log.i(TAG, "PROBE DONE ${results.length()}")
     }
 }
