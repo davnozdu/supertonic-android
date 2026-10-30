@@ -49,6 +49,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
+                var mixEvents by remember { mutableStateOf(AmbienceSettings.mix(prefs)) }
                 var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
                 var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
                 var eventLead by remember { mutableIntStateOf(AmbienceSettings.eventLead(prefs)) }
@@ -309,6 +310,15 @@ class BackgroundMusicActivity : ComponentActivity() {
                             "когда голос до этого доходит. Один звук создаётся на вид действия (дверь, бумаги, вода, посуда) и звучит " +
                             "во всех местах книги, поэтому моментов много, а клипов немного. Нужна книга, подготовленная в этой " +
                             "версии или новее.", style=MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Микс звуков",Modifier.weight(1f))
+                            Switch(checked=mixEvents,enabled=!busy,onCheckedChange={
+                                mixEvents=it; prefs.edit().putBoolean(AmbienceSettings.MIX,it).apply()
+                            })
+                        }
+                        Text("Не ждать, пока отзвучит предыдущий: пауза между звуками не соблюдается, звуки идут вплотную и могут " +
+                            "накладываться друг на друга — до трёх одновременно. Звуков становится больше, но в плотных абзацах " +
+                            "они смешиваются. Действует сразу.", style=MaterialTheme.typography.bodySmall)
                         if (events) {
                             Text("Громкость звуков событий: $eventsVolume %",style=MaterialTheme.typography.titleMedium)
                             Slider(value=eventsVolume.toFloat(),onValueChange={ eventsVolume=it.roundToInt() },

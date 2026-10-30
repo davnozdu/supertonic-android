@@ -224,16 +224,19 @@ object BackgroundMusic {
             val level = S.eventsVolume(p) / 100f
             val lead = if (leadOverride >= 0f) leadOverride else S.eventLead(p).toFloat()
             // A dense paragraph may describe several actions: they are all marked, but two sounds never start closer
-            // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere).
-            var lastAt = -MIN_EVENT_GAP_MS
+            // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere). «Микс звуков» снимает
+            // и эту паузу: звуки идут друг за другом вплотную и могут накладываться (AmbiencePlayer держит до трёх).
+            val mix = S.mix(p)
+            val gap = if (mix) 0L else MIN_EVENT_GAP_MS
+            var lastAt = -gap
             for (moment in tag.events) {
                 // Звук раньше своих слов (ползунок «Звук раньше текста»): слышен вместе с действием, а не после.
                 val at = (moment.word * per - lead).toLong().coerceAtLeast(0L)
-                if (at - lastAt < MIN_EVENT_GAP_MS) continue
+                if (gap > 0L && at - lastAt < gap) continue
                 lastAt = at
                 com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx,
                     "event ${moment.file.name} at word ${moment.word} → ${at} ms (${"%.0f".format(per)} ms/word)")
-                player.oneShot(ctx, moment.file, at, level)
+                player.oneShot(ctx, moment.file, at, level, mix)
             }
         }
     }

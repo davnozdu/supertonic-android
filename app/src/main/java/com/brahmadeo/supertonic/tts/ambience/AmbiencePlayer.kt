@@ -177,14 +177,17 @@ internal object AmbiencePlayer {
         return all[n % all.size]
     }
 
-    fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float) {
+    /** [mix]: «Микс звуков» — не ждать конца предыдущего: до трёх звуков звучат одновременно. */
+    fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float, mix: Boolean = false) {
         lateinit var run: Runnable
         run = Runnable {
             pending.remove(run)
             // Reading paused or stopped in between: the moment is gone.
             if (!playing || masterTarget == 0f) return@Runnable
             // An event is still sounding: the next one is skipped, two sounds never overlap (the voice is what matters).
-            if (shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil) {
+            // «Микс звуков» разрешает наложение — но не больше трёх сразу, иначе получается каша.
+            val busy = shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil
+            if (busy && (!mix || shots.size >= 3)) {
                 AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous")
                 return@Runnable
             }
