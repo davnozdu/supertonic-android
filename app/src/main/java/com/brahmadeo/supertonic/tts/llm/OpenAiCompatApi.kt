@@ -30,11 +30,14 @@ object OpenAiCompatApi {
      * max_completion_tokens и отвечают 400 на незнакомое поле. Поле «размышления» шлём только по просьбе:
      * незнакомые поля часть серверов отвергает. */
     fun request(model: String, system: String, prompt: String, tokens: Int, temperature: Double, thinking: Boolean,
-                tokenField: String = "max_tokens"): JSONObject {
+                tokenField: String = "max_tokens", sendEffort: Boolean = true): JSONObject {
         require(model.isNotBlank()) { "Выберите модель своего сервера" }
         return JSONObject().put("model", model).put("stream", false).put("temperature", temperature)
             .put(tokenField, tokens)
-            .apply { if (thinking) put("reasoning_effort", "medium") }
+            // «Размышление» выключаем явно: многие шлюзы (DeepSeek, Qwen) думают по умолчанию и съедают
+            // весь лимит ответа, возвращая пустой текст. Сервер, не знающий поля, отвергает запрос — тогда
+            // приложение повторяет его без поля.
+            .apply { if (sendEffort) put("reasoning_effort", if (thinking) "medium" else "none") }
             .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))
                 .put(JSONObject().put("role", "user").put("content", prompt)))
     }

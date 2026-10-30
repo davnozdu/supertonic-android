@@ -264,13 +264,17 @@ object LlmProviders {
         return if (provider == "custom") {
             require(c.customEndpoint.isNotBlank() && c.customModel.isNotBlank()) { "Укажите адрес сервера и модель" }
             val url = OpenAiCompatApi.url(c.customEndpoint, "/chat/completions")
-            fun ask(tokenField: String): String {
-                val body = OpenAiCompatApi.request(c.customModel, system, prompt, tokens, temperature, c.customThinking, tokenField)
+            fun ask(tokenField: String, sendEffort: Boolean): String {
+                val body = OpenAiCompatApi.request(c.customModel, system, prompt, tokens, temperature, c.customThinking, tokenField, sendEffort)
                 return DeepSeekApi.content(http(url, c.customKey, body, deadlineMs = remaining(), cancellation = cancellation, allowHttp = true))
             }
-            // Новые модели OpenAI на max_tokens отвечают 400: повторяем с max_completion_tokens.
-            try { ask("max_tokens") } catch (e: Exception) {
-                if (e.message.orEmpty().startsWith("API HTTP 400")) ask("max_completion_tokens") else throw e
+            // Новые модели OpenAI на max_tokens отвечают 400: повторяем с max_completion_tokens. Сервер, который
+            // не знает поля reasoning_effort, тоже отвечает 400: тогда повторяем без этого поля.
+            try { ask("max_tokens", true) } catch (e: Exception) {
+                if (!e.message.orEmpty().startsWith("API HTTP 400")) throw e
+                try { ask("max_completion_tokens", true) } catch (again: Exception) {
+                    if (again.message.orEmpty().startsWith("API HTTP 400")) ask("max_completion_tokens", false) else throw again
+                }
             }
         } else if (provider == "tokenharbor") {
             require(c.tokenharborKey.isNotBlank()) { "Введите ключ TokenHarbor" }
@@ -347,10 +351,10 @@ object LlmProviders {
             "custom" -> {
                 require(c.customEndpoint.isNotBlank() && c.customModel.isNotBlank()) { "Укажите адрес сервера и модель" }
                 val url = OpenAiCompatApi.url(c.customEndpoint, "/chat/completions")
-                fun go(tokenField: String) {
+                fun go(tokenField: String, sendEffort: Boolean) {
                     val body = JSONObject().put("model", c.customModel).put("stream", true)
                         .put("temperature", temperature).put(tokenField, tokens).put("messages", messages)
-                    if (c.customThinking) body.put("reasoning_effort", "medium")
+                    if (sendEffort) body.put("reasoning_effort", if (c.customThinking) "medium" else "none")
                     httpStream(url, c.customKey, body, false, remaining(), cancellation, allowHttp = true) { line ->
                         val data = line.removePrefix("data:").trim()
                         if (line.startsWith("data:") && data != "[DONE]") JSONObject(data).optJSONArray("choices")?.optJSONObject(0)?.let { choice ->
@@ -360,8 +364,12 @@ object LlmProviders {
                     }
                 }
                 // Ничего ещё не прочитано вслух — можно повторить с полем, которое понимает новая модель OpenAI.
-                try { go("max_tokens") } catch (e: Exception) {
-                    if (out.isEmpty() && e.message.orEmpty().startsWith("API HTTP 400")) go("max_completion_tokens") else throw e
+                try { go("max_tokens", true) } catch (e: Exception) {
+                    if (!out.isEmpty()) throw e
+                    if (!e.message.orEmpty().startsWith("API HTTP 400")) throw e
+                    try { go("max_completion_tokens", true) } catch (again: Exception) {
+                        if (out.isEmpty() && again.message.orEmpty().startsWith("API HTTP 400")) go("max_completion_tokens", false) else throw again
+                    }
                 }
             }
             "apinex", "deepseek", "tokenharbor" -> {
