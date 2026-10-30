@@ -260,7 +260,8 @@ object LlmPreparation {
         // осталась бы за автором. Локальные правила (тире, ремарки, очерёдность) закрывают такие места — без сети.
         if (book != null && LlmSettings.multiVoiceEnabled(ctx) && plan.orEmpty().all { it.role == com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR }) {
             val local = runCatching {
-                com.brahmadeo.supertonic.tts.llm.LocalSpeakers().plan(text,
+                // Один экземпляр на всё чтение: очерёдность реплик (кто говорил в прошлом куске) важна для выбора.
+                localSpeakers.plan(text,
                     book.cast.characters.map { com.brahmadeo.supertonic.tts.llm.LocalSpeakers.Person(it.id, it.gender, it.forms) })
             }.getOrNull()
             plan = com.brahmadeo.supertonic.tts.books.prepare.RoleMerge.merge(plan, local)

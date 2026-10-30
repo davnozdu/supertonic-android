@@ -52,6 +52,29 @@ class ReplyMarkingMergeTest {
         assertEquals(model, RoleMerge.merge(model, null))
     }
 
+    /** Одинаковый голос, но разные персонажи — разные куски: у каждого персонажа свой тембр. */
+    @Test fun sameRoleDifferentCharactersStayApart() {
+        val full = "— Да. — Нет."
+        val model = listOf(VoiceRoleText(full, VoiceRole.AUTHOR))
+        val local = listOf(
+            VoiceRoleText("— Да.", VoiceRole.MALE, "ivan"),
+            VoiceRoleText(" ", VoiceRole.AUTHOR),
+            VoiceRoleText("— Нет.", VoiceRole.MALE, "petr"))
+        val merged = RoleMerge.merge(model, local)!!
+        assertEquals(full, merged.joinToString("") { it.text })
+        assertEquals(listOf("ivan", "petr"), merged.filter { it.role == VoiceRole.MALE }.map { it.character })
+    }
+
+    /** Модель дала только роль без персонажа: она остаётся, кусок не разрастается. */
+    @Test fun roleWithoutCharacterIsKept() {
+        val full = "— Да."
+        val model = listOf(VoiceRoleText(full, VoiceRole.FEMALE))
+        val local = listOf(VoiceRoleText(full, VoiceRole.MALE, "ivan"))
+        val merged = RoleMerge.merge(model, local)!!
+        assertEquals(VoiceRole.FEMALE, merged.single().role)
+        assertEquals(null, merged.single().character)
+    }
+
     /** Границы кусков идут ровно по смене голоса: иначе индекс реплик сдвинется на слово. */
     @Test fun spansFollowVoiceChanges() {
         val full = "Он молчал. — Да. — Нет!"
