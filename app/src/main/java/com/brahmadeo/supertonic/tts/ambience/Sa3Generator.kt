@@ -82,8 +82,14 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
     /** One per generator (~40 MB for its 256 k pieces), freed with it after the book's sounds. */
     private val tokenizer by lazy { Sa3Tokenizer(File(dir, "tokenizer.model")) }
 
+    /** True after a [generate] that actually ran the DiT on the NPU: a loaded session alone does not mean that
+     * (the graph is 323 latents, i.e. 30 s, and shorter clips silently fall back to the CPU path). */
+    var usedNpu: Boolean = false
+        private set
+
     fun generate(prompt: String, seconds: Float, seed: Long, cancelled: () -> Boolean = { false },
                  onStage: (Stage) -> Unit = {}): Result {
+        usedNpu = false
         require(seconds in 1f..MAX_SECONDS) { "Длительность 1…${MAX_SECONDS.toInt()} с" }
         val stages = ArrayList<Stage>()
         fun <T> stage(name: String, work: () -> T): T {
@@ -93,7 +99,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
             if (cancelled()) throw InterruptedException("cancelled")
             return out
         }
-        val latents = maxOf(1, ceil(seconds * SAMPLE_RATE / SAMPLES_PER_LATENT).toInt())
+        val latents = latentsFor(seconds)
         val (hidden, mask) = stage("t5") { encodeText(prompt) }
         val x = stage("dit") { sample(hidden, mask, latents, seconds, seed, cancelled) }
         val audio = stage("decode") { decode(x, latents) }
@@ -138,7 +144,10 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
     }
 
     private fun sample(hidden: FloatArray, mask: FloatArray, length: Int, seconds: Float, seed: Long, cancelled: () -> Boolean): FloatArray {
-        npuDit?.takeIf { it.length == length }?.let { dit -> return pingpong(length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) } }
+        npuDit?.takeIf { it.length == length }?.let { dit ->
+            usedNpu = true
+            return pingpong(length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) }
+        }
         val rung = ditRungs.first { it >= length }
         val sig = "s$rung"
         return withModel(ditFile, cache = true) { m ->
@@ -241,6 +250,9 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
 
     companion object {
         const val SAMPLE_RATE = 44100
+
+        /** How many latents a clip of [seconds] needs: the NPU graph accepts only exactly 323 (30 s). */
+        fun latentsFor(seconds: Float): Int = maxOf(1, ceil(seconds * SAMPLE_RATE / SAMPLES_PER_LATENT).toInt())
         const val MAX_SECONDS = 120f
         private const val SAMPLES_PER_LATENT = 4096
         const val COND_TOKENS = 256

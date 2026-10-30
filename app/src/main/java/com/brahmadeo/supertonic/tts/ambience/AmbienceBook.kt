@@ -186,8 +186,11 @@ object AmbienceBook {
                 progress(done, ordered.size, job.label)
                 if (musicMode != job.music) {
                     npu?.close()
-                    npu = AmbienceModel.npuDit(context, music = job.music,
+                    // The NPU graph accepts exactly 323 latents (30 s): music fits, short event sounds do not, and
+                    // loading ~1–3 GB of HTP context for them only burns memory and a second per start.
+                    npu = if (job.music) AmbienceModel.npuDit(context, music = true,
                         onCompile = { k, n -> progress(done, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
+                        else null
                     generator?.close()
                     val keep = AmbienceSettings.keepModels(context.getSharedPreferences("SupertonicPrefs", 0))
                     generator = if (job.music) AmbienceModel.musicGenerator(context, threads, npu, keep)

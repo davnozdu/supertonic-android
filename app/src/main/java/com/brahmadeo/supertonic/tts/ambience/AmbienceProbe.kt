@@ -91,9 +91,14 @@ object AmbienceProbe {
         }
         val out = File(context.cacheDir, "ambience").apply { mkdirs() }
         val results = JSONArray()
-        val npuDit = if (intent.getBooleanExtra("ambienceNpu", false)) npuDit(context, threads, prompts.first().second,
-            intent.getBooleanExtra("ambienceNpuCheck", true)) else null
-        if (npuDit != null && seconds != 30f) Log.w(TAG, "NPU graph is 30 s only; this run stays on CPU")
+        // The NPU DiT is a static 323-latent graph (30 s). Loading it for a shorter clip costs memory and half a
+        // second per start and still ends on the CPU path, so the probe does not even try.
+        val latents = Sa3Generator.latentsFor(seconds)
+        val npuFits = latents == AmbienceModel.NPU_LENGTH
+        val npuDit = if (intent.getBooleanExtra("ambienceNpu", false) && npuFits)
+            npuDit(context, threads, prompts.first().second, intent.getBooleanExtra("ambienceNpuCheck", true)) else null
+        if (intent.getBooleanExtra("ambienceNpu", false) && !npuFits)
+            Log.i(TAG, "NPU skipped: $seconds s is $latents latents, the graph is ${AmbienceModel.NPU_LENGTH}")
         Log.i(TAG, "PSS before generation ${Debug.getPss() / 1024} MB")
         // Сравниваем именно модели: декодер у обеих один и тот же SAME-S, иначе разница будет от декодера.
         val generator = if (model == "medium") {
@@ -117,7 +122,8 @@ object AmbienceProbe {
                     AacFile.write(aac, pcm)
                     Log.i(TAG, "AAC $name run=$run bytes=${aac.length()} encodeMs=${android.os.SystemClock.elapsedRealtime() - enc}")
                 }
-                val row = JSONObject().put("model", model).put("run", run).put("name", name).put("threads", threads).put("npu", npuDit != null).put("seconds", seconds)
+                val row = JSONObject().put("model", model).put("run", run).put("name", name).put("threads", threads)
+                    .put("npu", generator.usedNpu).put("npuLoaded", npuDit != null).put("seconds", seconds)
                     .put("wallMs", wall).put("cpuMs", cpuMs).put("peakPssMb", peakPss.get() / 1024)
                     .put("peak", peak.toDouble()).put("rms", sqrt(sum / pcm.size)).put("nan", nan)
                     .put("stages", JSONArray(result.stages.map { JSONObject().put("name", it.name).put("wallMs", it.wallMs).put("cpuMs", it.cpuMs) }))
