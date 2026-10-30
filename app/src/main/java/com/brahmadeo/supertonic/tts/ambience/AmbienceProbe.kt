@@ -77,13 +77,23 @@ object AmbienceProbe {
         val seconds = intent.getIntExtra("ambienceSeconds", 30).toFloat()
         val threads = intent.getIntExtra("ambienceThreads", 4)
         val runs = intent.getIntExtra("ambienceRuns", 2)
+        // Модель для пробы: small (по умолчанию) или medium — для сравнения качества на одних и тех же промптах.
+        val model = intent.getStringExtra("ambienceModel") ?: "small"
+        if (model == "medium" && !AmbienceModel.musicReady(context)) {
+            Log.i(TAG, "DOWNLOAD medium")
+            runBlocking { AmbienceModel.downloadMusic(context) { t, p -> Log.i(TAG, "DOWNLOAD $t ${(p * 100).toInt()}%") } }
+        }
         val out = File(context.cacheDir, "ambience").apply { mkdirs() }
         val results = JSONArray()
         val npuDit = if (intent.getBooleanExtra("ambienceNpu", false)) npuDit(context, threads, prompts.first().second,
             intent.getBooleanExtra("ambienceNpuCheck", true)) else null
         if (npuDit != null && seconds != 30f) Log.w(TAG, "NPU graph is 30 s only; this run stays on CPU")
         Log.i(TAG, "PSS before generation ${Debug.getPss() / 1024} MB")
-        val generator = Sa3Generator(AmbienceModel.root(context), threads, npuDit)
+        // Сравниваем именно модели: декодер у обеих один и тот же SAME-S, иначе разница будет от декодера.
+        val generator = if (model == "medium") {
+            val m = AmbienceModel.music(context)
+            Sa3Generator(AmbienceModel.root(context), threads, npuDit, m.ditFile, m.rungs, "dec_w8a8.tflite", keep = true)
+        } else Sa3Generator(AmbienceModel.root(context), threads, npuDit)
         for (run in 0 until runs) for ((name, prompt) in prompts) {
             val peakPss = java.util.concurrent.atomic.AtomicLong(0); val sampling = java.util.concurrent.atomic.AtomicBoolean(true)
             val sampler = thread(name = "ambience-pss") { while (sampling.get()) { peakPss.accumulateAndGet(Debug.getPss()) { a, b -> maxOf(a, b) }; Thread.sleep(200) } }
@@ -95,11 +105,11 @@ object AmbienceProbe {
                 val pcm = result.pcm
                 var peak = 0f; var sum = 0.0; var nan = 0
                 for (v in pcm) { if (v.isNaN()) nan++ else { peak = maxOf(peak, abs(v)); sum += v * v } }
-                val file = File(out, "${name}_run$run.wav"); Sa3Generator.writeWav(file, pcm)
-                val aac = File(out, "${name}_run$run.m4a"); val enc = android.os.SystemClock.elapsedRealtime()
+                val file = File(out, "${model}_${name}_run$run.wav"); Sa3Generator.writeWav(file, pcm)
+                val aac = File(out, "${model}_${name}_run$run.m4a"); val enc = android.os.SystemClock.elapsedRealtime()
                 AacFile.write(aac, pcm)
                 Log.i(TAG, "AAC $name run=$run bytes=${aac.length()} encodeMs=${android.os.SystemClock.elapsedRealtime() - enc}")
-                val row = JSONObject().put("run", run).put("name", name).put("threads", threads).put("npu", npuDit != null).put("seconds", seconds)
+                val row = JSONObject().put("model", model).put("run", run).put("name", name).put("threads", threads).put("npu", npuDit != null).put("seconds", seconds)
                     .put("wallMs", wall).put("cpuMs", cpuMs).put("peakPssMb", peakPss.get() / 1024)
                     .put("peak", peak.toDouble()).put("rms", sqrt(sum / pcm.size)).put("nan", nan)
                     .put("stages", JSONArray(result.stages.map { JSONObject().put("name", it.name).put("wallMs", it.wallMs).put("cpuMs", it.cpuMs) }))
