@@ -73,7 +73,13 @@ object AmbienceProbe {
             var last = -1
             runBlocking { AmbienceModel.download(context) { text, p -> val pct = (p * 100).toInt(); if (pct / 5 != last) { last = pct / 5; Log.i(TAG, "DOWNLOAD $text") } } }
         }
-        val prompts = intent.getStringExtra("ambiencePrompts")?.split(";;")?.map { it.substringBefore('|') to it.substringAfter('|') } ?: DEFAULT
+        val prompts = intent.getStringExtra("ambiencePromptsFile")?.let { path ->
+            // Пачка промптов из файла: по строке «имя|промпт» — оболочка adb не выдерживает «;;» в длинных списках.
+            java.io.File(path).readLines().mapNotNull { l ->
+                val line = l.trim()
+                if (line.isEmpty() || line.startsWith("#")) null else line.substringBefore('|') to line.substringAfter('|')
+            }.ifEmpty { DEFAULT }
+        } ?: intent.getStringExtra("ambiencePrompts")?.split(";;")?.map { it.substringBefore('|') to it.substringAfter('|') } ?: DEFAULT
         val seconds = intent.getIntExtra("ambienceSeconds", 30).toFloat()
         val threads = intent.getIntExtra("ambienceThreads", 4)
         val runs = intent.getIntExtra("ambienceRuns", 2)
@@ -106,9 +112,11 @@ object AmbienceProbe {
                 var peak = 0f; var sum = 0.0; var nan = 0
                 for (v in pcm) { if (v.isNaN()) nan++ else { peak = maxOf(peak, abs(v)); sum += v * v } }
                 val file = File(out, "${model}_${name}_run$run.wav"); Sa3Generator.writeWav(file, pcm)
-                val aac = File(out, "${model}_${name}_run$run.m4a"); val enc = android.os.SystemClock.elapsedRealtime()
-                AacFile.write(aac, pcm)
-                Log.i(TAG, "AAC $name run=$run bytes=${aac.length()} encodeMs=${android.os.SystemClock.elapsedRealtime() - enc}")
+                if (!intent.getBooleanExtra("ambienceNoAac", false)) {
+                    val aac = File(out, "${model}_${name}_run$run.m4a"); val enc = android.os.SystemClock.elapsedRealtime()
+                    AacFile.write(aac, pcm)
+                    Log.i(TAG, "AAC $name run=$run bytes=${aac.length()} encodeMs=${android.os.SystemClock.elapsedRealtime() - enc}")
+                }
                 val row = JSONObject().put("model", model).put("run", run).put("name", name).put("threads", threads).put("npu", npuDit != null).put("seconds", seconds)
                     .put("wallMs", wall).put("cpuMs", cpuMs).put("peakPssMb", peakPss.get() / 1024)
                     .put("peak", peak.toDouble()).put("rms", sqrt(sum / pcm.size)).put("nan", nan)
