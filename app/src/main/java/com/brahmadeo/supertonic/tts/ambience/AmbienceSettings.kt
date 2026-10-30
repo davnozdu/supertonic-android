@@ -20,10 +20,10 @@ object AmbienceSettings {
     /** «Микс звуков»: the pause between event sounds is ignored and two of them may sound at once. */
     const val MIX = "ambience_mix_events"
     fun mix(prefs: SharedPreferences) = prefs.getBoolean(MIX, false)
-    /** Пауза между звуками событий, мс (ползунок): 0…3000, по умолчанию 1200. Ниже [MIX_FROM_MS]
+    /** Пауза между звуками событий, мс (ползунок): 0…3000, по умолчанию 200. Ниже [MIX_FROM_MS]
      * звуки могут накладываться друг на друга. */
     const val GAP = "ambience_event_gap_ms"
-    const val DEFAULT_GAP = 1200
+    const val DEFAULT_GAP = 200
     const val MIX_FROM_MS = 800
     fun eventGap(prefs: SharedPreferences) = prefs.getInt(GAP, DEFAULT_GAP).coerceIn(0, 3000)
     fun mixFor(gap: Int) = gap < MIX_FROM_MS
