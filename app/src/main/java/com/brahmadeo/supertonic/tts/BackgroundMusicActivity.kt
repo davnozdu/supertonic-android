@@ -49,7 +49,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
-                var mixEvents by remember { mutableStateOf(AmbienceSettings.mix(prefs)) }
+                var eventGap by remember { mutableIntStateOf(AmbienceSettings.eventGap(prefs)) }
                 var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
                 var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
                 var eventLead by remember { mutableIntStateOf(AmbienceSettings.eventLead(prefs)) }
@@ -310,15 +310,18 @@ class BackgroundMusicActivity : ComponentActivity() {
                             "когда голос до этого доходит. Один звук создаётся на вид действия (дверь, бумаги, вода, посуда) и звучит " +
                             "во всех местах книги, поэтому моментов много, а клипов немного. Нужна книга, подготовленная в этой " +
                             "версии или новее.", style=MaterialTheme.typography.bodySmall)
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                            Text("Микс звуков",Modifier.weight(1f))
-                            Switch(checked=mixEvents,enabled=!busy,onCheckedChange={
-                                mixEvents=it; prefs.edit().putBoolean(AmbienceSettings.MIX,it).apply()
-                            })
-                        }
-                        Text("Не ждать, пока отзвучит предыдущий: пауза между звуками не соблюдается, звуки идут вплотную и могут " +
-                            "накладываться друг на друга — до трёх одновременно. Звуков становится больше, но в плотных абзацах " +
-                            "они смешиваются. Действует сразу.", style=MaterialTheme.typography.bodySmall)
+                        Text("Пауза между звуками: " + if (eventGap == 0) "без паузы" else "${"%.1f".format(eventGap / 1000f)} с",
+                            style=MaterialTheme.typography.titleMedium)
+                        Slider(value=eventGap.toFloat(),onValueChange={ eventGap=it.roundToInt() },
+                            onValueChangeFinished={
+                                prefs.edit().putInt(AmbienceSettings.GAP,eventGap)
+                                    .putBoolean(AmbienceSettings.MIX,AmbienceSettings.mixFor(eventGap)).apply()
+                            },
+                            valueRange=0f..3000f,steps=29)
+                        Text("Сколько ждать после начала одного звука, прежде чем начнётся следующий. 1,2 с по умолчанию — " +
+                            "звуки идут по одному, плотные абзацы часть звуков пропускают. Меньше 0,8 с — звуки идут почти " +
+                            "вплотную и могут слегка накладываться (до двух одновременно), зато прозвучат и редкие. " +
+                            "Действует сразу.", style=MaterialTheme.typography.bodySmall)
                         if (events) {
                             Text("Громкость звуков событий: $eventsVolume %",style=MaterialTheme.typography.titleMedium)
                             Slider(value=eventsVolume.toFloat(),onValueChange={ eventsVolume=it.roundToInt() },

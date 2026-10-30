@@ -226,8 +226,9 @@ object BackgroundMusic {
             // A dense paragraph may describe several actions: they are all marked, but two sounds never start closer
             // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere). «Микс звуков» снимает
             // и эту паузу: звуки идут друг за другом вплотную и могут накладываться (AmbiencePlayer держит до трёх).
-            val mix = S.mix(p)
-            val gap = if (mix) 0L else MIN_EVENT_GAP_MS
+            val gapMs = S.eventGap(p)
+            val mix = S.mixFor(gapMs)
+            val gap = gapMs.toLong()
             var lastAt = -gap
             for (moment in tag.events) {
                 // Звук раньше своих слов (ползунок «Звук раньше текста»): слышен вместе с действием, а не после.

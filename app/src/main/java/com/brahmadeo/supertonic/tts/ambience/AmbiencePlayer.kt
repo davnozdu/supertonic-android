@@ -185,9 +185,9 @@ internal object AmbiencePlayer {
             // Reading paused or stopped in between: the moment is gone.
             if (!playing || masterTarget == 0f) return@Runnable
             // An event is still sounding: the next one is skipped, two sounds never overlap (the voice is what matters).
-            // «Микс звуков» разрешает наложение — но не больше трёх сразу, иначе получается каша.
+            // «Микс звуков» разрешает наложение — но не больше двух сразу: третий поверх двух уже каша.
             val busy = shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil
-            if (busy && (!mix || shots.size >= 3)) {
+            if (busy && (!mix || shots.size >= 2)) {
                 AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous")
                 return@Runnable
             }
