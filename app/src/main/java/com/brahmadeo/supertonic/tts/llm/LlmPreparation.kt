@@ -74,7 +74,9 @@ object LlmPreparation {
         // Prepared book and section of THIS text (readers queue ahead): its characters go into the role request.
         val book = if (LlmSettings.multiVoiceEnabled(ctx)) com.brahmadeo.supertonic.tts.books.BookMatcher.feed(ctx, caller, text) else null
         val seenEpoch = epoch
-        val reused = playedResults.get(input)
+        // Готовый текст книги: очередь не нужна вовсе — ни запроса, ни ожидания, ни проверки ударений облаком.
+        val prepared = preparedResult(ctx, text, book)
+        val reused = prepared ?: playedResults.get(input)
         val id = synchronized(lock) {
             // Bound copied text, even if a reader submits an entire book.
             while (entries.isNotEmpty() && (entries.size >= 512 || entries.values.sumOf { it.text.length } + text.length > 192_000)) {
@@ -90,7 +92,8 @@ object LlmPreparation {
         if (reused != null && seenEpoch == epoch) {
             // Keep role continuity for the next paragraph, as the worker would.
             roleContext.append(caller, listOf(if (reused.voicePlan.isEmpty()) reused.text else reused.voicePlan.joinToString("") { "[${it.role.name}]${it.text}" }))
-            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Reused played preparation chars=${text.length} provider=${reused.provider} roles=${reused.rolesReady} source=${SpeechTextTrace.fingerprint(text)}")
+            val what = if (reused.provider == "книга") "Готовый текст книги (очередь)" else "Reused played preparation"
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "$what chars=${text.length} provider=${reused.provider} roles=${reused.rolesReady} source=${SpeechTextTrace.fingerprint(text)}")
             return id
         }
         timer.schedule({ startWorker() }, 120, TimeUnit.MILLISECONDS)
@@ -196,7 +199,7 @@ object LlmPreparation {
         }
         // Книга подготовлена целиком: текст с ударениями, ё и пунктуацией уже в файле, голоса — в разметке реплик.
         // Тогда нейросеть не нужна вовсе: ни запроса, ни ожидания.
-        preparedBook(ctx, text)?.let { return it }
+        preparedResult(ctx, text)?.let { return it }
         if (!enabled(ctx)) return Result(text,"автономно",0,true)
         initialize(ctx)
         val entry = synchronized(lock) {
@@ -243,9 +246,9 @@ object LlmPreparation {
     }
     /** Готовый текст книги (PreparedText): ударения, ё и пунктуация посчитаны заранее при подготовке. Возвращает
      * null, если книга не узнана, файла нет или хотя бы одно предложение не совпало по буквам — тогда обычный путь. */
-    private fun preparedBook(ctx: Context, text: String): Result? {
+    private fun preparedResult(ctx: Context, text: String, known: com.brahmadeo.supertonic.tts.books.BookMatcher.Position? = null): Result? {
         if (text.length > 6000 || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
-        val position = com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value ?: return null
+        val position = known ?: com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value ?: return null
         val pkg = runCatching { com.brahmadeo.supertonic.tts.books.BookLibrary.get(ctx, position.book) }.getOrNull() ?: return null
         val started = SystemClock.elapsedRealtime()
         val ready = com.brahmadeo.supertonic.tts.books.PreparedText.prepare(pkg.prepared, text) ?: return null
