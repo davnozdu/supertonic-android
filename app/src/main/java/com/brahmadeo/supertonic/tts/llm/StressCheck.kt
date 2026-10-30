@@ -15,7 +15,7 @@ object StressCheck {
      * [llm] / [silero]: the stressed-vowel ordinals the LLM and Silero gave the word, if any. */
     data class Dispute(val fragment: Int, val range: IntRange, val sentence: String, val first: String, val second: String,
                        val context: String = "", val homograph: Boolean = false, val llm: Int? = null, val silero: Int? = null,
-                       val yo: Boolean = false)
+                       val yo: Boolean = false, val unknownName: Boolean = false, val repeated: Boolean = false)
     /** A decided word: [value] replaces [range] of [fragment]. */
     data class Mark(val fragment: Int, val range: IntRange, val value: String)
     /** [fragments] as given; [marks] (agreed or single-source) and [disputes] are applied together by [resolve]. */
@@ -159,15 +159,22 @@ object StressCheck {
                 val variants = homograph(k)?.distinct()?.takeIf { it.size >= 2 }
                 val llm = ordinal(w)
                 val r = if (variants != null) null else dictionary(k) ?: if (llmAsDictionary) llm else null
-                fun dispute(x: Int, y: Int, homo: Boolean) { disputes += Dispute(f, a[i].range, sentence(fragments[f], a[i].range),
-                    withStress(w, x), withStress(w, y), previousSentence(fragments[f], a[i].range), homo, llm, s) }
+                fun dispute(x: Int, y: Int, homo: Boolean, unknownName: Boolean = false) {
+                    // Одно и то же слово дважды в предложении (орган / орган): судье нужна подсказка, что значения разные.
+                    val inSentence = sentence(fragments[f], a[i].range).let { sent ->
+                        Regex("[А-Яа-яЁё́]+").findAll(sent.removePrefix("⟨")).count { bare(it.value).lowercase() == k } > 1
+                    }
+                    disputes += Dispute(f, a[i].range, sentence(fragments[f], a[i].range),
+                        withStress(w, x), withStress(w, y), previousSentence(fragments[f], a[i].range), homo, llm, s,
+                        unknownName = unknownName, repeated = inSentence)
+                }
                 val unknownName = knownName != null && llm != null && variants == null && capitalised(w) && !knownName(bare(w)) &&
                     (bookName(bare(w)) || !com.brahmadeo.supertonic.tts.utils.SentenceStart.at(fragments[f], a[i].range.first))
                 when {
                     unknownName -> {
                         val other = listOfNotNull(r, s).firstOrNull { it != llm }
                         when {
-                            other != null -> dispute(llm!!, other, false)
+                            other != null -> dispute(llm!!, other, false, unknownName = true)
                             r != null || s != null -> { marks += Mark(f, a[i].range, withStress(w, llm!!)); agreed++ }
                             else -> llmOnly++
                         }
@@ -196,12 +203,16 @@ object StressCheck {
      * the option position about as often as the meaning; the two orders go in two requests (duplicates in one request
      * came back merged). */
     fun items(disputes: List<Dispute>, secondFirst: Boolean): List<Item> = disputes.map {
-        Item(it.sentence, bare(it.first), if (secondFirst) listOf(it.second, it.first) else listOf(it.first, it.second), it.context)
+        val hint = if (it.repeated) " (в этом предложении слово встречается дважды, и значения у двух вхождений разные: ударение у них не должно совпадать)" else ""
+        Item(it.sentence + hint, bare(it.first), if (secondFirst) listOf(it.second, it.first) else listOf(it.first, it.second), it.context)
     }
 
     /** The no-judge rule: the LLM's own mark when it is one of the two, otherwise [first] (RUAccent's, or Silero's for a
      * homograph). [tie] may decide first (names, Silero's unambiguous words); null = no opinion. */
     private fun fallback(d: Dispute, tie: (Dispute) -> Int?): String {
+        // Фамилия, которой нет ни в словаре имён, ни в большом словаре: словари её только угадывают
+        // (Верхо́венский), а облако знает персонажа. Без ответа судьи берём вариант LLM, он в [first].
+        if (d.unknownName) return d.first
         val a = ordinal(d.first); val b = ordinal(d.second)
         tie(d)?.let { if (it == a) return d.first; if (it == b) return d.second }
         return if (d.llm != null && d.llm == b) d.second else d.first

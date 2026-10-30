@@ -1,6 +1,8 @@
 package com.brahmadeo.supertonic.tts.llm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StressCheckTest {
@@ -152,5 +154,34 @@ class StressCheckTest {
         // The book's own ё and a changed word count are left alone.
         assertEquals("Ёлка телёфон", StressCheck.confirmYo("Ёлка телёфон", "Ёлка телёфон") { _, _ -> false })
         assertEquals("Ёлка", StressCheck.confirmYo("Елка и", "Ёлка") { _, _ -> false })
+    }
+
+    // A surname neither the names dictionary nor RUAccent knows: the dictionaries guess (Верхо́венский), the cloud
+    // names the character correctly. Without a judge answer the LLM's mark stands.
+    private val unknownSurname = "Николай вошёл в комнату, и Верхове́нский стоял у окна."
+    private val dictionaryGuess = "Николай вошёл в комнату, и Верхо́венский стоял у окна."
+
+    @Test fun anUnknownSurnameKeepsTheCloudMarkWhenTheJudgeIsSilent() {
+        val p = StressCheck.plan(listOf(unknownSurname), listOf(dictionaryGuess),
+            { w -> if (w == "верховенский") 2 else null }, { null }, knownName = { false })
+        assertEquals(1, p.disputes.size)
+        assertTrue(p.disputes.single().unknownName)
+        assertEquals(unknownSurname, StressCheck.resolve(p, null).single())
+    }
+
+    @Test fun aConsistentJudgeAnswerStillWinsOverTheCloudOnAnUnknownSurname() {
+        val p = StressCheck.plan(listOf(unknownSurname), listOf(dictionaryGuess),
+            { w -> if (w == "верховенский") 2 else null }, { null }, knownName = { false })
+        assertEquals(dictionaryGuess, StressCheck.resolve(p, listOf(1, 0)).single())
+    }
+
+    @Test fun theSameWordTwiceInASentenceTellsTheJudgeSo() {
+        val text = "В соборе звуча́л о́рган, а врач осмотре́л больно́й о́рган."
+        val p = StressCheck.plan(listOf(text), listOf(text), { null }, { w -> if (w == "орган") listOf(1, 2) else null })
+        assertEquals(2, p.disputes.size)
+        assertTrue(p.disputes.all { it.repeated })
+        val items = StressCheck.items(p.disputes, secondFirst = false)
+        assertTrue(items.all { it.sentence.contains("встречается дважды") })
+        assertFalse(items.first().sentence.contains("\u0301"))
     }
 }
