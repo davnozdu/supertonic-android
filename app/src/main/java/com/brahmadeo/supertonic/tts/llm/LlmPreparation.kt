@@ -253,9 +253,18 @@ object LlmPreparation {
         val started = SystemClock.elapsedRealtime()
         val ready = com.brahmadeo.supertonic.tts.books.PreparedText.prepare(pkg.prepared, text) ?: return null
         val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, position) }.getOrNull()
-        val plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
+        var plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
             runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()
         else null
+        // Короткие куски читалки присылают без контекста: окна в 4 слова у начала куска не находятся, и вся реплика
+        // осталась бы за автором. Локальные правила (тире, ремарки, очерёдность) закрывают такие места — без сети.
+        if (book != null && LlmSettings.multiVoiceEnabled(ctx) && plan.orEmpty().all { it.role == com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR }) {
+            val local = runCatching {
+                com.brahmadeo.supertonic.tts.llm.LocalSpeakers().plan(text,
+                    book.cast.characters.map { com.brahmadeo.supertonic.tts.llm.LocalSpeakers.Person(it.id, it.gender, it.forms) })
+            }.getOrNull()
+            plan = com.brahmadeo.supertonic.tts.books.prepare.RoleMerge.merge(plan, local)
+        }
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
             "Готовый текст книги: LLM не нужна chars=${text.length} book=${position.book} roles=${plan?.joinToString { it.role.name }}")
         val result = Result(ready, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
