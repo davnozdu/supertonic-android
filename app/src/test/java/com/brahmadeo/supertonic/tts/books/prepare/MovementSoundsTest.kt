@@ -37,6 +37,29 @@ class MovementSoundsTest {
     }
 
     @Test
+    fun heelsIndoorsAreAWoodenClickNotPavement() {
+        val w = words("Она в каблуках прошла по паркету")
+        assertEquals("heel_walk_wood", MovementSounds.surfaceKind(w, MovementSounds.surfaceIndex(w)!!))
+    }
+
+    @Test
+    fun floorIsOnlyTheExactWord() {
+        // «по полу» — шаги; «получил» — нет: раньше начало слова давало ложные шаги.
+        assertNull(MovementSounds.surfaceIndex(words("Он получил письмо и читал его")))
+        assertNull(MovementSounds.surfaceIndex(words("Поезд стоял на полустанке")))
+        val floor = words("Она прошла по полу босиком")
+        assertEquals("footsteps_wood", MovementSounds.surfaceKind(floor, MovementSounds.surfaceIndex(floor)!!))
+    }
+
+    @Test
+    fun notEverySnowWordIsIce() {
+        // «настежь» и «настаивал» не должны давать хруст наста.
+        assertNull(MovementSounds.surfaceIndex(words("Он шёл и настаивал на своём")))
+        val crust = words("Он шёл по насту, проваливаясь")
+        assertEquals("snow_crunch", MovementSounds.surfaceKind(crust, MovementSounds.surfaceIndex(crust)!!))
+    }
+
+    @Test
     fun carEngineAndDoor() {
         assertEquals("car_start", MovementSounds.carIndex(words("Она завела мотор и отъехала"))!!.second)
         assertEquals("car_door_slam", MovementSounds.carIndex(words("Он хлопнул дверцей машины"))!!.second)

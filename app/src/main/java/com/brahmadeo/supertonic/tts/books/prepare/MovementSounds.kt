@@ -16,10 +16,26 @@ object MovementSounds {
         "камн" to "footsteps_stone", "плитк" to "footsteps_stone", "мостов" to "footsteps_stone",
         "снег" to "footsteps_snow", "сугроб" to "footsteps_snow", "наст" to "snow_crunch",
         "половиц" to "footsteps_wood", "паркет" to "footsteps_wood",
-        "линолеум" to "footsteps_wood", "доск" to "footsteps_wood", "полу" to "footsteps_wood",
+        "линолеум" to "footsteps_wood", "доск" to "footsteps_wood",
+        "крыльц" to "footsteps_wood", "террас" to "footsteps_wood", "сцен" to "footsteps_wood",
         "лестниц" to "footsteps_stairs", "ступен" to "footsteps_stairs",
         "трав" to "leaves_step", "листь" to "leaves_step", "листв" to "leaves_step",
-        "гряз" to "footsteps_mud", "луж" to "footsteps_water"
+        "гряз" to "footsteps_mud", "луж" to "footsteps_water",
+        // «наст» — это и наст снега, и «настежь», «настаивал»; такие слова отсекаются в [EXCEPTIONS].
+        "наст" to "snow_crunch"
+    )
+
+    /** Точные слова-поверхности: «по полу», «на полу» — но не «получил», «полустанок». */
+    private val EXACT: Map<String, String> = mapOf(
+        "пол" to "footsteps_wood", "полу" to "footsteps_wood",
+        "полом" to "footsteps_wood", "полы" to "footsteps_wood"
+    )
+
+    /** Слова, которые начинаются как поверхность, но ею не являются: иначе «получил письмо» даёт шаги по полу. */
+    private val EXCEPTIONS = listOf(
+        "получ", "полус", "полуо", "полум", "полук", "полюс",
+        "наста", "насто", "насте", "насты", "насти",
+        "досказ", "доскоч", "травл", "трави", "травн"
     )
 
     /** Глаголы движения (начало слова): без них поверхность — просто упоминание. */
@@ -40,7 +56,8 @@ object MovementSounds {
         if (lower.none { w -> MOTION.any { m -> w.startsWith(m) } }) return null
         for ((i, w) in lower.withIndex()) {
             if (w.isEmpty()) continue
-            if (SURFACES.none { (p, _) -> w.startsWith(p) }) continue
+            if (EXCEPTIONS.any { w.startsWith(it) }) continue
+            if (w !in EXACT && SURFACES.none { (p, _) -> w.startsWith(p) }) continue
             if (VoiceSounds.negated(words, i)) continue
             return i
         }
@@ -50,12 +67,14 @@ object MovementSounds {
     /** Вид шагов по названной поверхности ([at] — номер слова поверхности). */
     fun surfaceKind(words: List<String>, at: Int): String {
         val w = VoiceSounds.clean(words.getOrNull(at) ?: "")
-        val kind = SURFACES.firstOrNull { (p, _) -> w.startsWith(p) }?.second ?: "footsteps_wood"
-        // Женщина в каблуках по твёрдому покрытию — это стук каблуков, а не мягкие шаги.
-        if (kind == "footsteps_stone" || kind == "footsteps_gravel") {
-            if (heels(words.map { VoiceSounds.clean(it) })) return "heel_walk_stone"
+        val kind = EXACT[w] ?: SURFACES.firstOrNull { (p, _) -> w.startsWith(p) }?.second ?: "footsteps_wood"
+        if (!heels(words.map { VoiceSounds.clean(it) })) return kind
+        // Женщина в каблуках: по камню и гравию — цоканье снаружи, по половицам и паркету — стук в доме.
+        return when (kind) {
+            "footsteps_stone", "footsteps_gravel", "footsteps_stairs", "heel_walk_stone" -> "heel_walk_stone"
+            "footsteps_wood" -> "heel_walk_wood"
+            else -> kind
         }
-        return kind
     }
 
     /** Завод двигателя и дверца машины: «завёл мотор», «мотор завёлся», «хлопнул дверцей». */
