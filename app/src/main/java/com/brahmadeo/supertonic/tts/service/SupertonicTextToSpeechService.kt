@@ -308,9 +308,18 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         if (!voicePreview && !foreign) com.brahmadeo.supertonic.tts.books.smart.SmartMatcher.heard(this, request.callerUid, incomingText)
         // KOReader hands over one sentence at a time; its plugin sent the pages ahead and their paragraphs were prepared
         // by the LLM (KoreaderAhead): the sentence is cut out of its prepared paragraph. Not prepared yet: dictionaries.
-        val aheadText = if (voicePreview || foreign) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
+        val aheadPrepared = if (voicePreview || foreign) null else com.brahmadeo.supertonic.tts.llm.ReaderAudioAhead.takePrepared(incomingText)
             ?: com.brahmadeo.supertonic.tts.llm.KoreaderAhead.sentence(this, incomingText)
-        val preparation = if (aheadText == null && !voicePreview && !foreign) com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
+        // Книга знает, кто говорит. Если звук, подготовленный наперёд, сделан с другими голосами (его успели слепить
+        // до того, как книгу узнали, или с прежней разметкой), он не годится: он споёт всё автором. Тогда звук берём
+        // из готового текста книги заново, с её разметкой.
+        val bookPrepared = if (voicePreview || foreign) null else com.brahmadeo.supertonic.tts.llm.LlmPreparation.preparedOnly(this, incomingText)
+        fun planKey(list: List<com.brahmadeo.supertonic.tts.llm.VoiceRoleText>) =
+            list.joinToString("|") { "${it.role}:${it.character.orEmpty()}" }
+        val aheadText = if (bookPrepared != null && bookPrepared.voicePlan.isNotEmpty() &&
+            planKey(aheadPrepared?.voicePlan.orEmpty()) != planKey(bookPrepared.voicePlan)) null else aheadPrepared
+        val preparation = if (aheadText == null && !voicePreview && !foreign)
+            bookPrepared ?: com.brahmadeo.supertonic.tts.llm.LlmPreparation.prepareResult(this, incomingText) else null
         val llmProcessed = aheadText?.llmProcessed ?: (preparation?.fallback == false)
         // «Умная книга»: the retelling is stressed by Silero Stress alone (stress and ё), as the user chose; no LLM,
         // roles or music.

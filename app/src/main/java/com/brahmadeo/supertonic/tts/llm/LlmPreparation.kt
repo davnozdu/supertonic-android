@@ -246,6 +246,9 @@ object LlmPreparation {
     }
     /** Готовый текст книги (PreparedText): ударения, ё и пунктуация посчитаны заранее при подготовке. Возвращает
      * null, если книга не узнана, файла нет или хотя бы одно предложение не совпало по буквам — тогда обычный путь. */
+    /** Только готовый текст книги, без очереди и без облака: дёшево и можно спрашивать на каждом куске. */
+    fun preparedOnly(ctx: Context, text: String): Result? = preparedResult(ctx, text)
+
     private fun preparedResult(ctx: Context, text: String, known: com.brahmadeo.supertonic.tts.books.BookMatcher.Position? = null): Result? {
         if (text.length > 6000 || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
         val started = SystemClock.elapsedRealtime()
