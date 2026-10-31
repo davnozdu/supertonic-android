@@ -102,6 +102,9 @@ internal object ReplyMarking {
             }.getOrNull() else null
             builder.add(p.text, merge(plans[i], localPlan))
         }
+        com.brahmadeo.supertonic.tts.utils.DiagLog.i("Books",
+            "Разметка: абзацев=${paragraphs.size} размечено=$marked без_ответа=$failed окон=${builder.size} спорных=${builder.clashes} " +
+            "с_первым_лицом=${sectionsFirstPerson.count { it.value }}")
         val (codes, index) = builder.export()
         return Result(JSONObject().put("algorithm", ReplyIndex.ALGORITHM).put("codes", JSONArray(codes)).put("index", index),
             marked, failed, builder.size)
