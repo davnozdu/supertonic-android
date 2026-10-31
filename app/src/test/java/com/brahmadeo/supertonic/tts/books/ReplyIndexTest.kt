@@ -57,4 +57,26 @@ class ReplyIndexTest {
         val bad = runCatching { ReplyIndex.parse(listOf("m"), java.util.Base64.getEncoder().encodeToString(ByteArray(10).also { it[9] = 5 })) }
         assertEquals(true, bad.isFailure)
     }
+
+    /** Реплика в начале абзаца: четырёх слов для окна ещё нет — раньше такие слова выпадали и читались автором. */
+    @Test fun replyAtParagraphStartIsFound() {
+        val text = "— Ты пришёл, — сказала Анна Павловна."
+        val builder = ReplyIndex.Companion.Builder()
+        builder.add(text, listOf(
+            VoiceRoleText("— Ты пришёл, ", VoiceRole.FEMALE, "anna"),
+            VoiceRoleText("— сказала Анна Павловна.", VoiceRole.AUTHOR)))
+        val (codes, index) = builder.export()
+        val resolved = ReplyIndex.parse(codes, index)!!.resolve(text, emptyList()) { role, _ -> role.name }
+        assertEquals(VoiceRole.FEMALE, resolved!!.first().role)
+    }
+
+    /** Повествование без реплик остаётся за автором. */
+    @Test fun narrationStaysAuthor() {
+        val text = "Анна Павловна вошла и села у окна."
+        val builder = ReplyIndex.Companion.Builder()
+        builder.add(text, listOf(VoiceRoleText(text, VoiceRole.AUTHOR)))
+        val (codes, index) = builder.export()
+        val resolved = ReplyIndex.parse(codes, index)!!.resolve(text, emptyList()) { role, _ -> role.name }
+        assertEquals(VoiceRole.AUTHOR, resolved!!.single().role)
+    }
 }

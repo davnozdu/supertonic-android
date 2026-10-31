@@ -28,7 +28,8 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
         val window = ArrayDeque(before.takeLast(WINDOW - 1))
         val found = words.map { u ->
             window.addLast(letters(units[u].value)); while (window.size > WINDOW) window.removeFirst()
-            if (window.size == WINDOW) voiceOf(key(window)) else null
+            // Короткое окно — начало куска: там ключ тоже есть, если слова стоят в начале абзаца книги.
+            voiceOf(key(window))
         }
         if (found.all { it == null }) return null
         // A word not found takes the voice of the word before it (or, at the start, the first one found).
@@ -88,7 +89,9 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
                 for (m in unit.findAll(paragraph)) {
                     val w = letters(m.value); if (w.isEmpty()) continue
                     window.addLast(w); while (window.size > WINDOW) window.removeFirst()
-                    if (roleAt == null || window.size < WINDOW) continue
+                    // Начало абзаца: четырёх слов ещё нет, но реплика уже началась. Раньше такие слова молча
+                    // выпадали, и первая реплика абзаца читалась голосом рассказчика.
+                    if (roleAt == null || window.isEmpty()) continue
                     val part = roleAt[m.range.first + m.value.indexOfFirst { it.isLetterOrDigit() }] ?: continue
                     val v = Voice(part.role, part.character?.takeIf { part.role != VoiceRole.AUTHOR })
                     val k = key(window)
