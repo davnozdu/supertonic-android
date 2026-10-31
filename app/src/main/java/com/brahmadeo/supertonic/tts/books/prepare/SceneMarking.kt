@@ -414,7 +414,7 @@ internal object SceneMarking {
         val descriptions = unknown.map { it.sound }.filter { it.isNotEmpty() }.take(MAX_GROUP_ITEMS)
         val groupOf = HashMap<String, Pair<String, String>>() // description -> (kind, English prompt)
         if (group != null && descriptions.size >= 2) {
-            val answer = runCatching { grouping(group(groupPrompt(descriptions)), descriptions, known) }.getOrElse { e ->
+            val answer = runCatching { grouping(group(groupPrompt(descriptions)), descriptions, known, newKindMentions) }.getOrElse { e ->
                 // Cancel is not a failed request: the preparation must stop, not finish with what it has.
                 if (e is java.util.concurrent.CancellationException) throw e
                 null
@@ -471,7 +471,8 @@ internal object SceneMarking {
     }
 
     /** description -> (kind, English prompt) for the groups of two or more; a lone action stays unnamed (and is dropped). */
-    private fun grouping(raw: String, descriptions: List<String>, known: (String) -> Boolean): Map<String, Pair<String, String>> {
+    private fun grouping(raw: String, descriptions: List<String>, known: (String) -> Boolean,
+                         newKindMentions: Int = NEW_KIND_MENTIONS): Map<String, Pair<String, String>> {
         val groups = runCatching {
             val o = JSONObject(raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1))
             o.optJSONArray("groups") ?: org.json.JSONArray()
