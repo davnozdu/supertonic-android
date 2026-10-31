@@ -13,6 +13,9 @@ object VoiceRoom {
     const val KEY = "ambience_room"
     /** [size]: comb feedback (decay); [damp]: high-frequency loss; [wet]: share of the reverb in the mix. */
     data class Room(val name: String, val size: Float, val damp: Float, val wet: Float,
+                    /** Приглушение самого голоса (0 — нет, 1 — как из-за закрытого окна): низкие частоты проходят,
+                     * высокие гаснут. В салоне машины, за стеной, в вагоне голос звучит именно так. */
+                    val muffle: Float = 0f,
                     /** A distinct echo (tunnel, gorge): delay, feedback and level of a repeating reflection; 0 — none. */
                     val echoMs: Int = 0, val echoFeedback: Float = 0f, val echoLevel: Float = 0f)
     /** «Сила эха и реверберации», 0–200 % (100 — as tuned); part of the audio cache key. */
@@ -24,7 +27,12 @@ object VoiceRoom {
         "large_room" to Room("large_room", 0.80f, 0.40f, 0.11f),
         "hall" to Room("hall", 0.88f, 0.30f, 0.15f),
         "bathroom" to Room("bathroom", 0.68f, 0.10f, 0.13f),   // small, hard tiles: short and bright
-        "vehicle" to Room("vehicle", 0.60f, 0.60f, 0.06f),
+        // Салон машины, вагон, карета: короткий отклик и сильное приглушение верха — голос «из-за стекла».
+        "vehicle" to Room("vehicle", 0.55f, 0.70f, 0.05f, muffle = 0.70f),
+        "car" to Room("car", 0.55f, 0.70f, 0.05f, muffle = 0.70f),
+        // Подъезд, лестничная клетка, узкий коридор: камень и эхо, но без гула собора.
+        "stairwell" to Room("stairwell", 0.86f, 0.30f, 0.14f, echoMs = 120, echoFeedback = 0.28f, echoLevel = 0.12f),
+        "corridor" to Room("corridor", 0.78f, 0.38f, 0.12f),
         "cave" to Room("cave", 0.92f, 0.20f, 0.18f, echoMs = 140, echoFeedback = 0.25f, echoLevel = 0.12f),
         "tunnel" to Room("tunnel", 0.90f, 0.25f, 0.16f, echoMs = 210, echoFeedback = 0.35f, echoLevel = 0.18f),
     )
@@ -59,6 +67,9 @@ object VoiceRoom {
         private val combs = intArrayOf(1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617).map { Comb((it * scale).toInt().coerceAtLeast(8)) }
         private val passes = intArrayOf(556, 441, 341, 225).map { AllPass((it * scale).toInt().coerceAtLeast(4)) }
         private var odd: Byte? = null
+        // Приглушение: два однополюсных фильтра подряд — верх гаснет плавно, без «бульканья».
+        private var low1 = 0f
+        private var low2 = 0f
 
         private inner class Comb(n: Int) {
             val buf = FloatArray(n); var i = 0; var store = 0f
@@ -86,7 +97,11 @@ object VoiceRoom {
             odd = if (data.size % 2 == 1) data.last() else null
             val out = ByteArray(n * 2)
             for (k in 0 until n) {
-                val x = ((data[2 * k].toInt() and 255) or (data[2 * k + 1].toInt() shl 8)).toShort() / 32768f
+                val raw = ((data[2 * k].toInt() and 255) or (data[2 * k + 1].toInt() shl 8)).toShort() / 32768f
+                val x = if (room.muffle > 0f) {
+                    val a = (1f - room.muffle * 0.85f).coerceIn(0.02f, 1f)
+                    low1 += a * (raw - low1); low2 += a * (low1 - low2); low2
+                } else raw
                 var wet = 0f
                 for (c in combs) wet += c.run(x * 0.015f)
                 for (a in passes) wet = a.run(wet)
