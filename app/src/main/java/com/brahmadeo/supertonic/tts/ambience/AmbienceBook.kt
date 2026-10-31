@@ -47,7 +47,9 @@ object AmbienceBook {
         AmbienceSettings.eventSeconds(context.getSharedPreferences("SupertonicPrefs", 0))
 
     /** Music fragments per mood, played in a random order like the scene variants. */
-    private const val MUSIC_VARIANTS = 2
+    /** Три фрагмента на настроение (было два): книга читается около часа, а фрагмент — 30 с; с двумя вариантами
+     * одно и то же возвращается слишком часто. */
+    private const val MUSIC_VARIANTS = 3
 
     /** Event sounds are short one-shots; the chapter transition a little shorter. */
     const val EVENT_SECONDS = 8f
