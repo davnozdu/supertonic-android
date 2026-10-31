@@ -25,7 +25,9 @@ internal object SceneMarking {
     data class Result(val index: SceneIndex, val marked: Int, val failed: Int, val places: List<String?> = emptyList(),
                       val events: Int = 0, val kinds: Int = 0, val dropped: Int = 0,
                       /** Kinds that came from the second pass and their English prompts. */
-                      val kindPrompts: Map<String, String> = emptyMap())
+                      val kindPrompts: Map<String, String> = emptyMap(),
+                      /** Первая причина отказа облака (для сообщения пользователю), если разметка не удалась. */
+                      val reason: String? = null)
 
     /** Most distinct event sounds of a book (one clip per kind of action); the moments themselves are unlimited. */
     const val MAX_EVENTS = 400
@@ -297,6 +299,7 @@ internal object SceneMarking {
         val customKinds = HashSet<String>()                        // kinds the second pass made up (no such kind in the list)
         var previous: String? = null
         var marked = 0; var failed = 0
+        var firstReason: String? = null
         var eventsMarked = 0; var dropped = 0
         for ((n, batch) in batches.withIndex()) {
             check(); progress(n, batches.size)
@@ -310,6 +313,7 @@ internal object SceneMarking {
             }.getOrElse { e ->
                 if (e is java.util.concurrent.CancellationException) throw e
                 android.util.Log.w("SceneMarking", "Batch ${n + 1}/${batches.size} failed: ${e.javaClass.name}: ${e.message?.take(200)}")
+                if (firstReason == null) firstReason = e.message?.take(160) ?: e.javaClass.simpleName
                 // Журнал телефона обрезается: первая причина неудачи остаётся в файле кэша.
                 runCatching {
                     val f = java.io.File(System.getProperty("java.io.tmpdir") ?: ".", "scene-error.txt")
@@ -473,7 +477,8 @@ internal object SceneMarking {
         log("Places ${index.locations.size}, events $eventsMarked in ${index.events.size} keys, " +
             "kinds ${eventList.size}, refused $dropped, failed paragraphs $failed")
         return Result(index, marked, failed, placeOf.map { k -> k?.let { sounds[it]?.first } },
-            events = eventsMarked, kinds = eventList.size, dropped = dropped, kindPrompts = kindPrompts)
+            events = eventsMarked, kinds = eventList.size, dropped = dropped, kindPrompts = kindPrompts,
+            reason = firstReason)
     }
 
     /** description -> (kind, English prompt) for the groups of two or more; a lone action stays unnamed (and is dropped). */
