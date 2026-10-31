@@ -31,6 +31,9 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Prepare pinned Silero runtime
+        run: python3 tools/prepare_silero_runtime.py
+
       - name: Unit tests (готовый текст, роли, книги, звук)
         run: ./gradlew testDebugUnitTest --parallel --max-workers=4 --stacktrace
 
