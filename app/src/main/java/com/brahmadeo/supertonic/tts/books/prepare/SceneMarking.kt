@@ -309,7 +309,13 @@ internal object SceneMarking {
                 scenes(raw)
             }.getOrElse { e ->
                 if (e is java.util.concurrent.CancellationException) throw e
-                android.util.Log.w("SceneMarking", "Batch ${n + 1}/${batches.size} failed: ${e.javaClass.simpleName}")
+                android.util.Log.w("SceneMarking", "Batch ${n + 1}/${batches.size} failed: ${e.javaClass.name}: ${e.message?.take(200)}")
+                // Журнал телефона обрезается: первая причина неудачи остаётся в файле кэша.
+                runCatching {
+                    val f = java.io.File(System.getProperty("java.io.tmpdir") ?: ".", "scene-error.txt")
+                    if (!f.isFile) f.writeText("${e.javaClass.name}: ${e.message}\n" +
+                        e.stackTrace.take(10).joinToString("\n") { "  at $it" })
+                }
                 null
             }
             if (answer == null) { failed += batch.size; previous = null; continue }
