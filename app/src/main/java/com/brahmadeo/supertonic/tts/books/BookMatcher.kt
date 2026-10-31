@@ -54,8 +54,12 @@ object BookMatcher {
                 // the candidate if it has it, otherwise for the newest of them (a whole shared chapter: the book added
                 // last); a sentence only one book has settles it.
                 val hit = found.firstOrNull { it.book == s.candidate } ?: found.first()
+                // Предложение знает только одна книга — сомнений нет, ждать второго предложения незачем: короткий
+                // кусок читалки («— Да.») приходит один и без этого никогда не узнавался, а значит и готовый
+                // текст книги не применялся.
+                val onlyOne = found.map { it.book }.distinct().size == 1
                 if (s.candidate == hit.book) s.streak++ else { s.candidate = hit.book; s.streak = 1 }
-                if (s.streak >= CONFIRM) {
+                if (onlyOne || s.streak >= CONFIRM) {
                     s.current = Position(hit.book, hit.section)
                     s.candidate = null; s.streak = 0
                 }

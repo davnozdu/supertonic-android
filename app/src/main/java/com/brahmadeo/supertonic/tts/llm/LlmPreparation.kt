@@ -248,10 +248,17 @@ object LlmPreparation {
      * null, если книга не узнана, файла нет или хотя бы одно предложение не совпало по буквам — тогда обычный путь. */
     private fun preparedResult(ctx: Context, text: String, known: com.brahmadeo.supertonic.tts.books.BookMatcher.Position? = null): Result? {
         if (text.length > 6000 || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
-        val position = known ?: com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value ?: return null
+        val position = known ?: com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value ?: run {
+            // Видно, почему готовый текст не пригодился: книга не узнана (обычно слишком короткий кусок текста).
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Готовый текст: книга не узнана chars=${text.length}")
+            return null
+        }
         val pkg = runCatching { com.brahmadeo.supertonic.tts.books.BookLibrary.get(ctx, position.book) }.getOrNull() ?: return null
         val started = SystemClock.elapsedRealtime()
-        val ready = com.brahmadeo.supertonic.tts.books.PreparedText.prepare(pkg.prepared, text) ?: return null
+        val ready = com.brahmadeo.supertonic.tts.books.PreparedText.prepare(pkg.prepared, text) ?: run {
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Готовый текст: фрагмента нет в книге book=${position.book} chars=${text.length}")
+            return null
+        }
         val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, position) }.getOrNull()
         var plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
             runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()
