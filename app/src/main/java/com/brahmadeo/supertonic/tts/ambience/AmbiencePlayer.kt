@@ -89,7 +89,10 @@ internal object AmbiencePlayer {
     private const val ESTABLISH_HOLD_MS = 3000L
     private const val ESTABLISH_FADE_MS = 3000L
 
-    fun speaking(on: Boolean) { duckTarget = if (on && breathe) DUCK else 1f; handler.post { if (playing) schedule() } }
+    fun speaking(on: Boolean) { speechNow = on; duckTarget = if (on && breathe) DUCK else 1f; handler.post { if (playing) schedule() } }
+
+    /** Идёт ли речь прямо сейчас: звук события живёт сам по себе и не требует фоновой подложки. */
+    @Volatile private var speechNow = false
 
     /** A new section: everything dips out (1.2 s), holds (0.8 s) and comes back (2.5 s). */
     fun chapter() { chapterAt = android.os.SystemClock.uptimeMillis(); handler.post { if (playing) schedule() } }
@@ -184,7 +187,7 @@ internal object AmbiencePlayer {
             pending.remove(run)
             // Reading paused or stopped in between: the moment is gone. Причина видна в журнале: без неё «звука не было»
             // невозможно отличить от «не размечено».
-            if (!playing || masterTarget == 0f) {
+            if (!EventShot.allowed(speechNow, playing, masterTarget)) {
                 AmbienceScenes.trace(ctx, "one-shot dropped: playing=$playing master=$masterTarget ${file.name}")
                 return@Runnable
             }
