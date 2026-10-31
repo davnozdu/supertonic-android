@@ -15,9 +15,6 @@ object Loudness {
      * громко, как музыка: плотный фон приходилось загонять в лимитер, он звучал резко и «шумом», а звуки событий из
      * базы (−24 LUFS) терялись под ним. */
     const val TARGET_LUFS = -26.0
-    /** Звук события (дверь, шаги, посуда): заметно громче фона, но ниже голоса. База звуков выровнена по этой же
-     * громкости, поэтому событие из базы и созданное на телефоне звучат одинаково. */
-    const val EVENT_LUFS = -16.0
     /** Generated music: as loud as the bundled tracks (measured −11.5…−13.6, mean −12.7 LUFS), so one music slider fits all. */
     const val MUSIC_LUFS = -12.5
     private const val CEILING = 0.9f
@@ -67,6 +64,17 @@ object Loudness {
         val relative = lufs(absolute.average()) - 10.0
         val gated = absolute.filter { lufs(it) > relative }
         return lufs(gated.ifEmpty { absolute }.average())
+    }
+
+    /** Пик [pcm] поднят до [ceiling] (по умолчанию −3 dBFS): звук события не «выравнивают по громкости» — у щелчка и у
+     * удара двери она разная по природе, а слышно их по пику. Так событие из базы и созданное на телефоне звучат одинаково. */
+    fun peak(pcm: FloatArray, ceiling: Float = 0.7f): Double {
+        var max = 0f
+        for (v in pcm) { val m = abs(v); if (m > max) max = m }
+        if (max <= 0.0001f) return 0.0
+        val gain = ceiling / max
+        for (i in pcm.indices) pcm[i] = (pcm[i] * gain).coerceIn(-1f, 1f)
+        return (20 * log10(gain.toDouble()))
     }
 
     /** [pcm] brought to [target] LUFS in place; peaks above [CEILING] are softly limited (≤ 1.0). Returns the gain in dB. */

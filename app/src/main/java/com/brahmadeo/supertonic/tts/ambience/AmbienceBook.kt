@@ -200,12 +200,10 @@ object AmbienceBook {
                 val pcm = generator!!.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
                 if (job.music && MusicEnhance.enabled(context)) MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
                 val event = job.id.startsWith("k_") || job.id.startsWith("e")
-                val target = when {
-                    job.music -> Loudness.MUSIC_LUFS
-                    event -> Loudness.EVENT_LUFS
-                    else -> Loudness.TARGET_LUFS
-                }
-                val gain = Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, target)
+                // Звук события выравнивают по пику, а не по громкости: щелчок и удар двери по природе разной громкости,
+                // но оба должны пробиваться сквозь фон. Обстановка и музыка — по громкости (BS.1770).
+                val gain = if (event) Loudness.peak(pcm)
+                    else Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
                 AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
                 // The bank grows: a sound made for this book is reused by the next one for free.
                 if (!job.music && job.id.startsWith("k_") && SoundBank.on(context))
