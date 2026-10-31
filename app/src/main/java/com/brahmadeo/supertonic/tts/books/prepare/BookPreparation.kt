@@ -301,7 +301,11 @@ object BookPreparation {
             known = { k -> com.brahmadeo.supertonic.tts.books.EventKinds.proper(k) ||
                 com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) },
             // Добивка: абзацы, где событий не нашлось вовсе, идут отдельными короткими запросами.
-            fill = { prompt -> jsonRequest(folder, "scene-fill", prompt, PromptOverrides.get("scenes"), SceneMarking.fillSchema(), null, source, cancel) })
+            fill = { prompt -> jsonRequest(folder, "scene-fill", prompt, PromptOverrides.get("scenes"), SceneMarking.fillSchema(), null, source, cancel) },
+            // Максимальная плотность: даже вид, встретившийся один раз, получает свой звук — из базы, если он там есть,
+            // иначе создаётся на телефоне. Так «все звуки, размеченные по тексту», действительно звучат.
+            newKindMentions = if (ctx.getSharedPreferences("SupertonicPrefs", 0)
+                    .getInt(SceneMarking.EVENTS_DENSITY, SceneMarking.DEFAULT_DENSITY) >= 3) 1 else SceneMarking.NEW_KIND_MENTIONS)
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */

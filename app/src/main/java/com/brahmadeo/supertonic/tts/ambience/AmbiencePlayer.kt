@@ -191,10 +191,12 @@ internal object AmbiencePlayer {
             // An event is still sounding: the next one is skipped, two sounds never overlap (the voice is what matters).
             // «Микс звуков» разрешает наложение — но не больше двух сразу: третий поверх двух уже каша.
             val busy = shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil
-            if (busy && (!mix || shots.size >= 2)) {
+            if (EventMix.blocked(mix, busy)) {
                 AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous")
                 return@Runnable
             }
+            // Наложение: каждый следующий звук чуть тише (−1,4 дБ), иначе три клипа в сумме дают перегруз на выходе.
+            val level = if (mix && shots.isNotEmpty()) volume * 0.85f else volume
             val clip = variant(file)
             try {
                 val p = MediaPlayer()
@@ -219,7 +221,7 @@ internal object AmbiencePlayer {
                 val inSteps = 4
                 val inStep = 20L
                 for (i in 1..inSteps) handler.postDelayed({
-                    val k = volume * i / inSteps
+                    val k = level * i / inSteps
                     runCatching { p.setVolume(k, k) }
                 }, inStep * i)
                 // Длинный клип обрезаем: плавное затухание 400 мс и стоп, чтобы шорох не тянулся за пределы выбранной длины.
@@ -227,7 +229,7 @@ internal object AmbiencePlayer {
                     val steps = 10
                     val step = 40L
                     for (i in 1..steps) handler.postDelayed({
-                        val k = volume * (1f - i / steps.toFloat())
+                        val k = level * (1f - i / steps.toFloat())
                         runCatching { p.setVolume(k, k) }
                     }, (limit - steps * step).coerceAtLeast(0L) + step * i)
                     handler.postDelayed({

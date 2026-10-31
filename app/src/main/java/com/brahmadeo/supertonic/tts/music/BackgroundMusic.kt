@@ -235,7 +235,7 @@ object BackgroundMusic {
             for (moment in tag.events) {
                 // Звук раньше своих слов (ползунок «Звук раньше текста»): слышен вместе с действием, а не после.
                 val at = (moment.word * per - lead).toLong().coerceAtLeast(0L)
-                if (gap > 0L && at - lastAt < gap) continue
+                if (!com.brahmadeo.supertonic.tts.ambience.EventMix.allowed(mix, gap, at, lastAt)) continue
                 lastAt = at
                 com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx,
                     "event ${moment.file.name} at word ${moment.word} → ${at} ms (${"%.0f".format(per)} ms/word)")
