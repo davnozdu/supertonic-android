@@ -118,7 +118,8 @@ class AmbienceEventsTest {
         val group = """{"groups":[{"kind":"chisel_clatter","hint":"падает стамеска",
             "sound":"a small metal chisel clattering on wooden floorboards","items":[1,2]}]}"""
         val asked = ArrayList<String>()
-        val result = SceneMarking.mark(paragraphs, { ans }, group = { prompt -> asked += prompt; group })
+        // Группировка сама по себе проверяется с порогом два; правило по умолчанию (три упоминания) — в тесте ниже.
+        val result = SceneMarking.mark(paragraphs, { ans }, group = { prompt -> asked += prompt; group }, newKindMentions = 2)
         assertEquals(2, result.events)
         assertEquals(1, result.kinds)
         assertEquals(setOf("chisel_clatter"), result.kindPrompts.keys)
@@ -148,7 +149,7 @@ class AmbienceEventsTest {
                       {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a latch clicking shut"}]}"""
         val group = """{"groups":[{"kind":"deadbolt_click","hint":"щёлкнул засов",
             "sound":"a heavy deadbolt sliding and clicking","items":[1,2]}]}"""
-        val result = SceneMarking.mark(paragraphs, { ans }, group = { group })
+        val result = SceneMarking.mark(paragraphs, { ans }, group = { group }, newKindMentions = 2)
         assertEquals(setOf("deadbolt_click"), result.kindPrompts.keys)
     }
 
@@ -171,5 +172,17 @@ class AmbienceEventsTest {
         assertEquals("train interior, wheel clacking, a door sliding", AmbienceBook.prompt(location, 4))
         assertEquals("train interior, wheel clacking, a whistle blows twice", AmbienceBook.prompt(location, 5))
         assertEquals("train interior, wheel clacking", AmbienceBook.prompt(location.copy(accents = emptyList()), 3))
+    }
+
+    /** Правило по умолчанию: новый вид действия создаётся, когда книга упоминает его три раза, а не два. */
+    @Test fun twoMentionsOfAnUnnamedActionAreNotEnoughForANewKind() {
+        val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a chisel clattering on a wooden floor"},
+                      {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a chisel clatters on the floorboards"}]}"""
+        val group = """{"groups":[{"kind":"chisel_clatter","hint":"падает стамеска",
+            "sound":"a small metal chisel clattering on wooden floorboards","items":[1,2]}]}"""
+        val result = SceneMarking.mark(paragraphs, { ans }, group = { group })
+        assertEquals(0, result.kinds)
+        assertTrue(result.index.events.events.isEmpty())
     }
 }

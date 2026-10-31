@@ -277,7 +277,9 @@ internal object SceneMarking {
               * упоминании, нового клипа не нужно. Всё остальное требует двух упоминаний. */
              known: (String) -> Boolean = { com.brahmadeo.supertonic.tts.books.EventKinds.proper(it) },
              /** Добивка: отдельный короткий запрос по абзацам, где событий не нашлось (null — не добивать). */
-             fill: ((String) -> String)? = null): Result {
+             fill: ((String) -> String)? = null,
+             /** Сколько упоминаний нужно новому виду действия (известные виды и база — с одного). */
+             newKindMentions: Int = NEW_KIND_MENTIONS): Result {
         val batches = batches(paragraphs, density)
         val placeOf = arrayOfNulls<String>(paragraphs.size)
         val sounds = LinkedHashMap<String, Pair<String, String>>() // key -> (name, sound)
@@ -495,7 +497,7 @@ internal object SceneMarking {
             val members = (0 until items.length()).mapNotNull { items.optInt(it, 0).takeIf { n -> n in 1..descriptions.size } }.distinct()
             // Known kind already has its clip: one action may join it. A new kind is worth a clip only when the book
             // has it three times: two mentions are often a coincidence, three is a scene that keeps happening.
-            if (members.isEmpty() || (members.size < NEW_KIND_MENTIONS && !known(kind))) continue
+            if (members.isEmpty() || (members.size < newKindMentions && !known(kind))) continue
             for (n in members) out[descriptions[n - 1]] = kind to sound
         }
         return out
