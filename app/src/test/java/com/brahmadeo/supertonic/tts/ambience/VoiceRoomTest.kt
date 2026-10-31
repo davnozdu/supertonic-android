@@ -36,7 +36,9 @@ class VoiceRoomTest {
         val stream = VoiceRoom.Stream(rate, room, 100)
         val out = stream.feed(mono(input))
         val before = rms(mono(input))
-        val after = rms(out, n)      // вторая половина: фильтр уже устоялся
+        // Вторая половина: фильтр уже устоялся. Смещение в БАЙТАХ должно быть чётным, иначе 16-битные
+        // пары читаются со сдвигом на байт и замер превращается в шум (на этом тест уже падал).
+        val after = rms(out, (out.size / 2) and -2)
         return 20 * Math.log10(after / before)
     }
 
