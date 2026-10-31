@@ -182,8 +182,12 @@ internal object AmbiencePlayer {
         lateinit var run: Runnable
         run = Runnable {
             pending.remove(run)
-            // Reading paused or stopped in between: the moment is gone.
-            if (!playing || masterTarget == 0f) return@Runnable
+            // Reading paused or stopped in between: the moment is gone. Причина видна в журнале: без неё «звука не было»
+            // невозможно отличить от «не размечено».
+            if (!playing || masterTarget == 0f) {
+                AmbienceScenes.trace(ctx, "one-shot dropped: playing=$playing master=$masterTarget ${file.name}")
+                return@Runnable
+            }
             // An event is still sounding: the next one is skipped, two sounds never overlap (the voice is what matters).
             // «Микс звуков» разрешает наложение — но не больше двух сразу: третий поверх двух уже каша.
             val busy = shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil
