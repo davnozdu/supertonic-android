@@ -42,6 +42,8 @@ class BooksActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         voicePreview = VoicePreview(this)
+        // Новая версия базы звуков (вышла на GitHub) скачивается сама, в фоне и с уведомлением.
+        com.brahmadeo.supertonic.tts.ambience.SoundBank.autoUpdate(this)
         setContent {
             SupertonicTheme {
                 val previewState by voicePreview.state.collectAsState()

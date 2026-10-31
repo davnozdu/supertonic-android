@@ -178,6 +178,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         com.brahmadeo.supertonic.tts.utils.NoAutofill.apply(this)
+        // База звуков: если на GitHub вышла новая версия, она скачается в фоне (один раз на процесс).
+        com.brahmadeo.supertonic.tts.ambience.SoundBank.autoUpdate(this)
 
         loadPreferences()
         checkNotificationPermission()

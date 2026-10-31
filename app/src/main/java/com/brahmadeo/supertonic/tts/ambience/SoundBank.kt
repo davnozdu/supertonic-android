@@ -41,6 +41,30 @@ object SoundBank {
 
     fun dir(context: Context): File = File(context.filesDir, "sound-bank")
 
+    @Volatile private var autoChecking = false
+
+    /** Проверка обновления базы при запуске приложения. Если на GitHub вышла новая версия (manifest с другим
+     * номером), старые клипы выкидываются и архивы скачиваются в фоне через службу загрузки — с уведомлением,
+     * не мешая чтению. Без сети молчит. */
+    fun autoUpdate(context: Context) {
+        if (autoChecking) return
+        autoChecking = true
+        val ctx = context.applicationContext
+        Thread({
+            runCatching {
+                val before = version(ctx)
+                val fresh = manifest(ctx, refresh = true)
+                val after = version(ctx)
+                if (fresh.isEmpty() || after <= before) return@runCatching
+                Log.i("SoundBank", "новая версия базы $before → $after: качаем архивы")
+                kotlinx.coroutines.runBlocking {
+                    com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(ctx) { downloadAll(ctx) }
+                }
+                Log.i("SoundBank", "база $after скачана: видов ${fresh.size}")
+            }.onFailure { Log.w("SoundBank", "обновление базы не удалось: ${it.message}") }
+        }, "sound-bank-update").apply { isDaemon = true }.start()
+    }
+
     /** Тумблер «Брать готовые звуки из базы» (по умолчанию включён). */
     fun on(context: Context): Boolean =
         AmbienceSettings.soundBank(context.getSharedPreferences("SupertonicPrefs", 0))
