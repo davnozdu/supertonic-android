@@ -288,8 +288,11 @@ object LlmPreparation {
         if (book != null && LlmSettings.multiVoiceEnabled(ctx) && plan.orEmpty().all { it.role == com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR }) {
             val local = runCatching {
                 // Один экземпляр на всё чтение: очерёдность реплик (кто говорил в прошлом куске) важна для выбора.
+                // Повествование от первого лица («я вошёл») читает рассказчик, а «— сказал я» — тоже он, а не персонаж.
                 localSpeakers.plan(text,
-                    book.cast.characters.map { com.brahmadeo.supertonic.tts.llm.LocalSpeakers.Person(it.id, it.gender, it.forms) })
+                    book.cast.characters.map { com.brahmadeo.supertonic.tts.llm.LocalSpeakers.Person(it.id, it.gender, it.forms) },
+                    firstPerson = com.brahmadeo.supertonic.tts.books.BookVoices.firstPerson(ctx, start.book)
+                        ?: LlmSettings.firstPerson(ctx))
             }.getOrNull()
             plan = com.brahmadeo.supertonic.tts.books.prepare.RoleMerge.merge(plan, local)
         }
