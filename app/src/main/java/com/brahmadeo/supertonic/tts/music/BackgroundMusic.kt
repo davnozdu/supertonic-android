@@ -231,10 +231,13 @@ object BackgroundMusic {
             // Тумблер «Накладывать звуки» решает, ждать ли окончания предыдущего; ползунок задаёт паузу между началами.
             val mix = S.mix(p)
             val gap = gapMs.toLong()
+            // Времена всех размеченных звуков куска: каждый у своего слова, но два звука никогда не начинаются
+            // в один миг — даже при наложении они идут чередой (иначе плотный абзац звучит одним слипшимся ударом).
+            val wanted = tag.events.map { (it.word * per - lead).toLong() }
+            val starts = com.brahmadeo.supertonic.tts.ambience.EventMix.scheduled(wanted, mix, gap)
             var lastAt = -gap
-            for (moment in tag.events) {
-                // Звук раньше своих слов (ползунок «Звук раньше текста»): слышен вместе с действием, а не после.
-                val at = (moment.word * per - lead).toLong().coerceAtLeast(0L)
+            for ((i, moment) in tag.events.withIndex()) {
+                val at = starts[i]
                 if (!com.brahmadeo.supertonic.tts.ambience.EventMix.allowed(mix, gap, at, lastAt)) continue
                 lastAt = at
                 com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx,
