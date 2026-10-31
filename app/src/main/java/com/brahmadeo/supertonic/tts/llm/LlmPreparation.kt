@@ -248,18 +248,35 @@ object LlmPreparation {
      * null, если книга не узнана, файла нет или хотя бы одно предложение не совпало по буквам — тогда обычный путь. */
     private fun preparedResult(ctx: Context, text: String, known: com.brahmadeo.supertonic.tts.books.BookMatcher.Position? = null): Result? {
         if (text.length > 6000 || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
-        val position = known ?: com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value ?: run {
-            // Видно, почему готовый текст не пригодился: книга не узнана (обычно слишком короткий кусок текста).
-            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Готовый текст: книга не узнана chars=${text.length}")
-            return null
-        }
-        val pkg = runCatching { com.brahmadeo.supertonic.tts.books.BookLibrary.get(ctx, position.book) }.getOrNull() ?: return null
         val started = SystemClock.elapsedRealtime()
-        val ready = com.brahmadeo.supertonic.tts.books.PreparedText.prepare(pkg.prepared, text) ?: run {
-            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation", "Готовый текст: фрагмента нет в книге book=${position.book} chars=${text.length}")
-            return null
+        var position = known ?: com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value
+        var pkg = position?.let { runCatching { com.brahmadeo.supertonic.tts.books.BookLibrary.get(ctx, it.book) }.getOrNull() }
+        var ready = pkg?.let { com.brahmadeo.supertonic.tts.books.PreparedText.prepare(it.prepared, text) }
+        if (ready == null) {
+            // Узнать книгу по отпечаткам короткий кусок читалки не может: в отпечаток идут первые 48 букв предложения,
+            // а в короткой реплике их меньше. Тогда ищем текст в готовых текстах последних книг и берём ответ, только
+            // если он ровно один — иначе непонятно, чья это книга, и фрагмент идёт обычным путём.
+            val found = runCatching {
+                com.brahmadeo.supertonic.tts.books.BookLibrary.list(ctx).take(4).mapNotNull { entry ->
+                    val p = com.brahmadeo.supertonic.tts.books.BookLibrary.get(ctx, entry.id) ?: return@mapNotNull null
+                    val r = com.brahmadeo.supertonic.tts.books.PreparedText.prepare(p.prepared, text) ?: return@mapNotNull null
+                    Triple(entry, p, r)
+                }
+            }.getOrNull().orEmpty()
+            val only = found.singleOrNull()
+            if (only == null) {
+                com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
+                    "Готовый текст: книга не узнана chars=${text.length} найдено=${found.size}")
+                return null
+            }
+            position = com.brahmadeo.supertonic.tts.books.BookMatcher.Position(only.first.id, only.second.sections.firstOrNull()?.id.orEmpty())
+            pkg = only.second
+            ready = only.third
+            com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
+                "Готовый текст: книга найдена по тексту book=${only.first.id} chars=${text.length}")
         }
-        val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, position) }.getOrNull()
+        val start: com.brahmadeo.supertonic.tts.books.BookMatcher.Position = position!!
+        val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, start) }.getOrNull()
         var plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
             runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()
         else null
@@ -274,8 +291,8 @@ object LlmPreparation {
             plan = com.brahmadeo.supertonic.tts.books.prepare.RoleMerge.merge(plan, local)
         }
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
-            "Готовый текст книги: LLM не нужна chars=${text.length} book=${position.book} roles=${plan?.joinToString { it.role.name }}")
-        val result = Result(ready, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
+            "Готовый текст книги: LLM не нужна chars=${text.length} book=${start.book} roles=${plan?.joinToString { it.role.name }}")
+        val result = Result(ready ?: return null, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
             voicePlan = plan.orEmpty(), rolesReady = plan != null, roleProvider = if (plan != null) "book" else null)
         // Если фрагмент уже стоит в очереди (её успели поставить до того, как книга была узнана), закрываем его
         // здесь же: иначе рабочий поток отправит тот же текст в облако и заплатит за это временем.
