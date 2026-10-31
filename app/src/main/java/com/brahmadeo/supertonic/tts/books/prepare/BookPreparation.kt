@@ -33,9 +33,12 @@ object BookPreparation {
                      val message: String = "", val bookId: Long? = null, val startedAt: Long = 0,
                      /** When this stage (the current LLM request) began: the screen shows how long it is waiting. */
                      val stageAt: Long = System.currentTimeMillis())
-    class Source internal constructor(internal val config: LlmConfig, internal val gemini: Boolean, internal val provider: String = if (gemini) "gemini" else "ollama") {
+    class Source internal constructor(internal val config: LlmConfig, internal val gemini: Boolean,
+                                       internal val provider: String = if (gemini) "gemini" else "ollama",
+                                       /** Вся цепочка облаков (основной → резерв): отказ одного не срывает подготовку. */
+                                       internal val providers: List<String> = listOf(if (gemini) "gemini" else "ollama")) {
         val label: String get() = if (provider == "tokenharbor") "TokenHarbor · ${config.tokenharborModel}" else if (provider == "apinex") "APInex · ${config.apinexModel}" else if (provider == "deepseek") "DeepSeek · ${config.deepseekModel}" else if (gemini) "Gemini · ${config.geminiModel}" else "Ollama · ${config.ollamaModel}"
-        fun withThinking(enabled: Boolean) = Source(config.withCloudThinking(enabled), gemini, provider)
+        fun withThinking(enabled: Boolean) = Source(config.withCloudThinking(enabled), gemini, provider, providers)
         val thinking get() = if (provider == "tokenharbor") config.tokenharborThinking else if (provider == "apinex") config.apinexThinking else if (provider == "deepseek") config.deepseekThinking else if (gemini) config.geminiThinking else config.ollamaThinking
         override fun toString() = label // Never render LlmConfig (it contains credentials).
     }
@@ -54,10 +57,14 @@ object BookPreparation {
             "tokenharbor" to c.cloudReady("tokenharbor"), "custom" to c.cloudReady("custom"))
         // Gemma and «off» still prepare books with a cloud: the first one set up, in the AUTO order.
         val order = if (c.mode in listOf(LlmMode.OFF, LlmMode.LOCAL)) c.copy(mode = LlmMode.AUTO).cloudOrder() else c.cloudOrder()
-        val provider = order.firstOrNull { available[it] == true }
+        val chain = order.filter { available[it] == true }.ifEmpty { order }
+        val provider = chain.firstOrNull()
         require(provider != null) { "Настройте облако в настройках LLM: Ollama, Gemini, DeepSeek, APInex, TokenHarbor или свой сервер" }
-        return Source(c.withCloudThinking(true), provider == "gemini", provider)
+        return Source(c.withCloudThinking(true), provider == "gemini", provider, chain)
     }
+
+    /** Серверы, отказавшие в доступе в этой подготовке (401/403/404): второй раз к ним не ходим. */
+    private val deadProviders = java.util.Collections.synchronizedSet(HashSet<String>())
 
     @Volatile private var pendingSource: Source? = null
     /** [replies]: also «Разметка реплик»; [repliesFor]: an already prepared book — only its replies are marked;
@@ -95,6 +102,7 @@ object BookPreparation {
         val cancel = cancellation ?: LlmProviders.CloudCancellation()
         cancellation = cancel
         val startedAt = System.currentTimeMillis()
+        deadProviders.clear()
         mutable.value = State(running = true, stage = "Копирование книги", startedAt = startedAt)
         job = scope.launch(start = CoroutineStart.LAZY) {
             var temp: File? = null
@@ -335,37 +343,46 @@ object BookPreparation {
         val file = File(folder, "$kind.${BookPreparationPlan.hash("$system\n$prompt".toByteArray()).take(16)}.json")
         if (file.isFile && file.length() <= 512 * 1024) return file.readText()
         val config = source.withThinking(false).config
-        var delay = 4000L
-        var last: Exception? = null
-        for (attempt in 1..3) {
-            cancel.check()
-            try {
-                val raw = LlmProviders.cloudRequest(config, prompt, system, schema, source.gemini,
-                    tokens = 8000, deadlineMs = 3 * 60 * 1000L, cancellation = cancel, provider = source.provider)
+        // Та же цепочка, что при чтении: основной сервер, затем резерв. Отказ одного облака (ключ, 401, лимит)
+        // не срывает подготовку — запрос уходит на следующий. Отказавший сервер запоминается до конца подготовки.
+        var first: Exception? = null
+        for (provider in source.providers) {
+            if (provider in deadProviders) continue
+            var delay = 4000L
+            for (attempt in 1..3) {
                 cancel.check()
-                val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
-                // Saved only when it is the expected JSON; a broken answer is asked again next time.
-                val valid = if (field == null) runCatching { SceneMarking.scenes(raw) }.isSuccess
-                    else start >= 0 && end > start && runCatching { JSONObject(raw.substring(start, end + 1)).has(field) }.getOrDefault(false)
-                if (valid) {
-                    val tmp = File(folder, "${file.name}.tmp")
-                    try { tmp.writeText(raw); check(tmp.renameTo(file)) { "Не удалось сохранить ответ LLM" } } finally { tmp.delete() }
-                    return raw
+                try {
+                    val raw = LlmProviders.cloudRequest(config, prompt, system, schema, provider == "gemini",
+                        tokens = 8000, deadlineMs = 3 * 60 * 1000L, cancellation = cancel, provider = provider)
+                    cancel.check()
+                    val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
+                    // Saved only when it is the expected JSON; a broken answer is asked again next time.
+                    val valid = if (field == null) runCatching { SceneMarking.scenes(raw) }.isSuccess
+                        else start >= 0 && end > start && runCatching { JSONObject(raw.substring(start, end + 1)).has(field) }.getOrDefault(false)
+                    if (valid) {
+                        val tmp = File(folder, "${file.name}.tmp")
+                        try { tmp.writeText(raw); check(tmp.renameTo(file)) { "Не удалось сохранить ответ LLM" } } finally { tmp.delete() }
+                        return raw
+                    }
+                    if (first == null) first = IllegalStateException("LLM вернула ответ не в формате JSON")
+                    break
+                } catch (e: CancellationException) { throw e
+                } catch (e: Exception) {
+                    cancel.check()
+                    val message = e.message.orEmpty()
+                    val denied = message.startsWith("API HTTP 401") || message.startsWith("API HTTP 403") ||
+                        message.startsWith("API HTTP 404") || message.contains("Введите ключ") || message.contains("Выберите модель")
+                    if (denied) { deadProviders += provider; if (first == null) first = e; break }
+                    val temporary = e is java.io.IOException || message.startsWith("LLM превышен лимит запроса") ||
+                        message.startsWith("API HTTP 429") || Regex("^API HTTP 5\\d\\d").containsMatchIn(message)
+                    if (!temporary || attempt == 3) { if (first == null) first = e; break }
+                    val until = System.currentTimeMillis() + delay
+                    while (System.currentTimeMillis() < until) { cancel.check(); Thread.sleep(500) }
+                    delay *= 2
                 }
-                last = IllegalStateException("LLM вернула ответ не в формате JSON")
-            } catch (e: CancellationException) { throw e
-            } catch (e: Exception) {
-                cancel.check()
-                val message = e.message.orEmpty()
-                val temporary = e is java.io.IOException || message.startsWith("LLM превышен лимит запроса") || message.startsWith("API HTTP 429") || Regex("^API HTTP 5\\d\\d").containsMatchIn(message)
-                if (!temporary || attempt == 3) throw e
-                last = e
-                val until = System.currentTimeMillis() + delay
-                while (System.currentTimeMillis() < until) { cancel.check(); Thread.sleep(500) }
-                delay *= 2
             }
         }
-        throw last ?: IllegalStateException("LLM не вернула ответ")
+        throw first ?: IllegalStateException("LLM не вернула ответ")
     }
 
     /** One request, cached by its prompt: up to three attempts. A truncated thinking answer is retried one level
