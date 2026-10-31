@@ -50,6 +50,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
                 var eventGap by remember { mutableIntStateOf(AmbienceSettings.eventGap(prefs)) }
+                var mixEvents by remember { mutableStateOf(AmbienceSettings.mix(prefs)) }
                 var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
                 var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
                 var eventLead by remember { mutableIntStateOf(AmbienceSettings.eventLead(prefs)) }
@@ -310,18 +311,24 @@ class BackgroundMusicActivity : ComponentActivity() {
                             "когда голос до этого доходит. Один звук создаётся на вид действия (дверь, бумаги, вода, посуда) и звучит " +
                             "во всех местах книги, поэтому моментов много, а клипов немного. Нужна книга, подготовленная в этой " +
                             "версии или новее.", style=MaterialTheme.typography.bodySmall)
-                        Text("Пауза между звуками: " + if (eventGap == 0) "без паузы" else "${"%.1f".format(eventGap / 1000f)} с",
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Накладывать звуки (не ждать окончания)",Modifier.weight(1f))
+                            Switch(checked=mixEvents,enabled=!busy,onCheckedChange={
+                                mixEvents=it; prefs.edit().putBoolean(AmbienceSettings.MIX,it).apply()
+                            })
+                        }
+                        Text("Включено — следующий звук начинается, не дожидаясь конца предыдущего: в плотной сцене звучат " +
+                            "до трёх сразу. Выключено — строго по одному, и в тесных абзацах часть звуков пропускается. " +
+                            "Действует сразу.", style=MaterialTheme.typography.bodySmall)
+                        Text("Порог срабатывания: " + if (eventGap == 0) "без паузы" else "${"%.1f".format(eventGap / 1000f)} с",
                             style=MaterialTheme.typography.titleMedium)
                         Slider(value=eventGap.toFloat(),onValueChange={ eventGap=it.roundToInt() },
-                            onValueChangeFinished={
-                                prefs.edit().putInt(AmbienceSettings.GAP,eventGap)
-                                    .putBoolean(AmbienceSettings.MIX,AmbienceSettings.mixFor(eventGap)).apply()
-                            },
+                            onValueChangeFinished={ prefs.edit().putInt(AmbienceSettings.GAP,eventGap).apply() },
                             valueRange=0f..3000f,steps=29)
-                        Text("Сколько ждать после начала одного звука, прежде чем начнётся следующий. 0,2 с по умолчанию — " +
-                            "звуки почти не пропускаются и могут слегка накладываться (до двух одновременно). " +
-                            "1,2 с и больше — звуки идут строго по одному, плотные абзацы часть звуков пропускают. " +
-                            "Действует сразу.", style=MaterialTheme.typography.bodySmall)
+                        Text("Сколько пройдёт между началами двух звуков. По умолчанию 0,8 с: клип в 2–3 с ещё звучит, " +
+                            "когда начинается следующий, и сцена звучит слитно. 1,5 с и больше — звуки идут очередью, " +
+                            "плотные абзацы часть звуков пропускают. Действует сразу.",
+                            style=MaterialTheme.typography.bodySmall)
                         if (events) {
                             Text("Громкость звуков событий: $eventsVolume %",style=MaterialTheme.typography.titleMedium)
                             Slider(value=eventsVolume.toFloat(),onValueChange={ eventsVolume=it.roundToInt() },
@@ -377,7 +384,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Text("Готовые клипы событий на все книги: двери, бумаги, шаги, вода, посуда, животные, голоса, эмоции — " +
                             "8 секунд каждый. Приложение берёт из базы только то, что нужно книге, и качает эти файлы по одному " +
                             "(архива нет, распаковывать нечего). Если готовый звук есть, он используется даже когда действие " +
-                            "упомянуто в книге один раз; если его нет — новый вид создаётся при двух и более упоминаниях и " +
+                            "упомянуто в книге один раз; если его нет — новый вид создаётся, когда книга упоминает его три раза, и " +
                             "дописывается в базу с пометкой «сделан для книги». Фон локаций в базу не входит — он делается " +
                             "на телефоне.", style=MaterialTheme.typography.bodySmall)
                         val startedAt=remember { longArrayOf(0L) }

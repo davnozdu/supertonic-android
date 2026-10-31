@@ -156,6 +156,7 @@ object BookPreparation {
                     }
                     var sceneResult: SceneMarking.Result? = null
                     if (scenes) {
+                        mutable.value = mutable.value.copy(stage = "Локации: разметка сцен")
                         sceneResult = markScenes(ctx, plan, folder, source, cancel, startedAt)
                         // Nothing found in the whole book (no place, mood or event): nothing to store.
                         val idx = sceneResult.index
@@ -423,10 +424,13 @@ object BookPreparation {
     /** Where a preparation failed, for diagnosis: exception classes and stack frames, never the messages (they may
      * hold URLs or credentials). In the log and in cache/book-prep-error.txt (OnePlus drops app logs after a while). */
     private fun report(ctx: Context, t: Throwable) {
+        // Сообщение обязательно: без него в журнале виден только класс исключения, и причину не найти.
         val text = generateSequence(t) { it.cause }.take(4).joinToString("\ncaused by ") { e ->
-            e.javaClass.name + e.stackTrace.take(12).joinToString("") { "\n  at $it" }
+            e.javaClass.name + (e.message?.take(300)?.let { ": $it" } ?: "") +
+                e.stackTrace.take(12).joinToString("") { "\n  at $it" }
         }
-        Log.e("BookPreparation", "Preparation failed: $text")
+        val where = mutable.value.stage.takeIf { it.isNotBlank() }?.let { " на шаге «$it»" } ?: ""
+        Log.e("BookPreparation", "Preparation failed$where: $text")
         runCatching { File(ctx.cacheDir, "book-prep-error.txt").writeText("${java.util.Date()}\n$text\n") }
     }
 

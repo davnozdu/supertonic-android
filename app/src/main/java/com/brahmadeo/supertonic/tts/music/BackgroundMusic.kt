@@ -227,7 +227,8 @@ object BackgroundMusic {
             // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere). «Микс звуков» снимает
             // и эту паузу: звуки идут друг за другом вплотную и могут накладываться (AmbiencePlayer держит до трёх).
             val gapMs = S.eventGap(p)
-            val mix = S.mixFor(gapMs)
+            // Тумблер «Накладывать звуки» решает, ждать ли окончания предыдущего; ползунок задаёт паузу между началами.
+            val mix = S.mix(p)
             val gap = gapMs.toLong()
             var lastAt = -gap
             for (moment in tag.events) {

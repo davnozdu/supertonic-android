@@ -17,13 +17,15 @@ object AmbienceSettings {
     const val DEFAULT_VARIANTS = 3
     /** «Сглаживать резкие звуки»: a compressor keeps the events (a whistle) close to the background level. */
     const val TAME = "ambience_tame"
-    /** «Микс звуков»: the pause between event sounds is ignored and two of them may sound at once. */
+    /** «Накладывать звуки»: следующий звук события не ждёт, пока отзвучит предыдущий (до трёх сразу). Выключено —
+     * звуки идут строго по одному, тесные абзацы часть звуков пропускают. Включено по умолчанию: так задумано,
+     * чтобы плотная сцена не превращалась в очередь из восьми секунд. */
     const val MIX = "ambience_mix_events"
-    fun mix(prefs: SharedPreferences) = prefs.getBoolean(MIX, false)
-    /** Пауза между звуками событий, мс (ползунок): 0…3000, по умолчанию 200. Ниже [MIX_FROM_MS]
-     * звуки могут накладываться друг на друга. */
+    fun mix(prefs: SharedPreferences) = prefs.getBoolean(MIX, true)
+    /** Порог срабатывания: пауза между началами звуков событий, мс (ползунок 0…3000). По умолчанию 800 мс —
+     * клип в 2–3 с ещё звучит, когда начинается следующий, и сцена звучит слитно, а не очередью. */
     const val GAP = "ambience_event_gap_ms"
-    const val DEFAULT_GAP = 200
+    const val DEFAULT_GAP = 800
     const val MIX_FROM_MS = 800
     fun eventGap(prefs: SharedPreferences) = prefs.getInt(GAP, DEFAULT_GAP).coerceIn(0, 3000)
     fun mixFor(gap: Int) = gap < MIX_FROM_MS
