@@ -35,6 +35,22 @@ class LocalSpeakersTest {
         assertEquals("A=— Иду, — сказал я.", show(LocalSpeakers().plan("— Иду, — сказал я.", firstPerson = true)))
     }
 
+    /** Длинный абзац — повествование, даже если в нём есть «вы» или восклицание: реплики внутри него размечаются по
+     * тире и кавычкам, а весь текст голосом персонажа раньше читался целиком (авторский текст голосом женщины). */
+    @Test fun aLongParagraphIsNeverOneReply() {
+        val narration = "Джордж стоял в дверях и смотрел на мать, которая всё ещё держала руки опущенными, " +
+            "и думал о том, что вы никогда не знаете, что скажет старый человек, и что лучше было бы " +
+            "остаться в машине на дороге и не выходить из неё вовсе, пока она не позовёт его сама, " +
+            "и что тогда уже ничего нельзя будет исправить."
+        assertEquals("A=${narration.trim()}", show(LocalSpeakers().plan(narration)))
+        val dashedLong = "— Я не хочу туда идти, — сказала она, и потом долго молчала, глядя в окно, " +
+            "где ветер гнул деревья и где дорога уходила вниз к реке, а он всё стоял и не двигался с места."
+        val plan = LocalSpeakers().plan(dashedLong)
+
+        assertEquals(VoiceRole.FEMALE, plan.first().role)
+        assertEquals(VoiceRole.AUTHOR, plan.last().role)
+    }
+
     @Test fun aLongReplySentByTheSentenceStaysWithItsSpeaker() {
         val s = LocalSpeakers()
         assertEquals("M=— Даром деньги на франкировку письма истратили.", show(s.plan("— Даром деньги на франкировку письма истратили.")))

@@ -98,11 +98,19 @@ class LocalSpeakers {
      * enough: first-person narration is full of them, and every such sentence used to get a man's reply voice. */
     private fun looksSpoken(text: String, firstPerson: Boolean): Boolean {
         val t = text.trim()
+        // Длинный абзац не бывает одной репликой: в прозе в нём почти всегда есть авторский текст. Один признак
+        // разговорной речи («вы», «ты», «?») встречается и в повествовании, и раньше из-за него весь абзац уходил
+        // голосом персонажа — авторский текст читала женщина.
+        if (t.length > WHOLE_SPEECH_CHARS) return false
         if (t.endsWith("!") || t.endsWith("?") || t.endsWith("?!") || t.endsWith("!..") || t.endsWith("?..")) return true
         val words = word.findAll(t.lowercase()).map { it.value }.toList()
         if (words.any { it in secondPerson || it in interjections }) return true
         return Regex("[А-Яа-яЁё]-с(?![А-Яа-яЁё])").containsMatchIn(t)
     }
+    /** Длиннее этого — не реплика целиком, а повествование с вкраплениями речи (реплики внутри размечаются по тире и
+     * кавычкам). Порог с запасом: самая длинная реплика в диалоге русской прозы — две-три фразы. */
+    private const val WHOLE_SPEECH_CHARS = 240
+
     private val secondPerson = setOf("ты", "вы", "вас", "вам", "вами", "тебя", "тебе", "тобой", "ваш", "ваша", "ваше", "ваши",
         "твой", "твоя", "твоё", "твое", "твои")
 
@@ -114,6 +122,7 @@ class LocalSpeakers {
      * the narrator's voice, not a character's (a present-tense narration sentence used to stay with the speaker). */
     private fun continuesSpeech(text: String): Boolean {
         val t = text.trim()
+        if (t.length > WHOLE_SPEECH_CHARS) return false
         if (t.endsWith("!") || t.endsWith("?") || t.endsWith("…") || t.endsWith("..") || t.endsWith("?!")) return true
         val words = word.findAll(t.lowercase()).map { it.value }.toList()
         if (words.any { it in addressing || it in interjections }) return true

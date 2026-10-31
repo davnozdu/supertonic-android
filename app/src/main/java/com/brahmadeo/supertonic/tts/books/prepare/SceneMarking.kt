@@ -98,6 +98,11 @@ internal object SceneMarking {
         appendLine("Верни список сцен в порядке текста: from — номер первого абзаца сцены;")
         appendLine("place — короткое название обстановки по-русски: место и, если от этого меняется звук, время суток, погода или")
         appendLine("оживлённость (1–5 слов: «купе поезда», «трактир, вечер», «улица, дождь», «лес, раннее утро», «пустой дом, ночь»);")
+        appendLine("Место меняется каждый раз, когда герой оказывается в другом месте, даже если сцена короткая: сел в машину —")
+        appendLine("«салон машины, дорога»; машина едет — «шоссе, ночь, едет машина»; вышел и идёт по двору — «двор, ночь, гравий».")
+        appendLine("Улица, двор, шоссе, лес, поезд, салон машины — такие же обстановки, как комната или кухня: у них свой фон")
+        appendLine("(двигатель, шины по асфальту, шаги по гравию, ветер в деревьях). Не оставляй героя в прежней комнате, если по")
+        appendLine("тексту он уже уехал или вышел: слушатель сразу слышит, что место не то.")
         appendLine("sound — описание фонового звука этой обстановки по-английски для генератора звуков, 8–25 слов. Это тихая")
         appendLine("естественная атмосфера места, которая лежит под голосом: одна-две мягкие основы (воздух комнаты, дождь за окном,")
         appendLine("лёгкий ветер) и один-два редких узнаваемых предмета места (тихие часы, скрип половицы, огонь в печи). Между ними —")
@@ -146,6 +151,10 @@ internal object SceneMarking {
         appendLine("случилось давно и в другом месте.")
         appendLine("Голос тоже слышен: плач, всхлип, рыдание, крик, смех, шёпот, вздох — такие события отмечай обязательно")
         appendLine("(виды cry, shout, laugh_soft, whisper, sigh), даже если это одна фраза в середине абзаца.")
+        appendLine("Движение героя — тоже событие: шаги по полу и половицам (footsteps_wood), по гравию и щебню (footsteps_gravel),")
+        appendLine("по камню, асфальту и тротуару (footsteps_stone), по лестнице (footsteps_stairs), по снегу (footsteps_snow),")
+        appendLine("женские каблуки (heel_stone), бег (steps_run). Машина: завёл двигатель (car_engine), проехала (car_pass),")
+        appendLine("хлопнул дверцей (car_door_slam). Если герой вышел из дома и пошёл — шаги есть, даже если в тексте только «вышла».")
         appendLine("at — номер абзаца; quote — точные 3–6 слов ИМЕННО того действия, которое звучит, а не фразы, где предмет")
         appendLine("только упомянут («отворил дверь и прислушался», «что-то со стуком упало на пол»);")
         appendLine("если действие названо с местоимением («взял садовые ножницы, смазал их и наточил», «поднял её и отворил»),")
@@ -445,6 +454,27 @@ internal object SceneMarking {
                 if (quoteWords.isEmpty() ||
                     com.brahmadeo.supertonic.tts.books.EventIndex.anchorStart(words, quoteWords) == null) continue
                 rawEvents += Raw(i, quote, kind, "")
+            }
+            // Шаги по названной поверхности («по гравию», «по половицам») и машина («завёл мотор», «хлопнул дверцей»):
+            // модель эти бытовые действия иногда пропускает, а слушатель сразу слышит, что герой вышел — и тишина.
+            fun anchor(text: String, at: Int): String? {
+                val quote = words.subList(maxOf(0, at - 2), minOf(words.size, at + 2)).joinToString(" ")
+                val quoteWords = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(quote)
+                if (quoteWords.isEmpty()) return null
+                return if (com.brahmadeo.supertonic.tts.books.EventIndex.anchorStart(
+                        com.brahmadeo.supertonic.tts.books.ReplyIndex.words(text), quoteWords) == null) null else quote
+            }
+            MovementSounds.surfaceIndex(words)?.let { at ->
+                if (rawEvents.none { it.at == i && it.kind.startsWith("footsteps_") }) {
+                    anchor(paragraphs[i].text, at)?.let { q ->
+                        rawEvents += Raw(i, q, MovementSounds.surfaceKind(words, at), "")
+                    }
+                }
+            }
+            MovementSounds.carIndex(words)?.let { (at, kind) ->
+                if (rawEvents.none { it.at == i && it.kind.startsWith("car_") }) {
+                    anchor(paragraphs[i].text, at)?.let { q -> rawEvents += Raw(i, q, kind, "") }
+                }
             }
         }
         // Second pass: no closed list of kinds can name every action. The descriptions the model could not classify are
