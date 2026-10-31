@@ -53,7 +53,7 @@ object MovementSounds {
         val kind = SURFACES.firstOrNull { (p, _) -> w.startsWith(p) }?.second ?: "footsteps_wood"
         // Женщина в каблуках по твёрдому покрытию — это стук каблуков, а не мягкие шаги.
         if (kind == "footsteps_stone" || kind == "footsteps_gravel") {
-            if (heels(words.map { VoiceSounds.clean(it) })) return "heel_stone"
+            if (heels(words.map { VoiceSounds.clean(it) })) return "heel_walk_stone"
         }
         return kind
     }
@@ -64,7 +64,7 @@ object MovementSounds {
         val text = lower.joinToString(" ")
         val move = listOf("завёл", "завел", "завела", "завелся", "завёлся", "завелась", "зародил")
         if (lower.any { w -> move.any { w.startsWith(it) } } && (("мотор" in text) || ("двигател" in text) || ("машин" in text)))
-            return lower.indexOfFirst { w -> move.any { w.startsWith(it) } }.let { it to "car_engine" }
+            return lower.indexOfFirst { w -> move.any { w.startsWith(it) } }.let { it to "car_start" }
         if (("дверц" in text || ("двер" in text && "машин" in text)) && lower.any { it.startsWith("хлопнул") || it.startsWith("захлопнул") })
             return lower.indexOfFirst { it.startsWith("хлопнул") || it.startsWith("захлопнул") }.let { it to "car_door_slam" }
         return null

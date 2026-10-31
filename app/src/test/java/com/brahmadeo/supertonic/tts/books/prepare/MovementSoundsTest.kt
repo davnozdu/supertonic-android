@@ -20,7 +20,7 @@ class MovementSoundsTest {
     fun heelsOnHardGroundClick() {
         val w = words("Женщина в каблуках шла по тротуару")
         val at = MovementSounds.surfaceIndex(w)!!
-        assertEquals("heel_stone", MovementSounds.surfaceKind(w, at))
+        assertEquals("heel_walk_stone", MovementSounds.surfaceKind(w, at))
     }
 
     @Test
@@ -38,7 +38,7 @@ class MovementSoundsTest {
 
     @Test
     fun carEngineAndDoor() {
-        assertEquals("car_engine", MovementSounds.carIndex(words("Она завела мотор и отъехала"))!!.second)
+        assertEquals("car_start", MovementSounds.carIndex(words("Она завела мотор и отъехала"))!!.second)
         assertEquals("car_door_slam", MovementSounds.carIndex(words("Он хлопнул дверцей машины"))!!.second)
         assertNull(MovementSounds.carIndex(words("Машина стояла у дома")))
     }
