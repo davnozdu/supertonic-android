@@ -418,8 +418,12 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         runBlocking {
             val producer = launch(Dispatchers.IO) {
                 try {
+                    // Готовая книга знает голоса точно: её разметка главнее того, что успело подготовиться наперёд
+                    // (в упреждении мог остаться план от прошлой версии книги или от прежней разметки).
+                    val plan = if (preparation?.roleProvider == "book") preparation.voicePlan
+                               else aheadText?.voicePlan ?: preparation?.voicePlan.orEmpty()
                     val parts = if (voicePreview || com.brahmadeo.supertonic.tts.foreign.MultilingualVoice.single(requestedVoice)) listOf(com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.Route(rawText, stylePath, false)) else com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.routes(this@SupertonicTextToSpeechService,
-                        rawText, aheadText?.voicePlan ?: preparation?.voicePlan.orEmpty(), stylePath)
+                        rawText, plan, stylePath)
                     // Подсветка в читалке: диапазоны фраз в тексте, который прислала читалка.
                     val aligner = if (voicePreview || foreign) null else Aligner(incomingText)
                     val sentences = parts.flatMap { route -> textNormalizer.splitIntoSentences(
