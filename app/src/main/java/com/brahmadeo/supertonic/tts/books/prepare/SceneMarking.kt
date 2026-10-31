@@ -144,6 +144,8 @@ internal object SceneMarking {
         appendLine("там, где с этими предметами что-то делают. Записи, дневник, пересказ чужих бумаг — тоже сцена: событие")
         appendLine("происходит в описываемый момент. Не события: сравнения, общие рассуждения, мораль и пересказ того, что")
         appendLine("случилось давно и в другом месте.")
+        appendLine("Голос тоже слышен: плач, всхлип, рыдание, крик, смех, шёпот, вздох — такие события отмечай обязательно")
+        appendLine("(виды cry, shout, laugh_soft, whisper, sigh), даже если это одна фраза в середине абзаца.")
         appendLine("at — номер абзаца; quote — точные 3–6 слов ИМЕННО того действия, которое звучит, а не фразы, где предмет")
         appendLine("только упомянут («отворил дверь и прислушался», «что-то со стуком упало на пол»);")
         appendLine("если действие названо с местоимением («взял садовые ножницы, смазал их и наточил», «поднял её и отворил»),")
@@ -427,6 +429,22 @@ internal object SceneMarking {
                         rawEvents += Raw(at, quote, kind, sound)
                     }
                 }
+            }
+        }
+        // Слышимые голосовые звуки (плач, крик, смех, шёпот, вздох): модель иногда пропускает их, хотя слово названо
+        // прямо. Правило местное, без сети: если абзац называет такой звук, а события этого вида в нём ещё нет —
+        // событие ставится по глаголу. Отрицание («не заплакал») правило не берёт.
+        for (i in paragraphs.indices) {
+            val words = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(paragraphs[i].text)
+            if (words.isEmpty()) continue
+            for (kind in VoiceSounds.kinds) {
+                if (rawEvents.any { it.at == i && it.kind == kind }) continue
+                val idx = VoiceSounds.index(words, kind) ?: continue
+                val quote = words.subList(maxOf(0, idx - 1), minOf(words.size, idx + 3)).joinToString(" ")
+                val quoteWords = com.brahmadeo.supertonic.tts.books.ReplyIndex.words(quote)
+                if (quoteWords.isEmpty() ||
+                    com.brahmadeo.supertonic.tts.books.EventIndex.anchorStart(words, quoteWords) == null) continue
+                rawEvents += Raw(i, quote, kind, "")
             }
         }
         // Second pass: no closed list of kinds can name every action. The descriptions the model could not classify are
