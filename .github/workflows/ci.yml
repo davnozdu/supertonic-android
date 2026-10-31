@@ -8,8 +8,34 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Два задания идут одновременно: тесты логики не ждут сборки APK и наоборот.
+  tests:
+    name: Тесты (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Configure local.properties
+        run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Unit tests (готовый текст, роли, книги, звук)
+        run: ./gradlew testDebugUnitTest --parallel --max-workers=4 --stacktrace
+
   build:
-    name: Build Debug APK
+    name: APK debug
     runs-on: ubuntu-latest
 
     steps:
@@ -79,10 +105,7 @@ jobs:
 
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
-
-      - name: Verify text preparation
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew assembleDebug --parallel --max-workers=4 --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v5
