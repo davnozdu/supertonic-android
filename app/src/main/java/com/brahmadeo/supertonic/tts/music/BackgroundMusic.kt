@@ -221,7 +221,8 @@ object BackgroundMusic {
         }
         if (S.events(p) && tag.events.isNotEmpty()) {
             val per = owner?.let { msPerWord(it) } ?: 330f
-            val level = S.eventsVolume(p) / 100f
+            // Как у фона — по корню: ползунок в процентах, а слышимость ближе к корню (19 % ≈ −7 дБ, а не −14 дБ).
+            val level = kotlin.math.sqrt(S.eventsVolume(p) / 100f)
             val lead = if (leadOverride >= 0f) leadOverride else S.eventLead(p).toFloat()
             // A dense paragraph may describe several actions: they are all marked, but two sounds never start closer
             // than [MIN_EVENT_GAP_MS] (a clip lasts 8 s and a pile-up is mud, not atmosphere). «Микс звуков» снимает

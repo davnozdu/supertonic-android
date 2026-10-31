@@ -11,8 +11,13 @@ import kotlin.math.tanh
 /** Integrated loudness (ITU-R BS.1770-4: K-weighting, 400 ms blocks with 75 % overlap, absolute −70 LUFS and
  * relative −10 LU gates) and normalisation, so every location of every book sounds equally loud at one volume. */
 object Loudness {
-    /** As loud as the bundled music tracks (~−14 LUFS): the two sliders mean the same; the limiter keeps the peaks. */
-    const val TARGET_LUFS = -14.0
+    /** Фон обстановки: тихо и мягко, чтобы лежать под голосом и не превращаться в гул. Раньше было −14 LUFS — так же
+     * громко, как музыка: плотный фон приходилось загонять в лимитер, он звучал резко и «шумом», а звуки событий из
+     * базы (−24 LUFS) терялись под ним. */
+    const val TARGET_LUFS = -26.0
+    /** Звук события (дверь, шаги, посуда): заметно громче фона, но ниже голоса. База звуков выровнена по этой же
+     * громкости, поэтому событие из базы и созданное на телефоне звучат одинаково. */
+    const val EVENT_LUFS = -16.0
     /** Generated music: as loud as the bundled tracks (measured −11.5…−13.6, mean −12.7 LUFS), so one music slider fits all. */
     const val MUSIC_LUFS = -12.5
     private const val CEILING = 0.9f

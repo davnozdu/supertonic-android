@@ -98,13 +98,18 @@ internal object SceneMarking {
         appendLine("Верни список сцен в порядке текста: from — номер первого абзаца сцены;")
         appendLine("place — короткое название обстановки по-русски: место и, если от этого меняется звук, время суток, погода или")
         appendLine("оживлённость (1–5 слов: «купе поезда», «трактир, вечер», «улица, дождь», «лес, раннее утро», «пустой дом, ночь»);")
-        appendLine("sound — описание фонового звука этой обстановки по-английски для генератора звуков, 10–30 слов: плотный")
-        appendLine("непрерывный фон, который звучит всё время и сразу узнаётся, из 3–4 слоёв — постоянная основа (гул, ветер, дождь,")
-        appendLine("тишина комнаты) и 2–3 повторяющиеся детали места; без пауз, тишины и отдельных случайных звуков. Учитывай время")
-        appendLine("суток, погоду, людей и то, что за окном или стеной. Примеры: вечер дома у огня — \"crackling fireplace, ")
-        appendLine("ticking clock, quiet cozy room, faint wind outside\"; раннее утро в деревне — \"early morning birdsong, distant rooster, ")
-        appendLine("light breeze in leaves\"; бар — \"busy bar, murmur of indistinct conversations, clinking glasses\"; каюта — \"ship cabin, ")
-        appendLine("water lapping against the hull, creaking wood\". Без музыки, без отдельных разборчивых голосов и речи, без имён.")
+        appendLine("sound — описание фонового звука этой обстановки по-английски для генератора звуков, 8–25 слов. Это тихая")
+        appendLine("естественная атмосфера места, которая лежит под голосом: одна-две мягкие основы (воздух комнаты, дождь за окном,")
+        appendLine("лёгкий ветер) и один-два редких узнаваемых предмета места (тихие часы, скрип половицы, огонь в печи). Между ними —")
+        appendLine("тишина: фон не должен быть плотным и непрерывным.")
+        appendLine("НЕЛЬЗЯ писать и подразумевать гул, шипение, гудение, треск, свист, жужжание, вентиляцию, лампы, неон, электрический")
+        appendLine("шум и любой ровный шумовой слой (hum, hiss, buzz, whine, drone, static, crackle, flicker, fluorescent, air conditioning) —")
+        appendLine("на слух это воспринимается как шум помех. Приборы (холодильник, лампа, вентилятор) добавляй, только если о них прямо")
+        appendLine("сказано в тексте. Учитывай время суток, погоду, людей и то, что за окном или стеной. Примеры: вечер дома у огня —")
+        appendLine("\"quiet cozy room, soft crackling fire, a clock ticking slowly, faint wind outside\"; раннее утро в деревне — \"quiet village")
+        appendLine("morning, birds singing far apart, a distant rooster, light breeze in the leaves\"; бар — \"murmur of indistinct voices,")
+        appendLine("a glass set down, a chair moving, quiet room tone\"; каюта — \"quiet ship cabin, water lapping softly against the hull,")
+        appendLine("wood creaking now and then\". Без музыки, без разборчивых голосов и речи, без имён.")
         appendLine("accents — 2–4 характерных редких события этой обстановки по-английски (3–12 слов каждое), которые время от")
         appendLine("времени звучат поверх фона: поезд — \"a distant steam locomotive whistle blows twice\", \"brakes squeal and steam hisses\";")
         appendLine("трактир — \"a burst of laughter and a mug banging on a table\"; ночная деревня — \"a dog barking far away\",")
@@ -433,7 +438,12 @@ internal object SceneMarking {
             log("Second pass: ${descriptions.size} unnamed actions in ${answer?.values?.map { v -> v.first }?.distinct()?.size ?: 0} groups")
         }
         for (r in rawEvents) {
-            val known = com.brahmadeo.supertonic.tts.books.EventKinds.proper(r.kind)
+            // Известный вид — тот, у которого уже есть готовый клип: из закрытого списка или из скачанной базы звуков.
+            // Такой звук ставится и при одном упоминании (дверь открылась один раз — всё равно слышно), а новый вид
+            // по-прежнему требует трёх упоминаний, чтобы не плодить случайные клипы.
+            val inList = com.brahmadeo.supertonic.tts.books.EventKinds.proper(r.kind)
+            val inBase = r.kind.isNotEmpty() && known(r.kind)
+            val known = inList || inBase
             val grouped = if (known) null else groupOf[r.sound]
             if (!known && grouped == null) { dropped++; continue }
             val kind = if (known) r.kind else grouped!!.first
@@ -444,7 +454,7 @@ internal object SceneMarking {
                 kindNumber[kind] = eventList.size
                 eventList += com.brahmadeo.supertonic.tts.books.EventIndex.Event("e${eventList.size + 1}", sound, kind)
                 kindPrompts[kind] = sound
-                if (!known) customKinds += kind
+                if (!inList && !inBase) customKinds += kind
             }
             marksOf.getOrPut(r.at) { mutableListOf() } += r.quote to kindNumber.getValue(kind)
             eventsMarked++
