@@ -89,7 +89,13 @@ internal object AmbiencePlayer {
     private const val ESTABLISH_HOLD_MS = 3000L
     private const val ESTABLISH_FADE_MS = 3000L
 
-    fun speaking(on: Boolean) { speechNow = on; duckTarget = if (on && breathe) DUCK else 1f; handler.post { if (playing) schedule() } }
+    fun speaking(on: Boolean) {
+        speechNow = on; duckTarget = if (on && breathe) DUCK else 1f
+        // Речь снова идёт, а фон остался приглушённым (пауза, звонок, потеря аудиофокуса): поднимаем его сразу,
+        // не дожидаясь следующей смены сцены. Иначе слушатель слышит голос без атмосферы до конца главы.
+        if (on && scene != null && masterTarget == 0f) masterTarget = 1f
+        handler.post { if (playing) schedule() }
+    }
 
     /** Идёт ли речь прямо сейчас: звук события живёт сам по себе и не требует фоновой подложки. */
     @Volatile private var speechNow = false

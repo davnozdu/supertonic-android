@@ -45,7 +45,14 @@ internal object AmbienceScenes {
             wordCount = words.size
             val before = state.before
             state.before = (before + words).takeLast(ReplyIndex.WINDOW - 1)
-            val position = BookMatcher.feed(context, state.matcher, text) ?: return@runCatching null.also { state.scene = null; trace(context, "no book") }
+            // Короткий кусок без отпечатка (реплика «— Да.», обрыв после звонка) книгу не узнаёт, но и не значит,
+            // что герой вышел из комнаты: пока книга вообще узнаваема, держим прежнюю сцену — иначе фон пропадает
+            // на весь кусок и слушатель остаётся в тишине.
+            val position = BookMatcher.feed(context, state.matcher, text) ?: run {
+                val known = BookMatcher.recognised.value
+                if (known != null) { trace(context, "no book in piece, keep=${state.scene?.key}"); return@runCatching state.scene }
+                state.scene = null; trace(context, "no book"); return@runCatching null
+            }
             // A new section of the same book (not the first one recognised, not a jump).
             val section = position.book to position.section
             chapter = state.section != null && state.section != section && state.section?.first == position.book
