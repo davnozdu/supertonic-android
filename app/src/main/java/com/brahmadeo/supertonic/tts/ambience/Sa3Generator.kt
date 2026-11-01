@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
  * (cfg 1, 8-step rectified-flow pingpong). The three graphs load one after another and close straight away,
  * so only one of them is resident at a time. The DiT and the decoder are "rung" files: one signature per fixed
  * length sharing weights; the XNNPACK weight cache next to each file keeps that sharing (flat RAM). */
-class Sa3Generator(private val dir: File, private val threads: Int = 4, private val npuDit: NpuDit? = null,
+class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: NpuDit? = null,
                    /** The DiT on the CPU: sound effects (dit_w8a8) or music (dit_music_w8a8). */
                    private val ditFile: String = "dit_w8a8.tflite",
                    /** The DiT's rung lengths (the small and the medium models differ). */
@@ -29,6 +29,11 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
                     * decoder (89 MB) then stop being reloaded for every clip, which took ~4 s of the 8 per clip.
                     * Costs about +650 MB of RSS while the book is being prepared; freed with [close]. */
                    private val keep: Boolean = true) : AutoCloseable {
+    /** The DiT on the NPU, when the clip has the graph's exact length. It can be swapped between the batches of one
+     * book ([attachNpu]) so the CPU graphs stay loaded while the HTP session comes and goes; never swapped while a
+     * stage of a clip is running. */
+    @Volatile private var npuDit: NpuDit? = npuDit
+    fun attachNpu(dit: NpuDit?) { npuDit = dit }
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
      * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
@@ -77,20 +82,10 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
     }
 
     data class Stage(val name: String, val wallMs: Long, val cpuMs: Long)
-    class Result(val pcm: FloatArray, val stages: List<Stage>) // interleaved stereo, 44.1 kHz
 
-    /** One per generator (~40 MB for its 256 k pieces), freed with it after the book's sounds. */
-    private val tokenizer by lazy { Sa3Tokenizer(File(dir, "tokenizer.model")) }
-
-    /** True after a [generate] that actually ran the DiT on the NPU: a loaded session alone does not mean that
-     * (the graph is 323 latents, i.e. 30 s, and shorter clips silently fall back to the CPU path). */
-    var usedNpu: Boolean = false
-        private set
-
-    fun generate(prompt: String, seconds: Float, seed: Long, cancelled: () -> Boolean = { false },
-                 onStage: (Stage) -> Unit = {}): Result {
-        usedNpu = false
-        require(seconds in 1f..MAX_SECONDS) { "Длительность 1…${MAX_SECONDS.toInt()} с" }
+    /** Timings of one clip. In the pipeline the DiT stage is recorded by the producer thread and the decoder's by the
+     * consumer one, so the CPU time of a stage (process-wide) also counts what the other stage did meanwhile. */
+    class Track(val cancelled: () -> Boolean = { false }, val onStage: (Stage) -> Unit = {}) {
         val stages = ArrayList<Stage>()
         fun <T> stage(name: String, work: () -> T): T {
             val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
@@ -99,12 +94,45 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
             if (cancelled()) throw InterruptedException("cancelled")
             return out
         }
-        val latents = latentsFor(seconds)
-        val (hidden, mask) = stage("t5") { encodeText(prompt) }
-        val x = stage("dit") { sample(hidden, mask, latents, seconds, seed, cancelled) }
-        val audio = stage("decode") { decode(x, latents) }
+    }
+
+    /** One clip after its first two stages: what the decoder needs, and the timings collected so far. */
+    class Latents(val x: FloatArray, val length: Int, val track: Track)
+
+    class Result(val pcm: FloatArray, val stages: List<Stage>) // interleaved stereo, 44.1 kHz
+
+    /** One per generator (~40 MB for its 256 k pieces), freed with it after the book's sounds. */
+    private val tokenizer by lazy { Sa3Tokenizer(File(dir, "tokenizer.model")) }
+
+    /** True after a [latents] (or a [generate]) that actually ran the DiT on the NPU: a loaded session alone does not
+     * mean that (the graph is 323 latents, i.e. 30 s, and shorter clips silently fall back to the CPU path). */
+    @Volatile var usedNpu: Boolean = false
+        private set
+
+    /** One clip from start to finish, the three stages one after another on the calling thread. */
+    fun generate(prompt: String, seconds: Float, seed: Long, cancelled: () -> Boolean = { false },
+                 onStage: (Stage) -> Unit = {}): Result {
+        val track = Track(cancelled, onStage)
+        return decode(latents(prompt, seconds, seed, track), seconds)
+    }
+
+    /** The first two stages: the text encoder and the DiT steps (on the NPU when the clip has the graph's length).
+     * Split from [decode] so a second thread can decode the previous clip while this one is being made. */
+    fun latents(prompt: String, seconds: Float, seed: Long, track: Track = Track()): Latents {
+        require(seconds in 1f..MAX_SECONDS) { "Длительность 1…${MAX_SECONDS.toInt()} с" }
+        usedNpu = false
+        val length = latentsFor(seconds)
+        val (hidden, mask) = track.stage("t5") { encodeText(prompt) }
+        val x = track.stage("dit") { sample(hidden, mask, length, seconds, seed, track.cancelled) }
+        return Latents(x, length, track)
+    }
+
+    /** The last stage: the decoder on the CPU, trimmed to [seconds]. Safe to run while another thread makes the next
+     * clip's latents: the two use different graphs (the decoder and the encoder/DiT), and the model map is locked. */
+    fun decode(latents: Latents, seconds: Float): Result {
+        val audio = latents.track.stage("decode") { decode(latents.x, latents.length) }
         val frames = minOf(audio.size / 2, (seconds * SAMPLE_RATE).roundToInt())
-        return Result(audio.copyOf(frames * 2), stages)
+        return Result(audio.copyOf(frames * 2), latents.track.stages.toList())
     }
 
     private fun model(name: String, cache: Boolean) = CompiledModel.create(File(dir, name).path,
@@ -112,19 +140,22 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, private 
             cpuOptions = CompiledModel.CpuOptions(threads, null, if (cache) File(dir, "$name.xnnwc").path else null)
         })
 
-    /** Resident graphs ([keep]): one object per file, all of its rung signatures inside it. */
+    /** Resident graphs ([keep]): one object per file, all of its rung signatures inside it. Two threads may ask for
+     * different files at once (the encoder and the DiT in the pipeline's producer, the decoder in its consumer), so
+     * the map is locked; each graph is then used by one stage at a time. */
     private val resident = HashMap<String, CompiledModel>()
+    private val residentLock = Any()
 
     private fun <T> withModel(name: String, cache: Boolean, block: (CompiledModel) -> T): T {
         if (!keep) return model(name, cache).use(block)
-        val m = resident.getOrPut(name) { model(name, cache) }
+        val m = synchronized(residentLock) { resident.getOrPut(name) { model(name, cache) } }
         return block(m)
     }
 
     /** Frees the resident graphs; the NPU session is closed by its owner (AmbienceBook). */
     override fun close() {
-        resident.values.forEach { runCatching { it.close() } }
-        resident.clear()
+        val models = synchronized(residentLock) { resident.values.toList().also { resident.clear() } }
+        models.forEach { runCatching { it.close() } }
     }
 
     fun encodeText(prompt: String): Pair<FloatArray, FloatArray> {

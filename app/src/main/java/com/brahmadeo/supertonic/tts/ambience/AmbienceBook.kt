@@ -1,6 +1,8 @@
 package com.brahmadeo.supertonic.tts.ambience
 
 import android.content.Context
+import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import com.brahmadeo.supertonic.tts.books.BookFiles
 import com.brahmadeo.supertonic.tts.books.SceneIndex
@@ -176,46 +178,89 @@ object AmbienceBook {
             Log.i("Ambience", "$reused sounds taken from the bank, no generation")
         }
         if (todo.isEmpty()) return
-        // One NPU session at a time: the sounds first, then the music (each ~0.9 GB of HTP context).
+        // Один генератор и одна NPU-сессия на пачку подряд идущих клипов: звуки, музыка, а внутри звуков —
+        // 30-секундные локации на NPU и короткие события без него.
         val ordered = todo.sortedBy { it.music }
+        val place = HashMap<Job, Int>().apply { ordered.forEachIndexed { i, job -> put(job, i) } }
         var npu: Sa3Generator.NpuDit? = null
         var generator: Sa3Generator? = null
         var musicMode: Boolean? = null
         try {
-            val manifest = readManifest(context, sha)
-            for ((done, job) in ordered.withIndex()) {
+            val doc = readManifest(context, sha)
+            for (batch in batches(context, ordered)) {
                 if (cancelled()) throw InterruptedException("cancelled")
-                progress(done, ordered.size, job.label)
-                if (musicMode != job.music) {
-                    npu?.close()
-                    // The NPU graph accepts exactly 323 latents (30 s): music fits, short event sounds do not, and
-                    // loading ~1–3 GB of HTP context for them only burns memory and a second per start.
-                    npu = if (job.music) AmbienceModel.npuDit(context, music = true,
-                        onCompile = { k, n -> progress(done, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
-                        else null
-                    generator?.close()
+                if (musicMode != batch.music) {
+                    generator?.close(); npu?.close(); npu = null
                     val keep = AmbienceSettings.keepModels(context.getSharedPreferences("SupertonicPrefs", 0))
-                    generator = if (job.music) AmbienceModel.musicGenerator(context, threads, npu, keep)
-                        else Sa3Generator(AmbienceModel.root(context), threads, npu, keep = keep)
-                    musicMode = job.music
+                    generator = if (batch.music) AmbienceModel.musicGenerator(context, threads, null, keep)
+                        else Sa3Generator(AmbienceModel.root(context), threads, null, keep = keep)
+                    musicMode = batch.music
                 }
-                val pcm = generator!!.generate(job.prompt, job.seconds, job.seed, cancelled).pcm
-                if (job.music && MusicEnhance.enabled(context)) MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
-                val event = job.id.startsWith("k_") || job.id.startsWith("e")
-                // Звук события выравнивают по пику, а не по громкости: щелчок и удар двери по природе разной громкости,
-                // но оба должны пробиваться сквозь фон. Обстановка и музыка — по громкости (BS.1770).
-                val gain = if (event) Loudness.peak(pcm)
-                    else Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
-                AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
-                // The bank grows: a sound made for this book is reused by the next one for free.
-                if (!job.music && job.id.startsWith("k_") && SoundBank.on(context))
-                    SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file),
-                        custom = !com.brahmadeo.supertonic.tts.books.EventKinds.known(job.id.removePrefix("k_")))
-                manifest.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
-                manifest(context, sha).writeText(manifest.toString())
-                Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=${npu != null && job.seconds == SECONDS}, music=${job.music})")
+                // HTP-сессия живёт только пока делаются клипы, которые влезают в её граф: 30-секундные локации и
+                // музыка. Коротким звукам событий граф не подходит, и 1,8 ГБ памяти на них держать незачем.
+                if (!batch.npu && npu != null) { npu!!.close(); npu = null }
+                if (batch.npu && npu == null) npu = AmbienceModel.npuDit(context, music = batch.music,
+                    onCompile = { k, n -> progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
+                generator!!.attachNpu(npu)
+                if (npu != null) {
+                    // Конвейер: NPU считает DiT следующего клипа, пока CPU декодирует предыдущий.
+                    val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
+                    ClipPipeline(batch.jobs,
+                        produce = { job -> job to generator!!.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled)) },
+                        consume = { (job, latents) ->
+                            progress(place[job] ?: 0, ordered.size, job.label)
+                            saveClip(context, sha, dir, doc, job, generator!!.decode(latents, job.seconds), npu = true)
+                        }).run()
+                    Log.i("Ambience", "batch music=${batch.music} npu=true clips=${batch.jobs.size} " +
+                        "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
+                } else {
+                    for (job in batch.jobs) {
+                        if (cancelled()) throw InterruptedException("cancelled")
+                        progress(place[job] ?: 0, ordered.size, job.label)
+                        saveClip(context, sha, dir, doc, job, generator!!.generate(job.prompt, job.seconds, job.seed, cancelled), npu = false)
+                    }
+                }
             }
             progress(ordered.size, ordered.size, "")
         } finally { generator?.close(); npu?.close() }
+    }
+
+    /** Клипы с общим генератором и общей NPU-сессией: подряд идущие, одной модели (звуки или музыка) и одного места
+     * счёта DiT — на NPU он идёт только у клипов точной длины своего графа (30 с), прочие считает CPU. */
+    private class Batch(val music: Boolean, val npu: Boolean) { val jobs = ArrayList<Job>() }
+
+    private fun batches(context: Context, ordered: List<Job>): List<Batch> {
+        val planned = HashMap<Boolean, Boolean>()
+        val out = ArrayList<Batch>()
+        for (job in ordered) {
+            val npu = planned.getOrPut(job.music) { AmbienceModel.npuPlanned(context, job.music) } &&
+                Sa3Generator.latentsFor(job.seconds) == AmbienceModel.NPU_LENGTH
+            val last = out.lastOrNull()
+            if (last == null || last.music != job.music || last.npu != npu) out.add(Batch(job.music, npu))
+            out.last().jobs.add(job)
+        }
+        return out
+    }
+
+    /** Всё, что делается с готовым звуком: выравнивание громкости, AAC в папку книги, строка манифеста и копия в
+     * базу звуков. В конвейере это второй поток, пока первый считает следующий клип. */
+    private fun saveClip(context: Context, sha: String, dir: File, doc: JSONObject, job: Job,
+                         result: Sa3Generator.Result, npu: Boolean) {
+        val pcm = result.pcm
+        if (job.music && MusicEnhance.enabled(context)) MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
+        val event = job.id.startsWith("k_") || job.id.startsWith("e")
+        // Звук события выравнивают по пику, а не по громкости: щелчок и удар двери по природе разной громкости,
+        // но оба должны пробиваться сквозь фон. Обстановка и музыка — по громкости (BS.1770).
+        val gain = if (event) Loudness.peak(pcm)
+            else Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
+        AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
+        // The bank grows: a sound made for this book is reused by the next one for free.
+        if (!job.music && job.id.startsWith("k_") && SoundBank.on(context))
+            SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file),
+                custom = !com.brahmadeo.supertonic.tts.books.EventKinds.known(job.id.removePrefix("k_")))
+        doc.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
+        manifest(context, sha).writeText(doc.toString())
+        Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=$npu, music=${job.music}, " +
+            result.stages.joinToString(" ") { "${it.name}=${it.wallMs}" } + ")")
     }
 }

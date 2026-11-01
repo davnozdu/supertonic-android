@@ -123,6 +123,36 @@ object AmbienceProbe {
         Log.i(TAG, "MEM $tag " + stats.entries.joinToString(" ") { "${it.key.removePrefix("summary.")}=${it.value}" })
     }
 
+    /** The same clips through the pipeline (the DiT on the NPU while the decoder runs on the CPU), to compare with the
+     * sequential loop on identical prompts: per clip the step from one finished clip to the next, plus the batch. */
+    private fun pipeline(context: Context, generator: Sa3Generator, npu: Sa3Generator.NpuDit?,
+                         prompts: List<Pair<String, String>>, seconds: Float, runs: Int, out: File, intent: Intent) {
+        if (npu == null) { Log.i(TAG, "PIPELINE skipped: no NPU"); return }
+        val items = (0 until runs).flatMap { run -> prompts.map { run to it } }
+        val rows = JSONArray()
+        var previous = -1L
+        val wall = android.os.SystemClock.elapsedRealtime(); val cpu = android.os.Process.getElapsedCpuTime()
+        ClipPipeline(items,
+            produce = { item -> val (run, p) = item; item to generator.latents(p.second, seconds, 42L + run, Sa3Generator.Track()) },
+            consume = { done ->
+                val (item, latents) = done
+                val (run, p) = item
+                val result = generator.decode(latents, seconds)
+                val now = android.os.SystemClock.elapsedRealtime()
+                val step = if (previous < 0) 0L else now - previous
+                previous = now
+                val name = "pipe_${p.first}_run$run"
+                val where = save(context, File(out, "$name.wav"), name, result.pcm, intent.getStringExtra("ambienceOutDir"))
+                val row = JSONObject().put("name", p.first).put("run", run).put("stepMs", step).put("file", where)
+                    .put("stages", JSONArray(result.stages.map { JSONObject().put("name", it.name).put("wallMs", it.wallMs).put("cpuMs", it.cpuMs) }))
+                rows.put(row); Log.i(TAG, "PIPELINE $row")
+            }).run()
+        val total = android.os.SystemClock.elapsedRealtime() - wall
+        Log.i(TAG, "PIPELINE DONE clips=${items.size} wallMs=$total cpuMs=${android.os.Process.getElapsedCpuTime() - cpu} " +
+            "perClipMs=${if (items.isEmpty()) 0 else total / items.size}")
+        File(out, "probe-pipeline.json").writeText(rows.toString(1))
+    }
+
     fun run(context: Context, intent: Intent) {
         if (!AmbienceModel.ready(context)) {
             Log.i(TAG, "DOWNLOAD start ${AmbienceModel.totalBytes() / 1048576} MB")
@@ -192,6 +222,7 @@ object AmbienceProbe {
                 results.put(JSONObject().put("run", run).put("name", name).put("error", "${e.javaClass.simpleName}: ${e.message}"))
             }
         }
+        if (intent.getBooleanExtra("ambiencePipeline", false)) pipeline(context, generator, npuDit, prompts, seconds, runs, out, intent)
         generator.close()
         npuDit?.close()
         File(out, "probe.json").writeText(results.toString(1))

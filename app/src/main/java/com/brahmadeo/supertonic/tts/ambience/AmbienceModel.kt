@@ -195,6 +195,9 @@ object AmbienceModel {
     }
     private fun npuUsable(context: Context, music: Boolean) =
         npuWanted(context, target(context, music).scope) && (if (music) musicNpuReady(context) else npuReady(context))
+    /** True when the DiT for these sounds / this music is meant to run on the NPU: the switch is on, the graphs are
+     * there and this model has no recorded build failure. Says nothing about the compile still being needed. */
+    fun npuPlanned(context: Context, music: Boolean) = npuUsable(context, music)
     /** True when this DiT would use the NPU but its graphs are not compiled yet. */
     fun npuUncompiled(context: Context, music: Boolean) =
         npuUsable(context, music) && target(context, music).names.any { !Npu.cacheReady(context, it) }
