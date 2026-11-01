@@ -185,6 +185,7 @@ object AmbienceBook {
         var npu: Sa3Generator.NpuDit? = null
         var generator: Sa3Generator? = null
         var musicMode: Boolean? = null
+        var npuBroken = false
         try {
             val doc = readManifest(context, sha)
             for (batch in batches(context, ordered)) {
@@ -199,20 +200,39 @@ object AmbienceBook {
                 // HTP-сессия живёт только пока делаются клипы, которые влезают в её граф: 30-секундные локации и
                 // музыка. Коротким звукам событий граф не подходит, и 1,8 ГБ памяти на них держать незачем.
                 if (!batch.npu && npu != null) { npu!!.close(); npu = null }
-                if (batch.npu && npu == null) npu = AmbienceModel.npuDit(context, music = batch.music,
+                if (batch.npu && npu == null && !npuBroken) npu = AmbienceModel.npuDit(context, music = batch.music,
                     onCompile = { k, n -> progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
                 generator!!.attachNpu(npu)
                 if (npu != null) {
                     // Конвейер: NPU считает DiT следующего клипа, пока CPU декодирует предыдущий.
                     val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
-                    ClipPipeline(batch.jobs,
-                        produce = { job -> job to generator!!.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled)) },
-                        consume = { (job, latents) ->
+                    try {
+                        ClipPipeline(batch.jobs,
+                            produce = { job -> job to generator!!.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled)) },
+                            consume = { (job, latents) ->
+                                progress(place[job] ?: 0, ordered.size, job.label)
+                                saveClip(context, sha, dir, doc, job, generator!!.decode(latents, job.seconds), npu = true)
+                            }).run()
+                        Log.i("Ambience", "batch music=${batch.music} npu=true clips=${batch.jobs.size} " +
+                            "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
+                    } catch (e: InterruptedException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        // HTP может перезапуститься посреди книги (QNN 1007 «SSR detected»), и сессия умирает.
+                        // Книга на этом не обрывается: остаток пачки считает CPU, NPU вернётся в следующей.
+                        Log.w("Ambience", "NPU failed mid-batch after ${batch.jobs.count { File(dir, it.file).isFile }} clips " +
+                            "(${e.javaClass.simpleName}: ${e.message}); the rest on the CPU")
+                        runCatching { npu!!.close() }
+                        npu = null
+                        npuBroken = true
+                        generator!!.attachNpu(null)
+                        for (job in batch.jobs) {
+                            if (File(dir, job.file).isFile) continue
+                            if (cancelled()) throw InterruptedException("cancelled")
                             progress(place[job] ?: 0, ordered.size, job.label)
-                            saveClip(context, sha, dir, doc, job, generator!!.decode(latents, job.seconds), npu = true)
-                        }).run()
-                    Log.i("Ambience", "batch music=${batch.music} npu=true clips=${batch.jobs.size} " +
-                        "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
+                            saveClip(context, sha, dir, doc, job, generator!!.generate(job.prompt, job.seconds, job.seed, cancelled), npu = false)
+                        }
+                    }
                 } else {
                     for (job in batch.jobs) {
                         if (cancelled()) throw InterruptedException("cancelled")
