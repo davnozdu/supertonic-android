@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import kotlin.concurrent.thread
 
@@ -19,6 +20,7 @@ import kotlin.concurrent.thread
  * FGS держит процесс в приоритете и позволяет гасить экран. Экстрасы те же, что у пробы. */
 class SoundGenService : Service() {
     private var job: Thread? = null
+    private var wake: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -38,6 +40,11 @@ class SoundGenService : Service() {
             .setOngoing(true).setOnlyAlertOnce(true).build()
         if (Build.VERSION.SDK_INT >= 29) startForeground(ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         else startForeground(ID, notification)
+        // Экран погашен → система уходит в Doze и придерживает расчёт (замер: клип 0,9 с превращался в 4 с, одна
+        // пауза длилась две минуты). Wake lock не даёт уснуть: работа идёт с той же скоростью, что и при экране.
+        // Дольше двух часов проба не идёт; при бесконечной подготовке его обновляет AmbienceGenerationService.
+        if (wake?.isHeld != true) wake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyTTS:Sounds").apply { acquire(2 * 60 * 60 * 1000L) }
         if (job?.isAlive == true) {
             Log.i(TAG, "a batch is already running, this start is ignored")
             return START_NOT_STICKY
@@ -57,6 +64,8 @@ class SoundGenService : Service() {
 
     override fun onDestroy() {
         job?.interrupt()
+        if (wake?.isHeld == true) wake?.release()
+        wake = null
         super.onDestroy()
     }
 

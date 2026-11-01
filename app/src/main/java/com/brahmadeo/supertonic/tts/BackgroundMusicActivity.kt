@@ -28,6 +28,18 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 class BackgroundMusicActivity : ComponentActivity() {
+    /** Generation runs for minutes with the screen off: on aggressive firmwares (OnePlus and others) an app that is
+     * not exempt from battery restrictions is frozen or loses the network once the screen goes off. Ask once with
+     * the system dialog, from inside the app, so any phone can grant it. */
+    private fun allowBackground() {
+        val power = getSystemService(android.os.PowerManager::class.java)
+        if (power?.isIgnoringBatteryOptimizations(packageName) != false) return
+        runCatching {
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                android.net.Uri.parse("package:$packageName")))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -275,6 +287,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                             OutlinedButton(onClick=com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration::stop) { Text("Остановить") }
                         } else Button(enabled=!busy && !creating.running && musicText.isNotBlank(),onClick={
+                            allowBackground()
                             com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.startMusic(this@BackgroundMusicActivity, musicText, musicSeconds)
                         }) { Text("Создать музыку") }
                         if (!creating.running && creating.book == null && creating.message.isNotBlank()) Text(creating.message)

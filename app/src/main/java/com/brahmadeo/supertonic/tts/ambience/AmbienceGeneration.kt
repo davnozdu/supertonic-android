@@ -114,10 +114,16 @@ class AmbienceGenerationService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel("ambience_generation", "Фоновые звуки", NotificationManager.IMPORTANCE_LOW))
         startForeground(4208, notification(AmbienceGeneration.state.value))
-        if (wake?.isHeld != true) wake = (getSystemService(POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyTTS:Ambience").apply { acquire(60 * 60 * 1000L) }
-        scope.launch { AmbienceGeneration.state.collect { if (it.running) manager.notify(4208, notification(it)) } }
+        holdWake()
+        scope.launch { AmbienceGeneration.state.collect {
+            // Книга на два часа: снимок не должен кончиться посреди генерации (таймаут 60 мин).
+            if (!wake!!.isHeld) holdWake()
+            if (it.running) manager.notify(4208, notification(it)) } }
         return START_NOT_STICKY
+    }
+    private fun holdWake() {
+        if (wake == null) wake = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyTTS:Ambience")
+        wake!!.acquire(60 * 60 * 1000L)
     }
     private fun notification(state: AmbienceGeneration.State): android.app.Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, BooksActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
