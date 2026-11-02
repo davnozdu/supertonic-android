@@ -102,7 +102,8 @@ object Npu {
             options.setIntraOpNumThreads(1)
             if (!allowCpuFallback) options.addConfigEntry("session.disable_cpu_ep_fallback", "1")
             if (logInfo || verbose) options.setSessionLogLevel(if (verbose) ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE else ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_INFO)
-            options.addQnn(options(ctx, performance) + extra)
+            // Диагностика: опции QNN для одного графа из pref npu_debug_<cacheName> (например, enable_htp_fp16_precision=0).
+            options.addQnn(options(ctx, performance) + extra + debug(ctx, "npu_debug_$cacheName"))
             return if (cached.isFile) env.createSession(cached.path, options) else {
                 options.addConfigEntry("ep.context_enable", "1")
                 options.addConfigEntry("ep.context_embed_mode", "1")

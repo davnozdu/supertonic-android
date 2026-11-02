@@ -198,7 +198,13 @@ object AmbienceModel {
      * Проба (ambienceNpuCheck) берёт её графы явно, чтобы найти место поломки. */
     const val MEDIUM_NPU_BROKEN = true
     private fun mediumBlocked(context: Context, music: Boolean, model: Music?) =
-        MEDIUM_NPU_BROKEN && (model ?: if (music) music(context) else null) == MEDIUM_MUSIC
+        MEDIUM_NPU_BROKEN && (model ?: if (music) music(context) else null) == MEDIUM_MUSIC &&
+            // Гибрид (последняя часть на CPU в fp32) звучит верно — тогда NPU для средней разрешён.
+            2 !in cpuParts(context, target(context, music, model))
+    const val CPU_PARTS_KEY = "ambience_npu_cpu_parts"
+    private fun cpuParts(context: Context, t: NpuTarget): Set<Int> =
+        if (t.parts.size < 2) emptySet() else prefs(context).getString(CPU_PARTS_KEY, "").orEmpty()
+            .split(',').mapNotNull { it.trim().toIntOrNull() }.filter { it in t.parts.indices }.toSet()
     private fun npuUsable(context: Context, music: Boolean, model: Music? = null, diagnostic: Boolean = false) =
         (diagnostic || !mediumBlocked(context, music, model)) &&
         npuWanted(context, target(context, music, model).scope) &&
@@ -232,13 +238,18 @@ object AmbienceModel {
         val t = target(context, music, model)
         if (!allowCompile && t.names.any { !Npu.cacheReady(context, it) }) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
-        fun open(k: Int) = Npu.session(context, env, File(root(context), t.parts[k]), emptyMap(), t.names[k], family = t.family, siblings = t.names)
+        // Части графа, которые считает CPU в fp32 (pref ambience_npu_cpu_parts, например "2"): у средней модели
+        // последняя часть переполняет fp16 на HTP. Остальные части — на NPU.
+        val cpuParts = cpuParts(context, t)
+        fun open(k: Int) = if (k in cpuParts) env.createSession(File(root(context), t.parts[k]).path,
+                ai.onnxruntime.OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) })
+            else Npu.session(context, env, File(root(context), t.parts[k]), emptyMap(), t.names[k], family = t.family, siblings = t.names)
         val sessions = ArrayList<ai.onnxruntime.OrtSession>()
         var building = -1
         return try {
             // Compile the missing parts one at a time and free each (a compile peaks at several GB), then load all
             // from the cache. family: older compiled graphs (~1 GB each) are deleted, not only older runtimes.
-            for (k in t.parts.indices) if (!Npu.cacheReady(context, t.names[k])) {
+            for (k in t.parts.indices) if (k !in cpuParts && !Npu.cacheReady(context, t.names[k])) {
                 if (stop()) return null
                 onCompile(k + 1, t.parts.size); building = k
                 if (t.parts.size > 1) open(k).close() else sessions.add(open(k))
