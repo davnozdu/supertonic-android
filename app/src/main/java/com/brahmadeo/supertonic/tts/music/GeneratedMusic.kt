@@ -46,10 +46,11 @@ object GeneratedMusic {
             progress("Создание музыки (${seconds} с)")
             val npu = if (seconds == 30) AmbienceModel.npuDit(context, music = true,
                 onCompile = { k, n -> progress("Подготовка NPU: часть $k из $n (один раз)") }) else null
+            val decoder = if (seconds == 30) AmbienceModel.largeDecoderNpu(context, onCompile = { progress("Подготовка NPU: большой декодер (один раз)") }) else null
             try {
-                AmbienceModel.musicGenerator(context, 4, npu)
+                AmbienceModel.musicGenerator(context, 4, npu).also { it.npuDecoder = decoder }
                     .generate(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.prompt(prompt), seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm
-            } finally { npu?.close() }
+            } finally { npu?.close(); decoder?.close() }
         }
         progress("Сохранение")
         if (com.brahmadeo.supertonic.tts.ambience.MusicEnhance.enabled(context)) com.brahmadeo.supertonic.tts.ambience.MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)

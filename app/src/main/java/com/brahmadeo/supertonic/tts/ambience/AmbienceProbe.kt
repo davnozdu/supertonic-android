@@ -177,6 +177,34 @@ object AmbienceProbe {
         File(out, "probe-pipeline.json").writeText(rows.toString(1))
     }
 
+    /** SAME-L: одни и те же латенты средней модели (30 с) декодируются tflite на CPU и экспортом на NPU — время, SNR
+     * и оба WAV в cache/ambience (samel_cpu.wav, samel_npu.wav, samel-check.txt). */
+    private fun samelCheck(context: Context, npuDit: Sa3Generator.NpuDit?, threads: Int, prompt: String, out: File) {
+        val m = AmbienceModel.MEDIUM_MUSIC
+        Sa3Generator(AmbienceModel.root(context), threads, npuDit, m.ditFile, m.rungs, "dec_l_w8a8.tflite", keep = true).use { g ->
+            val lat = g.latents(prompt, 30f, 42L)
+            val t0 = android.os.SystemClock.elapsedRealtime(); val c0 = android.os.Process.getElapsedCpuTime()
+            val cpu = g.decodeCpu(lat.x, lat.length)
+            val cpuMs = android.os.SystemClock.elapsedRealtime() - t0; val cpuCpu = android.os.Process.getElapsedCpuTime() - c0
+            val dec = AmbienceModel.largeDecoderNpu(context, allowCompile = true, diagnostic = true)
+                ?: return Unit.also { File(out, "samel-check.txt").writeText("NPU decoder unavailable\n") }
+            dec.use { d ->
+                val times = (0 until 3).map {
+                    val t1 = android.os.SystemClock.elapsedRealtime(); val c1 = android.os.Process.getElapsedCpuTime()
+                    val y = d.decode(lat.x, lat.length)
+                    Triple(y, android.os.SystemClock.elapsedRealtime() - t1, android.os.Process.getElapsedCpuTime() - c1)
+                }
+                val npu = times.last().first
+                var sig = 0.0; var err = 0.0; var nan = 0
+                for (i in cpu.indices) { val a = npu[i]; if (a.isNaN()) { nan++; continue }; sig += cpu[i].toDouble() * cpu[i]; val e = cpu[i] - a; err += e.toDouble() * e }
+                Sa3Generator.writeWav(File(out, "samel_cpu.wav"), cpu); Sa3Generator.writeWav(File(out, "samel_npu.wav"), npu)
+                val line = "cpu wall=$cpuMs cpu=$cpuCpu | npu " + times.joinToString(" ") { "wall=${it.second} cpu=${it.third}" } +
+                    " | snrDb=${"%.1f".format(10 * kotlin.math.log10(sig / maxOf(err, 1e-30)))} nan=$nan"
+                Log.i(TAG, "SAMEL $line"); File(out, "samel-check.txt").writeText(line + "\n")
+            }
+        }
+    }
+
     fun run(context: Context, intent: Intent) {
         if (!AmbienceModel.ready(context)) {
             Log.i(TAG, "DOWNLOAD start ${AmbienceModel.totalBytes() / 1048576} MB")
@@ -250,6 +278,7 @@ object AmbienceProbe {
             }
         }
         if (intent.getBooleanExtra("ambiencePipeline", false)) pipeline(context, generator, npuDit, prompts, seconds, runs, out, intent)
+        if (intent.getBooleanExtra("ambienceSamelCheck", false)) samelCheck(context, npuDit, threads, prompts.first().second, out)
         generator.close()
         npuDit?.close()
         File(out, "probe.json").writeText(results.toString(1))

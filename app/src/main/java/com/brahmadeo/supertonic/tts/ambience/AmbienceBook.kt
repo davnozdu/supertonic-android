@@ -206,10 +206,14 @@ object AmbienceBook {
             for (batch in batches(context, ordered)) {
                 if (cancelled()) throw InterruptedException("cancelled")
                 if (mode != batch.gen) {
-                    generator?.close(); npu?.close(); npu = null
+                    generator?.npuDecoder?.close(); generator?.close(); npu?.close(); npu = null
                     val keep = AmbienceSettings.keepModels(prefs)
                     generator = when (batch.gen) {
-                        Gen.MUSIC -> AmbienceModel.musicGenerator(context, threads, null, keep)
+                        Gen.MUSIC -> AmbienceModel.musicGenerator(context, threads, null, keep).also {
+                            // «Большой декодер» на NPU: весь 30-секундный фрагмент одним проходом вместо ~10 с на CPU.
+                            it.npuDecoder = AmbienceModel.largeDecoderNpu(context, onCompile = {
+                                progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU: большой декодер (один раз)") })
+                        }
                         Gen.MEDIUM_SFX -> AmbienceModel.mediumSfxGenerator(context, threads, keep)
                         Gen.SMALL -> Sa3Generator(AmbienceModel.root(context), threads, null, keep = keep)
                     }
@@ -260,7 +264,7 @@ object AmbienceBook {
                 }
             }
             progress(ordered.size, ordered.size, "")
-        } finally { generator?.close(); npu?.close() }
+        } finally { generator?.npuDecoder?.close(); generator?.close(); npu?.close() }
     }
 
     /** Чем делается клип: малой моделью, средней (звуки событий по выбору) или моделью музыки. */

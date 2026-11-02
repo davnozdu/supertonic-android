@@ -76,7 +76,7 @@ object Npu {
         // The reason is kept (OnePlus drops app logs after a while): the pref <failed><scope>_reason.
         prefs(ctx).edit().putLong(FAILED + scope, version(ctx)).putString(FAILED + scope + "_reason", reason.take(500)).apply()
     }
-    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).remove(FAILED + TERA_SAMPLER).remove(FAILED + AMBIENCE).remove(FAILED + AMBIENCE_MEDIUM).apply() }
+    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).remove(FAILED + TERA_SAMPLER).remove(FAILED + AMBIENCE).remove(FAILED + AMBIENCE_MEDIUM).remove(FAILED + "_ambience_samel").apply() }
 
     fun options(ctx: Context, performance: String = "high_performance"): Map<String, String> {
         // The DSP loads the HTP skel through FastRPC from the app's extracted native libraries.

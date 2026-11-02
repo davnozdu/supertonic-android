@@ -37,6 +37,33 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
     /** «Короткие звуки на NPU»: клип короче графа считается графом целиком (условие длительности = [seconds]) и
      * обрезается до своих латентов. Иначе короткие клипы идут на CPU. */
     @Volatile var npuShort: Boolean = false
+    /** SAME-L на NPU (ORT QNN, граф на [NpuDecoder.length] латентов): весь клип одним проходом вместо окон на CPU. */
+    @Volatile var npuDecoder: NpuDecoder? = null
+
+    /** Декодер SAME-L для HTP: свой экспорт из эталонного PyTorch-описания Stability (tflite/build/torch_defs) с
+     * полосным вниманием (окно ±17 позиций → 51 ключ на блок, стандартные операции, линейная стоимость) и порогом
+     * −20 на аргументе Exp; веса fp16, вход/выход fp32. Вход [1, 256, length], выход планарный [1, 2, length·4096]. */
+    class NpuDecoder(val session: ai.onnxruntime.OrtSession, val length: Int) : AutoCloseable {
+        fun decode(x: FloatArray, latents: Int): FloatArray {
+            val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+            // Короче графа — последний латент повторяется (как у окон CPU-декодера), лишнее потом отрезается.
+            val padded = FloatArray(LATENT_CH * length)
+            for (c in 0 until LATENT_CH) for (t in 0 until length) padded[c * length + t] = x[c * latents + minOf(t, latents - 1)]
+            val input = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(padded), longArrayOf(1, LATENT_CH.toLong(), length.toLong()))
+            try {
+                val planar = com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
+                    session.run(mapOf(session.inputNames.first() to input)).use { r ->
+                        val o = r[0] as ai.onnxruntime.OnnxTensor
+                        FloatArray(2 * length * SAMPLES_PER_LATENT).also { o.floatBuffer.get(it) }
+                    }
+                }
+                val span = length * SAMPLES_PER_LATENT
+                val frames = latents * SAMPLES_PER_LATENT
+                return FloatArray(frames * 2) { i -> planar[(i and 1) * span + (i shr 1)] }
+            } finally { input.close() }
+        }
+        override fun close() { runCatching { session.close() } }
+    }
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
      * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
@@ -298,6 +325,12 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
     /** SAME-S decode on rungs: one exact window when the length is a rung, else lossless overlapped tiles
      * (TRIM latents per side) on the rung that decodes the fewest latents in total. */
     private fun decode(x: FloatArray, length: Int): FloatArray {
+        npuDecoder?.takeIf { length <= it.length }?.let { return it.decode(x, length) }
+        return decodeCpu(x, length)
+    }
+
+    /** Декодер на CPU (tflite, окна-ступени) — и для сверки с NPU в пробе. */
+    fun decodeCpu(x: FloatArray, length: Int): FloatArray {
         val even = if (length % 2 == 0) length else length + 1        // SAME-S needs an even length
         val lat = Array(LATENT_CH) { c -> FloatArray(even) { t -> x[c * length + minOf(t, length - 1)] } }
         val candidates = DEC_RUNGS.filter { it == even || (it < even && it - 2 * TRIM > 0) }
@@ -355,7 +388,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
         /** How many latents a clip of [seconds] needs: the NPU graph accepts only exactly 323 (30 s). */
         fun latentsFor(seconds: Float): Int = maxOf(1, ceil(seconds * SAMPLE_RATE / SAMPLES_PER_LATENT).toInt())
         const val MAX_SECONDS = 120f
-        private const val SAMPLES_PER_LATENT = 4096
+        const val SAMPLES_PER_LATENT = 4096
         const val COND_TOKENS = 256
         const val COND_DIM = 768
         const val LATENT_CH = 256

@@ -64,6 +64,40 @@ object AmbienceModel {
     val LARGE_DECODER = listOf(
         Asset("dec_l_w8a8.tflite", 515_381_432L, "53dbca41ec9620257834bda4f3008a2cd5072afba564b84906f8ffdfca2647e7"),
     )
+    /** SAME-L для NPU: свой экспорт на 324 латента (30 с) с полосным вниманием, fp16 (2 ноября 2026). На CPU
+     * совпадает с эталоном 53 дБ (w8a8-tflite — 30 дБ). Берётся, когда включены «Большой декодер» и NPU. */
+    val LARGE_DECODER_NPU = listOf(
+        Asset("samel_dec_L324.onnx", 911_680_903L, "9a32c6b98fdeda699635d8959ee3b49869285a1bd6d5959fe2dc7ab4c1e2f36c"),
+    )
+    private const val LARGE_DECODER_NPU_MARKER = "verified-ambience-sa3-v1-samel-npu"
+    private const val SAMEL_CACHE = "sa3-samel-L324-9a32c6b9"
+    const val SAMEL_SCOPE = "_ambience_samel"
+    const val SAMEL_LENGTH = 324
+    fun largeDecoderNpuReady(context: Context) = complete(context, LARGE_DECODER_NPU, LARGE_DECODER_NPU_MARKER)
+    /** Пойдёт ли большой декодер на NPU: включены «Большой декодер» и NPU, файл скачан, сбоя сборки не было. */
+    fun largeDecoderNpuPlanned(context: Context) = largeDecoderWanted(context) && largeDecoderReady(context) &&
+        npuWanted(context, SAMEL_SCOPE) && largeDecoderNpuReady(context)
+
+    /** Сессия SAME-L на NPU (первый раз — компиляция, затем из кэша за секунды) или null — тогда декодирует CPU. */
+    fun largeDecoderNpu(context: Context, allowCompile: Boolean = !AmbienceSettings.npuNight(prefs(context)),
+                        onCompile: () -> Unit = {}, diagnostic: Boolean = false): Sa3Generator.NpuDecoder? {
+        if (!diagnostic && !largeDecoderNpuPlanned(context)) return null
+        if (!largeDecoderNpuReady(context)) return null
+        if (!allowCompile && !Npu.cacheReady(context, SAMEL_CACHE)) return null
+        val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+        return try {
+            if (!Npu.cacheReady(context, SAMEL_CACHE)) onCompile()
+            val session = Npu.session(context, env, File(root(context), LARGE_DECODER_NPU[0].name), emptyMap(), SAMEL_CACHE, family = "sa3-samel")
+            Log.i("Ambience", "SAME-L NPU session ready, PSS ${android.os.Debug.getPss() / 1024} MB")
+            Sa3Generator.NpuDecoder(session, SAMEL_LENGTH)
+        } catch (e: Throwable) {
+            Log.w("Ambience", "SAME-L NPU unavailable: ${e.javaClass.simpleName}: ${e.message}")
+            File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("$SAMEL_CACHE-") }?.forEach { it.delete() }
+            Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", SAMEL_SCOPE)
+            null
+        }
+    }
+
     const val MUSIC_MODEL_KEY = "music_model"
     const val LARGE_DECODER_KEY = "music_decoder_large"
     private const val LARGE_DECODER_MARKER = "verified-ambience-sa3-v1-dec-l"
@@ -185,12 +219,14 @@ object AmbienceModel {
         if (!complete(context, m.assets, m.marker)) fetch(context, m.assets, m.marker, "Музыка · ${m.title.lowercase()}", progress)
         if (largeDecoderWanted(context) && !largeDecoderReady(context)) fetch(context, LARGE_DECODER, LARGE_DECODER_MARKER, "Большой декодер", progress)
         if (npuWanted(context, m.failScope) && musicNpuMissing(context)) fetch(context, m.npuAssets, m.npuMarker, "Музыка · NPU", progress)
+        if (largeDecoderWanted(context) && npuWanted(context, SAMEL_SCOPE) && !largeDecoderNpuReady(context))
+            fetch(context, LARGE_DECODER_NPU, LARGE_DECODER_NPU_MARKER, "Большой декодер · NPU", progress)
     }
 
     /** Deletes the model, the NPU graphs and their compiled HTP cache. */
     suspend fun remove(context: Context) = withContext(Dispatchers.IO) { lock.withLock {
         root(context).deleteRecursively()
-        File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("sa3-dit-") || it.name.startsWith("sa3-music-") || it.name.startsWith("sa3-medium-") }?.forEach { it.delete() }
+        File(context.filesDir, "npu-cache").listFiles()?.filter { it.name.startsWith("sa3-dit-") || it.name.startsWith("sa3-music-") || it.name.startsWith("sa3-medium-") || it.name.startsWith("sa3-samel-") }?.forEach { it.delete() }
     } }
     fun installedBytes(context: Context) = root(context).walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
