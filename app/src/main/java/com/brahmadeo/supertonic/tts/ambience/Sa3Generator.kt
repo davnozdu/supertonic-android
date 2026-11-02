@@ -43,7 +43,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
     /** Декодер SAME-L для HTP: свой экспорт из эталонного PyTorch-описания Stability (tflite/build/torch_defs) с
      * полосным вниманием (окно ±17 позиций → 51 ключ на блок, стандартные операции, линейная стоимость) и порогом
      * −20 на аргументе Exp; веса fp16, вход/выход fp32. Вход [1, 256, length], выход планарный [1, 2, length·4096]. */
-    class NpuDecoder(val session: ai.onnxruntime.OrtSession, val length: Int) : AutoCloseable {
+    class NpuDecoder(val sessions: List<ai.onnxruntime.OrtSession>, val length: Int) : AutoCloseable {
         fun decode(x: FloatArray, latents: Int): FloatArray {
             val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
             // Короче графа — последний латент повторяется (как у окон CPU-декодера), лишнее потом отрезается.
@@ -51,18 +51,25 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
             for (c in 0 until LATENT_CH) for (t in 0 until length) padded[c * length + t] = x[c * latents + minOf(t, latents - 1)]
             val input = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(padded), longArrayOf(1, LATENT_CH.toLong(), length.toLong()))
             try {
+                // Части по 4 блока (каждая компилируется отдельно — цельный граф не помещался в память телефона):
+                // выход части — вход следующей.
                 val planar = com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
-                    session.run(mapOf(session.inputNames.first() to input)).use { r ->
-                        val o = r[0] as ai.onnxruntime.OnnxTensor
-                        FloatArray(2 * length * SAMPLES_PER_LATENT).also { o.floatBuffer.get(it) }
-                    }
+                    var current: ai.onnxruntime.OnnxTensor = input
+                    val results = ArrayList<ai.onnxruntime.OrtSession.Result>()
+                    try {
+                        for (part in sessions) {
+                            val r = part.run(mapOf(part.inputNames.first() to current)); results.add(r)
+                            current = r[0] as ai.onnxruntime.OnnxTensor
+                        }
+                        FloatArray(2 * length * SAMPLES_PER_LATENT).also { current.floatBuffer.get(it) }
+                    } finally { results.forEach { it.close() } }
                 }
                 val span = length * SAMPLES_PER_LATENT
                 val frames = latents * SAMPLES_PER_LATENT
                 return FloatArray(frames * 2) { i -> planar[(i and 1) * span + (i shr 1)] }
             } finally { input.close() }
         }
-        override fun close() { runCatching { session.close() } }
+        override fun close() { sessions.forEach { runCatching { it.close() } } }
     }
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
