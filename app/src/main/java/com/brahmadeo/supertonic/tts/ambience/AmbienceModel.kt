@@ -193,7 +193,14 @@ object AmbienceModel {
             if (music) m.failScope else Npu.AMBIENCE, if (parts.size == 1) listOf(cache) else parts.indices.map { "$cache-p$it" },
             if (music) "музыка, ${m.title.lowercase()}" else "звуки")
     }
-    private fun npuUsable(context: Context, music: Boolean, model: Music? = null) =
+    /** Средняя модель на HTP выдаёт шум вместо звука (проверено 2 ноября 2026: центр спектра 7,6 кГц против 1,2 кГц на
+     * CPU, и у звуков, и у музыки). Пока причина не найдена, средняя считается на CPU: медленнее, но звук верный.
+     * Проба (ambienceNpuCheck) берёт её графы явно, чтобы найти место поломки. */
+    const val MEDIUM_NPU_BROKEN = true
+    private fun mediumBlocked(context: Context, music: Boolean, model: Music?) =
+        MEDIUM_NPU_BROKEN && (model ?: if (music) music(context) else null) == MEDIUM_MUSIC
+    private fun npuUsable(context: Context, music: Boolean, model: Music? = null, diagnostic: Boolean = false) =
+        (diagnostic || !mediumBlocked(context, music, model)) &&
         npuWanted(context, target(context, music, model).scope) &&
             (if (model != null) mediumNpuReady(context) else if (music) musicNpuReady(context) else npuReady(context))
     /** Средняя модель для звуков событий (её же сделана база): скачана вместе со «Средней» моделью музыки. */
@@ -220,8 +227,8 @@ object AmbienceModel {
     fun npuDit(context: Context, music: Boolean = false, allowCompile: Boolean = !AmbienceSettings.npuNight(prefs(context)),
                onCompile: (Int, Int) -> Unit = { _, _ -> }, stop: () -> Boolean = { false },
                /** Явно заданная модель (средняя для звуков событий), иначе выбранная модель музыки. */
-               model: Music? = null): Sa3Generator.NpuDit? {
-        if (!npuUsable(context, music, model)) return null
+               model: Music? = null, diagnostic: Boolean = false): Sa3Generator.NpuDit? {
+        if (!npuUsable(context, music, model, diagnostic)) return null
         val t = target(context, music, model)
         if (!allowCompile && t.names.any { !Npu.cacheReady(context, it) }) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()

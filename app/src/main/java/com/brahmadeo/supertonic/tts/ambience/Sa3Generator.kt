@@ -57,6 +57,40 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
             } finally { scalars.values.forEach { it.close() } }
         }
 
+        /** Диагностика: все выходы всех частей графа для одного шага — на своих сессиях (HTP) или на сессиях, которые
+         * даёт [open] (ORT CPU; каждая закрывается сразу после своей части, чтобы не держать 3 ГБ разом). */
+        fun trace(x: FloatArray, t: Float, hidden: FloatArray, mask: FloatArray, seconds: Float,
+                  open: ((Int) -> ai.onnxruntime.OrtSession)? = null): List<Map<String, FloatArray>> {
+            val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+            fun tensor(data: FloatArray, vararg shape: Long) = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(data), shape)
+            val values = HashMap<String, ai.onnxruntime.OnnxTensor>()
+            values["x"] = tensor(x, 1, LATENT_CH.toLong(), length.toLong())
+            values["t5_hidden"] = tensor(hidden, 1, COND_TOKENS.toLong(), COND_DIM.toLong())
+            values["t5_mask"] = tensor(mask, 1, COND_TOKENS.toLong())
+            values["local_add_cond"] = tensor(FloatArray(257 * length), 1, 257, length.toLong())
+            conditioning(t, seconds).forEach { (k, c) -> values[k] = tensor(c.data, *c.shape) }
+            val out = ArrayList<Map<String, FloatArray>>()
+            try {
+                for (k in sessions.indices) {
+                    val session = open?.invoke(k) ?: sessions[k]
+                    try {
+                        val r = (if (open == null) com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
+                            session.run(session.inputNames.associateWith { values.getValue(it) }) }
+                            else session.run(session.inputNames.associateWith { values.getValue(it) }))
+                        val part = LinkedHashMap<String, FloatArray>()
+                        r.use { res -> res.forEach { (name, v) ->
+                            val o = v as ai.onnxruntime.OnnxTensor
+                            val data = FloatArray(o.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { o.floatBuffer.get(it) }
+                            part[name] = data
+                            values.put(name, tensor(data, *o.info.shape))?.close()
+                        } }
+                        out += part
+                    } finally { if (open != null) session.close() }
+                }
+            } finally { values.values.forEach { it.close() } }
+            return out
+        }
+
         fun velocity(x: FloatArray, t: Float, hidden: FloatArray, mask: FloatArray, seconds: Float): FloatArray {
             val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
             fun tensor(data: FloatArray, vararg shape: Long) = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(data), shape)

@@ -32,7 +32,7 @@ object AmbienceProbe {
             memory("before-npu")
             val wall = android.os.SystemClock.elapsedRealtime(); val cpu = android.os.Process.getElapsedCpuTime()
             // Средняя модель — свои графы (раньше проба грузила граф малой и выдавала его скорость за среднюю).
-            val dit = (if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC) else AmbienceModel.npuDit(context))
+            val dit = (if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC, diagnostic = true) else AmbienceModel.npuDit(context))
                 ?: return null.also { Log.e(TAG, "NPU DiT unavailable") }
             Log.i(TAG, "NPU LOAD wallMs=${android.os.SystemClock.elapsedRealtime() - wall} cpuMs=${android.os.Process.getElapsedCpuTime() - cpu}")
             memory("after-npu-load")
@@ -44,6 +44,24 @@ object AmbienceProbe {
                 dit.velocity(x, 0.7f, hidden, mask, 30f).also { _ -> Log.i(TAG, "NPU FORWARD wallMs=${android.os.SystemClock.elapsedRealtime() - t0} cpuMs=${android.os.Process.getElapsedCpuTime() - c0}") } }.last()
             memory("after-npu-forward")
             System.gc(); Runtime.getRuntime().gc(); memory("after-gc")
+            if (check && medium) {
+                // Средняя модель по частям: каждый выход каждой части на HTP против того же графа на ORT CPU.
+                val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+                val files = AmbienceModel.MEDIUM_MUSIC.npuParts
+                val htp = dit.trace(x, 0.7f, hidden, mask, 30f)
+                val cpu = dit.trace(x, 0.7f, hidden, mask, 30f) { k ->
+                    val o = ai.onnxruntime.OrtSession.SessionOptions().apply { setIntraOpNumThreads(threads) }
+                    env.createSession(File(AmbienceModel.root(context), files[k]).path, o)
+                }
+                for (k in htp.indices) for ((name, a) in htp[k]) {
+                    val b = cpu[k][name] ?: continue
+                    var signal = 0.0; var noise = 0.0; var maxAbs = 0f; var nan = 0
+                    for (i in b.indices) { if (a[i].isNaN()) { nan++; continue }; signal += b[i].toDouble() * b[i]; val d = b[i] - a[i]; noise += d.toDouble() * d; maxAbs = maxOf(maxAbs, kotlin.math.abs(b[i])) }
+                    Log.i(TAG, "NPU PART $k $name snrDb=${"%.1f".format(10 * kotlin.math.log10(signal / maxOf(noise, 1e-30)))} cpuMax=$maxAbs nan=$nan")
+                    File(context.cacheDir, "ambience").apply { mkdirs() }.let { d -> File(d, "npu-parts.txt").appendText(
+                        "$k $name snrDb=${"%.1f".format(10 * kotlin.math.log10(signal / maxOf(noise, 1e-30)))} cpuMax=$maxAbs nan=$nan\n") }
+                }
+            }
             if (check && !medium) {
                 val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
                 ai.onnxruntime.OrtSession.SessionOptions().use { o ->
