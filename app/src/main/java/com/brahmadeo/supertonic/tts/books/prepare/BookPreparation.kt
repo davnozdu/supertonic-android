@@ -32,7 +32,30 @@ object BookPreparation {
     data class State(val running: Boolean = false, val stage: String = "", val done: Int = 0, val total: Int = 0,
                      val message: String = "", val bookId: Long? = null, val startedAt: Long = 0,
                      /** When this stage (the current LLM request) began: the screen shows how long it is waiting. */
-                     val stageAt: Long = System.currentTimeMillis())
+                     val stageAt: Long = System.currentTimeMillis(),
+                     /** Параллельная строка: звуки книги, которые считаются, пока идут запросы LLM. */
+                     val sounds: String = soundLine)
+    @Volatile private var soundLine = ""
+
+    /** Звуки книги в своём потоке, пока основной поток задаёт вопросы LLM. [finish] ждёт и возвращает итог для
+     * сообщения, [abort] останавливает (готовые клипы сохраняются: «Создать фоновые звуки» продолжит с места). */
+    private class SoundsInParallel(val ctx: Context, val pkg: BookPackage, val cancel: LlmProviders.CloudCancellation, val startedAt: Long) {
+        @Volatile private var stopped = false
+        @Volatile private var note = ""
+        @Volatile private var failure: Throwable? = null
+        private val thread = Thread({
+            try { note = generateSounds(ctx, pkg, cancel, startedAt) { runCatching { cancel.check() }.isFailure || stopped } }
+            catch (t: Throwable) { failure = t }
+            finally { soundLine = "" }
+        }, "book-sounds")
+        fun start() = thread.start()
+        fun finish(): String {
+            thread.join()
+            failure?.let { if (it is CancellationException) throw it; report(ctx, it) }
+            return note
+        }
+        fun abort() { stopped = true; runCatching { thread.join(120_000) } }
+    }
     class Source internal constructor(internal val config: LlmConfig, internal val gemini: Boolean,
                                        internal val provider: String = if (gemini) "gemini" else "ollama",
                                        /** Вся цепочка облаков (основной → резерв): отказ одного не срывает подготовку. */
@@ -106,6 +129,8 @@ object BookPreparation {
         mutable.value = State(running = true, stage = "Копирование книги", startedAt = startedAt)
         job = scope.launch(start = CoroutineStart.LAZY) {
             var temp: File? = null
+            var paused: BookQueue.Entry? = null
+            var sounds: SoundsInParallel? = null
             try {
                 run {
                     // A previous process may have died before its finally block.
@@ -126,7 +151,9 @@ object BookPreparation {
                     // Cache identity: the book, provider/model and thinking. Every request is cached by its own prompt.
                     // No credentials in it.
                     val identity = "book-prep-v2\n${plan.fileSha}\n${source.gemini}\n${source.config.ollamaEndpoint}\n${source.label}\n${source.thinking}"
-                    val folder = File(ctx.cacheDir, "book-prep/${BookPreparationPlan.hash(identity.toByteArray())}").apply { mkdirs() }
+                    val folder = File(cacheRoot(ctx), BookPreparationPlan.hash(identity.toByteArray())).apply { mkdirs() }
+                    // Срок кэша считается от последнего использования: книга, которую готовят, не устаревает.
+                    folder.setLastModified(System.currentTimeMillis())
                     if (repliesFor >= 0) {
                         markExisting(ctx, plan, repliesFor, folder, source, cancel, startedAt)
                         return@run
@@ -140,6 +167,22 @@ object BookPreparation {
                     cancel.check()
                     mutable.value = mutable.value.copy(stage = "Сохранение")
                     var json = plan.export(casts)
+                    // Сцены — сразу после персонажей: звуки по ним считаются на телефоне (NPU/CPU) параллельно с
+                    // остальными этапами LLM (реплики, готовый текст, «Умная книга»), которые ждут сеть, а не процессор.
+                    // Запросы к LLM по-прежнему строго по одному.
+                    var sceneResult: SceneMarking.Result? = null
+                    if (scenes) {
+                        mutable.value = mutable.value.copy(stage = "Локации: разметка сцен")
+                        sceneResult = markScenes(ctx, plan, folder, source, cancel, startedAt)
+                        val idx = sceneResult.index
+                        if (idx.locations.isNotEmpty() || idx.moods.moods.isNotEmpty() || idx.events.events.isNotEmpty())
+                            json = JSONObject(json).put("ambience", idx.toJson()).toString()
+                    }
+                    if (sceneResult != null && (sceneResult.index.locations.isNotEmpty() || sceneResult.index.moods.moods.isNotEmpty())) {
+                        val early = BookPackage.parse(json)
+                        com.brahmadeo.supertonic.tts.ambience.AmbienceBook.sync(ctx, early.contentSha256, early.scenes)
+                        sounds = SoundsInParallel(ctx, early, cancel, startedAt).also { it.start() }
+                    }
                     var marking: ReplyMarking.Result? = null
                     if (replies) {
                         marking = markReplies(plan, BookPackage.parse(json), folder, source, cancel, startedAt)
@@ -162,26 +205,15 @@ object BookPreparation {
                         smartSections = text.summaries.size
                         json = JSONObject(json).put("smart", text.toJson()).toString()
                     }
-                    var sceneResult: SceneMarking.Result? = null
-                    if (scenes) {
-                        mutable.value = mutable.value.copy(stage = "Локации: разметка сцен")
-                        sceneResult = markScenes(ctx, plan, folder, source, cancel, startedAt)
-                        // Nothing found in the whole book (no place, mood or event): nothing to store.
-                        val idx = sceneResult.index
-                        if (idx.locations.isNotEmpty() || idx.moods.moods.isNotEmpty() || idx.events.events.isNotEmpty())
-                            json = JSONObject(json).put("ambience", idx.toJson()).toString()
-                    }
                     require(json.toByteArray().size <= BookPackage.MAX_BYTES) { "Файл подготовленной книги слишком велик" }
                     val pkg = BookPackage.parse(json)
                     val characters = pkg.groups.indices.sumOf { pkg.groupCast(it).characters.size }
                     // The original EPUB/FB2 goes into the book's container («Извлечь файл книги»).
                     runCatching { epub.inputStream().use { BookFiles.saveSource(ctx, pkg.contentSha256, sourceName(ctx, uri, epub), it, EpubBook.MAX_BYTES) } }
                         .onFailure { report(ctx, it) }
-                    var soundsNote = ""
-                    // Sounds of an earlier preparation that no longer fit the new locations go at once.
-                    if (sceneResult != null) com.brahmadeo.supertonic.tts.ambience.AmbienceBook.sync(ctx, pkg.contentSha256, pkg.scenes)
-                    if (sceneResult != null && (sceneResult.index.locations.isNotEmpty() || sceneResult.index.moods.moods.isNotEmpty()))
-                        soundsNote = generateSounds(ctx, pkg, cancel, startedAt)
+                    // Звуки считались параллельно с LLM: дожидаемся их перед сохранением книги.
+                    val soundsNote = sounds?.let { mutable.value = mutable.value.copy(stage = "Фоновые звуки: завершение"); it.finish() } ?: ""
+                    sounds = null
                     // Cancellation and committing the completed package are one critical section.
                     // Once committed, the UI reports success even if Stop was tapped at that instant.
                     synchronized(this@BookPreparation) {
@@ -199,6 +231,20 @@ object BookPreparation {
                             "Откройте исходную книгу в читалке — MyTTS узнает её по тексту.", bookId = id)
                     }
                 }
+            } catch (p: CloudPause) {
+                if (runCatching { cancel.check() }.isFailure) {
+                    mutable.value = State(message = "Подготовка остановлена. Уже полученные ответы сохранены; можно выбрать книгу снова.")
+                } else {
+                    // Книга не падает: копия файла и параметры уходят в очередь как «на паузе», ответы LLM уже в кэше.
+                    // Разметка реплик уже готовой книги не ставится в очередь: её просто запускают снова.
+                    paused = if (repliesFor >= 0) null else runCatching { BookQueue.pause(ctx, uri, temp, replies, smart, scenes, text, thinking, p.reason) }
+                        .onFailure { report(ctx, it) }.getOrNull()
+                    mutable.value = State(message = if (paused != null)
+                        "Пауза: облако недоступно (${p.reason}). Готовые ответы сохранены; подготовка продолжится сама " +
+                            "в ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(paused!!.resumeAt))} " +
+                            "или кнопкой «Продолжить сейчас»."
+                        else "Облако недоступно (${p.reason}). Готовые ответы сохранены; выберите книгу снова позже.")
+                }
             } catch (_: CancellationException) {
                 mutable.value = State(message = "Подготовка остановлена. Уже полученные ответы сохранены; можно выбрать книгу снова.")
             } catch (t: Exception) {
@@ -206,13 +252,16 @@ object BookPreparation {
                 if (!stopped) report(ctx, t)
                 mutable.value = State(message = if (stopped) "Подготовка остановлена. Можно выбрать книгу снова." else safeError(t) + " [${t.javaClass.simpleName}]")
             } finally {
+                // Пауза, остановка или ошибка посреди LLM-этапов: звуки останавливаются, готовые клипы остаются.
+                sounds?.abort()
+                soundLine = ""
                 temp?.delete()
                 runCatching { ctx.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 synchronized(this@BookPreparation) {
                     ctx.stopService(Intent(ctx, BookPreparationService::class.java))
                     job = null; cancellation = null
                 }
-                BookQueue.finished(ctx, uri, mutable.value.bookId != null)
+                BookQueue.finished(ctx, uri, mutable.value.bookId != null, paused = paused != null)
             }
         }.also { it.start() }
     }
@@ -230,7 +279,8 @@ object BookPreparation {
             { prompt, tokens, multi ->
                 val file = File(folder, "smart.${BookPreparationPlan.hash(prompt.toByteArray()).take(16)}.txt")
                 if (file.isFile && file.length() in 1..512 * 1024) file.readText()
-                else com.brahmadeo.supertonic.tts.books.smart.SmartRecap.request(plain, prompt, tokens, cancel, multi).also { answer ->
+                else try { com.brahmadeo.supertonic.tts.books.smart.SmartRecap.request(plain, prompt, tokens, cancel, multi) }
+                    catch (e: CancellationException) { throw e } catch (e: Exception) { throw pauseOr(e) }.also { answer ->
                     val tmp = File(folder, "${file.name}.tmp")
                     try { tmp.writeText(answer); tmp.renameTo(file) } finally { tmp.delete() }
                 }
@@ -240,11 +290,59 @@ object BookPreparation {
         return text.copy(summaries = summaries)
     }
 
-    /** Deleting a book forgets its LLM answers too: preparing the same file again asks anew. Only when nothing is
-     * being prepared (a running preparation keeps its answers to continue). */
-    @Synchronized fun forgetCache(ctx: Context) {
-        if (!mutable.value.running) File(ctx.cacheDir, "book-prep").deleteRecursively()
+    /** Кэш ответов LLM подготовки: по папке на книгу+модель, каждый ответ — по своему промпту. Живёт [CACHE_DAYS] дней
+     * от последнего использования и переживает удаление книги: случайно удалённую книгу можно подготовить заново без
+     * LLM (заново делаются только звуки). В files, а не в cache — системная очистка кэша его не трогает. */
+    const val CACHE_DAYS = 14
+    fun cacheRoot(ctx: Context): File {
+        val root = File(ctx.noBackupFilesDir, "book-prep-cache")
+        // Перенос из прежнего места (cache/book-prep), один раз.
+        val old = File(ctx.cacheDir, "book-prep")
+        if (old.isDirectory && !root.exists()) runCatching { root.parentFile?.mkdirs(); old.renameTo(root) }
+        return root.apply { mkdirs() }
     }
+
+    /** Убирает папки кэша, не использованные [CACHE_DAYS] дней (не во время подготовки). */
+    @Synchronized fun expireCache(ctx: Context) {
+        if (mutable.value.running) return
+        val limit = System.currentTimeMillis() - CACHE_DAYS * 24L * 60 * 60 * 1000
+        cacheRoot(ctx).listFiles()?.filter { it.isDirectory && it.lastModified() < limit }?.forEach { it.deleteRecursively() }
+    }
+
+    /** Размер кэша в байтах (для экрана книг). */
+    fun cacheBytes(ctx: Context): Long = cacheRoot(ctx).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    /** «Очистить кэш подготовки»: например, после смены промптов. Не во время подготовки. */
+    @Synchronized fun clearCache(ctx: Context): Boolean {
+        if (mutable.value.running) return false
+        cacheRoot(ctx).deleteRecursively()
+        return true
+    }
+
+    /** Раньше удаление книги стирало кэш всех книг. Теперь кэш живёт [CACHE_DAYS] дней; здесь только чистим устаревшее. */
+    @Synchronized fun forgetCache(ctx: Context) = expireCache(ctx)
+
+    /** Облако недоступно (лимит, кончились токены, сеть, сбой сервера): подготовка не падает, а встаёт на паузу.
+     * Наследует CancellationException, поэтому проходит сквозь все места, где разметка глотает ошибки пакетов. */
+    class CloudPause(val reason: String, cause: Throwable?) : java.util.concurrent.CancellationException(reason) {
+        init { if (cause != null) initCause(cause) }
+    }
+
+    /** Ошибка облака, которая пройдёт сама: лимит/токены/баланс, сеть, таймаут, 5xx. Неверный ключ (401/403) — нет. */
+    fun outage(t: Throwable?): Boolean {
+        if (t == null) return false
+        if (t is CloudPause) return true
+        // Ответ не уместился в лимит токенов ответа — это не отказ облака, повтор дал бы тот же результат.
+        if (t is LlmProviders.CloudOutputLimitException) return false
+        if (t is java.io.IOException) return true
+        val m = t.message.orEmpty()
+        // Сообщения облаков: «API HTTP 429: лимит запросов», «API HTTP 402: …закончились средства», 5xx; дедлайн запроса.
+        return Regex("^API HTTP (402|408|425|429|5\\d\\d)").containsMatchIn(m) || m.startsWith("LLM превышен лимит запроса")
+    }
+
+    /** [e] как пауза, если это отказ облака, иначе как есть. */
+    fun pauseOr(e: Exception): Exception = if (e !is CloudPause && outage(e))
+        CloudPause(e.message?.take(160) ?: e.javaClass.simpleName, e) else e
 
     @Synchronized fun stop() {
         if (!mutable.value.running) return
@@ -310,16 +408,19 @@ object BookPreparation {
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */
-    private fun generateSounds(ctx: Context, pkg: BookPackage, cancel: LlmProviders.CloudCancellation, startedAt: Long): String {
+    private fun generateSounds(ctx: Context, pkg: BookPackage, cancel: LlmProviders.CloudCancellation, startedAt: Long,
+                               stop: () -> Boolean = { runCatching { cancel.check() }.isFailure }): String {
         if (!com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx)) return "Звуки не созданы: скачайте генератор в разделе «Фоновая музыка» и создайте их в карточке книги. "
         return try {
             if (com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(ctx.getSharedPreferences("SupertonicPrefs", 0)) &&
                 !com.brahmadeo.supertonic.tts.ambience.AmbienceModel.musicReady(ctx)) runBlocking {
-                com.brahmadeo.supertonic.tts.ambience.AmbienceModel.download(ctx) { text, _ -> mutable.value = State(true, text, startedAt = startedAt) }
+                com.brahmadeo.supertonic.tts.ambience.AmbienceModel.download(ctx) { text, _ -> soundLine = text; mutable.value = mutable.value.copy(sounds = text) }
             }
             com.brahmadeo.supertonic.tts.ambience.AmbienceBook.generate(ctx, pkg.contentSha256, pkg.scenes,
-                progress = { done, all, place -> mutable.value = State(true, "Фоновые звуки${if (place.isNotEmpty()) ": $place" else ""}", done, all, startedAt = startedAt) },
-                cancelled = { runCatching { cancel.check() }.isFailure })
+                progress = { done, all, place ->
+                    soundLine = "Фоновые звуки $done из $all${if (place.isNotEmpty()) ": $place" else ""}"
+                    mutable.value = mutable.value.copy(sounds = soundLine) },
+                cancelled = stop)
             com.brahmadeo.supertonic.tts.ambience.NpuNightJob.schedule(ctx)
             "Фоновые звуки созданы. "
         } catch (e: InterruptedException) { throw CancellationException("stopped")
@@ -351,6 +452,7 @@ object BookPreparation {
         // Та же цепочка, что при чтении: основной сервер, затем резерв. Отказ одного облака (ключ, 401, лимит)
         // не срывает подготовку — запрос уходит на следующий. Отказавший сервер запоминается до конца подготовки.
         var first: Exception? = null
+        var outageSeen: Exception? = null
         for (provider in source.providers) {
             if (provider in deadProviders) continue
             var delay = 4000L
@@ -378,6 +480,7 @@ object BookPreparation {
                     val denied = message.startsWith("API HTTP 401") || message.startsWith("API HTTP 403") ||
                         message.startsWith("API HTTP 404") || message.contains("Введите ключ") || message.contains("Выберите модель")
                     if (denied) { deadProviders += provider; if (first == null) first = e; break }
+                    if (outage(e)) outageSeen = e
                     val temporary = e is java.io.IOException || message.startsWith("LLM превышен лимит запроса") ||
                         message.startsWith("API HTTP 429") || Regex("^API HTTP 5\\d\\d").containsMatchIn(message)
                     if (!temporary || attempt == 3) { if (first == null) first = e; break }
@@ -387,6 +490,8 @@ object BookPreparation {
                 }
             }
         }
+        // Хоть одно облако отказало временно (лимит, сеть) — это пауза, а не ошибка книги.
+        outageSeen?.let { throw pauseOr(it) }
         throw first ?: IllegalStateException("LLM не вернула ответ")
     }
 
@@ -429,14 +534,14 @@ object BookPreparation {
                 cancel.check()
                 val message = e.message.orEmpty()
                 val temporary = e is java.io.IOException || message.startsWith("LLM превышен лимит запроса") || message.startsWith("API HTTP 429") || Regex("^API HTTP 5\\d\\d").containsMatchIn(message)
-                if (!temporary || attempt == 3) throw e
+                if (!temporary || attempt == 3) throw pauseOr(e)
                 last = e
                 val until = System.currentTimeMillis() + delay
                 while (System.currentTimeMillis() < until) { cancel.check(); Thread.sleep(500) }
                 delay *= 2
             }
         }
-        throw last ?: IllegalStateException("LLM не вернула ответ; повторите подготовку")
+        throw last?.let { pauseOr(it) } ?: IllegalStateException("LLM не вернула ответ; повторите подготовку")
     }
     @Volatile private var effortHint: String? = null
     private const val DEFAULT_EFFORT = "medium"

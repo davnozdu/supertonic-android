@@ -70,7 +70,14 @@ class BooksActivity : ComponentActivity() {
                 var textOn by remember { mutableStateOf(prepPrefs.getBoolean("text", false)) }
                 var nightQueue by remember { mutableStateOf(com.brahmadeo.supertonic.tts.books.prepare.BookQueue.nightOn(this@BooksActivity)) }
                 val queue by com.brahmadeo.supertonic.tts.books.prepare.BookQueue.entries.collectAsState()
-                LaunchedEffect(Unit) { withContext(Dispatchers.IO) { com.brahmadeo.supertonic.tts.books.prepare.BookQueue.refresh(this@BooksActivity) } }
+                var prepCacheBytes by remember { mutableStateOf(0L) }
+                LaunchedEffect(Unit) { withContext(Dispatchers.IO) {
+                    com.brahmadeo.supertonic.tts.books.prepare.BookQueue.refresh(this@BooksActivity)
+                    // Кэш подготовки живёт 14 дней; книги на паузе продолжатся по таймеру (и после перезагрузки).
+                    com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.expireCache(this@BooksActivity)
+                    com.brahmadeo.supertonic.tts.books.prepare.BookResumeJob.schedule(this@BooksActivity)
+                    prepCacheBytes = com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.cacheBytes(this@BooksActivity)
+                } }
                 val queuePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
                     if (uris.isNotEmpty()) scope.launch {
                         var added = 0; var failed = 0
@@ -238,8 +245,14 @@ class BooksActivity : ComponentActivity() {
                                 if (queue.isNotEmpty()) {
                                     Text("В очереди: ${queue.size}", style = MaterialTheme.typography.titleSmall)
                                     for (e in queue) Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        Text(e.name + (if (e.failures > 0) " · не удалось ${e.failures} раз" else ""), Modifier.weight(1f),
+                                        Text(e.name + (if (e.paused) " · пауза: ${e.pausedReason}; продолжу в " +
+                                                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(e.resumeAt))
+                                            else "") + (if (e.failures > 0) " · не удалось ${e.failures} раз" else ""), Modifier.weight(1f),
                                             style = MaterialTheme.typography.bodySmall)
+                                        if (e.paused && !preparation.running) TextButton(onClick = {
+                                            if (!com.brahmadeo.supertonic.tts.books.prepare.BookQueue.resumePaused(this@BooksActivity, now = true))
+                                                message = "Не удалось продолжить: проверьте облачную LLM в настройках." else allowBackground()
+                                        }) { Text("Продолжить сейчас") }
                                         TextButton(onClick = { scope.launch { withContext(Dispatchers.IO) {
                                             com.brahmadeo.supertonic.tts.books.prepare.BookQueue.remove(this@BooksActivity, e.id) } } }) { Text("Убрать") }
                                     }
@@ -248,10 +261,20 @@ class BooksActivity : ComponentActivity() {
                                             message = "Не удалось начать: проверьте облачную LLM в настройках." else allowBackground()
                                     }) { Text("Подготовить очередь сейчас") }
                                 }
+                                Text("Кэш подготовки: ${"%.1f".format(prepCacheBytes / 1048576.0)} МБ. Ответы LLM хранятся " +
+                                    "${com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.CACHE_DAYS} дней и после удаления книги: " +
+                                    "подготовить её заново можно без LLM, заново делаются только звуки. Очистите кэш, если поменяли промпты.",
+                                    style = MaterialTheme.typography.bodySmall)
+                                if (!preparation.running && prepCacheBytes > 0) OutlinedButton(onClick = { scope.launch {
+                                    val ok = withContext(Dispatchers.IO) { com.brahmadeo.supertonic.tts.books.prepare.BookPreparation.clearCache(this@BooksActivity) }
+                                    if (ok) prepCacheBytes = 0L
+                                    message = if (ok) "Кэш подготовки очищен" else "Сейчас идёт подготовка; очистите после неё"
+                                } }) { Text("Очистить кэш подготовки") }
                                 if (preparation.running) {
                                     // Read with elapsedSeconds, so it is recomposed every second.
                                     val waiting = elapsedSeconds.let { ((System.currentTimeMillis() - preparation.stageAt) / 1000).coerceAtLeast(0) }
                                     Text(preparation.stage + if (waiting >= 5) " · ${waiting / 60}:${"%02d".format(waiting % 60)}" else "")
+                                    if (preparation.sounds.isNotEmpty()) Text("Параллельно: " + preparation.sounds, style = MaterialTheme.typography.bodySmall)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                         Text("Прошло: ${elapsedSeconds / 60} мин ${elapsedSeconds % 60} с", style = MaterialTheme.typography.bodySmall)

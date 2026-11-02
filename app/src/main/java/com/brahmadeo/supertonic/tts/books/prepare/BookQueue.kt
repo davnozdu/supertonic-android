@@ -20,7 +20,11 @@ import java.util.Calendar
  * while the phone charges and nobody uses it ([BookNightJob]); a book once started is finished even after 06:00. */
 object BookQueue {
     data class Entry(val id: String, val name: String, val file: File, val replies: Boolean, val smart: Boolean, val scenes: Boolean,
-                     val thinking: Boolean, val failures: Int, val text: Boolean = false)
+                     val thinking: Boolean, val failures: Int, val text: Boolean = false,
+                     /** На паузе: облако отказало (лимит, токены, сеть); причина и когда продолжить сама. */
+                     val pausedReason: String? = null, val resumeAt: Long = 0L, val pauses: Int = 0) {
+        val paused: Boolean get() = pausedReason != null
+    }
     const val NIGHT_KEY = "book_queue_night"
     const val NIGHT_FROM = 0
     const val NIGHT_TO = 6
@@ -38,7 +42,8 @@ object BookQueue {
             val o = JSONObject(File(d, "entry.json").readText())
             val file = File(d, o.getString("name")).takeIf { it.isFile } ?: return@runCatching null
             Entry(d.name, o.getString("name"), file, o.optBoolean("replies", true), o.optBoolean("smart"), o.optBoolean("scenes"),
-                o.optBoolean("thinking", true), o.optInt("failures"), o.optBoolean("text"))
+                o.optBoolean("thinking", true), o.optInt("failures"), o.optBoolean("text"),
+                o.optString("paused").takeIf { it.isNotEmpty() }, o.optLong("resume_at"), o.optInt("pauses"))
         }.getOrNull() }?.sortedBy { it.id }.orEmpty()
         mutable.value = list
         return list
@@ -64,6 +69,45 @@ object BookQueue {
         return requireNotNull(mutable.value.firstOrNull { it.id == d.name })
     }
 
+    /** Пауза подготовки из-за облака: книга [uri] (из очереди — та же запись; иначе копия [copy] или самого файла)
+     * встаёт в очередь «на паузе» и продолжится сама через 15 / 30 / 60 мин, потом раз в 2 часа ([BookResumeJob]). */
+    fun pause(context: Context, uri: Uri, copy: File?, replies: Boolean, smart: Boolean, scenes: Boolean, text: Boolean,
+              thinking: Boolean, reason: String): Entry {
+        val queued = if (uri.scheme == "file") uri.path?.let { File(it) }?.parentFile?.takeIf { it.parentFile == dir(context) } else null
+        val d = queued ?: File(dir(context), System.currentTimeMillis().toString()).apply { mkdirs() }
+        val entry = File(d, "entry.json")
+        val o = if (queued != null) JSONObject(entry.readText()) else {
+            val name = runCatching { context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null } }.getOrNull()?.trim()
+                ?.takeIf { com.brahmadeo.supertonic.tts.books.BookFiles.validSourceName(it) } ?: "book.epub"
+            try {
+                val target = File(d, name)
+                if (copy != null && copy.isFile) copy.copyTo(target, overwrite = true)
+                else context.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } }
+                    ?: error("Не удалось открыть книгу")
+            } catch (t: Throwable) { d.deleteRecursively(); throw t }
+            JSONObject().put("name", name).put("replies", replies).put("smart", smart).put("scenes", scenes)
+                .put("thinking", thinking).put("text", text)
+        }
+        val pauses = o.optInt("pauses") + 1
+        val delay = PAUSE_STEPS_MIN.getOrElse(pauses - 1) { PAUSE_STEPS_MIN.last() } * 60_000L
+        o.put("paused", reason.ifBlank { "облако недоступно" }).put("resume_at", System.currentTimeMillis() + delay).put("pauses", pauses)
+        entry.writeText(o.toString())
+        refresh(context)
+        BookResumeJob.schedule(context)
+        return requireNotNull(mutable.value.firstOrNull { it.id == d.name })
+    }
+    private val PAUSE_STEPS_MIN = listOf(15L, 30L, 60L, 120L)
+
+    /** Книга на паузе, чья очередь продолжить настала (или любая — [now]): запускает её. */
+    fun resumePaused(context: Context, now: Boolean = false): Boolean {
+        if (BookPreparation.state.value.running || com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.value.running) return false
+        val next = refresh(context).filter { it.paused && (now || it.resumeAt <= System.currentTimeMillis()) }.minByOrNull { it.resumeAt } ?: return false
+        val source = runCatching { BookPreparation.source(context).withThinking(next.thinking) }.getOrNull() ?: return false
+        return runCatching { BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies, smart = next.smart,
+            scenes = next.scenes, text = next.text) }.getOrDefault(false).also { if (it) running = next.id }
+    }
+
     fun remove(context: Context, id: String) { File(dir(context), id).deleteRecursively(); refresh(context); BookNightJob.schedule(context) }
 
     fun inNight(now: Calendar = Calendar.getInstance()) = now.get(Calendar.HOUR_OF_DAY) in NIGHT_FROM until NIGHT_TO
@@ -73,7 +117,8 @@ object BookQueue {
         if (!now && (!inNight() || !com.brahmadeo.supertonic.tts.ambience.NpuNightJob.charging(context))) return false
         // Never beside the generator's own work (an NPU compile holds the chip and several GB).
         if (com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.value.running) return false
-        val next = refresh(context).firstOrNull { it.failures < MAX_FAILURES } ?: return false
+        // Книги на паузе ждут своего времени (BookResumeJob); «Подготовить сейчас» берёт и их.
+        val next = refresh(context).firstOrNull { it.failures < MAX_FAILURES && (now || !it.paused) } ?: return false
         val source = runCatching { BookPreparation.source(context).withThinking(next.thinking) }.getOrNull() ?: return false
         return runCatching { BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies, smart = next.smart,
             scenes = next.scenes, text = next.text) }
@@ -93,13 +138,17 @@ object BookQueue {
 
     /** From BookPreparation when a run ends: a queued book that was prepared leaves the queue, a failed one counts the
      * failure (twice — it stays, skipped, for the user to see); then the next one, while the night lasts. */
-    internal fun finished(context: Context, uri: Uri, prepared: Boolean) {
+    internal fun finished(context: Context, uri: Uri, prepared: Boolean, paused: Boolean = false) {
+        // Пауза облака — не неудача книги: счётчик ошибок не растёт, продолжение по таймеру.
+        if (paused) { if (running != null && uri.path?.contains("/book-queue/$running/") == true) running = null; chain = false; return }
         val id = running ?: return
         if (uri.scheme != "file" || uri.path?.contains("/book-queue/$id/") != true) return
         running = null
         val d = File(dir(context), id)
         if (prepared) d.deleteRecursively() else runCatching {
-            val f = File(d, "entry.json"); val o = JSONObject(f.readText()); f.writeText(o.put("failures", o.optInt("failures") + 1).toString())
+            // Ошибка самой книги (не облака): пауза снимается, книга остаётся с отметкой неудачи.
+            val f = File(d, "entry.json"); val o = JSONObject(f.readText()); o.remove("paused")
+            f.writeText(o.put("failures", o.optInt("failures") + 1).toString())
         }
         refresh(context)
         Handler(Looper.getMainLooper()).postDelayed({
@@ -139,6 +188,48 @@ class BookNightJob : JobService() {
             jobs.schedule(JobInfo.Builder(ID, ComponentName(context, BookNightJob::class.java))
                 .setMinimumLatency(delay.coerceAtLeast(0)).setRequiresCharging(true).setRequiresDeviceIdle(true)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).build())
+        }
+    }
+}
+
+/** Продолжение подготовки после паузы облака: когда настало время ближайшей книги «на паузе» и есть сеть. Без условий
+ * зарядки и ночи — это не ночная очередь, а прерванная работа. */
+class BookResumeJob : JobService() {
+    override fun onStartJob(params: JobParameters?): Boolean {
+        val due = BookQueue.refresh(this).any { it.paused && it.resumeAt <= System.currentTimeMillis() }
+        val started = due && BookQueue.resumePaused(this)
+        jobFinished(params, false)
+        if (!started) {
+            // Android мог не разрешить фоновый запуск (экономия заряда): напоминаем уведомлением и пробуем позже.
+            if (due && !BookPreparation.state.value.running) remind(this)
+            schedule(this, minDelayMs = 15 * 60_000L)
+        }
+        return false
+    }
+
+    private fun remind(context: Context) {
+        val manager = context.getSystemService(android.app.NotificationManager::class.java) ?: return
+        manager.createNotificationChannel(android.app.NotificationChannel("book_resume", "Подготовка книг",
+            android.app.NotificationManager.IMPORTANCE_LOW))
+        val open = android.app.PendingIntent.getActivity(context, 0,
+            android.content.Intent(context, com.brahmadeo.supertonic.tts.BooksActivity::class.java),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+        runCatching { manager.notify(4213, androidx.core.app.NotificationCompat.Builder(context, "book_resume")
+            .setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("MyTTS: подготовка книги на паузе")
+            .setContentText("Облако снова может быть доступно — нажмите, чтобы продолжить").setContentIntent(open)
+            .setAutoCancel(true).build()) }
+    }
+    override fun onStopJob(params: JobParameters?) = true
+
+    companion object {
+        private const val ID = 4212
+        fun schedule(context: Context, minDelayMs: Long = 60_000L) {
+            val jobs = context.getSystemService(JobScheduler::class.java) ?: return
+            jobs.cancel(ID)
+            val next = BookQueue.refresh(context).filter { it.paused }.minOfOrNull { it.resumeAt } ?: return
+            jobs.schedule(JobInfo.Builder(ID, ComponentName(context, BookResumeJob::class.java))
+                .setMinimumLatency((next - System.currentTimeMillis()).coerceAtLeast(minDelayMs))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(false).build())
         }
     }
 }

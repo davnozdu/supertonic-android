@@ -42,6 +42,8 @@ object PreparedMarking {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Облако недоступно (лимит, сеть): не пропускаем абзацы, а ставим подготовку на паузу.
+                if (BookPreparation.outage(e)) throw BookPreparation.pauseOr(e)
                 failed += batch.size
                 emptyList()
             }

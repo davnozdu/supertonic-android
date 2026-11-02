@@ -56,6 +56,7 @@
         <service android:name=".utils.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".books.prepare.BookPreparationService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <service android:name=".books.prepare.BookNightJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".books.prepare.BookResumeJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".ambience.NpuNightJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".ambience.AmbienceGenerationService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <service android:name=".ambience.SoundGenService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
