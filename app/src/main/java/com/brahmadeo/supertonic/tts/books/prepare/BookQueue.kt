@@ -70,7 +70,7 @@ object BookQueue {
     }
 
     /** Пауза подготовки из-за облака: книга [uri] (из очереди — та же запись; иначе копия [copy] или самого файла)
-     * встаёт в очередь «на паузе» и продолжится сама через 15 / 30 / 60 мин, потом раз в 2 часа ([BookResumeJob]). */
+     * встаёт в очередь «на паузе» и продолжится сама через 1 / 5 / 15 / 30 мин, потом раз в час ([BookResumeJob]). */
     fun pause(context: Context, uri: Uri, copy: File?, replies: Boolean, smart: Boolean, scenes: Boolean, text: Boolean,
               thinking: Boolean, reason: String): Entry {
         val queued = if (uri.scheme == "file") uri.path?.let { File(it) }?.parentFile?.takeIf { it.parentFile == dir(context) } else null
@@ -97,7 +97,8 @@ object BookQueue {
         BookResumeJob.schedule(context)
         return requireNotNull(mutable.value.firstOrNull { it.id == d.name })
     }
-    private val PAUSE_STEPS_MIN = listOf(15L, 30L, 60L, 120L)
+    // Короткий сбой сети проходит быстро: первая попытка через минуту, дальше реже (лимит/кончились токены).
+    private val PAUSE_STEPS_MIN = listOf(1L, 5L, 15L, 30L, 60L)
 
     /** Книга на паузе, чья очередь продолжить настала (или любая — [now]): запускает её. */
     fun resumePaused(context: Context, now: Boolean = false): Boolean {

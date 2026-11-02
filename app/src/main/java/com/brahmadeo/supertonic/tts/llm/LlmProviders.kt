@@ -113,6 +113,11 @@ object LlmProviders {
             cancellation?.check()
             check(!expired.get()) { "LLM превышен лимит запроса" }
             return JSONObject(String(bytes, Charsets.UTF_8))
+        } catch (e: java.io.IOException) {
+            // Сторож срока рвёт соединение — это «превышен лимит запроса», а не обрыв сети («Socket closed»).
+            cancellation?.check()
+            if (expired.get()) throw IllegalStateException("LLM превышен лимит запроса", e)
+            throw e
         } finally { watchdog.cancel(false); activeHttp.remove(connection); cancellation?.detach(connection); connection.disconnect() }
     }
     private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
@@ -167,9 +172,9 @@ object LlmProviders {
     }
     /** [slow]: text prepared ahead (KOReader), nobody waits — bigger batches get the time they need. */
     fun cloud(c: LlmConfig, texts: List<String>, gemini: Boolean, names: List<String> = emptyList(), provider: String = if (gemini) "gemini" else "ollama",
-              slow: Boolean = false): List<String> {
+              slow: Boolean = false, deadlineMs: Long? = null): List<String> {
         // Output length (stress marks included) grows with input; a fixed 12 s cut off large batches.
-        val deadline = (8000L + texts.sumOf { it.length } * 4L).coerceIn(12000L, if (slow) 60_000L else 25000L)
+        val deadline = deadlineMs ?: (8000L + texts.sumOf { it.length } * 4L).coerceIn(12000L, if (slow) 60_000L else 25000L)
         val request = JSONObject().put("count", texts.size).put("texts", JSONArray(texts))
         if (names.isNotEmpty()) request.put("names", JSONArray(names))
         return parse(cloudRequest(c, request.toString(), instruction(c), schema(), gemini, deadlineMs = deadline, provider = provider), texts.size)

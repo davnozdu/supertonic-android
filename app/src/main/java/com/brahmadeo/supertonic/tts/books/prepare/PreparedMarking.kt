@@ -78,7 +78,10 @@ object PreparedMarking {
             val lines = runCatching { cache.readLines() }.getOrDefault(emptyList())
             if (lines.size == batch.size) return lines
         }
-        val prepared = LlmProviders.cloud(source.config, batch, source.gemini, provider = source.provider, slow = true)
+        // Без размышления (как при чтении — решение пользователя) и с нормальным для подготовки книги сроком: срок
+        // «быстрого» пути (8 с + 4 мс на знак) размышляющая модель не успевала, соединение рвалось («Socket closed»).
+        val prepared = LlmProviders.cloud(source.withThinking(false).config, batch, source.gemini, provider = source.provider,
+            slow = true, deadlineMs = 180_000L)
         cancel.check()
         runCatching {
             val tmp = File(folder, "${cache.name}.tmp")

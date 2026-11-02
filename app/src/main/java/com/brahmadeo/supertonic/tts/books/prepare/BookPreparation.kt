@@ -232,6 +232,9 @@ object BookPreparation {
                     }
                 }
             } catch (p: CloudPause) {
+                // Звукам облако не нужно: даём им доделаться, а не обрываем вместе с паузой LLM.
+                sounds?.let { s -> mutable.value = mutable.value.copy(stage = "Пауза LLM: досчитываются фоновые звуки"); runCatching { s.finish() } }
+                sounds = null
                 if (runCatching { cancel.check() }.isFailure) {
                     mutable.value = State(message = "Подготовка остановлена. Уже полученные ответы сохранены; можно выбрать книгу снова.")
                 } else {
