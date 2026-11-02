@@ -87,25 +87,33 @@ object AmbienceModel {
     fun largeDecoderNpu(context: Context, allowCompile: Boolean = !AmbienceSettings.npuNight(prefs(context)),
                         onCompile: () -> Unit = {}, diagnostic: Boolean = false): Sa3Generator.NpuDecoder? {
         if (!diagnostic && !largeDecoderNpuPlanned(context)) return null
-        if (!largeDecoderNpuReady(context)) return null
-        if (!allowCompile && SAMEL_NAMES.any { !Npu.cacheReady(context, it) }) return null
+        // Отладка (только проба): pref samel_debug = "окно:частей" — файлы samel_dec_L<окно>_p<k>.onnx без проверки
+        // размера, свои имена кэша. Так варианты пробуются без пересборки приложения.
+        val debug = if (diagnostic) prefs(context).getString("samel_debug", null)?.split(':')?.mapNotNull { it.trim().toIntOrNull() } else null
+        val window = debug?.getOrNull(0) ?: SAMEL_WINDOW
+        val files = if (debug != null) (0 until (debug.getOrNull(1) ?: 3)).map { "samel_dec_L${window}_p$it.onnx" } else LARGE_DECODER_NPU.map { it.name }
+        val names = if (debug != null) files.indices.map { "sa3-samel-dbg-W$window-n${files.size}-p$it" } else SAMEL_NAMES
+        if (debug == null && !largeDecoderNpuReady(context)) return null
+        if (!allowCompile && names.any { !Npu.cacheReady(context, it) }) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
-        fun open(k: Int) = Npu.session(context, env, File(root(context), LARGE_DECODER_NPU[k].name), emptyMap(), SAMEL_NAMES[k],
-            family = "sa3-samel", siblings = SAMEL_NAMES)
+        fun open(k: Int) = Npu.session(context, env, File(root(context), files[k]), emptyMap(), names[k],
+            family = "sa3-samel", siblings = names)
         val sessions = ArrayList<ai.onnxruntime.OrtSession>()
         var building = -1
         return try {
             // Каждая часть компилируется отдельно и сразу закрывается (пик памяти — одна часть), потом все из кэша.
-            for (k in SAMEL_NAMES.indices) if (!Npu.cacheReady(context, SAMEL_NAMES[k])) { onCompile(); building = k; open(k).close(); building = -1 }
-            for (k in SAMEL_NAMES.indices) sessions.add(open(k))
-            Log.i("Ambience", "SAME-L NPU sessions ready, PSS ${android.os.Debug.getPss() / 1024} MB")
-            Sa3Generator.NpuDecoder(sessions, SAMEL_WINDOW)
+            for (k in names.indices) if (!Npu.cacheReady(context, names[k])) { onCompile(); building = k; open(k).close(); building = -1 }
+            for (k in names.indices) sessions.add(open(k))
+            Log.i("Ambience", "SAME-L NPU sessions ready (window $window, parts ${names.size}), PSS ${android.os.Debug.getPss() / 1024} MB")
+            Sa3Generator.NpuDecoder(sessions, window)
         } catch (e: Throwable) {
             sessions.forEach { runCatching { it.close() } }
             Log.w("Ambience", "SAME-L NPU unavailable: ${e.javaClass.simpleName}: ${e.message}")
-            val drop = if (building >= 0) listOf(SAMEL_NAMES[building]) else SAMEL_NAMES
+            val drop = if (building >= 0) listOf(names[building]) else names
             File(context.filesDir, "npu-cache").listFiles()?.filter { f -> drop.any { f.name.startsWith("$it-") } }?.forEach { it.delete() }
-            Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", SAMEL_SCOPE)
+            // Какая часть не собралась — в файл пробы (журнал OnePlus обрезает).
+            if (diagnostic) runCatching { File(context.cacheDir, "ambience/samel-fail.txt").appendText("window=$window parts=${names.size} failed part=$building: ${e.message}\n") }
+            if (debug == null) Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", SAMEL_SCOPE)
             null
         }
     }
