@@ -16,6 +16,9 @@ object AmbienceBook {
     const val SECONDS = 30f
     private const val BITRATE = 64_000
     private const val LUFS_KEY = "_lufs"
+    /** Версия обработки музыки: 2 — пик не выше −1 dBFS вместо ограничителя. */
+    private const val MUSIC_KEY = "_music"
+    private const val MUSIC_VERSION = 2
 
     private const val MAX_CLIPS = 240
 
@@ -131,6 +134,12 @@ object AmbienceBook {
             runCatching { manifest(context, sha).writeText(known.toString()) }
             Log.i("Ambience", "база версии $bank: старых звуков событий удалено $old, из новой базы взято $again")
         }
+        // Музыка, выровненная прежним способом (пики в ограничителе — хрип на громких нотах), делается заново один раз.
+        if (known.optInt(MUSIC_KEY, 1) != MUSIC_VERSION) {
+            files.filter { it.name.startsWith("m") }.forEach { it.delete() }
+            known.put(MUSIC_KEY, MUSIC_VERSION)
+            runCatching { manifest(context, sha).writeText(known.toString()) }
+        }
         // Made at another loudness (before −14 LUFS): all of them again.
         if (known.optDouble(LUFS_KEY, -20.0) != Loudness.TARGET_LUFS) { files.forEach { it.delete() }; manifest(context, sha).delete(); return }
         val current = jobs(context, scenes).associate { it.id to it.recipe }
@@ -148,7 +157,7 @@ object AmbienceBook {
         if (BookFiles.sounds(context, sha).isEmpty()) return
         // Звуки событий пришли вместе с книгой: помечаем их текущей версией базы, иначе sync() сочтёт их устаревшими и
         // удалит до следующего «Создать фоновые звуки».
-        val manifest = JSONObject().put(LUFS_KEY, Loudness.TARGET_LUFS).put("bank", SoundBank.version(context))
+        val manifest = JSONObject().put(LUFS_KEY, Loudness.TARGET_LUFS).put("bank", SoundBank.version(context)).put(MUSIC_KEY, MUSIC_VERSION)
         for (job in jobs(context, scenes)) manifest.put(job.id, job.recipe)
         runCatching { manifest(context, sha).writeText(manifest.toString()) }
     }
@@ -175,7 +184,7 @@ object AmbienceBook {
         val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
         // «База звуков» first: a clip already made for another book is copied and nothing is generated for it.
         // Версия базы, из которой взяты звуки событий: без неё sync() принял бы их за устаревшие и удалил.
-        val manifest0 = readManifest(context, sha).put("bank", SoundBank.version(context))
+        val manifest0 = readManifest(context, sha).put("bank", SoundBank.version(context)).put(MUSIC_KEY, MUSIC_VERSION)
         var reused = 0
         val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
             .filter { job ->
@@ -202,7 +211,7 @@ object AmbienceBook {
         var npuFailures = 0
         var npuRetryAt = 0L
         try {
-            val doc = readManifest(context, sha).put("bank", SoundBank.version(context))
+            val doc = readManifest(context, sha).put("bank", SoundBank.version(context)).put(MUSIC_KEY, MUSIC_VERSION)
             for (batch in batches(context, ordered)) {
                 if (cancelled()) throw InterruptedException("cancelled")
                 if (mode != batch.gen) {
@@ -229,19 +238,43 @@ object AmbienceBook {
                 if (npu != null) {
                     // Конвейер: NPU считает DiT следующего клипа, пока CPU декодирует предыдущий.
                     val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
+                    val g = generator!!
+                    fun produceNpu(job: Job) = job to g.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled))
+                    fun save(job: Job, result: Sa3Generator.Result) {
+                        progress(place[job] ?: 0, ordered.size, job.label)
+                        synchronized(doc) { saveClip(context, sha, dir, doc, job, result, npu = true) }
+                    }
+                    var helper: Sa3Generator? = null
                     try {
-                        ClipPipeline(batch.jobs,
-                            produce = { job -> job to generator!!.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled)) },
-                            consume = { (job, latents) ->
-                                progress(place[job] ?: 0, ordered.size, job.label)
-                                saveClip(context, sha, dir, doc, job, generator!!.decode(latents, job.seconds), npu = true)
-                            }).run()
+                        if (AmbienceSettings.parallel(prefs) && batch.gen == Gen.MUSIC && g.npuDecoder != null) {
+                            // Музыка: NPU считает DiT; декодирует тот, кто свободен — NPU или процессор.
+                            ParallelPipeline(batch.jobs, listOf(::produceNpu), listOf(
+                                { r: Pair<Job, Sa3Generator.Latents> -> save(r.first, g.decodeWith(r.second, r.first.seconds, npu = true)) },
+                                { r: Pair<Job, Sa3Generator.Latents> -> save(r.first, g.decodeWith(r.second, r.first.seconds, npu = false)) })).run()
+                        } else if (AmbienceSettings.parallel(prefs)) {
+                            // Фоны и события: второй DiT на процессоре (своя копия моделей) считает другие клипы, пока NPU
+                            // занят; декодер на процессоре один на обоих.
+                            val keep = AmbienceSettings.keepModels(prefs)
+                            val h = when (batch.gen) {
+                                Gen.MUSIC -> AmbienceModel.musicGenerator(context, threads, null, keep)
+                                Gen.MEDIUM_SFX -> AmbienceModel.mediumSfxGenerator(context, threads, keep)
+                                Gen.SMALL -> Sa3Generator(AmbienceModel.root(context), threads, null, keep = keep)
+                            }.also { helper = it }
+                            ParallelPipeline(batch.jobs, listOf(::produceNpu,
+                                    { job: Job -> job to h.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled)) }),
+                                listOf { r: Pair<Job, Sa3Generator.Latents> -> save(r.first, g.decode(r.second, r.first.seconds)) }).run()
+                        } else ClipPipeline(batch.jobs,
+                            produce = { job -> produceNpu(job) },
+                            consume = { (job, latents) -> save(job, g.decode(latents, job.seconds)) }).run()
                         npuFailures = 0
-                        Log.i("Ambience", "batch ${batch.gen} npu=true clips=${batch.jobs.size} " +
+                        helper?.close(); helper = null
+                        Log.i("Ambience", "batch ${batch.gen} npu=true parallel=${AmbienceSettings.parallel(prefs)} clips=${batch.jobs.size} " +
                             "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
                     } catch (e: InterruptedException) {
+                        helper?.close()
                         throw e
                     } catch (e: Throwable) {
+                        helper?.close(); helper = null
                         Log.w("Ambience", "NPU failed mid-batch after ${batch.jobs.count { File(dir, it.file).isFile }} clips " +
                             "(${e.javaClass.simpleName}: ${e.message}); the rest on the CPU")
                         runCatching { npu!!.close() }
@@ -311,7 +344,8 @@ object AmbienceBook {
         // Звук события выравнивают по пику, а не по громкости: щелчок и удар двери по природе разной громкости,
         // но оба должны пробиваться сквозь фон. Обстановка и музыка — по громкости (BS.1770).
         val gain = if (event) Loudness.peak(pcm)
-            else Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
+            else if (job.music) Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, Loudness.MUSIC_LUFS, maxPeakDb = Loudness.MUSIC_PEAK_DB)
+            else Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, Loudness.TARGET_LUFS)
         // Сначала во временный файл: оборванная запись (сбой, остановка) не должна выглядеть готовым клипом —
         // по наличию файла решается, что делать заново.
         val part = File(dir, job.file + ".part")

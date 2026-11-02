@@ -17,6 +17,8 @@ object Loudness {
     const val TARGET_LUFS = -26.0
     /** Generated music: as loud as the bundled tracks (measured −11.5…−13.6, mean −12.7 LUFS), so one music slider fits all. */
     const val MUSIC_LUFS = -12.5
+    /** Пик музыки после выравнивания не выше этого: без ограничителя и хрипа на громких нотах. */
+    const val MUSIC_PEAK_DB = -1.0
     private const val CEILING = 0.9f
 
     private class Biquad(val b0: Double, val b1: Double, val b2: Double, val a1: Double, val a2: Double)
@@ -78,10 +80,17 @@ object Loudness {
     }
 
     /** [pcm] brought to [target] LUFS in place; peaks above [CEILING] are softly limited (≤ 1.0). Returns the gain in dB. */
-    fun normalize(pcm: FloatArray, rate: Int, target: Double = TARGET_LUFS): Double {
+    /** [maxPeakDb]: усиление не выше того, при котором пик дошёл бы до этого уровня (dBFS). Для музыки: у пианино и
+     * струнных разброс тихого и громкого 18 дБ, подъём до [MUSIC_LUFS] загонял пики на +5 дБ в ограничитель — на
+     * громких высоких нотах это слышно как хрип. Трек выходит тише цели — его выравнивает ползунок громкости музыки. */
+    fun normalize(pcm: FloatArray, rate: Int, target: Double = TARGET_LUFS, maxPeakDb: Double? = null): Double {
         val now = integrated(pcm, rate)
         if (now.isInfinite()) return 0.0
-        val db = (target - now).coerceIn(-30.0, 30.0)
+        var db = (target - now).coerceIn(-30.0, 30.0)
+        if (maxPeakDb != null) {
+            var peak = 0f; for (v in pcm) { val m = abs(v); if (m > peak) peak = m }
+            if (peak > 1e-6f) db = minOf(db, maxPeakDb - 20 * log10(peak.toDouble()))
+        }
         val gain = 10.0.pow(db / 20).toFloat()
         for (i in pcm.indices) {
             val v = pcm[i] * gain; val m = abs(v)

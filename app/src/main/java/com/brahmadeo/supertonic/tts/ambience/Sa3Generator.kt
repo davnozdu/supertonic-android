@@ -352,6 +352,16 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
         return decodeCpu(x, length)
     }
 
+    /** Последний этап явно на NPU-декодере ([npu]) или на CPU — для «Параллельно NPU и процессор». */
+    fun decodeWith(latents: Latents, seconds: Float, npu: Boolean): Result {
+        val dec = npuDecoder
+        val audio = latents.track.stage(if (npu) "decode-npu" else "decode-cpu") {
+            if (npu && dec != null) dec.decode(latents.x, latents.length) else decodeCpu(latents.x, latents.length)
+        }
+        val frames = minOf(audio.size / 2, (seconds * SAMPLE_RATE).roundToInt())
+        return Result(audio.copyOf(frames * 2), latents.track.stages.toList())
+    }
+
     /** Декодер на CPU (tflite, окна-ступени) — и для сверки с NPU в пробе. */
     fun decodeCpu(x: FloatArray, length: Int): FloatArray {
         val even = if (length % 2 == 0) length else length + 1        // SAME-S needs an even length

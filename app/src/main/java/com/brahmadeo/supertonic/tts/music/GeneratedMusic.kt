@@ -55,7 +55,7 @@ object GeneratedMusic {
         }
         progress("Сохранение")
         if (com.brahmadeo.supertonic.tts.ambience.MusicEnhance.enabled(context)) com.brahmadeo.supertonic.tts.ambience.MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
-        Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, Loudness.MUSIC_LUFS)
+        Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, Loudness.MUSIC_LUFS, maxPeakDb = Loudness.MUSIC_PEAK_DB)
         val loop = loop(pcm, (LOOP_FADE_S * Sa3Generator.SAMPLE_RATE).toInt())
         val id = System.currentTimeMillis().toString()
         val folder = dir(context).apply { mkdirs() }

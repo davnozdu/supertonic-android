@@ -91,6 +91,11 @@ object AmbienceSettings {
     const val NPU_SHORT = "ambience_npu_short"
     fun npuShort(prefs: SharedPreferences) = prefs.getBoolean(NPU_SHORT, false)
 
+    /** «Параллельно NPU и процессор · эксперимент»: пока NPU занят, процессор считает другие клипы (музыка — второй
+     * декодер на процессоре; фоны и события — второй DiT на процессоре). Быстрее, но больше заряда и памяти. */
+    const val PARALLEL = "ambience_parallel"
+    fun parallel(prefs: SharedPreferences) = prefs.getBoolean(PARALLEL, false)
+
     const val KEEP_MODELS = "ambience_keep_models"
     fun keepModels(prefs: SharedPreferences) = prefs.getBoolean(KEEP_MODELS, true)
 
