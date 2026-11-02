@@ -299,13 +299,14 @@ object BookPreparation {
                 SceneMarking.groupSchema(), "groups", source, cancel) },
             // «Есть в базе звуков» — тоже известный вид: такое действие берётся даже при одном упоминании.
             known = { k -> com.brahmadeo.supertonic.tts.books.EventKinds.proper(k) ||
-                com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) },
+                (com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) &&
+                    // Свои «голосовые» виды, досозданные прежними версиями (storytelling_voice), больше не берём.
+                    (!SceneMarking.speechLike(k, "") || com.brahmadeo.supertonic.tts.ambience.SoundBank.manifest(ctx).containsKey(k))) },
             // Добивка: абзацы, где событий не нашлось вовсе, идут отдельными короткими запросами.
             fill = { prompt -> jsonRequest(folder, "scene-fill", prompt, PromptOverrides.get("scenes"), SceneMarking.fillSchema(), null, source, cancel) },
-            // Максимальная плотность: даже вид, встретившийся один раз, получает свой звук — из базы, если он там есть,
-            // иначе создаётся на телефоне. Так «все звуки, размеченные по тексту», действительно звучат.
-            newKindMentions = if (ctx.getSharedPreferences("SupertonicPrefs", 0)
-                    .getInt(SceneMarking.EVENTS_DENSITY, SceneMarking.DEFAULT_DENSITY) >= 3) 1 else SceneMarking.NEW_KIND_MENTIONS)
+            // Правило базы: вид, который в базе есть, звучит с одного упоминания; вида нет — создаётся, только если
+            // книга упоминает его два раза и больше (одиночное неопознанное действие лучше пропустить).
+            newKindMentions = SceneMarking.NEW_KIND_MENTIONS)
 
     /** The sounds of the book's locations, when the generator is installed; else they can be made later from the
      * book's card. Never fails the preparation: the book without sounds plays the music. */

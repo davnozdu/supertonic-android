@@ -60,7 +60,7 @@ internal object SceneMarking {
 
     /** Сколько упоминаний нужно новому виду действия, чтобы для него создавался свой клип (известные виды и база
      * берутся при одном упоминании). */
-    const val NEW_KIND_MENTIONS = 3
+    const val NEW_KIND_MENTIONS = 2
 
     /** How many unnamed descriptions one grouping request takes (a book rarely has more; the rest stay unnamed). */
     const val MAX_GROUP_ITEMS = 120
@@ -507,7 +507,7 @@ internal object SceneMarking {
         for (r in rawEvents) {
             // Известный вид — тот, у которого уже есть готовый клип: из закрытого списка или из скачанной базы звуков.
             // Такой звук ставится и при одном упоминании (дверь открылась один раз — всё равно слышно), а новый вид
-            // по-прежнему требует трёх упоминаний, чтобы не плодить случайные клипы.
+            // по-прежнему требует двух упоминаний, чтобы не плодить случайные клипы.
             val inList = com.brahmadeo.supertonic.tts.books.EventKinds.proper(r.kind)
             val inBase = r.kind.isNotEmpty() && known(r.kind)
             val known = inList || inBase
@@ -558,6 +558,11 @@ internal object SceneMarking {
             reason = firstReason)
     }
 
+    private val SPEECH = Regex("\\b(voice|voices|speak\\w*|talk\\w*|speech|words?|story\\w*|narrat\\w*|plead\\w*|question\\w*|says|saying|telling|asking)\\b")
+    /** Похоже ли описание нового вида на речь: такие виды не создаются. */
+    fun speechLike(kind: String, sound: String) = SPEECH.containsMatchIn(kind.replace('_', ' ').lowercase()) ||
+        SPEECH.containsMatchIn(sound.lowercase())
+
     /** description -> (kind, English prompt) for the groups of two or more; a lone action stays unnamed (and is dropped). */
     private fun grouping(raw: String, descriptions: List<String>, known: (String) -> Boolean,
                          newKindMentions: Int = NEW_KIND_MENTIONS): Map<String, Pair<String, String>> {
@@ -584,9 +589,12 @@ internal object SceneMarking {
                 ?: com.brahmadeo.supertonic.tts.books.EventKinds.sound(kind) ?: continue
             val items = group.optJSONArray("items") ?: continue
             val members = (0 until items.length()).mapNotNull { items.optInt(it, 0).takeIf { n -> n in 1..descriptions.size } }.distinct()
-            // Known kind already has its clip: one action may join it. A new kind is worth a clip only when the book
-            // has it three times: two mentions are often a coincidence, three is a scene that keeps happening.
+            // Known kind already has its clip: one action may join it. A new kind is worth a clip when the book has it
+            // [newKindMentions] times (два и больше): одиночное неопознанное действие лучше пропустить.
             if (members.isEmpty() || (members.size < newKindMentions && !known(kind))) continue
+            // Новый вид, который по сути речь («мальчик умоляет», «рассказывает»), — это голос поверх голоса чтеца:
+            // такой клип слышится как чужая неразборчивая речь. Плач, смех, крик и вздох есть в списке как свои виды.
+            if (!known(kind) && speechLike(kind, sound)) continue
             for (n in members) out[descriptions[n - 1]] = kind to sound
         }
         return out

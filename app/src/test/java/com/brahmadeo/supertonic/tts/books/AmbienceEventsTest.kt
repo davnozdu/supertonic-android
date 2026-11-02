@@ -118,7 +118,7 @@ class AmbienceEventsTest {
         val group = """{"groups":[{"kind":"chisel_clatter","hint":"падает стамеска",
             "sound":"a small metal chisel clattering on wooden floorboards","items":[1,2]}]}"""
         val asked = ArrayList<String>()
-        // Группировка сама по себе проверяется с порогом два; правило по умолчанию (три упоминания) — в тесте ниже.
+        // Группировка с порогом два (правило по умолчанию: вида нет в базе — создаётся с двух упоминаний).
         val result = SceneMarking.mark(paragraphs, { ans }, group = { prompt -> asked += prompt; group }, newKindMentions = 2)
         assertEquals(2, result.events)
         assertEquals(1, result.kinds)
@@ -174,15 +174,25 @@ class AmbienceEventsTest {
         assertEquals("train interior, wheel clacking", AmbienceBook.prompt(location.copy(accents = emptyList()), 3))
     }
 
-    /** Правило по умолчанию: новый вид действия создаётся, когда книга упоминает его три раза, а не два. */
-    @Test fun twoMentionsOfAnUnnamedActionAreNotEnoughForANewKind() {
-        val ans = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+    /** Правило базы: вида нет — он создаётся с двух упоминаний; одно упоминание неизвестного действия пропускается. */
+    @Test fun oneMentionOfAnUnnamedActionIsNotEnoughButTwoAre() {
+        val one = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a chisel clattering on a wooden floor"}]}"""
+        val two = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
             "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a chisel clattering on a wooden floor"},
                       {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a chisel clatters on the floorboards"}]}"""
-        val group = """{"groups":[{"kind":"chisel_clatter","hint":"падает стамеска",
-            "sound":"a small metal chisel clattering on wooden floorboards","items":[1,2]}]}"""
-        val result = SceneMarking.mark(paragraphs, { ans }, group = { group })
-        assertEquals(0, result.kinds)
-        assertTrue(result.index.events.events.isEmpty())
+        val groupOne = """{"groups":[{"kind":"chisel_clatter","sound":"a small metal chisel clattering on wooden floorboards","items":[1]}]}"""
+        val groupTwo = """{"groups":[{"kind":"chisel_clatter","sound":"a small metal chisel clattering on wooden floorboards","items":[1,2]}]}"""
+        assertEquals(0, SceneMarking.mark(paragraphs, { one }, group = { groupOne }).kinds)
+        assertEquals(1, SceneMarking.mark(paragraphs, { two }, group = { groupTwo }).kinds)
+    }
+
+    /** Новый вид, который по сути речь, не создаётся: это неразборчивый голос поверх голоса чтеца. */
+    @Test fun aSpeechLikeNewKindIsNotMade() {
+        val two = """{"scenes":[{"from":1,"place":"гостиная","sound":"quiet drawing room, ticking clock"}],
+            "events":[{"at":1,"quote":"притворил за собой дверь","kind":"other","sound":"a boy pleading softly"},
+                      {"at":3,"quote":"дверь хлопнула снова","kind":"other","sound":"a boy's voice pleading"}]}"""
+        val group = """{"groups":[{"kind":"boy_voice_pleading","sound":"a young boy's voice pleading","items":[1,2]}]}"""
+        assertEquals(0, SceneMarking.mark(paragraphs, { two }, group = { group }).kinds)
     }
 }

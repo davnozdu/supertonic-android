@@ -42,11 +42,10 @@ object AmbienceBook {
     /** One clip to make: [file] in the book's ambience folder, from [prompt]; [id]/[recipe] go into sounds.json. */
     class Job(val file: String, val prompt: String, val seconds: Float, val seed: Long, val id: String, val recipe: String, val label: String,
               /** Made by the music model («Музыка по настроению»). */
-              val music: Boolean = false)
-
-    /** Длина новых звуков событий — из настроек: клип в базе 8 с, приложение играет выбранные секунды. */
-    private fun eventSeconds(context: Context) =
-        AmbienceSettings.eventSeconds(context.getSharedPreferences("SupertonicPrefs", 0))
+              val music: Boolean = false) {
+        /** Звук события или перехода главы (не фон локации и не музыка). */
+        val event: Boolean get() = !music && (id.startsWith("k_") || id.startsWith("e"))
+    }
 
     /** Music fragments per mood, played in a random order like the scene variants. */
     /** Три фрагмента на настроение (было два): книга читается около часа, а фрагмент — 30 с; с двумя вариантами
@@ -66,7 +65,9 @@ object AmbienceBook {
         // One clip per kind of action: a door slammed in chapter 1 is the same sound in chapter 30.
         val events = scenes.events.events.groupBy { com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(it) }.map { (key, same) ->
             val prompt = scenes.events.kinds[key.removePrefix("k_")] ?: same.first().sound
-            Job("$key.m4a", prompt, eventSeconds(context), key.hashCode().toLong(), key, prompt,
+            // Всегда 8 с, как клипы базы: ползунок «Длина звука события» обрезает при воспроизведении, и его можно
+            // поднять позже без новой генерации.
+            Job("$key.m4a", prompt, EVENT_SECONDS, key.hashCode().toLong(), key, prompt,
                 "событие: " + same.first().kind.ifEmpty { prompt.take(40) })
         }
         val chapter = com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID.let { id ->
@@ -117,11 +118,18 @@ object AmbienceBook {
         // База звуков переехала на новую версию (клипы выровнены по громкости): старые копии в книге выкидываем —
         // подготовка возьмёт из базы новые, без генерации.
         val bank = SoundBank.version(context)
-        if (SoundBank.on(context) && known.optInt("bank", 1) != bank) {
-            val old = files.count { it.name.startsWith("k_") && it.delete() }
+        if (!known.has("bank")) {
+            // Книги до этой версии отметки не хранили (и очистка их звуков не видела): берём их клипы как есть.
             known.put("bank", bank)
             runCatching { manifest(context, sha).writeText(known.toString()) }
-            Log.i("Ambience", "база версии $bank: старых звуков событий удалено $old, возьмём новые")
+        } else if (SoundBank.on(context) && known.optInt("bank", 1) != bank) {
+            val old = files.count { it.name.startsWith("k_") && it.delete() }
+            known.put("bank", bank)
+            // Сразу берём новые клипы из базы: иначе до «Создать фоновые звуки» события книги молчали бы.
+            val dir = BookFiles.ambience(context, sha)
+            val again = jobs(context, scenes).count { it.id.startsWith("k_") && adoptFromBank(context, dir, it) }
+            runCatching { manifest(context, sha).writeText(known.toString()) }
+            Log.i("Ambience", "база версии $bank: старых звуков событий удалено $old, из новой базы взято $again")
         }
         // Made at another loudness (before −14 LUFS): all of them again.
         if (known.optDouble(LUFS_KEY, -20.0) != Loudness.TARGET_LUFS) { files.forEach { it.delete() }; manifest(context, sha).delete(); return }
@@ -138,7 +146,9 @@ object AmbienceBook {
      * re-preparation (new numbers) drops them instead of playing them in the wrong places. */
     fun adopt(context: Context, sha: String, scenes: SceneIndex) {
         if (BookFiles.sounds(context, sha).isEmpty()) return
-        val manifest = JSONObject().put(LUFS_KEY, Loudness.TARGET_LUFS)
+        // Звуки событий пришли вместе с книгой: помечаем их текущей версией базы, иначе sync() сочтёт их устаревшими и
+        // удалит до следующего «Создать фоновые звуки».
+        val manifest = JSONObject().put(LUFS_KEY, Loudness.TARGET_LUFS).put("bank", SoundBank.version(context))
         for (job in jobs(context, scenes)) manifest.put(job.id, job.recipe)
         runCatching { manifest(context, sha).writeText(manifest.toString()) }
     }
@@ -164,7 +174,8 @@ object AmbienceBook {
         // Music without its model (not downloaded yet) waits for it; the sounds are made now.
         val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
         // «База звуков» first: a clip already made for another book is copied and nothing is generated for it.
-        val manifest0 = readManifest(context, sha)
+        // Версия базы, из которой взяты звуки событий: без неё sync() принял бы их за устаревшие и удалил.
+        val manifest0 = readManifest(context, sha).put("bank", SoundBank.version(context))
         var reused = 0
         val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
             .filter { job ->
@@ -178,31 +189,39 @@ object AmbienceBook {
             Log.i("Ambience", "$reused sounds taken from the bank, no generation")
         }
         if (todo.isEmpty()) return
-        // Один генератор и одна NPU-сессия на пачку подряд идущих клипов: звуки, музыка, а внутри звуков —
-        // 30-секундные локации на NPU и короткие события без него.
-        val ordered = todo.sortedBy { it.music }
+        // Один генератор и одна NPU-сессия на пачку подряд идущих клипов одной модели (малая, средняя для событий,
+        // музыка) и одного места счёта DiT.
+        val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
+        val ordered = todo.sortedBy { genOf(context, it).ordinal }
         val place = HashMap<Job, Int>().apply { ordered.forEachIndexed { i, job -> put(job, i) } }
         var npu: Sa3Generator.NpuDit? = null
         var generator: Sa3Generator? = null
-        var musicMode: Boolean? = null
-        var npuBroken = false
+        var mode: Gen? = null
+        // Сбой NPU посреди книги (QNN 1007 «SSR detected» — перезапуск CDSP) не отключает NPU до конца книги:
+        // остаток пачки считает CPU, а следующая пачка пробует NPU снова после паузы (как у Kokoro и Tera).
+        var npuFailures = 0
+        var npuRetryAt = 0L
         try {
-            val doc = readManifest(context, sha)
+            val doc = readManifest(context, sha).put("bank", SoundBank.version(context))
             for (batch in batches(context, ordered)) {
                 if (cancelled()) throw InterruptedException("cancelled")
-                if (musicMode != batch.music) {
+                if (mode != batch.gen) {
                     generator?.close(); npu?.close(); npu = null
-                    val keep = AmbienceSettings.keepModels(context.getSharedPreferences("SupertonicPrefs", 0))
-                    generator = if (batch.music) AmbienceModel.musicGenerator(context, threads, null, keep)
-                        else Sa3Generator(AmbienceModel.root(context), threads, null, keep = keep)
-                    musicMode = batch.music
+                    val keep = AmbienceSettings.keepModels(prefs)
+                    generator = when (batch.gen) {
+                        Gen.MUSIC -> AmbienceModel.musicGenerator(context, threads, null, keep)
+                        Gen.MEDIUM_SFX -> AmbienceModel.mediumSfxGenerator(context, threads, keep)
+                        Gen.SMALL -> Sa3Generator(AmbienceModel.root(context), threads, null, keep = keep)
+                    }
+                    mode = batch.gen
                 }
-                // HTP-сессия живёт только пока делаются клипы, которые влезают в её граф: 30-секундные локации и
-                // музыка. Коротким звукам событий граф не подходит, и 1,8 ГБ памяти на них держать незачем.
+                // HTP-сессия живёт только пока делаются клипы, которые идут на NPU; 1–3 ГБ на прочие не держим.
                 if (!batch.npu && npu != null) { npu!!.close(); npu = null }
-                if (batch.npu && npu == null && !npuBroken) npu = AmbienceModel.npuDit(context, music = batch.music,
+                if (batch.npu && npu == null && SystemClock.elapsedRealtime() >= npuRetryAt) npu = AmbienceModel.npuDit(context,
+                    music = batch.gen != Gen.SMALL, model = if (batch.gen == Gen.MEDIUM_SFX) AmbienceModel.MEDIUM_MUSIC else null,
                     onCompile = { k, n -> progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
                 generator!!.attachNpu(npu)
+                generator!!.npuShort = AmbienceSettings.npuShort(prefs)
                 if (npu != null) {
                     // Конвейер: NPU считает DiT следующего клипа, пока CPU декодирует предыдущий.
                     val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
@@ -213,18 +232,17 @@ object AmbienceBook {
                                 progress(place[job] ?: 0, ordered.size, job.label)
                                 saveClip(context, sha, dir, doc, job, generator!!.decode(latents, job.seconds), npu = true)
                             }).run()
-                        Log.i("Ambience", "batch music=${batch.music} npu=true clips=${batch.jobs.size} " +
+                        npuFailures = 0
+                        Log.i("Ambience", "batch ${batch.gen} npu=true clips=${batch.jobs.size} " +
                             "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
                     } catch (e: InterruptedException) {
                         throw e
                     } catch (e: Throwable) {
-                        // HTP может перезапуститься посреди книги (QNN 1007 «SSR detected»), и сессия умирает.
-                        // Книга на этом не обрывается: остаток пачки считает CPU, NPU вернётся в следующей.
                         Log.w("Ambience", "NPU failed mid-batch after ${batch.jobs.count { File(dir, it.file).isFile }} clips " +
                             "(${e.javaClass.simpleName}: ${e.message}); the rest on the CPU")
                         runCatching { npu!!.close() }
                         npu = null
-                        npuBroken = true
+                        npuRetryAt = SystemClock.elapsedRealtime() + com.brahmadeo.supertonic.tts.utils.Npu.retryDelayMs(++npuFailures)
                         generator!!.attachNpu(null)
                         for (job in batch.jobs) {
                             if (File(dir, job.file).isFile) continue
@@ -245,18 +263,35 @@ object AmbienceBook {
         } finally { generator?.close(); npu?.close() }
     }
 
-    /** Клипы с общим генератором и общей NPU-сессией: подряд идущие, одной модели (звуки или музыка) и одного места
-     * счёта DiT — на NPU он идёт только у клипов точной длины своего графа (30 с), прочие считает CPU. */
-    private class Batch(val music: Boolean, val npu: Boolean) { val jobs = ArrayList<Job>() }
+    /** Чем делается клип: малой моделью, средней (звуки событий по выбору) или моделью музыки. */
+    private enum class Gen { SMALL, MEDIUM_SFX, MUSIC }
+
+    private fun genOf(context: Context, job: Job): Gen = when {
+        job.music -> Gen.MUSIC
+        job.event && AmbienceSettings.eventsMedium(context.getSharedPreferences("SupertonicPrefs", 0)) &&
+            AmbienceModel.mediumReady(context) -> Gen.MEDIUM_SFX
+        else -> Gen.SMALL
+    }
+
+    /** Клипы с общим генератором и общей NPU-сессией: подряд идущие, одной модели и одного места счёта DiT — на NPU
+     * он идёт у клипов точной длины графа (30 с), а при «Короткие звуки на NPU» и у более коротких. */
+    private class Batch(val gen: Gen, val npu: Boolean) { val jobs = ArrayList<Job>() }
 
     private fun batches(context: Context, ordered: List<Job>): List<Batch> {
-        val planned = HashMap<Boolean, Boolean>()
+        val short = AmbienceSettings.npuShort(context.getSharedPreferences("SupertonicPrefs", 0))
+        val planned = HashMap<Gen, Boolean>()
         val out = ArrayList<Batch>()
         for (job in ordered) {
-            val npu = planned.getOrPut(job.music) { AmbienceModel.npuPlanned(context, job.music) } &&
-                Sa3Generator.latentsFor(job.seconds) == AmbienceModel.NPU_LENGTH
+            val gen = genOf(context, job)
+            val npu = planned.getOrPut(gen) {
+                when (gen) {
+                    Gen.SMALL -> AmbienceModel.npuPlanned(context, false)
+                    Gen.MUSIC -> AmbienceModel.npuPlanned(context, true)
+                    Gen.MEDIUM_SFX -> AmbienceModel.mediumNpuPlanned(context)
+                }
+            } && Sa3Generator.fitsGraph(Sa3Generator.latentsFor(job.seconds), AmbienceModel.NPU_LENGTH, short)
             val last = out.lastOrNull()
-            if (last == null || last.music != job.music || last.npu != npu) out.add(Batch(job.music, npu))
+            if (last == null || last.gen != gen || last.npu != npu) out.add(Batch(gen, npu))
             out.last().jobs.add(job)
         }
         return out
@@ -273,7 +308,11 @@ object AmbienceBook {
         // но оба должны пробиваться сквозь фон. Обстановка и музыка — по громкости (BS.1770).
         val gain = if (event) Loudness.peak(pcm)
             else Loudness.normalize(pcm, Sa3Generator.SAMPLE_RATE, if (job.music) Loudness.MUSIC_LUFS else Loudness.TARGET_LUFS)
-        AacFile.write(File(dir, job.file), pcm, bitrate = BITRATE)
+        // Сначала во временный файл: оборванная запись (сбой, остановка) не должна выглядеть готовым клипом —
+        // по наличию файла решается, что делать заново.
+        val part = File(dir, job.file + ".part")
+        AacFile.write(part, pcm, bitrate = BITRATE)
+        check(part.renameTo(File(dir, job.file))) { "Не удалось сохранить ${job.file}" }
         // The bank grows: a sound made for this book is reused by the next one for free.
         if (!job.music && job.id.startsWith("k_") && SoundBank.on(context))
             SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file),

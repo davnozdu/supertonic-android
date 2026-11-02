@@ -23,7 +23,7 @@ object AmbienceProbe {
 
     /** Production NPU DiT (AmbienceModel.npuDit, switch forced on for the probe only), then optionally one forward
      * checked against the same graph on the ORT CPU (that CPU session inflates the process memory afterwards). */
-    private fun npuDit(context: Context, threads: Int, prompt: String, check: Boolean): Sa3Generator.NpuDit? {
+    private fun npuDit(context: Context, threads: Int, prompt: String, check: Boolean, medium: Boolean = false): Sa3Generator.NpuDit? {
         val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
         val had = prefs.contains(AmbienceModel.NPU_KEY); val old = prefs.getBoolean(AmbienceModel.NPU_KEY, false)
         prefs.edit().putBoolean(AmbienceModel.NPU_KEY, true).commit()
@@ -31,7 +31,9 @@ object AmbienceProbe {
             if (!AmbienceModel.npuReady(context)) runBlocking { AmbienceModel.download(context) { text, _ -> Log.i(TAG, "DOWNLOAD $text") } }
             memory("before-npu")
             val wall = android.os.SystemClock.elapsedRealtime(); val cpu = android.os.Process.getElapsedCpuTime()
-            val dit = AmbienceModel.npuDit(context) ?: return null.also { Log.e(TAG, "NPU DiT unavailable") }
+            // Средняя модель — свои графы (раньше проба грузила граф малой и выдавала его скорость за среднюю).
+            val dit = (if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC) else AmbienceModel.npuDit(context))
+                ?: return null.also { Log.e(TAG, "NPU DiT unavailable") }
             Log.i(TAG, "NPU LOAD wallMs=${android.os.SystemClock.elapsedRealtime() - wall} cpuMs=${android.os.Process.getElapsedCpuTime() - cpu}")
             memory("after-npu-load")
             val (hidden, mask) = Sa3Generator(AmbienceModel.root(context), threads).use { it.encodeText(prompt) }
@@ -42,7 +44,7 @@ object AmbienceProbe {
                 dit.velocity(x, 0.7f, hidden, mask, 30f).also { _ -> Log.i(TAG, "NPU FORWARD wallMs=${android.os.SystemClock.elapsedRealtime() - t0} cpuMs=${android.os.Process.getElapsedCpuTime() - c0}") } }.last()
             memory("after-npu-forward")
             System.gc(); Runtime.getRuntime().gc(); memory("after-gc")
-            if (check) {
+            if (check && !medium) {
                 val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
                 ai.onnxruntime.OrtSession.SessionOptions().use { o ->
                     o.setIntraOpNumThreads(threads)
@@ -180,17 +182,20 @@ object AmbienceProbe {
         // The NPU DiT is a static 323-latent graph (30 s). Loading it for a shorter clip costs memory and half a
         // second per start and still ends on the CPU path, so the probe does not even try.
         val latents = Sa3Generator.latentsFor(seconds)
-        val npuFits = latents == AmbienceModel.NPU_LENGTH
+        // ambienceNpuShort: клип короче 30 с — на 30-секундном графе с условием длительности и обрезкой.
+        val short = intent.getBooleanExtra("ambienceNpuShort", false)
+        val npuFits = Sa3Generator.fitsGraph(latents, AmbienceModel.NPU_LENGTH, short)
         val npuDit = if (intent.getBooleanExtra("ambienceNpu", false) && npuFits)
-            npuDit(context, threads, prompts.first().second, intent.getBooleanExtra("ambienceNpuCheck", true)) else null
+            npuDit(context, threads, prompts.first().second, intent.getBooleanExtra("ambienceNpuCheck", true), model == "medium") else null
         if (intent.getBooleanExtra("ambienceNpu", false) && !npuFits)
             Log.i(TAG, "NPU skipped: $seconds s is $latents latents, the graph is ${AmbienceModel.NPU_LENGTH}")
         Log.i(TAG, "PSS before generation ${Debug.getPss() / 1024} MB")
         // Сравниваем именно модели: декодер у обеих один и тот же SAME-S, иначе разница будет от декодера.
         val generator = if (model == "medium") {
-            val m = AmbienceModel.music(context)
+            val m = AmbienceModel.MEDIUM_MUSIC
             Sa3Generator(AmbienceModel.root(context), threads, npuDit, m.ditFile, m.rungs, "dec_w8a8.tflite", keep = true)
         } else Sa3Generator(AmbienceModel.root(context), threads, npuDit)
+        generator.npuShort = short
         for (run in 0 until runs) for ((name, prompt) in prompts) {
             val peakPss = java.util.concurrent.atomic.AtomicLong(0); val sampling = java.util.concurrent.atomic.AtomicBoolean(true)
             val sampler = thread(name = "ambience-pss") { while (sampling.get()) { peakPss.accumulateAndGet(Debug.getPss()) { a, b -> maxOf(a, b) }; Thread.sleep(200) } }

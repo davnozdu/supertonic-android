@@ -184,8 +184,8 @@ object AmbienceModel {
      * failure turns the NPU off for this app version; the first build compiles the HTP graph (~2 min, cached). */
     /** One NPU DiT: its graph files, CPU front, cache names (one per part) and failure scope. */
     private class NpuTarget(val parts: List<String>, val pre: String, val cache: String, val family: String, val scope: String, val names: List<String>, val label: String)
-    private fun target(context: Context, music: Boolean): NpuTarget {
-        val m = music(context)
+    private fun target(context: Context, music: Boolean, model: Music? = null): NpuTarget {
+        val m = model ?: music(context)
         val parts = if (music) m.npuParts else listOf("dit_L323_main.onnx")
         val cache = if (music) m.npuCache else NPU_CACHE
         // One graph keeps its old cache name; the parts of a cut model get "-p<k>" and keep each other's caches.
@@ -193,8 +193,18 @@ object AmbienceModel {
             if (music) m.failScope else Npu.AMBIENCE, if (parts.size == 1) listOf(cache) else parts.indices.map { "$cache-p$it" },
             if (music) "музыка, ${m.title.lowercase()}" else "звуки")
     }
-    private fun npuUsable(context: Context, music: Boolean) =
-        npuWanted(context, target(context, music).scope) && (if (music) musicNpuReady(context) else npuReady(context))
+    private fun npuUsable(context: Context, music: Boolean, model: Music? = null) =
+        npuWanted(context, target(context, music, model).scope) &&
+            (if (model != null) mediumNpuReady(context) else if (music) musicNpuReady(context) else npuReady(context))
+    /** Средняя модель для звуков событий (её же сделана база): скачана вместе со «Средней» моделью музыки. */
+    fun mediumReady(context: Context) = ready(context) && complete(context, MEDIUM_ASSETS, MEDIUM_MUSIC.marker)
+    private fun mediumNpuReady(context: Context) = mediumReady(context) &&
+        complete(context, MEDIUM_NPU_ASSETS, MEDIUM_MUSIC.npuMarker)
+    /** Звуки событий средней моделью на NPU: тумблер NPU, графы средней скачаны, сбоя сборки нет. */
+    fun mediumNpuPlanned(context: Context) = npuUsable(context, true, MEDIUM_MUSIC)
+    /** Генератор звуков событий средней моделью: её DiT и декодер SAME-S — как у готовой базы звуков. */
+    fun mediumSfxGenerator(context: Context, threads: Int, keep: Boolean = true) =
+        Sa3Generator(root(context), threads, null, MEDIUM_MUSIC.ditFile, MEDIUM_MUSIC.rungs, "dec_w8a8.tflite", keep)
     /** True when the DiT for these sounds / this music is meant to run on the NPU: the switch is on, the graphs are
      * there and this model has no recorded build failure. Says nothing about the compile still being needed. */
     fun npuPlanned(context: Context, music: Boolean) = npuUsable(context, music)
@@ -208,9 +218,11 @@ object AmbienceModel {
      * «Готовить NPU ночью» ([allowCompile] false) nothing is compiled here: the CPU makes the clip and the night job
      * compiles. [onCompile] (part, parts) before each part compiled; [stop] is checked between parts. */
     fun npuDit(context: Context, music: Boolean = false, allowCompile: Boolean = !AmbienceSettings.npuNight(prefs(context)),
-               onCompile: (Int, Int) -> Unit = { _, _ -> }, stop: () -> Boolean = { false }): Sa3Generator.NpuDit? {
-        if (!npuUsable(context, music)) return null
-        val t = target(context, music)
+               onCompile: (Int, Int) -> Unit = { _, _ -> }, stop: () -> Boolean = { false },
+               /** Явно заданная модель (средняя для звуков событий), иначе выбранная модель музыки. */
+               model: Music? = null): Sa3Generator.NpuDit? {
+        if (!npuUsable(context, music, model)) return null
+        val t = target(context, music, model)
         if (!allowCompile && t.names.any { !Npu.cacheReady(context, it) }) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         fun open(k: Int) = Npu.session(context, env, File(root(context), t.parts[k]), emptyMap(), t.names[k], family = t.family, siblings = t.names)
@@ -251,13 +263,19 @@ object AmbienceModel {
     /** «Готовить NPU ночью»: compiles every NPU DiT that would be used and is not compiled yet (the sounds, the chosen
      * music model), part by part; stops between parts when [stop] says so (unplugged, «Остановить»). */
     fun compileMissing(context: Context, stop: () -> Boolean, progress: (String) -> Unit): Boolean = exclusive {
-        for (music in listOf(false, true)) {
-            if (!npuUncompiled(context, music)) continue
-            val label = target(context, music).label
-            npuDit(context, music, allowCompile = true, onCompile = { k, n -> progress("Подготовка NPU ($label): часть $k из $n") }, stop = stop)?.close()
+        // Звуки, музыка и — если звуки событий делает средняя модель — её графы, даже когда музыка малая.
+        val medium = if (AmbienceSettings.eventsMedium(prefs(context)) && AmbienceSettings.npuShort(prefs(context))) MEDIUM_MUSIC else null
+        val targets = listOf<Pair<Boolean, Music?>>(false to null, true to null) + listOfNotNull(medium?.let { true to it })
+        fun uncompiled(music: Boolean, model: Music?) =
+            npuUsable(context, music, model) && target(context, music, model).names.any { !Npu.cacheReady(context, it) }
+        for ((music, model) in targets) {
+            if (!uncompiled(music, model)) continue
+            val label = target(context, music, model).label
+            npuDit(context, music, allowCompile = true, onCompile = { k, n -> progress("Подготовка NPU ($label): часть $k из $n") },
+                stop = stop, model = model)?.close()
             if (stop()) return@exclusive false
         }
-        !npuUncompiled(context, false) && !npuUncompiled(context, true)
+        targets.none { (music, model) -> uncompiled(music, model) }
     }
 
 }

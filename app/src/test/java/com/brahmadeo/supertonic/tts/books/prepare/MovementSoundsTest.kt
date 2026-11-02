@@ -65,4 +65,13 @@ class MovementSoundsTest {
         assertEquals("car_door_slam", MovementSounds.carIndex(words("Он хлопнул дверцей машины"))!!.second)
         assertNull(MovementSounds.carIndex(words("Машина стояла у дома")))
     }
+
+    @Test
+    fun lookalikeWordsAreNotMotionOrSurface() {
+        // «шелест» — не «шел», «наступила ночь» — не наст, «травма» — не трава, «прошлое» — не «прошла».
+        assertNull(MovementSounds.surfaceIndex(words("Был слышен шелест листвы")))
+        assertNull(MovementSounds.surfaceIndex(words("Он вышел, наступила ночь")))
+        assertNull(MovementSounds.surfaceIndex(words("Он вышел со старой травмой")))
+        assertNull(MovementSounds.surfaceIndex(words("Прошлое лежало на снегу")))
+    }
 }

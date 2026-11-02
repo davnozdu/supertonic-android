@@ -11,8 +11,18 @@ object EventMix {
     fun allowed(mix: Boolean, gap: Long, at: Long, lastAt: Long): Boolean =
         mix || gap <= 0L || at - lastAt >= gap
 
-    /** Не занят ли канал предыдущим звуком: при наложении не занят никогда. */
-    fun blocked(mix: Boolean, busy: Boolean): Boolean = busy && !mix
+    /** Сколько звуков событий может звучать одновременно при наложении (плотный абзац размечает до восьми). */
+    const val MAX_SHOTS = 3
+
+    /** Не занят ли канал: без наложения — пока звучит предыдущий; с наложением — когда звучат уже [MAX_SHOTS]. */
+    fun blocked(mix: Boolean, busy: Boolean, sounding: Int = 0): Boolean = if (mix) sounding >= MAX_SHOTS else busy
+
+    /** Уровень следующего звука, когда [sounding] уже звучат: −1,4 дБ за каждый (0,85ⁿ). */
+    fun overlapGain(sounding: Int): Float {
+        var g = 1f
+        repeat(sounding.coerceIn(0, MAX_SHOTS)) { g *= 0.85f }
+        return g
+    }
 
     /** Наименьший разнос начал: два звука в один миг сливаются в кашу, поэтому при наложении они всё равно идут
      * чередой — друг за другом, а не одновременно. */

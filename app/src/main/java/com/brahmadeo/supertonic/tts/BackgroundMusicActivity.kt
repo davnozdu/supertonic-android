@@ -65,6 +65,8 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var mixEvents by remember { mutableStateOf(AmbienceSettings.mix(prefs)) }
                 var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
                 var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
+                var eventsMedium by remember { mutableStateOf(AmbienceSettings.eventsMedium(prefs)) }
+                var npuShort by remember { mutableStateOf(AmbienceSettings.npuShort(prefs)) }
                 var eventLead by remember { mutableIntStateOf(AmbienceSettings.eventLead(prefs)) }
                 var eventsDensity by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,
                     com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.DEFAULT_DENSITY)) }
@@ -331,7 +333,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                             })
                         }
                         Text("Включено — следующий звук начинается, не дожидаясь конца предыдущего: в плотной сцене звучат " +
-                            "до трёх сразу. Выключено — строго по одному, и в тесных абзацах часть звуков пропускается. " +
+                            "до ${com.brahmadeo.supertonic.tts.ambience.EventMix.MAX_SHOTS} сразу. Выключено — строго по одному, и в тесных абзацах часть звуков пропускается. " +
                             "Действует сразу.", style=MaterialTheme.typography.bodySmall)
                         Text("Порог срабатывания: " + if (eventGap == 0) "без паузы" else "${"%.1f".format(eventGap / 1000f)} с",
                             style=MaterialTheme.typography.titleMedium)
@@ -360,8 +362,22 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Slider(value=eventSeconds,onValueChange={ eventSeconds=it },
                                 onValueChangeFinished={ prefs.edit().putFloat(AmbienceSettings.EVENT_SECONDS,eventSeconds).apply() },
                                 valueRange=1f..8f,steps=13)
-                            Text("Сколько звучит один звук. В базе клипы по 8 с — это запас на затухание, поэтому 3 с звучат " +
-                                "как короткий шорох, а 8 с как полный клип. Действует сразу; новые звуки сразу делаются такой длины.",
+                            Text("Сколько звучит один звук. Клипы событий — по 8 с (и в базе, и созданные на телефоне), это запас " +
+                                "на затухание: 3 с звучат как короткий шорох, 8 с — как полный клип. Действует сразу.",
+                                style=MaterialTheme.typography.bodySmall)
+                            Text("Модель для новых звуков событий",style=MaterialTheme.typography.titleMedium)
+                            val mediumReady = AmbienceModel.mediumReady(this@BackgroundMusicActivity)
+                            for ((medium, label) in listOf(false to "Малая: быстрее (≈1,7 с на звук на процессоре)",
+                                    true to "Большая (средняя модель): чище звук, ей сделана база звуков; ≈4,6 с на звук на процессоре")) {
+                                Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                                    RadioButton(selected=eventsMedium==medium,enabled=!busy,onClick={ eventsMedium=medium
+                                        prefs.edit().putString(AmbienceSettings.EVENTS_MODEL,if (medium) "medium" else "small").apply() })
+                                    Text(label,Modifier.weight(1f))
+                                }
+                            }
+                            Text(if (eventsMedium && !mediumReady) "Большая модель ещё не скачана: выберите «Средняя» в модели музыки ниже " +
+                                "и скачайте её. Пока её нет, звуки делает малая." else
+                                "Создаётся только то, чего нет в базе звуков и что книга упоминает два раза и больше.",
                                 style=MaterialTheme.typography.bodySmall)
                             Text("Сколько событий отмечать",style=MaterialTheme.typography.titleMedium)
                             for ((d, label) in listOf(1 to "Редко: только прямо описанные звуки (выстрел, гром, хлопнула дверь)",
@@ -395,9 +411,9 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Text(if (bankCount > 0) "В базе $bankCount видов" else "Список базы ещё не скачан",
                             style=MaterialTheme.typography.bodyMedium)
                         Text("Готовые клипы событий на все книги: двери, бумаги, шаги, вода, посуда, животные, голоса, эмоции — " +
-                            "8 секунд каждый. Приложение берёт из базы только то, что нужно книге, и качает эти файлы по одному " +
-                            "(архива нет, распаковывать нечего). Если готовый звук есть, он используется даже когда действие " +
-                            "упомянуто в книге один раз; если его нет — новый вид создаётся, когда книга упоминает его три раза, и " +
+                            "8 секунд каждый, три варианта на вид. Скачиваются тремя архивами и обновляются сами по Wi-Fi, когда выходит " +
+                            "новая версия. Если готовый звук есть, он используется даже когда действие " +
+                            "упомянуто в книге один раз; если его нет — новый вид создаётся, когда книга упоминает его два раза и больше, и " +
                             "дописывается в базу с пометкой «сделан для книги». Фон локаций в базу не входит — он делается " +
                             "на телефоне.", style=MaterialTheme.typography.bodySmall)
                         val startedAt=remember { longArrayOf(0L) }
@@ -537,7 +553,18 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 })
                             }
                             Text("Нагружает процессор примерно в 3 раза меньше. Дополнительно ${AmbienceModel.npuBytes()/1048576} МБ; " +
-                                "первая подготовка NPU занимает около 2 минут.",style=MaterialTheme.typography.bodySmall)
+                                "первая подготовка NPU занимает около 2 минут. Графы NPU — ровно на 30 с: фон локаций и музыка.",style=MaterialTheme.typography.bodySmall)
+                            if (ambienceNpu) {
+                                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                                    Text("Короткие звуки на NPU · эксперимент",Modifier.weight(1f))
+                                    Switch(checked=npuShort,enabled=!busy,onCheckedChange={
+                                        npuShort=it; prefs.edit().putBoolean(AmbienceSettings.NPU_SHORT,it).apply()
+                                    })
+                                }
+                                Text("Звуки событий (8 с) считаются тем же 30-секундным графом NPU и обрезаются: процессор нагружен в " +
+                                    "несколько раз меньше, по времени примерно так же. Звук немного отличается от расчёта на процессоре.",
+                                    style=MaterialTheme.typography.bodySmall)
+                            }
                             if (ambienceNpu) {
                                 Text("Подготовка NPU (компиляция графов, один раз)",style=MaterialTheme.typography.titleMedium)
                                 Text("Компиляция долгая: модели звуков и малая модель музыки — минуты, средняя модель музыки — до часа; " +

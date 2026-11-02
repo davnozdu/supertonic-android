@@ -186,7 +186,7 @@ internal object AmbiencePlayer {
         return all[n % all.size]
     }
 
-    /** [mix]: «Микс звуков» — не ждать конца предыдущего: до трёх звуков звучат одновременно. */
+    /** [mix]: «Накладывать звуки» — не ждать конца предыдущего: до [EventMix.MAX_SHOTS] звуков одновременно. */
     fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float, mix: Boolean = false) {
         lateinit var run: Runnable
         run = Runnable {
@@ -198,14 +198,14 @@ internal object AmbiencePlayer {
                 return@Runnable
             }
             // An event is still sounding: the next one is skipped, two sounds never overlap (the voice is what matters).
-            // «Микс звуков» разрешает наложение — но не больше двух сразу: третий поверх двух уже каша.
+            // «Накладывать звуки» разрешает наложение — но не больше [EventMix.MAX_SHOTS] сразу: дальше уже каша.
             val busy = shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil
-            if (EventMix.blocked(mix, busy)) {
-                AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous")
+            if (EventMix.blocked(mix, busy, shots.size)) {
+                AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous (${shots.size} sounding)")
                 return@Runnable
             }
-            // Наложение: каждый следующий звук чуть тише (−1,4 дБ), иначе три клипа в сумме дают перегруз на выходе.
-            val level = if (mix && shots.isNotEmpty()) volume * 0.85f else volume
+            // Наложение: каждый следующий звук тише на −1,4 дБ за каждый уже звучащий, иначе сумма даёт перегруз.
+            val level = volume * EventMix.overlapGain(if (mix) shots.size else 0)
             val clip = variant(file)
             try {
                 val p = MediaPlayer()

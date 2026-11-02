@@ -16,7 +16,7 @@ import java.util.zip.ZipOutputStream
 object BookArchive {
     const val MAX_BYTES = 512L * 1024 * 1024
     private const val MAX_SOURCE = 64L * 1024 * 1024
-    private const val MAX_SOUNDS = 400
+    private const val MAX_SOUNDS = 1500
 
     fun isZip(file: File) = file.inputStream().use { val b = ByteArray(2); it.read(b) == 2 && b[0] == 'P'.code.toByte() && b[1] == 'K'.code.toByte() }
 

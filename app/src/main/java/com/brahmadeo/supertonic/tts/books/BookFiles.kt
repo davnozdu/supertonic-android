@@ -8,8 +8,10 @@ import java.io.InputStream
  * regeneration keeps them): the original EPUB/FB2 («Извлечь файл книги») and the location sounds. */
 object BookFiles {
     private val SOURCE = Regex("[^/\\\\:*?\"<>|\\u0000-\\u001F]{1,120}\\.(epub|fb2|fb2\\.zip|zip)", RegexOption.IGNORE_CASE)
-    /** l<number>_<variant>.m4a (location sounds), m<number>_<variant>.m4a (mood music) and e<number>.m4a (event sounds). */
-    val SOUND = Regex("(l[0-9]{1,4}_[0-9]{1,2}|m[0-9]{1,3}_[0-9]{1,2}|e[0-9]{1,4})\\.m4a")
+    /** l<number>_<variant>.m4a (location sounds), m<number>_<variant>.m4a (mood music), e<number>.m4a (event sounds of
+     * older books) and k_<kind>[_2|_3].m4a — один звук на вид действия. Без последних экспорт терял звуки событий,
+     * импорт их отбрасывал, а очистка после новой версии базы их не видела. */
+    val SOUND = Regex("(l[0-9]{1,4}_[0-9]{1,2}|m[0-9]{1,3}_[0-9]{1,2}|e[0-9]{1,4}|k_[a-z0-9_]{1,80})\\.m4a")
     private val SHA = Regex("[0-9a-f]{64}")
 
     fun dir(context: Context, sha: String): File {

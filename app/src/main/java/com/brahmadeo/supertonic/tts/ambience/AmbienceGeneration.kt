@@ -122,7 +122,9 @@ class AmbienceGenerationService : Service() {
         return START_NOT_STICKY
     }
     private fun holdWake() {
+        // Без подсчёта ссылок: повторный onStartCommand не должен оставлять снимок висеть до часа после работы.
         if (wake == null) wake = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyTTS:Ambience")
+            .apply { setReferenceCounted(false) }
         wake!!.acquire(60 * 60 * 1000L)
     }
     private fun notification(state: AmbienceGeneration.State): android.app.Notification {

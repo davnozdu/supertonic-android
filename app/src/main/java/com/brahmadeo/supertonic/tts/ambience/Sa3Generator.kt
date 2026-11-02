@@ -34,6 +34,9 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
      * stage of a clip is running. */
     @Volatile private var npuDit: NpuDit? = npuDit
     fun attachNpu(dit: NpuDit?) { npuDit = dit }
+    /** «Короткие звуки на NPU»: клип короче графа считается графом целиком (условие длительности = [seconds]) и
+     * обрезается до своих латентов. Иначе короткие клипы идут на CPU. */
+    @Volatile var npuShort: Boolean = false
     /** DiT on the NPU (ORT QNN): a static-length all-fp16-safe ONNX graph, used when the clip has exactly [length]
      * latents. Everything that depends only on t and seconds (sin/cos features with arguments up to ~6e4, the
      * global adaLN conditioning) runs in [pre], an fp32 graph on the ORT CPU; its outputs feed [session] by name. */
@@ -175,9 +178,10 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
     }
 
     private fun sample(hidden: FloatArray, mask: FloatArray, length: Int, seconds: Float, seed: Long, cancelled: () -> Boolean): FloatArray {
-        npuDit?.takeIf { it.length == length }?.let { dit ->
+        npuDit?.takeIf { fitsGraph(length, it.length, npuShort) }?.let { dit ->
             usedNpu = true
-            return pingpong(length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) }
+            val full = pingpong(dit.length, seed, cancelled) { x, t -> dit.velocity(x, t, hidden, mask, seconds) }
+            return if (dit.length == length) full else crop(full, dit.length, length)
         }
         val rung = ditRungs.first { it >= length }
         val sig = "s$rung"
@@ -281,6 +285,16 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
 
     companion object {
         const val SAMPLE_RATE = 44100
+
+        /** Клип в [length] латентов на графе в [graph]: точная длина всегда, короче — только при [short]. */
+        fun fitsGraph(length: Int, graph: Int, short: Boolean) = length == graph || (short && length < graph)
+
+        /** Первые [length] латентов каждого канала из [x] формы [256, graph]. */
+        fun crop(x: FloatArray, graph: Int, length: Int): FloatArray {
+            val out = FloatArray(LATENT_CH * length)
+            for (c in 0 until LATENT_CH) System.arraycopy(x, c * graph, out, c * length, length)
+            return out
+        }
 
         /** How many latents a clip of [seconds] needs: the NPU graph accepts only exactly 323 (30 s). */
         fun latentsFor(seconds: Float): Int = maxOf(1, ceil(seconds * SAMPLE_RATE / SAMPLES_PER_LATENT).toInt())

@@ -50,6 +50,11 @@ object SoundBank {
         if (autoChecking) return
         autoChecking = true
         val ctx = context.applicationContext
+        // Только для тех, кто базу уже скачивал (иначе 250 МБ без спроса), и только по безлимитной сети: проверка
+        // манифеста при новой версии сразу удаляет старые клипы, поэтому и её не делаем по мобильной сети.
+        val had = dir(ctx).listFiles()?.any { it.name.endsWith(".$FORMAT") } == true
+        val metered = runCatching { ctx.getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered }.getOrDefault(true)
+        if (!had || metered || !on(ctx)) { autoChecking = false; return }
         Thread({
             runCatching {
                 val before = version(ctx)

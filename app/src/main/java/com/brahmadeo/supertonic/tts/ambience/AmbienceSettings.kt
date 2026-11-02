@@ -81,6 +81,16 @@ object AmbienceSettings {
 
     /** Генератор держит три графа открытыми всю подготовку книги: +650 МБ памяти, зато ~4 с с каждого клипа.
      * Включено по умолчанию — памяти на телефоне с избытком, а клипов на книгу десятки. */
+    /** «Модель звуков событий»: small — Stable Audio 3 Small SFX, medium — Stable Audio 3 Medium (ей же сделана база
+     * звуков: чище тембр, ~4× дольше на CPU). Средняя скачивается вместе со «Средней» моделью музыки. */
+    const val EVENTS_MODEL = "ambience_events_model"
+    fun eventsMedium(prefs: SharedPreferences) = prefs.getString(EVENTS_MODEL, "small") == "medium"
+
+    /** «Короткие звуки на NPU · эксперимент»: клип короче 30 с считается готовым 30-секундным графом NPU с условием
+     * длительности и обрезается. Без новых графов и компиляции; звук отличается от CPU-пути (там маска внимания). */
+    const val NPU_SHORT = "ambience_npu_short"
+    fun npuShort(prefs: SharedPreferences) = prefs.getBoolean(NPU_SHORT, false)
+
     const val KEEP_MODELS = "ambience_keep_models"
     fun keepModels(prefs: SharedPreferences) = prefs.getBoolean(KEEP_MODELS, true)
 
