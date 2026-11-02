@@ -43,17 +43,36 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
     /** Декодер SAME-L для HTP: свой экспорт из эталонного PyTorch-описания Stability (tflite/build/torch_defs) с
      * полосным вниманием (окно ±17 позиций → 51 ключ на блок, стандартные операции, линейная стоимость) и порогом
      * −20 на аргументе Exp; веса fp16, вход/выход fp32. Вход [1, 256, length], выход планарный [1, 2, length·4096]. */
-    class NpuDecoder(val sessions: List<ai.onnxruntime.OrtSession>, val length: Int) : AutoCloseable {
+    class NpuDecoder(val sessions: List<ai.onnxruntime.OrtSession>, val window: Int) : AutoCloseable {
+        /** Клип любой длины — окнами по [window] латентов с перекрытием [TRIM] с каждой стороны, как CPU-декодер
+         * (полный граф на 30 с не помещался в память телефона при компиляции). Окна дают тот же звук, что цельное
+         * декодирование (97 дБ на компьютере). */
         fun decode(x: FloatArray, latents: Int): FloatArray {
+            val even = if (latents % 2 == 0) latents else latents + 1
+            val out = FloatArray(even * SAMPLES_PER_LATENT * 2)
+            val starts = if (even <= window) listOf(0) else
+                (0 until even - window step window - 2 * TRIM).toMutableList().also { if (it.lastOrNull() != even - window) it.add(even - window) }
+            val span = window * SAMPLES_PER_LATENT
+            starts.forEachIndexed { k, st ->
+                val chunk = FloatArray(LATENT_CH * window)
+                for (c in 0 until LATENT_CH) for (t in 0 until window) chunk[c * window + t] = x[c * latents + minOf(st + t, latents - 1)]
+                val y = run(chunk)
+                val lo = if (k == 0) 0 else TRIM
+                val hi = if (st + window >= even) minOf(window, even - st) else window - TRIM
+                for (sIdx in lo * SAMPLES_PER_LATENT until hi * SAMPLES_PER_LATENT) {
+                    val frame = st * SAMPLES_PER_LATENT + sIdx
+                    out[frame * 2] = y[sIdx]; out[frame * 2 + 1] = y[span + sIdx]
+                }
+            }
+            return out.copyOf(latents * SAMPLES_PER_LATENT * 2)
+        }
+
+        /** Одно окно: части по 4 блока одна за другой, выход части — вход следующей. Планарный [2, window·4096]. */
+        private fun run(chunk: FloatArray): FloatArray {
             val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
-            // Короче графа — последний латент повторяется (как у окон CPU-декодера), лишнее потом отрезается.
-            val padded = FloatArray(LATENT_CH * length)
-            for (c in 0 until LATENT_CH) for (t in 0 until length) padded[c * length + t] = x[c * latents + minOf(t, latents - 1)]
-            val input = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(padded), longArrayOf(1, LATENT_CH.toLong(), length.toLong()))
+            val input = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(chunk), longArrayOf(1, LATENT_CH.toLong(), window.toLong()))
             try {
-                // Части по 4 блока (каждая компилируется отдельно — цельный граф не помещался в память телефона):
-                // выход части — вход следующей.
-                val planar = com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
+                return com.brahmadeo.supertonic.tts.utils.Npu.exclusive {
                     var current: ai.onnxruntime.OnnxTensor = input
                     val results = ArrayList<ai.onnxruntime.OrtSession.Result>()
                     try {
@@ -61,12 +80,9 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
                             val r = part.run(mapOf(part.inputNames.first() to current)); results.add(r)
                             current = r[0] as ai.onnxruntime.OnnxTensor
                         }
-                        FloatArray(2 * length * SAMPLES_PER_LATENT).also { current.floatBuffer.get(it) }
+                        FloatArray(2 * window * SAMPLES_PER_LATENT).also { current.floatBuffer.get(it) }
                     } finally { results.forEach { it.close() } }
                 }
-                val span = length * SAMPLES_PER_LATENT
-                val frames = latents * SAMPLES_PER_LATENT
-                return FloatArray(frames * 2) { i -> planar[(i and 1) * span + (i shr 1)] }
             } finally { input.close() }
         }
         override fun close() { sessions.forEach { runCatching { it.close() } } }
@@ -332,7 +348,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
     /** SAME-S decode on rungs: one exact window when the length is a rung, else lossless overlapped tiles
      * (TRIM latents per side) on the rung that decodes the fewest latents in total. */
     private fun decode(x: FloatArray, length: Int): FloatArray {
-        npuDecoder?.takeIf { length <= it.length }?.let { return it.decode(x, length) }
+        npuDecoder?.let { return it.decode(x, length) }
         return decodeCpu(x, length)
     }
 
@@ -400,7 +416,7 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
         const val COND_DIM = 768
         const val LATENT_CH = 256
         private const val MEM = 64
-        private const val TRIM = 16
+        const val TRIM = 16
         private const val STEPS = 8
         val SMALL_RUNGS = intArrayOf(8, 48, 96, 192, 416, 704, 1056, 1292)
         val MEDIUM_RUNGS = intArrayOf(8, 48, 96, 192, 416, 704, 1056, 1496, 2040, 2824, 3536, 4096)

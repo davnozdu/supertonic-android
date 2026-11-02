@@ -64,18 +64,19 @@ object AmbienceModel {
     val LARGE_DECODER = listOf(
         Asset("dec_l_w8a8.tflite", 515_381_432L, "53dbca41ec9620257834bda4f3008a2cd5072afba564b84906f8ffdfca2647e7"),
     )
-    /** SAME-L для NPU: свой экспорт на 324 латента (30 с) с полосным вниманием, fp16 (2 ноября 2026). На CPU
+    /** SAME-L для NPU: свой экспорт с полосным вниманием, fp16 (2 ноября 2026). На CPU
      * совпадает с эталоном 53 дБ (w8a8-tflite — 30 дБ). Берётся, когда включены «Большой декодер» и NPU. */
-    // Три части по 4 блока: цельный граф (912 МБ) при компиляции выедал всю память телефона (lmkd убивал процесс).
+    // Окна по 96 латентов (как у CPU-декодера, перекрытие 16), три части по 4 блока: граф на весь 30-секундный
+    // клип (5 508 позиций) при компиляции выедал всю память телефона — lmkd убивал процесс даже по частям.
     val LARGE_DECODER_NPU = listOf(
-        Asset("samel_dec_L324_p0.onnx", 314_514_899L, "33d54ee1eaea6a8ce71758f1f8068d940d70f350cb9e45d17d8a472f99af81c7"),
-        Asset("samel_dec_L324_p1.onnx", 297_797_110L, "1f91095e660d3b107cdfac77a5d50d3c060d2c8059884857fabc92d72760003d"),
-        Asset("samel_dec_L324_p2.onnx", 299_373_378L, "a522d41198e397b95af4e28fda03b5b408902d7c21c6ccd44c32963bade704b1"),
+        Asset("samel_dec_L96_p0.onnx", 293_788_780L, "cc2ac117303307d1a3cef621031019fcd8125b7e3064801c933aa50b4f25bd6f"),
+        Asset("samel_dec_L96_p1.onnx", 288_277_650L, "ef4b40732644380c71c29e3b4c7c5ffa1bced111e65564efffd34684a67036c8"),
+        Asset("samel_dec_L96_p2.onnx", 289_853_918L, "5623f23c37286dfe457a4777a574a3e26391153f87d051135ef0be0a536ff8cc"),
     )
-    private const val LARGE_DECODER_NPU_MARKER = "verified-ambience-sa3-v1-samel-npu3"
-    private val SAMEL_NAMES = listOf("sa3-samel-L324-p0-33d54ee1", "sa3-samel-L324-p1-1f91095e", "sa3-samel-L324-p2-a522d411")
+    private const val LARGE_DECODER_NPU_MARKER = "verified-ambience-sa3-v1-samel-w96"
+    private val SAMEL_NAMES = listOf("sa3-samel-W96-p0-cc2ac117", "sa3-samel-W96-p1-ef4b4073", "sa3-samel-W96-p2-5623f23c")
     const val SAMEL_SCOPE = "_ambience_samel"
-    const val SAMEL_LENGTH = 324
+    const val SAMEL_WINDOW = 96
     fun largeDecoderNpuReady(context: Context) = complete(context, LARGE_DECODER_NPU, LARGE_DECODER_NPU_MARKER)
     /** Пойдёт ли большой декодер на NPU: включены «Большой декодер» и NPU, файл скачан, сбоя сборки не было. */
     fun largeDecoderNpuPlanned(context: Context) = largeDecoderWanted(context) && largeDecoderReady(context) &&
@@ -97,7 +98,7 @@ object AmbienceModel {
             for (k in SAMEL_NAMES.indices) if (!Npu.cacheReady(context, SAMEL_NAMES[k])) { onCompile(); building = k; open(k).close(); building = -1 }
             for (k in SAMEL_NAMES.indices) sessions.add(open(k))
             Log.i("Ambience", "SAME-L NPU sessions ready, PSS ${android.os.Debug.getPss() / 1024} MB")
-            Sa3Generator.NpuDecoder(sessions, SAMEL_LENGTH)
+            Sa3Generator.NpuDecoder(sessions, SAMEL_WINDOW)
         } catch (e: Throwable) {
             sessions.forEach { runCatching { it.close() } }
             Log.w("Ambience", "SAME-L NPU unavailable: ${e.javaClass.simpleName}: ${e.message}")

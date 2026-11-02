@@ -181,13 +181,16 @@ object AmbienceProbe {
      * и оба WAV в cache/ambience (samel_cpu.wav, samel_npu.wav, samel-check.txt). */
     private fun samelCheck(context: Context, npuDit: Sa3Generator.NpuDit?, threads: Int, prompt: String, out: File) {
         val m = AmbienceModel.MEDIUM_MUSIC
+        // Сначала декодер на NPU (компиляция — пик памяти), пока средняя модель на CPU ещё не загружена.
+        val c = android.os.SystemClock.elapsedRealtime()
+        val dec = AmbienceModel.largeDecoderNpu(context, allowCompile = true, diagnostic = true)
+            ?: return Unit.also { File(out, "samel-check.txt").writeText("NPU decoder unavailable\n") }
+        Log.i(TAG, "SAMEL load/compile ${android.os.SystemClock.elapsedRealtime() - c} ms")
         Sa3Generator(AmbienceModel.root(context), threads, npuDit, m.ditFile, m.rungs, "dec_l_w8a8.tflite", keep = true).use { g ->
             val lat = g.latents(prompt, 30f, 42L)
             val t0 = android.os.SystemClock.elapsedRealtime(); val c0 = android.os.Process.getElapsedCpuTime()
             val cpu = g.decodeCpu(lat.x, lat.length)
             val cpuMs = android.os.SystemClock.elapsedRealtime() - t0; val cpuCpu = android.os.Process.getElapsedCpuTime() - c0
-            val dec = AmbienceModel.largeDecoderNpu(context, allowCompile = true, diagnostic = true)
-                ?: return Unit.also { File(out, "samel-check.txt").writeText("NPU decoder unavailable\n") }
             dec.use { d ->
                 val times = (0 until 3).map {
                     val t1 = android.os.SystemClock.elapsedRealtime(); val c1 = android.os.Process.getElapsedCpuTime()
