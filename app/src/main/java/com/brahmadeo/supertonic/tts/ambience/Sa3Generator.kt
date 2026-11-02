@@ -59,6 +59,28 @@ class Sa3Generator(private val dir: File, private val threads: Int = 4, npuDit: 
 
         /** Диагностика: все выходы всех частей графа для одного шага — на своих сессиях (HTP) или на сессиях, которые
          * даёт [open] (ORT CPU; каждая закрывается сразу после своей части, чтобы не держать 3 ГБ разом). */
+        /** Диагностика: одна часть [k] на [session] (ORT CPU) с теми же входами, что получила бы на HTP: базовые входы
+         * плюс выходы предыдущих частей из [prior] (обычно — HTP-прогон [trace]). Одна CPU-сессия вместо всех. */
+        fun tracePart(k: Int, session: ai.onnxruntime.OrtSession, prior: List<Map<String, FloatArray>>, x: FloatArray, t: Float,
+                      hidden: FloatArray, mask: FloatArray, seconds: Float): Map<String, FloatArray> {
+            val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
+            fun tensor(data: FloatArray, shape: LongArray) = ai.onnxruntime.OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(data), shape)
+            val shapes = session.inputInfo.mapValues { (it.value.info as ai.onnxruntime.TensorInfo).shape }
+            val base = HashMap<String, FloatArray>()
+            base["x"] = x; base["t5_hidden"] = hidden; base["t5_mask"] = mask; base["local_add_cond"] = FloatArray(257 * length)
+            conditioning(t, seconds).forEach { (n, c) -> base[n] = c.data }
+            for (i in 0 until k) base.putAll(prior[i])
+            val feeds = session.inputNames.associateWith { tensor(base.getValue(it), shapes.getValue(it)) }
+            try {
+                session.run(feeds).use { r ->
+                    val out = LinkedHashMap<String, FloatArray>()
+                    r.forEach { (name, v) -> val o = v as ai.onnxruntime.OnnxTensor
+                        out[name] = FloatArray(o.info.shape.fold(1L) { a, b -> a * b }.toInt()).also { o.floatBuffer.get(it) } }
+                    return out
+                }
+            } finally { feeds.values.forEach { it.close() } }
+        }
+
         fun trace(x: FloatArray, t: Float, hidden: FloatArray, mask: FloatArray, seconds: Float,
                   open: ((Int) -> ai.onnxruntime.OrtSession)? = null): List<Map<String, FloatArray>> {
             val env = ai.onnxruntime.OrtEnvironment.getEnvironment()

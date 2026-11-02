@@ -49,10 +49,14 @@ object AmbienceProbe {
                 val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
                 val files = AmbienceModel.MEDIUM_MUSIC.npuParts
                 val htp = dit.trace(x, 0.7f, hidden, mask, 30f)
-                val cpu = dit.trace(x, 0.7f, hidden, mask, 30f) { k ->
-                    val o = ai.onnxruntime.OrtSession.SessionOptions().apply { setIntraOpNumThreads(threads) }
-                    env.createSession(File(AmbienceModel.root(context), files[k]).path, o)
+                // Только последняя часть на CPU, с входами из HTP-прогона: одна CPU-сессия (три вместе убивал OOM),
+                // а расхождение показывает ошибку именно этой части, а не накопленную раньше.
+                val last = files.size - 1
+                val o = ai.onnxruntime.OrtSession.SessionOptions().apply { setIntraOpNumThreads(threads) }
+                val cpuLast = env.createSession(File(AmbienceModel.root(context), files[last]).path, o).use { session ->
+                    dit.tracePart(last, session, htp, x, 0.7f, hidden, mask, 30f)
                 }
+                val cpu = htp.indices.map { if (it == last) cpuLast else emptyMap() }
                 for (k in htp.indices) for ((name, a) in htp[k]) {
                     val b = cpu[k][name] ?: continue
                     var signal = 0.0; var noise = 0.0; var maxAbs = 0f; var nan = 0
