@@ -68,13 +68,14 @@ object AmbienceModel {
      * совпадает с эталоном 53 дБ (w8a8-tflite — 30 дБ). Берётся, когда включены «Большой декодер» и NPU. */
     // Окна по 96 латентов (как у CPU-декодера, перекрытие 16), три части по 4 блока: граф на весь 30-секундный
     // клип (5 508 позиций) при компиляции выедал всю память телефона — lmkd убивал процесс даже по частям.
+    // Тензоры не выше ранга 4 (без измерения батча): QNN отвергал ранг 5 («Failed to finalize QNN graph»).
     val LARGE_DECODER_NPU = listOf(
-        Asset("samel_dec_L96_p0.onnx", 293_788_780L, "cc2ac117303307d1a3cef621031019fcd8125b7e3064801c933aa50b4f25bd6f"),
-        Asset("samel_dec_L96_p1.onnx", 288_277_650L, "ef4b40732644380c71c29e3b4c7c5ffa1bced111e65564efffd34684a67036c8"),
-        Asset("samel_dec_L96_p2.onnx", 289_853_918L, "5623f23c37286dfe457a4777a574a3e26391153f87d051135ef0be0a536ff8cc"),
+        Asset("samel_dec_L96_p0.onnx", 293_790_734L, "3a2a48348ecdd19e69048426a930adfa6ff33d07e983271b019dc5da0fe4f34b"),
+        Asset("samel_dec_L96_p1.onnx", 288_279_786L, "9b82b4c21378eff1e96517459ca0212642aa25409e8c24c86d0de43f37167502"),
+        Asset("samel_dec_L96_p2.onnx", 289_855_932L, "488404c23a71eb7a930d589162002d6dc7616759fb119079442b28df47007889"),
     )
-    private const val LARGE_DECODER_NPU_MARKER = "verified-ambience-sa3-v1-samel-w96"
-    private val SAMEL_NAMES = listOf("sa3-samel-W96-p0-cc2ac117", "sa3-samel-W96-p1-ef4b4073", "sa3-samel-W96-p2-5623f23c")
+    private const val LARGE_DECODER_NPU_MARKER = "verified-ambience-sa3-v1-samel-w96r4"
+    private val SAMEL_NAMES = listOf("sa3-samel-W96-p0-3a2a4834", "sa3-samel-W96-p1-9b82b4c2", "sa3-samel-W96-p2-488404c2")
     const val SAMEL_SCOPE = "_ambience_samel"
     const val SAMEL_WINDOW = 96
     fun largeDecoderNpuReady(context: Context) = complete(context, LARGE_DECODER_NPU, LARGE_DECODER_NPU_MARKER)
