@@ -60,3 +60,16 @@
   на компьютере (~/Downloads/sound-bank-medium: driver.py, normalize*, build_bank.py). Не сгенерировано.
 - Телефон: stay_on_while_plugged_in=3 ВРЕМЕННО (просьба пользователя на время отладки), исходно 0 — вернуть.
   timeout 30000 не менялся. Пары для прослушивания: ~/Downloads/sound-bank-medium/послушать/2026-11-02-npu/.
+- ИСПРАВЛЕНО (beta177, 98bb47e7): средняя на NPU. Поуровневая сверка HTP/CPU: слои 16–21 56–65 дБ, на выходе
+  слоя 22 NaN. Причины: (1) project_out — остаточный поток ~2000 без нормы в MatMul по 1536 входам (сумма в fp16);
+  (2) softmax слоя 22: оценки внимания до 440 (у прочих слоёв ≤27), аргумент Exp до −880 → NaN на HTP.
+  Новый файл medium_dit_L323_r_p2b.onnx (953523660 Б, sha e72f5173…) в ambience-sa3-v1: project_out ×1/64…×64 и
+  Max(x−max, −20) перед каждым Exp; на CPU = p2 (68–69 дБ). Имя кэша части 2 «…-p2b», части 0–1 не перекомпилируются,
+  метка npu3, старая p2 удаляется. На телефоне: пианино NPU = CPU (полосы ±1 дБ), дверь 8 с нормальная.
+  Скрипты: scratchpad сессии med/ (run_chain.py, scan.py, make_p2b.py) — НЕ сохраняются; суть выше.
+- Компиляция части 2 на телефоне до 9,5 ГБ: OnePlus o-kill «abnormal memory» убивает; при блокировке экрана
+  процесс замораживается. Компилировать на разблокированном телефоне после drop_caches/am kill-all, без сверки.
+- Скорость средняя 8 с: Mac M2 Pro CPU 8 потоков 4,2 с (CPU 23 с), 4 потока 5,9 с; телефон CPU 4,2–4,6 с (16–18 с);
+  телефон NPU «короткий» режим 6,9 с (CPU 4 с). Телефон NPU+CPU параллельно ≈2,7 с/клип (оценка).
+- Экран для отладки: screen_off_timeout 1800000 (исходно 30000), svc power stayon true (stay_on 15; исходно 0) —
+  ВЕРНУТЬ: settings put system screen_off_timeout 30000; svc power stayon false; settings put global stay_on_while_plugged_in 0.
