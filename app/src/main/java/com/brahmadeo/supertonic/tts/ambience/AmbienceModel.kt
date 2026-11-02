@@ -54,7 +54,10 @@ object AmbienceModel {
     val MEDIUM_NPU_ASSETS = listOf(
         Asset("medium_dit_L323_r_p0.onnx", 960_813_101L, "2fd544d27814af2ecdbdac519639f9a54117fd80dd46c6a75b6a189e244632c4"),
         Asset("medium_dit_L323_r_p1.onnx", 952_607_398L, "1d73f64d7bb89d6cc81c69b0ed0d241906b4ed793daf362aa0ce4bc0a33b89de"),
-        Asset("medium_dit_L323_r_p2.onnx", 953_528_040L, "0ffd507bc84d447f6b2c279e65bef12d3ec19a69ef9d60d57b8e1c8a7b77f94d"),
+        // p2b (2 ноября 2026): та же часть 2 с двумя правками под fp16 на HTP — project_out ×1/64…×64 (сумма
+        // переполнялась) и аргумент Exp в softmax не ниже −20 (в слое 22 он доходил до −880 и HTP давал NaN).
+        // Прежняя p2 на NPU давала шум вместо звука. На CPU p2b совпадает с p2 (68–69 дБ).
+        Asset("medium_dit_L323_r_p2b.onnx", 953_523_660L, "e72f51732815b4292f824be81da4c9981c0ee877d741c28457abb514bf9508cc"),
         Asset("medium_dit_pre.onnx", 47_063_721L, "7134b158307db424298c3896f4e96b06d6091336895523823fab2a9ad1f62d37"),
     )
     /** SAME-L decoder (the same latents as SAME-S): more detail, ~+30 % of the generation time. */
@@ -69,12 +72,19 @@ object AmbienceModel {
     class Music(val id: String, val title: String, val ditFile: String, val rungs: IntArray, val assets: List<Asset>, val marker: String,
                 val npuAssets: List<Asset>, val npuMarker: String, val npuParts: List<String>, val npuPre: String, val npuCache: String, val family: String,
                 /** Where an NPU failure of this model is recorded. */
-                val failScope: String = Npu.AMBIENCE)
+                val failScope: String = Npu.AMBIENCE,
+                /** Имена скомпилированных графов по частям, если не "<npuCache>-p<k>". */
+                val npuNames: List<String>? = null,
+                val obsolete: List<String> = emptyList())
     val SMALL_MUSIC = Music("small", "Малая", "dit_music_w8a8.tflite", Sa3Generator.SMALL_RUNGS, MUSIC_ASSETS, "verified-ambience-sa3-v1-music",
         MUSIC_NPU_ASSETS, "verified-ambience-sa3-v1-music-npu", listOf("music_dit_L323_main.onnx"), "music_dit_pre.onnx", "sa3-music-L323-b76f554f", "sa3-music")
     val MEDIUM_MUSIC = Music("medium", "Средняя", "dit_medium_w8a8.tflite", Sa3Generator.MEDIUM_RUNGS, MEDIUM_ASSETS, "verified-ambience-sa3-v1-medium",
-        MEDIUM_NPU_ASSETS, "verified-ambience-sa3-v1-medium-npu2", (0..2).map { "medium_dit_L323_r_p$it.onnx" }, "medium_dit_pre.onnx", "sa3-medium-L323-2fd544d2", "sa3-medium",
-        Npu.AMBIENCE_MEDIUM)
+        MEDIUM_NPU_ASSETS, "verified-ambience-sa3-v1-medium-npu3", listOf("medium_dit_L323_r_p0.onnx", "medium_dit_L323_r_p1.onnx", "medium_dit_L323_r_p2b.onnx"),
+        "medium_dit_pre.onnx", "sa3-medium-L323-2fd544d2", "sa3-medium", Npu.AMBIENCE_MEDIUM,
+        // Части 0–1 не менялись (их скомпилированные графы остаются), у исправленной части 2 своё имя кэша.
+        npuNames = listOf("sa3-medium-L323-2fd544d2-p0", "sa3-medium-L323-2fd544d2-p1", "sa3-medium-L323-2fd544d2-p2b"),
+        /** Прежние файлы этой модели, которые больше не нужны (удаляются, когда новые на месте). */
+        obsolete = listOf("medium_dit_L323_r_p2.onnx"))
     private fun prefs(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0)
     /** The chosen music model (pref [MUSIC_MODEL_KEY], the small one by default). */
     fun music(context: Context) = if (prefs(context).getString(MUSIC_MODEL_KEY, "small") == "medium") MEDIUM_MUSIC else SMALL_MUSIC
@@ -87,7 +97,11 @@ object AmbienceModel {
     fun musicReady(context: Context) = ready(context) && music(context).let { complete(context, it.assets, it.marker) } &&
         (!largeDecoderWanted(context) || largeDecoderReady(context))
     /** False while a model has no NPU graphs (the CPU makes its music then). */
-    fun musicNpuReady(context: Context) = musicReady(context) && music(context).let { it.npuAssets.isNotEmpty() && complete(context, it.npuAssets, it.npuMarker) }
+    fun musicNpuReady(context: Context) = musicReady(context) && music(context).let { m ->
+        (m.npuAssets.isNotEmpty() && complete(context, m.npuAssets, m.npuMarker)).also { ok ->
+            // Новые файлы на месте — прежние версии (≈1 ГБ) больше не нужны.
+            if (ok) m.obsolete.forEach { File(root(context), it).takeIf { f -> f.exists() }?.delete() }
+        } }
     private fun musicNpuMissing(context: Context) = music(context).npuAssets.isNotEmpty() && !musicNpuReady(context)
     /** A generator for music with the chosen model and decoder. */
     fun musicGenerator(context: Context, threads: Int, npu: Sa3Generator.NpuDit?, keep: Boolean = true) = music(context).let {
@@ -190,13 +204,13 @@ object AmbienceModel {
         val cache = if (music) m.npuCache else NPU_CACHE
         // One graph keeps its old cache name; the parts of a cut model get "-p<k>" and keep each other's caches.
         return NpuTarget(parts, if (music) m.npuPre else "dit_pre.onnx", cache, if (music) m.family else "sa3-dit",
-            if (music) m.failScope else Npu.AMBIENCE, if (parts.size == 1) listOf(cache) else parts.indices.map { "$cache-p$it" },
+            if (music) m.failScope else Npu.AMBIENCE,
+            if (music && m.npuNames != null) m.npuNames else if (parts.size == 1) listOf(cache) else parts.indices.map { "$cache-p$it" },
             if (music) "музыка, ${m.title.lowercase()}" else "звуки")
     }
-    /** Средняя модель на HTP выдаёт шум вместо звука (проверено 2 ноября 2026: центр спектра 7,6 кГц против 1,2 кГц на
-     * CPU, и у звуков, и у музыки). Пока причина не найдена, средняя считается на CPU: медленнее, но звук верный.
-     * Проба (ambienceNpuCheck) берёт её графы явно, чтобы найти место поломки. */
-    const val MEDIUM_NPU_BROKEN = true
+    /** Аварийный выключатель средней модели на NPU. До p2b (2 ноября 2026) её часть 2 на HTP давала шум вместо звука;
+     * с p2b звук совпадает с CPU (пианино: полосы спектра ±1 дБ). Оставлен на случай новой регрессии QNN. */
+    const val MEDIUM_NPU_BROKEN = false
     private fun mediumBlocked(context: Context, music: Boolean, model: Music?) =
         MEDIUM_NPU_BROKEN && (model ?: if (music) music(context) else null) == MEDIUM_MUSIC &&
             // Гибрид (последняя часть на CPU в fp32) звучит верно — тогда NPU для средней разрешён.
