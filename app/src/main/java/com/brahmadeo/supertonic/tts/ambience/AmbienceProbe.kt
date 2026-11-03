@@ -24,9 +24,9 @@ object AmbienceProbe {
     /** Production NPU DiT (AmbienceModel.npuDit, switch forced on for the probe only), then optionally one forward
      * checked against the same graph on the ORT CPU (that CPU session inflates the process memory afterwards). */
     private fun npuDit(context: Context, threads: Int, prompt: String, check: Boolean, medium: Boolean = false): Sa3Generator.NpuDit? {
-        val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
-        val had = prefs.contains(AmbienceModel.NPU_KEY); val old = prefs.getBoolean(AmbienceModel.NPU_KEY, false)
-        prefs.edit().putBoolean(AmbienceModel.NPU_KEY, true).commit()
+        // Через Npu.forceSwitch, а не записью в SupertonicPrefs: в отдельном процессе (:soundgen) запись в общий файл
+        // настроек затёрла бы то, что основной процесс сохранил за это время.
+        com.brahmadeo.supertonic.tts.utils.Npu.forceSwitch(context, true)
         try {
             if (!AmbienceModel.npuReady(context)) runBlocking { AmbienceModel.download(context) { text, _ -> Log.i(TAG, "DOWNLOAD $text") } }
             memory("before-npu")
@@ -80,7 +80,7 @@ object AmbienceProbe {
             }
             return dit
         } finally {
-            prefs.edit().apply { if (had) putBoolean(AmbienceModel.NPU_KEY, old) else remove(AmbienceModel.NPU_KEY) }.commit()
+            com.brahmadeo.supertonic.tts.utils.Npu.forceSwitch(context, null)
         }
     }
 
@@ -217,7 +217,7 @@ object AmbienceProbe {
      * 42 °C — пауза до остывания.
      */
     private const val RECYCLE = 150
-    private fun bankRun(context: Context, intent: Intent) {
+    private fun bankRun(context: Context, intent: Intent, recycle: (() -> Boolean)? = null) {
         val dir = File(context.filesDir, "bank-gen").apply { mkdirs() }
         val doneFile = File(dir, "done.txt")
         val status = File(dir, "status.txt")
@@ -279,13 +279,16 @@ object AmbienceProbe {
                         last = now
                     }).run()
             } finally { g.npuDecoder?.close(); g.close() }
+            // A long bank run gets a fresh process every RECYCLE clips: the native heap and the kernel's dmabuf pool are
+            // then not carried for hours, and everything the run took is returned at once. Progress is in done.txt.
+            if (done.size < jobs.size && recycle?.invoke() == true) return
         } } finally { dit?.close() }
         status.writeText("finished ${done.size}/${jobs.size} at=${System.currentTimeMillis()}\n")
         Log.i(TAG, "BANK finished, made $made")
     }
 
-    fun run(context: Context, intent: Intent) {
-        if (intent.getBooleanExtra("ambienceBankJob", false)) { bankRun(context, intent); return }
+    fun run(context: Context, intent: Intent, recycle: (() -> Boolean)? = null) {
+        if (intent.getBooleanExtra("ambienceBankJob", false)) { bankRun(context, intent, recycle); return }
         if (!AmbienceModel.ready(context)) {
             Log.i(TAG, "DOWNLOAD start ${AmbienceModel.totalBytes() / 1048576} MB")
             var last = -1

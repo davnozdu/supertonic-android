@@ -24,6 +24,8 @@ internal object GemmaNpuClient {
     private val gate = object : IHtpGate.Stub() {
         override fun lock() { Npu.lockForRemote() }
         override fun unlock() { Npu.unlockForRemote() }
+        // Not needed here: this client releases its own turns when the Gemma process dies (crashed()).
+        override fun watch(client: android.os.IBinder?) {}
     }
 
     class Remote internal constructor(private val context: Context, private val connection: ServiceConnection,

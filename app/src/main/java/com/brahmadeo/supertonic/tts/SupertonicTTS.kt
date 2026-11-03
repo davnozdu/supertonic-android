@@ -26,7 +26,9 @@ object SupertonicTTS {
     }.apply { removeOnCancelPolicy = true }
     private var teraIdleTask: java.util.concurrent.ScheduledFuture<*>? = null
     private const val TERA_IDLE_MS = 120_000L
-    private fun touchAudio() { lastAudioUse = android.os.SystemClock.elapsedRealtime() }
+    private fun touchAudio() { lastAudioUse = android.os.SystemClock.elapsedRealtime(); com.brahmadeo.supertonic.tts.utils.NpuJanitor.used() }
+    /** How long ago the engine last made sound: the NPU cleaner waits for this before closing resident models. */
+    fun idleMs(): Long = android.os.SystemClock.elapsedRealtime() - maxOf(lastAudioUse, lastTeraUse)
     @Synchronized private fun scheduleTeraIdle() {
         teraIdleTask?.cancel(false)
         teraIdleTask = if (teraEngine == null) null else idleScheduler.schedule({

@@ -53,7 +53,10 @@ class SoundGenService : Service() {
         }
         job = thread(name = "sound-gen") {
             try {
-                AmbienceProbe.run(this, intent)
+                // The generator runs in its own process: the HTP turn must be taken from the main process, otherwise
+                // its QNN graphs would run at the same time as the reader's (QNN 1002, both sides slower).
+                com.brahmadeo.supertonic.tts.utils.HtpGate.attach(this)
+                AmbienceProbe.run(this, intent, recycle = { restartLater(intent) })
             } catch (e: Throwable) {
                 Log.e(TAG, "FAILED ${e.javaClass.simpleName}: ${e.message}", e)
                 // Журнал приложения прошивка глушит: причину — в файл, его читает скрипт сборки базы.
@@ -75,11 +78,32 @@ class SoundGenService : Service() {
         if (wake?.isHeld == true) wake?.release()
         wake = null
         super.onDestroy()
+        // This service is the only component of ":soundgen": ending the thread would keep the process (and the NPU
+        // buffers the kernel still caches for it) alive. The job's progress is in files, so a restart resumes.
+        Log.i(TAG, "generator process done: ${com.brahmadeo.supertonic.tts.utils.Npu.footprint(this)}")
+        com.brahmadeo.supertonic.tts.utils.HtpGate.detach("job finished")
     }
+
+    /**
+     * A long run gets a fresh process: the alarm starts this service again a few seconds after this process is gone, and
+     * done.txt makes the new one continue where this one stopped. Scheduling is best effort — on «false» the run simply
+     * goes on here, so a restrictive ROM cannot break generation, it only keeps the process longer.
+     */
+    private fun restartLater(intent: Intent): Boolean = runCatching {
+        if (android.os.Build.VERSION.SDK_INT < 26) return false
+        val again = Intent(intent).setAction(ACTION_RESTART)
+        val pending = android.app.PendingIntent.getForegroundService(this, ID, again,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+        (getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager)
+            .setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 5000, pending)
+        Log.i(TAG, "next batch in a fresh process in 5 s (memory and dmabuf are returned on the way out)")
+        true
+    }.getOrDefault(false)
 
     private companion object {
         const val TAG = "SoundGen"
         const val CHANNEL = "sound_gen"
         const val ID = 4211
+        const val ACTION_RESTART = "com.brahmadeo.supertonic.tts.RESTART_BANK"
     }
 }

@@ -15,6 +15,15 @@ object Npu {
     private const val TAG = "Npu"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE)
+    /** This process's name: "<package>" or "<package>:soundgen". API 28 has Application.getProcessName(). */
+    fun processName(): String = if (Build.VERSION.SDK_INT >= 28) runCatching { android.app.Application.getProcessName() }.getOrDefault("")
+        else runCatching { File("/proc/self/cmdline").readText().trim('\u0000', '\n') }.getOrDefault("")
+    /** The heavy generators run in ":soundgen" (see [HtpGate]). SharedPreferences are not shared between processes:
+     * a write there flushes that process's whole copy and would wipe what the main process changed meanwhile. So the
+     * worker keeps its own failure marks in a separate file, and both are read. */
+    private fun workerProcess(ctx: Context) = processName().endsWith(":soundgen")
+    private fun statePrefs(ctx: Context) = if (workerProcess(ctx)) ctx.getSharedPreferences("NpuWorkerState", Context.MODE_PRIVATE) else prefs(ctx)
+
     private fun version(ctx: Context) = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).longVersionCode }.getOrDefault(0L)
     private fun backend(ctx: Context) = File(ctx.applicationInfo.nativeLibraryDir, "libQnnHtp.so")
     /** Compiled HTP contexts depend on the ORT/QNN runtime and the graphs, not on the app version: an update that
@@ -37,7 +46,7 @@ object Npu {
     fun retryDelayMs(failures: Int): Long = minOf(30_000L shl (failures - 1).coerceIn(0, 4), 300_000L)
     /** Set only inside the Gemma NPU process: its turns are taken from the main process, where QNN runs. */
     @Volatile var remoteHtp: com.brahmadeo.supertonic.tts.llm.IHtpGate? = null
-    @JvmStatic fun lockHtp() { remoteHtp?.let { it.lock(); return }; htp.lock() }
+    @JvmStatic fun lockHtp() { NpuJanitor.used(); remoteHtp?.let { it.lock(); return }; htp.lock() }
     @JvmStatic fun unlockHtp() { remoteHtp?.let { it.unlock(); return }; htp.unlock() }
 
     /** The main-process side of [remoteHtp]. A ReentrantLock must be released by the thread that took it,
@@ -56,11 +65,37 @@ object Npu {
     const val AMBIENCE = "_ambience"
     /** The medium music model: its own scope, so its failure leaves the sounds and the small model on the NPU. */
     const val AMBIENCE_MEDIUM = "_ambience_medium"
-    fun failed(ctx: Context, scope: String = "") = prefs(ctx).getLong(FAILED + scope, -1L) == version(ctx)
+    fun failed(ctx: Context, scope: String = "") =
+        prefs(ctx).getLong(FAILED + scope, -1L) == version(ctx) || statePrefs(ctx).getLong(FAILED + scope, -1L) == version(ctx)
     fun enabled(ctx: Context, scope: String = ""): Boolean {
         cleanStale(ctx)
-        return prefs(ctx).getBoolean(KEY, false) && supported(ctx) && !failed(ctx, scope)
+        val on = prefs(ctx).getBoolean(KEY, false) || statePrefs(ctx).getBoolean(KEY, false)
+        return on && supported(ctx) && !failed(ctx, scope)
     }
+    /** Probe only: forces the NPU switch on for this process without touching the user's settings file. */
+    fun forceSwitch(ctx: Context, on: Boolean?) = statePrefs(ctx).edit().apply {
+        if (on == null) remove(KEY) else putBoolean(KEY, on)
+    }.commit()
+    /** NPU memory this process holds right now: mapped dmabuf/fastrpc megabytes and PSS. Logged when a session or a
+     * model is closed, so "не освобождается" is a number in the log instead of a guess. */
+    fun footprint(ctx: Context): String {
+        var dmabuf = 0L
+        runCatching {
+            File("/proc/self/maps").forEachLine { line ->
+                if (line.contains("dmabuf") || line.contains("fastrpc")) {
+                    val range = line.substringBefore(' ')
+                    val dash = range.indexOf('-')
+                    if (dash > 0) runCatching {
+                        dmabuf += range.substring(dash + 1).toLong(16) - range.substring(0, dash).toLong(16)
+                    }
+                }
+            }
+        }
+        val pss = runCatching { android.os.Debug.getPss() / 1024 }.getOrDefault(-1)
+        return "PSS ${pss} MB, dmabuf ${dmabuf / 1048576} MB"
+    }
+    /** Called after the last NPU session of a job/model is closed: one line that proves the buffers went away. */
+    fun logClosed(ctx: Context, what: String) = Log.i(TAG, "$what closed: ${footprint(ctx)}")
     @Volatile private var cleaned = false
     /** Once per process: caches with the old app-version names ("-v<code>") and of the removed hybrid Tera
      * sampler ("tera-step-", 1.5 GB) are never read again; current caches clean their own families. */
@@ -74,9 +109,13 @@ object Npu {
     fun markFailed(ctx: Context, reason: String, scope: String = "") {
         Log.w(TAG, "NPU$scope disabled for this version: $reason")
         // The reason is kept (OnePlus drops app logs after a while): the pref <failed><scope>_reason.
-        prefs(ctx).edit().putLong(FAILED + scope, version(ctx)).putString(FAILED + scope + "_reason", reason.take(500)).apply()
+        statePrefs(ctx).edit().putLong(FAILED + scope, version(ctx)).putString(FAILED + scope + "_reason", reason.take(500)).apply()
     }
-    fun clearFailure(ctx: Context) { prefs(ctx).edit().remove(FAILED).remove(FAILED + KOKORO).remove(FAILED + TERA_SAMPLER).remove(FAILED + AMBIENCE).remove(FAILED + AMBIENCE_MEDIUM).remove(FAILED + "_ambience_samel").apply() }
+    fun clearFailure(ctx: Context) {
+        val keys = listOf(FAILED, FAILED + KOKORO, FAILED + TERA_SAMPLER, FAILED + AMBIENCE, FAILED + AMBIENCE_MEDIUM, FAILED + "_ambience_samel")
+        prefs(ctx).edit().apply { keys.forEach { remove(it) } }.apply()
+        statePrefs(ctx).edit().apply { keys.forEach { remove(it) } }.apply()
+    }
 
     fun options(ctx: Context, performance: String = "high_performance"): Map<String, String> {
         // The DSP loads the HTP skel through FastRPC from the app's extracted native libraries.
