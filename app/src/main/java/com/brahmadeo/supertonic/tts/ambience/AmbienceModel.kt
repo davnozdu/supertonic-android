@@ -122,8 +122,10 @@ object AmbienceModel {
     }
 
     /** Свободная память (МБ), без которой NPU-модель не загружается — см. [enoughMemory]. */
-    private const val NEED_MEDIUM_MB = 9000L
-    private const val NEED_SMALL_MB = 3500L
+    // Замер (CPH2745, 3 ноября): средняя на NPU — пик расхода ~5,5 ГБ (буферы NPU 3,4 ГБ + скачок памяти процесса
+    // при загрузке), свободная падала с 7,2 до 1,64 ГБ. Порог — пик + ~1 ГБ запаса.
+    private const val NEED_MEDIUM_MB = 6500L
+    private const val NEED_SMALL_MB = 3000L
     private const val NEED_SAMEL_MB = 2500L
 
     /** Хватит ли памяти на загрузку NPU-модели: availMem системы с запасом. Нет — модель берётся на процессоре.
@@ -358,7 +360,7 @@ object AmbienceModel {
         if (!npuUsable(context, music, model, diagnostic)) return null
         val t = target(context, music, model)
         if (!allowCompile && t.names.any { !Npu.cacheReady(context, it) }) return null
-        // Память: загрузка средней модели на NPU берёт до ~8 ГБ (RAM + буферы NPU), малой — ~3 ГБ. Не хватает —
+        // Память: загрузка средней модели на NPU берёт ~5,5 ГБ (RAM + буферы NPU), малой — ~2 ГБ. Не хватает —
         // DiT считает процессор (медленнее), а не система выгружает процесс посреди книги или базы.
         val medium = t.parts.size > 1
         if (!enoughMemory(context, if (medium) NEED_MEDIUM_MB else NEED_SMALL_MB, if (medium) "средняя модель" else "малая модель")) return null
