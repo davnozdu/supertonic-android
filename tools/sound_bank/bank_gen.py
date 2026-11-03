@@ -233,6 +233,24 @@ def speed_report(done: int, total: int) -> str:
             f"осталось ≈{left / 3600:.0f} ч {left % 3600 / 60:.0f} мин, конец ≈{finish}")
 
 
+def memory() -> str:
+    """Память телефона: свободная (MemAvailable), буферы NPU (IonTotalUsed), пул ядра DMA-BUF и рабочий :soundgen."""
+    out = su("grep -E 'MemAvailable|IonTotalUsed' /proc/meminfo; cat /sys/kernel/dma_heap/total_pools_kb; "
+             f"for p in $(pidof {PKG}:soundgen); do grep VmRSS /proc/$p/status; done") or ""
+    vals = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if line.startswith("MemAvailable"): vals["avail"] = int(parts[1]) // 1024
+        elif line.startswith("IonTotalUsed"): vals["npu"] = int(parts[1]) // 1024
+        elif line.startswith("VmRSS"): vals["rss"] = int(parts[1]) // 1024
+        elif parts and parts[0].isdigit(): vals["pool"] = int(parts[0]) // 1024
+    s = (f"память: свободно {vals.get('avail', '?')} МБ, буферы NPU {vals.get('npu', '?')} МБ, пул ядра {vals.get('pool', '?')} МБ, "
+         f":soundgen {vals.get('rss', '—')} МБ")
+    if vals.get("avail", 99999) < 1000:
+        s += "  ⚠ МАЛО СВОБОДНОЙ ПАМЯТИ"
+    return s
+
+
 def cmd_run():
     all_jobs = jobs()
     total = len(all_jobs)
@@ -273,7 +291,7 @@ def cmd_run():
         if got or time.time() - last_report > 60:
             last_report = time.time()
             temp = re.search(r"temp=([\d.]+)", status)
-            log(f"{speed_report(done, total)}; на компьютере {len(have())}"
+            log(f"{speed_report(done, total)}; на компьютере {len(have())}; {memory()}"
                 + (f"; батарея {temp.group(1)} °C" if temp else "") + ("; ОСТЫВАЕТ" if status.startswith("cooling") else ""))
         time.sleep(8)
 
@@ -286,6 +304,7 @@ def cmd_status():
         print("телефон:", (su(f"cat {DEV}/status.txt 2>/dev/null") or "").strip(),
               "| генерация", "идёт" if service_running() else "не запущена")
         print(speed_report(done, total))
+        print(memory())
 
 
 # ---------------------------------------------------------------- build
