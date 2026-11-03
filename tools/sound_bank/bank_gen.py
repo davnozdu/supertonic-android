@@ -68,7 +68,12 @@ def su(cmd: str, timeout=120):
 
 
 def connected() -> bool:
-    out = subprocess.run(["adb", "devices"], capture_output=True, text=True).stdout
+    # С ограничением времени: после сна Mac сервер adb иногда подвисает — тогда считаем телефон отключённым
+    # и через 10 с проверяем снова, а не висим навсегда.
+    try:
+        out = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=20).stdout
+    except subprocess.TimeoutExpired:
+        return False
     return any(l.startswith(SERIAL) and "\tdevice" in l for l in out.splitlines())
 
 
@@ -278,11 +283,24 @@ def cmd_run():
         running = service_running()
         if done != last_done:
             last_done, last_progress = done, time.time()
+            cmd_run.quick = 0
         status = (su(f"cat {DEV}/status.txt 2>/dev/null") or "").strip()
         if not running and done < total:
             err = (su(f"cat {DEV}/error.txt 2>/dev/null") or "").strip()
             if err:
-                log("генерация упала с ошибкой:\n" + err[:1500]); return
+                # Сбой NPU (SSR), убийство процесса системой и т. п. обычно временные: ошибку сохраняем в журнал,
+                # убираем с телефона и запускаем заново. Остановка только после трёх ошибок подряд без новых клипов.
+                log("генерация упала с ошибкой:\n" + err[:1500])
+                su(f"mv {DEV}/error.txt {DEV}/error-{int(time.time())}.txt")
+                if done != getattr(cmd_run, "err_done", None):
+                    cmd_run.err_done, cmd_run.errors = done, 0
+                cmd_run.errors = getattr(cmd_run, "errors", 0) + 1
+                if cmd_run.errors >= 3:
+                    log("три ошибки подряд без новых клипов — остановка"); return
+                log(f"перезапуск через 20 с (ошибка {cmd_run.errors} из 3 подряд)")
+                time.sleep(20)
+                start_generation("после ошибки"); cmd_run.started_at = time.time()
+                last_progress = time.time(); continue
             quick = getattr(cmd_run, "quick", 0)
             if time.time() - getattr(cmd_run, "started_at", 0) < 90:
                 cmd_run.quick = quick + 1

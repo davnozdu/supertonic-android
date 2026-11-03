@@ -134,8 +134,12 @@ object Npu {
                 siblings: List<String> = emptyList()): OrtSession {
         val cacheDir = File(ctx.filesDir, "npu-cache").apply { mkdirs() }
         val cached = File(cacheDir, "$cacheName-${cacheVersion(ctx)}_ctx.onnx")
-        val keep = (siblings + cacheName).map { "$it-${cacheVersion(ctx)}_ctx.onnx" }.toSet()
+        // The context binary lives next to the small _ctx.onnx as <name>_ctx_qnn.bin (embed mode 0): both are kept.
+        val keep = (siblings + cacheName).flatMap { listOf("$it-${cacheVersion(ctx)}_ctx.onnx", "$it-${cacheVersion(ctx)}_ctx_qnn.bin") }.toSet()
         cacheDir.listFiles()?.filter { it.name.startsWith("$family-") && it.name !in keep }?.forEach { it.delete() }
+        // A small _ctx.onnx refers to its .bin; without the .bin (interrupted write) it is useless — compile again.
+        val bin = File(cacheDir, "$cacheName-${cacheVersion(ctx)}_ctx_qnn.bin")
+        if (cached.isFile && cached.length() < 64L * 1024 * 1024 && !bin.isFile) cached.delete()
         OrtSession.SessionOptions().use { options ->
             dims.forEach { (name, value) -> options.setSymbolicDimensionValue(name, value) }
             options.setIntraOpNumThreads(1)
@@ -143,9 +147,14 @@ object Npu {
             if (logInfo || verbose) options.setSessionLogLevel(if (verbose) ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE else ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_INFO)
             // Диагностика: опции QNN для одного графа из pref npu_debug_<cacheName> (например, enable_htp_fp16_precision=0).
             options.addQnn(options(ctx, performance) + extra + debug(ctx, "npu_debug_$cacheName"))
+            // Embed mode 0: the compiled HTP binary goes to a separate _qnn.bin file. With embed mode 1 it sat
+            // inside the _ctx.onnx as a node attribute, and ORT kept the whole graph — a second, never used copy
+            // of the binary (~1 GB per medium-model part, 3 GB in all) — in native memory for the life of the
+            // session; the system swapped it out and the phone crawled. From a .bin the QNN EP reads the binary,
+            // hands it to the HTP and frees the buffer. Old embedded caches still load (just with that copy).
             return if (cached.isFile) env.createSession(cached.path, options) else {
                 options.addConfigEntry("ep.context_enable", "1")
-                options.addConfigEntry("ep.context_embed_mode", "1")
+                options.addConfigEntry("ep.context_embed_mode", "0")
                 options.addConfigEntry("ep.context_file_path", cached.path)
                 env.createSession(model.path, options)
             }
