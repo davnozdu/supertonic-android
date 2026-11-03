@@ -219,9 +219,12 @@ object AmbienceBook {
                     val keep = AmbienceSettings.keepModels(prefs)
                     generator = when (batch.gen) {
                         Gen.MUSIC -> AmbienceModel.musicGenerator(context, threads, null, keep).also {
-                            // «Большой декодер» на NPU: весь 30-секундный фрагмент одним проходом вместо ~10 с на CPU.
-                            it.npuDecoder = AmbienceModel.largeDecoderNpu(context, onCompile = {
-                                progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU: большой декодер (один раз)") })
+                            // Одна тяжёлая NPU-модель за раз: средняя модель и большой декодер вместе на NPU не помещались
+                            // в память (ядро выгружало процесс). DiT на NPU — декодер на процессоре конвейером (скорость та
+                            // же, ~12 с на фрагмент); DiT на процессоре — декодер на NPU.
+                            if (!(batch.npu && AmbienceModel.npuPlanned(context, true)))
+                                it.npuDecoder = AmbienceModel.largeDecoderNpu(context, onCompile = {
+                                    progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU: большой декодер (один раз)") })
                         }
                         Gen.MEDIUM_SFX -> AmbienceModel.mediumSfxGenerator(context, threads, keep)
                         Gen.SMALL -> Sa3Generator(AmbienceModel.root(context), threads, null, keep = keep)

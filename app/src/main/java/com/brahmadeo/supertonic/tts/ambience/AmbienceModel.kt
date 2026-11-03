@@ -89,6 +89,7 @@ object AmbienceModel {
     fun largeDecoderNpu(context: Context, allowCompile: Boolean = !AmbienceSettings.npuNight(prefs(context)),
                         onCompile: () -> Unit = {}, diagnostic: Boolean = false): Sa3Generator.NpuDecoder? {
         if (!diagnostic && !largeDecoderNpuPlanned(context)) return null
+        if (!enoughMemory(context, NEED_SAMEL_MB, "большой декодер")) return null
         // Отладка (только проба): pref samel_debug = "окно:частей" — файлы samel_dec_L<окно>_p<k>.onnx без проверки
         // размера, свои имена кэша. Так варианты пробуются без пересборки приложения.
         val debug = if (diagnostic) prefs(context).getString("samel_debug", null)?.split(':')?.mapNotNull { it.trim().toIntOrNull() } else null
@@ -118,6 +119,24 @@ object AmbienceModel {
             if (debug == null) Npu.markFailed(context, "${e.javaClass.simpleName}: ${e.message}", SAMEL_SCOPE)
             null
         }
+    }
+
+    /** Свободная память (МБ), без которой NPU-модель не загружается — см. [enoughMemory]. */
+    private const val NEED_MEDIUM_MB = 9000L
+    private const val NEED_SMALL_MB = 3500L
+    private const val NEED_SAMEL_MB = 2500L
+
+    /** Хватит ли памяти на загрузку NPU-модели: availMem системы с запасом. Нет — модель берётся на процессоре.
+     * Причина — в журнал и в cache/ambience-memory.txt (журнал приложения прошивка глушит). */
+    fun enoughMemory(context: Context, needMb: Long, what: String): Boolean {
+        val info = android.app.ActivityManager.MemoryInfo()
+        context.getSystemService(android.app.ActivityManager::class.java)?.getMemoryInfo(info) ?: return true
+        val availMb = info.availMem / 1048576
+        if (availMb >= needMb) return true
+        val line = "${java.util.Date()}: $what на NPU не загружается — свободно $availMb МБ, нужно $needMb; считает процессор"
+        Log.w("Ambience", line)
+        runCatching { File(context.cacheDir, "ambience-memory.txt").appendText(line + "\n") }
+        return false
     }
 
     const val MUSIC_MODEL_KEY = "music_model"
@@ -316,6 +335,10 @@ object AmbienceModel {
         if (!npuUsable(context, music, model, diagnostic)) return null
         val t = target(context, music, model)
         if (!allowCompile && t.names.any { !Npu.cacheReady(context, it) }) return null
+        // Память: загрузка средней модели на NPU берёт до ~8 ГБ (RAM + буферы NPU), малой — ~3 ГБ. Не хватает —
+        // DiT считает процессор (медленнее), а не система выгружает процесс посреди книги или базы.
+        val medium = t.parts.size > 1
+        if (!enoughMemory(context, if (medium) NEED_MEDIUM_MB else NEED_SMALL_MB, if (medium) "средняя модель" else "малая модель")) return null
         val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
         // Части графа, которые считает CPU в fp32 (pref ambience_npu_cpu_parts, например "2"): у средней модели
         // последняя часть переполняет fp16 на HTP. Остальные части — на NPU.

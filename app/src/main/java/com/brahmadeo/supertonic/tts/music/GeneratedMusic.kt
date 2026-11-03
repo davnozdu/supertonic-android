@@ -47,7 +47,8 @@ object GeneratedMusic {
             val npu = if (seconds == 30) AmbienceModel.npuDit(context, music = true,
                 onCompile = { k, n -> progress("Подготовка NPU: часть $k из $n (один раз)") }) else null
             // Большой декодер на NPU работает окнами — для любой длины трека.
-            val decoder = if (true) AmbienceModel.largeDecoderNpu(context, onCompile = { progress("Подготовка NPU: большой декодер (один раз)") }) else null
+            // Одна тяжёлая NPU-модель за раз: DiT на NPU — декодер на процессоре, иначе декодер на NPU.
+            val decoder = if (npu == null) AmbienceModel.largeDecoderNpu(context, onCompile = { progress("Подготовка NPU: большой декодер (один раз)") }) else null
             try {
                 AmbienceModel.musicGenerator(context, 4, npu).also { it.npuDecoder = decoder }
                     .generate(com.brahmadeo.supertonic.tts.ambience.MusicEnhance.prompt(prompt), seconds.toFloat(), System.currentTimeMillis(), cancelled).pcm

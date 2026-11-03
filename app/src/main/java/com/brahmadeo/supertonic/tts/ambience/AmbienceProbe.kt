@@ -237,10 +237,11 @@ object AmbienceProbe {
         var made = 0
         File(dir, "error.txt").delete()
         status.writeText("loading todo=${todo.size} at=${System.currentTimeMillis()}\n")
-        for (chunk in todo.chunked(RECYCLE)) {
-            // Свежие генератор и NPU-сессия на каждую пачку: долгоживущие замедлялись.
-            val dit = if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC, diagnostic = true)
-                else AmbienceModel.npuDit(context)
+        // NPU-сессия — одна на весь прогон: каждое открытие/закрытие берёт и бросает гигабайты буферов NPU, а ядро
+        // держит их в пуле. Пересоздаются только графы процессора (каждые RECYCLE клипов).
+        val dit = if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC, diagnostic = true)
+            else AmbienceModel.npuDit(context)
+        try { for (chunk in todo.chunked(RECYCLE)) {
             val m = AmbienceModel.MEDIUM_MUSIC
             // Максимальное качество: декодер SAME-L (у Stability — «для максимальной точности на medium»), на NPU в
             // fp16, если он есть, иначе SAME-L на процессоре; ambienceBankDecoder=small — SAME-S.
@@ -277,8 +278,8 @@ object AmbienceProbe {
                             "temp=${temperature()} at=${System.currentTimeMillis()}\n")
                         last = now
                     }).run()
-            } finally { g.npuDecoder?.close(); g.close(); dit?.close() }
-        }
+            } finally { g.npuDecoder?.close(); g.close() }
+        } } finally { dit?.close() }
         status.writeText("finished ${done.size}/${jobs.size} at=${System.currentTimeMillis()}\n")
         Log.i(TAG, "BANK finished, made $made")
     }
