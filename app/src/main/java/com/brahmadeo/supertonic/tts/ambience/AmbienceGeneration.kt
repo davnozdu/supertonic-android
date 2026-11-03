@@ -54,6 +54,15 @@ object AmbienceGeneration {
                     intent.getStringExtra("place").orEmpty(), intent.getStringExtra("message").orEmpty())
                 // The night book queue waited for this NPU compilation: it goes on now.
                 if (!running && intent.getBooleanExtra("compiled", false)) com.brahmadeo.supertonic.tts.books.prepare.BookQueue.resume(ctx)
+                // A record of what reached the main process (the log is cut by the firmware): proves the screens get it.
+                runCatching {
+                    val f = java.io.File(ctx.cacheDir, "ambience-state.txt")
+                    val lines = if (f.isFile) f.readLines().takeLast(19) else emptyList()
+                    val line = "${java.text.SimpleDateFormat("dd.MM HH:mm:ss", java.util.Locale.US).format(java.util.Date())} running=$running " +
+                        "book=${book.takeIf { it >= 0 }} done=${intent.getIntExtra("done", 0)}/${intent.getIntExtra("total", 0)} " +
+                        "${intent.getStringExtra("place").orEmpty()} ${intent.getStringExtra("message").orEmpty()}"
+                    f.writeText((lines + line).joinToString("\n") + "\n")
+                }
             }
         }
         ContextCompat.registerReceiver(ctx, receiver, IntentFilter(ACTION_STATE), ContextCompat.RECEIVER_NOT_EXPORTED)
