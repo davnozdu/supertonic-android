@@ -73,6 +73,15 @@ class SoundGenService : Service() {
                 GeneratorSlot.release()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+                // The process exists for the models' sake: once the job is over it must go, and take every NPU/dmabuf
+                // buffer with it (the janitor would do the same a minute later — this is immediate).
+                Thread {
+                    Thread.sleep(1500)
+                    if (!GeneratorSlot.taken) {
+                        Log.i(TAG, "generator process done: ${com.brahmadeo.supertonic.tts.utils.Npu.footprint(this)}")
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    }
+                }.apply { isDaemon = true }.start()
             }
         }
         return START_NOT_STICKY
