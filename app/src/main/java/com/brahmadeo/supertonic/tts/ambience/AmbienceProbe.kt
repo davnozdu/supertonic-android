@@ -248,25 +248,35 @@ object AmbienceProbe {
             val decFile = if (large && AmbienceModel.largeDecoderReady(context)) "dec_l_w8a8.tflite" else "dec_w8a8.tflite"
             val g = if (medium) Sa3Generator(AmbienceModel.root(context), threads, dit, m.ditFile, m.rungs, decFile, keep = true)
                 else Sa3Generator(AmbienceModel.root(context), threads, dit, decFile = decFile)
-            if (decFile == "dec_l_w8a8.tflite") g.npuDecoder = AmbienceModel.largeDecoderNpu(context, allowCompile = true, diagnostic = true)
+            // SAME-L на NPU вместе со средней моделью на NPU не помещается в память (свободная падала до 0,6 ГБ, ядро
+            // выгружало процесс): декодер — на процессоре, w8a8 (у Stability «без потерь качества»), конвейером с NPU.
+            if (decFile == "dec_l_w8a8.tflite" && intent.getBooleanExtra("ambienceBankNpuDecoder", false))
+                g.npuDecoder = AmbienceModel.largeDecoderNpu(context, allowCompile = true, diagnostic = true)
             // Клип короче 30 с — окном 30 с с условием длительности (полный контекст токенов); 30 с — как есть,
             // а нужные 8 с вырезает компьютер вокруг главного события.
             g.npuShort = true
             status.writeText("models dit=${if (dit != null) "npu" else "cpu"} decoder=$decFile npuDecoder=${g.npuDecoder != null} at=${System.currentTimeMillis()}\n")
             try {
-                for ((name, seed, prompt) in chunk) {
-                    while (temperature() > 42f) {
-                        status.writeText("cooling ${temperature()} C, done ${done.size}/${jobs.size}\n"); Thread.sleep(30_000)
-                    }
-                    val t0 = android.os.SystemClock.elapsedRealtime()
-                    val pcm = g.generate(prompt, seconds, seed).pcm
-                    val tmp = File(dir, ".$name.wav.part")
-                    Sa3Generator.writeWav(tmp, pcm)
-                    check(tmp.renameTo(File(dir, "$name.wav"))) { "rename $name" }
-                    doneFile.appendText(name + "\n"); done += name; made++
-                    status.writeText("ok ${done.size}/${jobs.size} last=$name ms=${android.os.SystemClock.elapsedRealtime() - t0} " +
-                        "npu=${g.usedNpu} temp=${temperature()} at=${System.currentTimeMillis()}\n")
-                }
+                var last = android.os.SystemClock.elapsedRealtime()
+                // Конвейер: NPU считает DiT следующего клипа, пока процессор декодирует предыдущий.
+                ClipPipeline(chunk,
+                    produce = { (name, seed, prompt) ->
+                        while (temperature() > 42f) {
+                            status.writeText("cooling ${temperature()} C, done ${done.size}/${jobs.size}\n"); Thread.sleep(30_000)
+                        }
+                        name to g.latents(prompt, seconds, seed)
+                    },
+                    consume = { (name, latents) ->
+                        val pcm = g.decode(latents, seconds).pcm
+                        val tmp = File(dir, ".$name.wav.part")
+                        Sa3Generator.writeWav(tmp, pcm)
+                        check(tmp.renameTo(File(dir, "$name.wav"))) { "rename $name" }
+                        doneFile.appendText(name + "\n"); done += name; made++
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        status.writeText("ok ${done.size}/${jobs.size} last=$name ms=${now - last} npu=${g.usedNpu} " +
+                            "temp=${temperature()} at=${System.currentTimeMillis()}\n")
+                        last = now
+                    }).run()
             } finally { g.npuDecoder?.close(); g.close(); dit?.close() }
         }
         status.writeText("finished ${done.size}/${jobs.size} at=${System.currentTimeMillis()}\n")
