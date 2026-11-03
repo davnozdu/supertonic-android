@@ -22,7 +22,9 @@ object NpuJanitor {
     private const val TAG = "Npu"
     private const val IDLE_MS = 180_000L          // 3 min without NPU/audio → everything is unloaded
     private const val RESIDUAL_MB = 120L          // more dmabuf than this means something is still held
-    private const val HARD_IDLE_MS = 900_000L     // 15 min idle and still holding → restart the process
+    // 60 мин простоя и буферы всё ещё держатся → перезапуск процесса. Было 15: читалка на долгой паузе теряла движок
+    // (переподключалась); перезапуск — редкая страховка, цена — лишь более долгий первый запуск после простоя.
+    private const val HARD_IDLE_MS = 3_600_000L
     private const val SWEEP_MS = 60_000L
 
     @Volatile private var lastUse = SystemClock.elapsedRealtime()
