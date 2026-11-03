@@ -128,7 +128,7 @@ class AmbienceGenerationService : Service() {
         manager.createNotificationChannel(NotificationChannel("ambience_generation", "Фоновые звуки", NotificationManager.IMPORTANCE_LOW))
         startForeground(4208, notification(AmbienceGeneration.State(true, null, place = "Подготовка")))
         holdWake()
-        if (job?.isAlive == true) {
+        if (job?.isActive == true) {
             // This process already owns the generator: a second start is a duplicate (the main process may have
             // restarted and lost the running state).
             return START_NOT_STICKY
