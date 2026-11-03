@@ -344,8 +344,10 @@ def cmd_build():
                 if r.returncode != 0:
                     log(f"ошибка кодирования {src}"); continue
                 os.replace(tmp, dst)
+            # Как в v9: без ссылок на отдельные файлы — приложение берёт клипы только из трёх архивов
+            # (GitHub плохо переносит тысячи отдельных вложений).
             variants.append({"file": os.path.basename(dst), "bytes": os.path.getsize(dst), "sha256": sha256(dst),
-                             "url": f"{BASE}/{os.path.basename(dst)}", "prompt": k["prompts"][i - 1]})
+                             "prompt": k["prompts"][i - 1]})
         if len(variants) != 3:
             continue
         sounds.append({"key": k["key"], "hint": k["hint"], "prompt": k["prompts"][0], "seed": k["seeds"][0],
