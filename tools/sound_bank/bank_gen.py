@@ -124,11 +124,9 @@ def service_running() -> bool:
 
 
 def phone_done() -> int:
-    out = su(f"cat {DEV}/done.txt 2>/dev/null | wc -l") or "0"
-    try:
-        return int(out.strip() or 0)
-    except ValueError:
-        return 0
+    """Сколько клипов ТЕКУЩЕГО списка заданий телефон уже сделал (done.txt хранит и прошлые, например сравнение)."""
+    out = su(f"cat {DEV}/done.txt 2>/dev/null") or ""
+    return len({l.strip() for l in out.splitlines()} & set(jobs()))
 
 
 def push_jobs():
@@ -213,10 +211,32 @@ def cmd_ab():
     log(f"сравнение {tag}: {len(prompts)} клипов → {JOBS}; дальше: run")
 
 
+SPEED = os.path.join(ROOT, "speed.json")
+
+
+def speed_report(done: int, total: int) -> str:
+    """Скорость по счётчику телефона (он считает и без компьютера) за последние 10 минут: с/клип, клипов/мин,
+    сколько осталось и примерное время окончания. История — в speed.json, переживает перезапуск скрипта."""
+    hist = json.load(open(SPEED)) if os.path.isfile(SPEED) else []
+    now = time.time()
+    if not hist or hist[-1][1] != done:
+        hist.append([now, done])
+    hist = [h for h in hist if now - h[0] < 3600][-500:]
+    json.dump(hist, open(SPEED, "w"))
+    window = [h for h in hist if now - h[0] <= 600] or hist
+    if len(window) < 2 or window[-1][1] <= window[0][1]:
+        return f"готово {done}/{total}; скорость ещё меряется"
+    rate = (window[-1][1] - window[0][1]) / (window[-1][0] - window[0][0])   # клипов в секунду
+    left = (total - done) / rate
+    finish = time.strftime("%H:%M", time.localtime(now + left))
+    return (f"готово {done}/{total} ({100 * done / total:.1f} %), {1 / rate:.1f} с/клип, {rate * 60:.1f} клипов/мин, "
+            f"осталось ≈{left / 3600:.0f} ч {left % 3600 / 60:.0f} мин, конец ≈{finish}")
+
+
 def cmd_run():
     all_jobs = jobs()
     total = len(all_jobs)
-    last_progress = time.time(); last_done = -1; was = None; started = time.time(); base = len(have())
+    last_progress = time.time(); last_done = -1; was = None; last_report = 0.0
     while True:
         local = have()
         want = set(all_jobs) - local
@@ -242,18 +262,22 @@ def cmd_run():
         elif running and time.time() - last_progress > STALL_S and not status.startswith("cooling"):
             start_generation(f"нет новых клипов {STALL_S // 60} мин")
             last_progress = time.time()
-        if got:
-            n = len(have()); rate = (n - base) / max(1.0, time.time() - started)
-            eta = (total - n) / rate / 60 if rate > 0 else 0
-            log(f"собрано {n}/{total} (+{got}), телефон отметил {done}; {status[:80]}; осталось ≈{eta:.0f} мин")
+        if got or time.time() - last_report > 60:
+            last_report = time.time()
+            temp = re.search(r"temp=([\d.]+)", status)
+            log(f"{speed_report(done, total)}; на компьютере {len(have())}"
+                + (f"; батарея {temp.group(1)} °C" if temp else "") + ("; ОСТЫВАЕТ" if status.startswith("cooling") else ""))
         time.sleep(8)
 
 
 def cmd_status():
-    print(f"собрано на компьютере: {len(have())}/{len(jobs())}")
+    total = len(jobs())
+    print(f"собрано на компьютере: {len(have())}/{total}")
     if connected():
-        print("телефон:", (su(f"cat {DEV}/status.txt 2>/dev/null") or "").strip(), "| отмечено", phone_done(),
+        done = phone_done()
+        print("телефон:", (su(f"cat {DEV}/status.txt 2>/dev/null") or "").strip(),
               "| генерация", "идёт" if service_running() else "не запущена")
+        print(speed_report(done, total))
 
 
 # ---------------------------------------------------------------- build
