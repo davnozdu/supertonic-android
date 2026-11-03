@@ -167,7 +167,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         const val AUDIO_WRITE_CHUNK_SIZE = 8192
         /** True while audio is actually playing: the NPU cleaner must not close models under the speaker. */
         @Volatile var playing = false
-            private set
+            internal set
     }
 
     override fun onBind(intent: Intent): IBinder {
