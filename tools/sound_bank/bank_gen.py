@@ -85,7 +85,9 @@ def cmd_plan():
     os.makedirs(ROOT, exist_ok=True)
     live = json.loads(urllib.request.urlopen(f"https://github.com/{REPO}/releases/download/{LIVE}/manifest.json").read())
     sys.path.insert(0, HERE)
-    from new_kinds_v10 import NEW
+    from new_kinds_v10 import NEW as NEW_A
+    from new_kinds_v10b import NEW as NEW_B
+    NEW = NEW_A + NEW_B
     kinds, seen = [], set()
     for s in live["sounds"]:
         seed = int(s.get("seed") or stable_seed(s["key"]))
