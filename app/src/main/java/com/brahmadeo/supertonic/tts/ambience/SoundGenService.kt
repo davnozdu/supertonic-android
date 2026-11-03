@@ -44,7 +44,9 @@ class SoundGenService : Service() {
         // пауза длилась две минуты). Wake lock не даёт уснуть: работа идёт с той же скоростью, что и при экране.
         // Дольше двух часов проба не идёт; при бесконечной подготовке его обновляет AmbienceGenerationService.
         if (wake?.isHeld != true) wake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyTTS:Sounds").apply { acquire(2 * 60 * 60 * 1000L) }
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyTTS:Sounds").apply {
+                // Генерация базы идёт часами и без компьютера: снимок на 12 ч; обычная проба — 2 ч.
+                acquire((if (intent.getBooleanExtra("ambienceBankJob", false)) 12L else 2L) * 60 * 60 * 1000L) }
         if (job?.isAlive == true) {
             Log.i(TAG, "a batch is already running, this start is ignored")
             return START_NOT_STICKY

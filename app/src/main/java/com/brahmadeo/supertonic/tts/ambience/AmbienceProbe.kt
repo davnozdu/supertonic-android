@@ -208,7 +208,63 @@ object AmbienceProbe {
         }
     }
 
+    /**
+     * Генерация базы звуков на телефоне, без компьютера (ambienceBankJob=true). Задания — files/bank-gen/jobs.txt,
+     * строки «имя|seed|промпт». Готовый клип — files/bank-gen/<имя>.wav (атомарно), имя дописывается в done.txt.
+     * Перезапуск пропускает всё из done.txt: компьютер может забирать и удалять клипы, телефон продолжит с того же
+     * места, подключён он или нет. Модель — средняя (ambienceModel) на NPU, 8 с «коротким» режимом, декодер SAME-S.
+     * Каждые [RECYCLE] клипов генератор и NPU-сессии пересоздаются (долгий процесс замедлялся). При батарее горячее
+     * 42 °C — пауза до остывания.
+     */
+    private const val RECYCLE = 150
+    private fun bankRun(context: Context, intent: Intent) {
+        val dir = File(context.filesDir, "bank-gen").apply { mkdirs() }
+        val doneFile = File(dir, "done.txt")
+        val status = File(dir, "status.txt")
+        val jobs = File(dir, "jobs.txt").readLines().mapNotNull { l ->
+            val p = l.split('|', limit = 3); if (p.size == 3 && p[0].isNotBlank()) Triple(p[0].trim(), p[1].trim().toLongOrNull() ?: 42L, p[2].trim()) else null
+        }
+        val done = if (doneFile.isFile) doneFile.readLines().map { it.trim() }.toHashSet() else HashSet()
+        val todo = jobs.filter { it.first !in done }
+        val seconds = intent.getIntExtra("ambienceSeconds", 8).toFloat()
+        val threads = intent.getIntExtra("ambienceThreads", 4)
+        val medium = (intent.getStringExtra("ambienceModel") ?: "medium") == "medium"
+        Log.i(TAG, "BANK jobs=${jobs.size} done=${done.size} todo=${todo.size}")
+        fun temperature(): Float = runCatching {
+            val b = context.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            (b?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
+        }.getOrDefault(0f)
+        var made = 0
+        for (chunk in todo.chunked(RECYCLE)) {
+            // Свежие генератор и NPU-сессия на каждую пачку: долгоживущие замедлялись.
+            val dit = if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC, diagnostic = true)
+                else AmbienceModel.npuDit(context)
+            val m = AmbienceModel.MEDIUM_MUSIC
+            val g = if (medium) Sa3Generator(AmbienceModel.root(context), threads, dit, m.ditFile, m.rungs, "dec_w8a8.tflite", keep = true)
+                else Sa3Generator(AmbienceModel.root(context), threads, dit)
+            g.npuShort = true
+            try {
+                for ((name, seed, prompt) in chunk) {
+                    while (temperature() > 42f) {
+                        status.writeText("cooling ${temperature()} C, done ${done.size}/${jobs.size}\n"); Thread.sleep(30_000)
+                    }
+                    val t0 = android.os.SystemClock.elapsedRealtime()
+                    val pcm = g.generate(prompt, seconds, seed).pcm
+                    val tmp = File(dir, ".$name.wav.part")
+                    Sa3Generator.writeWav(tmp, pcm)
+                    check(tmp.renameTo(File(dir, "$name.wav"))) { "rename $name" }
+                    doneFile.appendText(name + "\n"); done += name; made++
+                    status.writeText("ok ${done.size}/${jobs.size} last=$name ms=${android.os.SystemClock.elapsedRealtime() - t0} " +
+                        "npu=${g.usedNpu} temp=${temperature()} at=${System.currentTimeMillis()}\n")
+                }
+            } finally { g.close(); dit?.close() }
+        }
+        status.writeText("finished ${done.size}/${jobs.size} at=${System.currentTimeMillis()}\n")
+        Log.i(TAG, "BANK finished, made $made")
+    }
+
     fun run(context: Context, intent: Intent) {
+        if (intent.getBooleanExtra("ambienceBankJob", false)) { bankRun(context, intent); return }
         if (!AmbienceModel.ready(context)) {
             Log.i(TAG, "DOWNLOAD start ${AmbienceModel.totalBytes() / 1048576} MB")
             var last = -1
