@@ -235,6 +235,8 @@ object AmbienceProbe {
             (b?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
         }.getOrDefault(0f)
         var made = 0
+        File(dir, "error.txt").delete()
+        status.writeText("loading todo=${todo.size} at=${System.currentTimeMillis()}\n")
         for (chunk in todo.chunked(RECYCLE)) {
             // Свежие генератор и NPU-сессия на каждую пачку: долгоживущие замедлялись.
             val dit = if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC, diagnostic = true)
@@ -250,6 +252,7 @@ object AmbienceProbe {
             // Клип короче 30 с — окном 30 с с условием длительности (полный контекст токенов); 30 с — как есть,
             // а нужные 8 с вырезает компьютер вокруг главного события.
             g.npuShort = true
+            status.writeText("models dit=${if (dit != null) "npu" else "cpu"} decoder=$decFile npuDecoder=${g.npuDecoder != null} at=${System.currentTimeMillis()}\n")
             try {
                 for ((name, seed, prompt) in chunk) {
                     while (temperature() > 42f) {

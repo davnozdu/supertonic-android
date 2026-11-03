@@ -56,6 +56,12 @@ class SoundGenService : Service() {
                 AmbienceProbe.run(this, intent)
             } catch (e: Throwable) {
                 Log.e(TAG, "FAILED ${e.javaClass.simpleName}: ${e.message}", e)
+                // Журнал приложения прошивка глушит: причину — в файл, его читает скрипт сборки базы.
+                runCatching {
+                    java.io.File(filesDir, "bank-gen").apply { mkdirs() }.let { d ->
+                        java.io.File(d, "error.txt").writeText("${java.util.Date()}\n${android.util.Log.getStackTraceString(e)}")
+                    }
+                }
             } finally {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()

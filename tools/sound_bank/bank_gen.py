@@ -257,7 +257,15 @@ def cmd_run():
             last_done, last_progress = done, time.time()
         status = (su(f"cat {DEV}/status.txt 2>/dev/null") or "").strip()
         if not running and done < total:
-            start_generation("не запущена")
+            err = (su(f"cat {DEV}/error.txt 2>/dev/null") or "").strip()
+            if err:
+                log("генерация упала с ошибкой:\n" + err[:1500]); return
+            quick = getattr(cmd_run, "quick", 0)
+            if time.time() - getattr(cmd_run, "started_at", 0) < 90:
+                cmd_run.quick = quick + 1
+                if cmd_run.quick >= 3:
+                    log("генерация трижды завершилась сразу после запуска — остановка, см. status.txt на телефоне"); return
+            start_generation("не запущена"); cmd_run.started_at = time.time()
             last_progress = time.time()
         elif running and time.time() - last_progress > STALL_S and not status.startswith("cooling"):
             start_generation(f"нет новых клипов {STALL_S // 60} мин")
