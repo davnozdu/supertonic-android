@@ -43,7 +43,8 @@ object AmbienceGeneration {
                     AmbienceModel.download(ctx) { text, _ -> mutable.value = State(true, book, place = text) }
                 AmbienceBook.generate(ctx, sha, scenes, progress = { done, total, place -> mutable.value = State(true, book, done, total, place) },
                     cancelled = { stopped })
-                mutable.value = State(book = book, message = "Фоновые звуки созданы: ${scenes.locations.size} локаций")
+                mutable.value = State(book = book, message = "Фоновые звуки созданы: ${scenes.locations.size} локаций" +
+                    (AmbienceModel.takeLowMemory()?.let { ". $it" } ?: ""))
             } catch (_: InterruptedException) { mutable.value = State(book = book, message = "Создание звуков остановлено; готовые сохранены")
             } catch (e: Exception) { mutable.value = State(book = book, message = "Не удалось создать звуки: ${e.message ?: e.javaClass.simpleName}")
             } finally {

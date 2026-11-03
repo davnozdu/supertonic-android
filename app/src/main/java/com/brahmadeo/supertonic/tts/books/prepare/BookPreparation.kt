@@ -425,7 +425,7 @@ object BookPreparation {
                     mutable.value = mutable.value.copy(sounds = soundLine) },
                 cancelled = stop)
             com.brahmadeo.supertonic.tts.ambience.NpuNightJob.schedule(ctx)
-            "Фоновые звуки созданы. "
+            "Фоновые звуки созданы. " + (com.brahmadeo.supertonic.tts.ambience.AmbienceModel.takeLowMemory()?.let { "$it " } ?: "")
         } catch (e: InterruptedException) { throw CancellationException("stopped")
         } catch (e: Exception) { report(ctx, e); "Фоновые звуки не созданы (${e.javaClass.simpleName}); можно повторить в карточке книги. " }
     }

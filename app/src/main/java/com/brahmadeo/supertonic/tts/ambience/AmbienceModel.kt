@@ -136,7 +136,30 @@ object AmbienceModel {
         val line = "${java.util.Date()}: $what на NPU не загружается — свободно $availMb МБ, нужно $needMb; считает процессор"
         Log.w("Ambience", line)
         runCatching { File(context.cacheDir, "ambience-memory.txt").appendText(line + "\n") }
+        lowMemory = "Мало свободной памяти ($availMb МБ): $what считает процессор, медленнее. Перезагрузите телефон, чтобы вернуть скорость NPU."
+        notifyLowMemory(context, lowMemory!!)
         return false
+    }
+
+    /** Последнее предупреждение о нехватке памяти (для итогового сообщения о звуках книги); сбрасывается при чтении. */
+    @Volatile private var lowMemory: String? = null
+    fun takeLowMemory(): String? = lowMemory.also { lowMemory = null }
+    @Volatile private var lowMemoryNotifiedAt = 0L
+
+    /** Видимое уведомление, не чаще раза в час: без него пользователь не узнает, почему стало медленно. */
+    private fun notifyLowMemory(context: Context, text: String) {
+        val now = System.currentTimeMillis()
+        if (now - lowMemoryNotifiedAt < 60 * 60 * 1000L) return
+        lowMemoryNotifiedAt = now
+        runCatching {
+            val manager = context.getSystemService(android.app.NotificationManager::class.java) ?: return
+            manager.createNotificationChannel(android.app.NotificationChannel("ambience_memory", "Память для NPU",
+                android.app.NotificationManager.IMPORTANCE_DEFAULT))
+            manager.notify(4214, androidx.core.app.NotificationCompat.Builder(context, "ambience_memory")
+                .setSmallIcon(android.R.drawable.stat_sys_warning).setContentTitle("MyTTS: мало памяти для NPU")
+                .setContentText(text).setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
+                .setAutoCancel(true).build())
+        }
     }
 
     const val MUSIC_MODEL_KEY = "music_model"
