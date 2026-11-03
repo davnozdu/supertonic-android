@@ -240,8 +240,15 @@ object AmbienceProbe {
             val dit = if (medium) AmbienceModel.npuDit(context, music = true, model = AmbienceModel.MEDIUM_MUSIC, diagnostic = true)
                 else AmbienceModel.npuDit(context)
             val m = AmbienceModel.MEDIUM_MUSIC
-            val g = if (medium) Sa3Generator(AmbienceModel.root(context), threads, dit, m.ditFile, m.rungs, "dec_w8a8.tflite", keep = true)
-                else Sa3Generator(AmbienceModel.root(context), threads, dit)
+            // Максимальное качество: декодер SAME-L (у Stability — «для максимальной точности на medium»), на NPU в
+            // fp16, если он есть, иначе SAME-L на процессоре; ambienceBankDecoder=small — SAME-S.
+            val large = intent.getStringExtra("ambienceBankDecoder") != "small"
+            val decFile = if (large && AmbienceModel.largeDecoderReady(context)) "dec_l_w8a8.tflite" else "dec_w8a8.tflite"
+            val g = if (medium) Sa3Generator(AmbienceModel.root(context), threads, dit, m.ditFile, m.rungs, decFile, keep = true)
+                else Sa3Generator(AmbienceModel.root(context), threads, dit, decFile = decFile)
+            if (decFile == "dec_l_w8a8.tflite") g.npuDecoder = AmbienceModel.largeDecoderNpu(context, allowCompile = true, diagnostic = true)
+            // Клип короче 30 с — окном 30 с с условием длительности (полный контекст токенов); 30 с — как есть,
+            // а нужные 8 с вырезает компьютер вокруг главного события.
             g.npuShort = true
             try {
                 for ((name, seed, prompt) in chunk) {
@@ -257,7 +264,7 @@ object AmbienceProbe {
                     status.writeText("ok ${done.size}/${jobs.size} last=$name ms=${android.os.SystemClock.elapsedRealtime() - t0} " +
                         "npu=${g.usedNpu} temp=${temperature()} at=${System.currentTimeMillis()}\n")
                 }
-            } finally { g.close(); dit?.close() }
+            } finally { g.npuDecoder?.close(); g.close(); dit?.close() }
         }
         status.writeText("finished ${done.size}/${jobs.size} at=${System.currentTimeMillis()}\n")
         Log.i(TAG, "BANK finished, made $made")
