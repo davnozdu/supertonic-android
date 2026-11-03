@@ -261,6 +261,9 @@ def cmd_run():
         local = have()
         want = set(all_jobs) - local
         if not want:
+            # Часть клипов сделал компьютер (mac_gen.py): телефон остановить, иначе он пересчитывал бы их.
+            if connected():
+                su(f"am force-stop {PKG}"); su(f"rm -f {DEV}/*.wav")
             log(f"всё собрано: {total} клипов"); return
         if not connected():
             if was is not False:
