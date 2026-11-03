@@ -53,6 +53,10 @@ class SoundGenService : Service() {
         }
         job = thread(name = "sound-gen") {
             try {
+                if (!GeneratorSlot.tryAcquire()) {
+                    Log.w(TAG, "another generator job owns this process; refusing to start a second one")
+                    return@thread
+                }
                 // The generator runs in its own process: the HTP turn must be taken from the main process, otherwise
                 // its QNN graphs would run at the same time as the reader's (QNN 1002, both sides slower).
                 com.brahmadeo.supertonic.tts.utils.HtpGate.attach(this)
@@ -66,6 +70,7 @@ class SoundGenService : Service() {
                     }
                 }
             } finally {
+                GeneratorSlot.release()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
