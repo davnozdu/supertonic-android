@@ -67,7 +67,6 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
                 var eventsMedium by remember { mutableStateOf(AmbienceSettings.eventsMedium(prefs)) }
                 var npuShort by remember { mutableStateOf(AmbienceSettings.npuShort(prefs)) }
-                var parallel by remember { mutableStateOf(AmbienceSettings.parallel(prefs)) }
                 var eventLead by remember { mutableIntStateOf(AmbienceSettings.eventLead(prefs)) }
                 var eventsDensity by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,
                     com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.DEFAULT_DENSITY)) }
@@ -556,16 +555,6 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("Нагружает процессор примерно в 3 раза меньше. Дополнительно ${AmbienceModel.npuBytes()/1048576} МБ; " +
                                 "первая подготовка NPU занимает около 2 минут. Графы NPU — ровно на 30 с: фон локаций и музыка.",style=MaterialTheme.typography.bodySmall)
                             if (ambienceNpu) {
-                                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                                    Text("Параллельно NPU и процессор · эксперимент",Modifier.weight(1f))
-                                    Switch(checked=parallel,enabled=!busy,onCheckedChange={
-                                        parallel=it; prefs.edit().putBoolean(AmbienceSettings.PARALLEL,it).apply()
-                                    })
-                                }
-                                Text("Пока NPU занят, процессор считает другие клипы: музыка — второй декодер на процессоре, " +
-                                    "фоны и события — вторая копия модели. Создание звуков книги быстрее (ожидается ≈1,5×), " +
-                                    "но процессор нагружен сильнее (заряд, нагрев) и нужно ещё ~1–2 ГБ памяти.",
-                                    style=MaterialTheme.typography.bodySmall)
                                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                                     Text("Короткие звуки на NPU · эксперимент",Modifier.weight(1f))
                                     Switch(checked=npuShort,enabled=!busy,onCheckedChange={

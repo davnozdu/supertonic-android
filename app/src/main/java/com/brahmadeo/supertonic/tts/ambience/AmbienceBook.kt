@@ -244,37 +244,16 @@ object AmbienceBook {
                         progress(place[job] ?: 0, ordered.size, job.label)
                         synchronized(doc) { saveClip(context, sha, dir, doc, job, result, npu = true) }
                     }
-                    var helper: Sa3Generator? = null
                     try {
-                        if (AmbienceSettings.parallel(prefs) && batch.gen == Gen.MUSIC && g.npuDecoder != null) {
-                            // Музыка: NPU считает DiT; декодирует тот, кто свободен — NPU или процессор.
-                            ParallelPipeline(batch.jobs, listOf(::produceNpu), listOf(
-                                { r: Pair<Job, Sa3Generator.Latents> -> save(r.first, g.decodeWith(r.second, r.first.seconds, npu = true)) },
-                                { r: Pair<Job, Sa3Generator.Latents> -> save(r.first, g.decodeWith(r.second, r.first.seconds, npu = false)) })).run()
-                        } else if (AmbienceSettings.parallel(prefs)) {
-                            // Фоны и события: второй DiT на процессоре (своя копия моделей) считает другие клипы, пока NPU
-                            // занят; декодер на процессоре один на обоих.
-                            val keep = AmbienceSettings.keepModels(prefs)
-                            val h = when (batch.gen) {
-                                Gen.MUSIC -> AmbienceModel.musicGenerator(context, threads, null, keep)
-                                Gen.MEDIUM_SFX -> AmbienceModel.mediumSfxGenerator(context, threads, keep)
-                                Gen.SMALL -> Sa3Generator(AmbienceModel.root(context), threads, null, keep = keep)
-                            }.also { helper = it }
-                            ParallelPipeline(batch.jobs, listOf(::produceNpu,
-                                    { job: Job -> job to h.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled)) }),
-                                listOf { r: Pair<Job, Sa3Generator.Latents> -> save(r.first, g.decode(r.second, r.first.seconds)) }).run()
-                        } else ClipPipeline(batch.jobs,
+                        ClipPipeline(batch.jobs,
                             produce = { job -> produceNpu(job) },
                             consume = { (job, latents) -> save(job, g.decode(latents, job.seconds)) }).run()
                         npuFailures = 0
-                        helper?.close(); helper = null
-                        Log.i("Ambience", "batch ${batch.gen} npu=true parallel=${AmbienceSettings.parallel(prefs)} clips=${batch.jobs.size} " +
+                        Log.i("Ambience", "batch ${batch.gen} npu=true clips=${batch.jobs.size} " +
                             "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
                     } catch (e: InterruptedException) {
-                        helper?.close()
                         throw e
                     } catch (e: Throwable) {
-                        helper?.close(); helper = null
                         Log.w("Ambience", "NPU failed mid-batch after ${batch.jobs.count { File(dir, it.file).isFile }} clips " +
                             "(${e.javaClass.simpleName}: ${e.message}); the rest on the CPU")
                         runCatching { npu!!.close() }
