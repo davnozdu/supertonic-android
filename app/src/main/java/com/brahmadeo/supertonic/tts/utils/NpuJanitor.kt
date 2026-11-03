@@ -40,6 +40,7 @@ object NpuJanitor {
         releaseAll = release
         idleExtra = idle
         val app = context.applicationContext
+        note(app, "started: sweep ${SWEEP_MS / 1000} s, idle ${IDLE_MS / 1000} s, residual ${RESIDUAL_MB} MB")
         ScheduledThreadPoolExecutor(1) { r -> Thread(r, "NpuJanitor").apply { isDaemon = true } }
             .apply { removeOnCancelPolicy = true }
             .scheduleWithFixedDelay({ runCatching { sweep(app) }.onFailure { Log.w(TAG, "janitor: ${it.javaClass.simpleName}: ${it.message}") } },
@@ -62,11 +63,17 @@ object NpuJanitor {
         if (idle < IDLE_MS) return
         val before = Npu.footprint(context)
         if (dmabufMb() < RESIDUAL_MB) return
+        note(context, "idle ${idle / 1000} s, still held — $before; closing every model")
         Log.i(TAG, "janitor: NPU idle ${idle / 1000} s, still held — $before; closing every model and session")
         runCatching { releaseAll?.invoke() }
         runCatching { com.brahmadeo.supertonic.tts.llm.LlmProviders.unload() }
         // The buffers go away a moment after close(): measure once more, and say so in the log.
-        Thread { Thread.sleep(4000); Log.i(TAG, "janitor: after release ${Npu.footprint(context)}") }.apply { isDaemon = true }.start()
+        Thread {
+            Thread.sleep(4000)
+            val after = Npu.footprint(context)
+            note(context, "after release — $after")
+            Log.i(TAG, "janitor: after release $after")
+        }.apply { isDaemon = true }.start()
         if (idle > HARD_IDLE_MS && SystemClock.elapsedRealtime() - lastRestart > HARD_IDLE_MS) {
             Thread {
                 Thread.sleep(10_000)
@@ -87,7 +94,15 @@ object NpuJanitor {
         if (running) return
         val proc = runCatching { am.runningAppProcesses?.firstOrNull { it.processName == context.packageName + ":soundgen" } }.getOrNull() ?: return
         Log.w(TAG, "janitor: sound generator process ${proc.pid} outlived its service — killing it")
+        note(context, "killed orphan generator process ${proc.pid}")
         runCatching { android.os.Process.killProcess(proc.pid) }
+    }
+
+    /** The cleaner's own record: the app log is cut by the firmware after a few lines, this file stays. */
+    private fun note(context: Context, text: String) = runCatching {
+        val f = File(context.cacheDir, "npu-janitor.txt")
+        val lines = if (f.isFile) f.readLines().takeLast(19) else emptyList()
+        f.writeText((lines + "${java.text.SimpleDateFormat("dd.MM HH:mm:ss", java.util.Locale.US).format(java.util.Date())} $text").joinToString("\n") + "\n")
     }
 
     /** dmabuf mapped into this process, MB. */

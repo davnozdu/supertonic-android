@@ -256,7 +256,8 @@ object AmbienceProbe {
             // Клип короче 30 с — окном 30 с с условием длительности (полный контекст токенов); 30 с — как есть,
             // а нужные 8 с вырезает компьютер вокруг главного события.
             g.npuShort = true
-            status.writeText("models dit=${if (dit != null) "npu" else "cpu"} decoder=$decFile npuDecoder=${g.npuDecoder != null} at=${System.currentTimeMillis()}\n")
+            status.writeText("models dit=${if (dit != null) "npu" else "cpu"} decoder=$decFile npuDecoder=${g.npuDecoder != null} " +
+                "gate=${com.brahmadeo.supertonic.tts.utils.HtpGate.attached} at=${System.currentTimeMillis()}\n")
             try {
                 var last = android.os.SystemClock.elapsedRealtime()
                 // Конвейер: NPU считает DiT следующего клипа, пока процессор декодирует предыдущий.
