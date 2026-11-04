@@ -4,16 +4,22 @@ import android.content.Context
 import android.util.Log
 import com.brahmadeo.supertonic.tts.SupertonicTTS
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),
     val slow: Boolean = PocketDownload.slowEnabled(context),
     /** Stability <-> expressiveness: the sampling temperature (0.3 so far; lower is steadier). */
-    val temperature: Float = temperature(context)) : AutoCloseable {
+    val temperature: Float = temperature(context),
+    /** «8 бит»: главный граф int8 (быстрее, на слух почти не отличается). */
+    val int8: Boolean = PocketDownload.int8Enabled(context, slow)) : AutoCloseable {
     companion object {
         const val TEMPERATURE = "shtorm_temperature"
         fun temperature(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getFloat(TEMPERATURE, .3f).coerceIn(.1f, .8f)
+        /** «Яркость», дБ выше ~3 кГц (0 — выключено, по умолчанию). В форке TeraTTS на слух выбрали +8. */
+        const val BRIGHTNESS = "shtorm_brightness_db"
+        fun brightness(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getFloat(BRIGHTNESS, 0f).coerceIn(0f, 12f)
     }
     private val root=PocketDownload.modelDir(context, slow)
     private val prefs = context.applicationContext.getSharedPreferences("SupertonicPrefs", 0)
@@ -30,8 +36,10 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
     @Synchronized fun synthesize(text: String, voiceFile: String, speed: Float, gain: Float, listener: SupertonicTTS.ProgressListener?, sid: Long): ByteArray {
         used=android.os.SystemClock.elapsedRealtime()
         try {
-            val engine=native ?: NativePocketTts(root.path,root.path,"fp32",temperature,1,
-                threads,180,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads slow=$slow") }
+            // Кэш голосов (.cache) зависит от весов: у 8-битного графа — своя папка, чтобы не смешивать состояния.
+            val voices = if (int8) File(root, "int8").apply { mkdirs() } else root
+            val engine=native ?: NativePocketTts(root.path,voices.path,if (int8) "int8" else "fp32",temperature,1,
+                threads,180,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads slow=$slow int8=$int8") }
             val output=ByteArrayOutputStream()
             val start=android.os.SystemClock.elapsedRealtime()
             for(chunk in PocketText.chunks(text)) {
@@ -49,6 +57,9 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
                     }
                 })
                 if(!okay || SupertonicTTS.isCancelled()) return ByteArray(0)
+                // «Яркость»: подъём верхов до нормализации громкости — громкость и пик считаются уже по яркому звуку.
+                val bright = prefs.getFloat(BRIGHTNESS, 0f).coerceIn(0f, 12f)
+                if (bright >= .1f) com.brahmadeo.supertonic.tts.utils.HighShelf(bright, 3000f, 24000f).let { f -> frames.forEach(f::process) }
                 // Normalize a bounded phrase consistently; never hard-clip the common 2.5x gain.
                 val safeGain=com.brahmadeo.supertonic.tts.utils.SpeechLoudness.scale(frames,gain,prefs.getBoolean("voice_loudness_normalization",true))
                 val phrase = ByteArrayOutputStream(count * 2)

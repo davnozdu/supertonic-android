@@ -73,12 +73,27 @@ fun TeraVoiceImport(onChanged: () -> Unit) {
         Text(
             "Файл .json голоса Supertonic или два файла TeraTTS: style_ttl.npy и style_dp.npy (выбрать вместе). " +
                 "Голос появится в списке как «Свой · …», его можно дать персонажу. Голоса из английских наборов " +
-                "читают по-русски с акцентом и разной точностью — сравните на слух.",
+                "читают по-русски с акцентом и разной точностью — сравните на слух. Если свой голос пропускает слова, " +
+                "выберите у него «Ритм» родного голоса Tera: тембр останется свой, ритм речи — от родного.",
             style = MaterialTheme.typography.bodySmall
         )
         custom.forEach { name ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(TeraCustomVoices.label(name), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text(TeraCustomVoices.label(name), style = MaterialTheme.typography.bodyMedium)
+                    var donor by remember(name) { mutableStateOf(com.brahmadeo.supertonic.tts.tera.TeraVoiceRhythm.donor(context, name)) }
+                    var open by remember { mutableStateOf(false) }
+                    TextButton(onClick = { open = true }) { Text("Ритм: " + donor.ifEmpty { "свой" }) }
+                    androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                        (listOf("") + com.brahmadeo.supertonic.tts.tera.TeraVoiceRhythm.DONORS).forEach { d ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(if (d.isEmpty()) "свой (как в файле)" else "как у $d") }, onClick = {
+                                open = false; donor = d
+                                com.brahmadeo.supertonic.tts.tera.TeraVoiceRhythm.setDonor(context, name, d)
+                                SpeechPreparationCache.clear(); onChanged()
+                            })
+                        }
+                    }
+                }
                 TextButton(onClick = {
                     TeraCustomVoices.delete(context, name)
                     VoiceGenderSettings.save(context, BookVoiceRef(AssetManager.TERA_MODEL, name).key, null)

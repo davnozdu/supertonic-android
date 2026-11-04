@@ -173,8 +173,11 @@ class TeraEngine(private val root: File, context: Context,
     private fun voice(path: String): Pair<FloatArray, FloatArray> {
         val voiceDir = File(path.substringBefore(';')).parentFile
         require(voiceDir.parentFile.name == "styles")
-        return styles.getOrPut(voiceDir.name) {
-            loadNpy(File(voiceDir, "style_dp.npy"), 128) to
+        // «Ритм голоса»: у своего голоса ритм (style_dp) может быть взят у родного голоса Tera — тембр остаётся свой.
+        val donor = if (voiceDir.name.startsWith(TeraCustomVoices.PREFIX)) TeraVoiceRhythm.donor(context, voiceDir.name) else ""
+        val dpFile = File(if (donor.isEmpty()) voiceDir else File(voiceDir.parentFile, donor), "style_dp.npy")
+        return styles.getOrPut(voiceDir.name + "|" + donor) {
+            loadNpy(dpFile.takeIf { it.isFile } ?: File(voiceDir, "style_dp.npy"), 128) to
                 loadNpy(File(voiceDir, "style_ttl.npy"), 12800)
         }
     }
@@ -229,7 +232,8 @@ class TeraEngine(private val root: File, context: Context,
         val (styleDp, styleTtl) = voice(stylePath)
         val punctuated = TeraTextPreparation.punctuation(text)
         val accented = if (skipDictionary) TeraTextPreparation.explicitStress(punctuated) else accentText(punctuated)
-        val stressed = if (pausePrefs.getBoolean(LOWER_NAMES, true)) TeraTextPreparation.lowerNames(accented) else accented
+        val named = if (pausePrefs.getBoolean(LOWER_NAMES, true)) TeraTextPreparation.lowerNames(accented) else accented
+        val stressed = if (pausePrefs.getBoolean(COMMA_QUOTES, false)) TeraTextPreparation.commaQuotes(named) else named
         val prepared = Normalizer.normalize("<ru>${stressed}</ru>", Normalizer.Form.NFKD)
         val ids = tokenize(prepared)
         val durationIds = tokenize(prepared.replace("+", ""))
@@ -347,6 +351,8 @@ class TeraEngine(private val root: File, context: Context,
         const val NPU_SAMPLER_STEPS = "tera_npu_sampler_steps"
         const val NOISE_SCALE = "tera_noise_scale"
         const val LOWER_NAMES = "tera_lower_names"
+        /** «Замена запятых» — выключено по умолчанию (дело вкуса). */
+        const val COMMA_QUOTES = "tera_comma_quotes"
     }
 
     override fun close() {

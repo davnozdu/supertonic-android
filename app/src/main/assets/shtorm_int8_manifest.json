@@ -1,0 +1,4 @@
+{"files":[
+ {"variant":"fast","name":"flow_lm_main_int8.onnx","size":75865936,"sha256":"e5347a5420efc65f662debf9805b0f58d21bdf9db8898ce07723788b004afa71"},
+ {"variant":"slow","name":"flow_lm_main_int8.onnx","size":75865936,"sha256":"24bdb2a0670fe3f1173da430d70c5c4e8fca0235af946ece5a205dbcbf2dbbf3"}
+]}

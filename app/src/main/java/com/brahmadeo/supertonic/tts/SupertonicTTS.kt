@@ -56,7 +56,7 @@ object SupertonicTTS {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         // prefs.all copies the whole map; take one snapshot per key, not one per setting.
         val all=prefs.all
-        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_int8","tera_steps","tera_noise_scale","tera_lower_names","shtorm_temperature","clean_speed_max_"+AssetManager.getModelType(context),"tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
+        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_int8","tera_steps","tera_noise_scale","tera_lower_names","tera_comma_quotes","shtorm_temperature","shtorm_brightness_db","shtorm_int8","clean_speed_max_"+AssetManager.getModelType(context),"tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
         val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
         val pocketSlow=AssetManager.isPocket(context) && com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowEnabled(context)
         return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,pocketSlow,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
@@ -71,8 +71,9 @@ object SupertonicTTS {
         val threads = com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context)
         val slow = com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowEnabled(context)
         val temperature = com.brahmadeo.supertonic.tts.pocket.PocketEngine.temperature(context)
-        pocketEngine?.let { if (it.threads == threads && it.slow == slow && it.temperature == temperature) return it; it.close(); pocketEngine = null }
-        return com.brahmadeo.supertonic.tts.pocket.PocketEngine(context, threads, slow, temperature).also { pocketEngine = it }
+        val int8 = com.brahmadeo.supertonic.tts.pocket.PocketDownload.int8Enabled(context, slow)
+        pocketEngine?.let { if (it.threads == threads && it.slow == slow && it.temperature == temperature && it.int8 == int8) return it; it.close(); pocketEngine = null }
+        return com.brahmadeo.supertonic.tts.pocket.PocketEngine(context, threads, slow, temperature, int8).also { pocketEngine = it }
     }
     @Synchronized private fun maybeSileroEngine(context: Context): com.brahmadeo.supertonic.tts.silero.SileroEngine {
         val model = AssetManager.getModelType(context)
@@ -457,7 +458,7 @@ object SupertonicTTS {
                     }
                     return pcm
                 }
-                fun russian(textPart: String): ByteArray = when {
+                fun russianEngine(textPart: String): ByteArray = when {
                     AssetManager.isKokoro(context) -> stretched { s, l -> maybeKokoroEngine(context).synthesize(textPart, stylePath, s, gain, l, sid) }
                     AssetManager.isPocket(context) -> stretched { s, l -> maybePocketEngine(context).synthesize(textPart, stylePath, s, gain, l, sid) }
                     AssetManager.isSilero(context) -> stretched { s, l -> maybeSileroEngine(context).synthesize(textPart, stylePath, s, gain, l, sid) }
@@ -465,6 +466,8 @@ object SupertonicTTS {
                         maybeTeraEngine(context)?.synthesize(textPart, lang, stylePath, speed, gain, routedListener, sid, skipDictionary)
                             .also { lastTeraUse = android.os.SystemClock.elapsedRealtime() } ?: ByteArray(0) }
                 }
+                fun russian(textPart: String): ByteArray = com.brahmadeo.supertonic.tts.utils.SpeedHint.synth(context, sourceRate,
+                    live = preparationGeneration == null) { russianEngine(textPart) }
                 // A whole non-Russian request (the reader set another language) goes to that language's engine.
                 val parts = if (!lang.lowercase().startsWith("ru") && !text.any { it in 'Ѐ'..'ӿ' })
                     listOf(com.brahmadeo.supertonic.tts.foreign.ForeignText.Part(text, true))

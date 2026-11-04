@@ -64,7 +64,37 @@ fun ModelPackageChoice(model: String) {
             }
         }) { Text(if (kokoro) "Скачать полную точность · 622 МБ" else "Скачать спокойную подачу · ${PocketDownload.slowSizeMb(context)} МБ") }
         if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
+        if (!kokoro) ShtormInt8()
     }
+}
+
+/** Shtorm «8 бит»: главный граф int8 (76 МБ вместо 302) — быстрее; на слух почти не отличается (форк TeraTTS 1.10). */
+@Composable
+private fun ShtormInt8() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE) }
+    var ready by remember { mutableStateOf(PocketDownload.int8Ready(context)) }
+    var on by remember { mutableStateOf(prefs.getBoolean(PocketDownload.INT8_KEY, false)) }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val full = "Полная точность"; val compact = "8 бит · быстрее"
+    if (ready) DropdownSelector(label = "Точность Shtorm", options = listOf(full, compact), selectedOption = if (on) compact else full,
+        onOptionSelected = { on = it == compact; prefs.edit().putBoolean(PocketDownload.INT8_KEY, on).apply() })
+    Text("8 бит — та же модель с весами в 8 битах: главный граф 76 МБ вместо 302, на телефоне считает быстрее (меньше " +
+        "читает памяти на каждый кадр). Звук чуть отличается — сравните на слух.", style = MaterialTheme.typography.bodySmall)
+    if (!ready) OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+        busy = true
+        scope.launch {
+            try {
+                PocketDownload.downloadInt8(context) { s, _ -> scope.launch { status = s } }
+                ready = true; on = true; prefs.edit().putBoolean(PocketDownload.INT8_KEY, true).apply()
+                status = "Shtorm 8 бит установлена"
+            } catch (t: Exception) { status = "Ошибка установки: ${t.message ?: t.javaClass.simpleName}" }
+            finally { busy = false }
+        }
+    }) { Text("Скачать Shtorm 8 бит · ${PocketDownload.int8SizeMb(context)} МБ") }
+    if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
 }
 
 /** Tera: distilled (default), the compact int8 build of it, or the teacher. Each extra one downloads from here. */

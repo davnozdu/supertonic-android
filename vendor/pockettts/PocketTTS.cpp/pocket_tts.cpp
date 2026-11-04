@@ -43,6 +43,12 @@
 // ── External Libraries ──────────────────────────────────────────────────────
 
 #include <onnxruntime_cxx_api.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#define LOGI_POCKET(...) __android_log_print(ANDROID_LOG_INFO, "PocketTTS", __VA_ARGS__)
+#else
+#define LOGI_POCKET(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
+#endif
 #include <sentencepiece_processor.h>
 
 #define DR_WAV_IMPLEMENTATION
@@ -1460,13 +1466,23 @@ public:
         }
         
         auto& env = get_ort_env();
-        std::string sfx = cfg_.precision == "int8" ? "_int8" : "";
+        // MyTTS: "int8" takes the 8-bit file of a graph where it exists (as in the TeraTTS fork only the main graph,
+        // 76 MB instead of 302, is quantised) and the full-precision one otherwise.
+        auto pick = [&](const std::string& name) {
+            if (cfg_.precision == "int8") {
+                std::ifstream probe(cfg_.models_dir + "/" + name + "_int8.onnx");
+                if (probe.good()) return name + "_int8";
+            }
+            return name;
+        };
+        const std::string main_name = pick("flow_lm_main"), flow_name = pick("flow_lm_flow"), dec_name = pick("mimi_decoder");
         
         enc_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/mimi_encoder.onnx", opts_enc, "mimi_encoder");
         txt_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/text_conditioner.onnx", opts_full, "text_conditioner");
-        main_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/flow_lm_main" + sfx + ".onnx", opts_ar, "flow_lm_main" + sfx);
-        flow_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/flow_lm_flow" + sfx + ".onnx", opts_ar, "flow_lm_flow" + sfx);
-        dec_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/mimi_decoder" + sfx + ".onnx", opts_dec, "mimi_decoder" + sfx);
+        main_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/" + main_name + ".onnx", opts_ar, main_name);
+        flow_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/" + flow_name + ".onnx", opts_ar, flow_name);
+        dec_ = std::make_unique<OrtSession>(env, cfg_.models_dir + "/" + dec_name + ".onnx", opts_dec, dec_name);
+        LOGI_POCKET("Shtorm graphs: %s, %s, %s", main_name.c_str(), flow_name.c_str(), dec_name.c_str());
         
         main_runner_ = std::make_unique<StatefulRunner>(*main_);
         dec_runner_ = std::make_unique<StatefulRunner>(*dec_);
@@ -1893,6 +1909,8 @@ private:
         }
         
         bool has_next() const { return !done_ && idx_ < max_; }
+        /** The model itself signalled the end of speech (not stopped by the frame limit). */
+        bool ended() const { return eos_; }
         
         Tensor next() {
             if (!has_next()) throw std::runtime_error("No more latents");
@@ -2084,7 +2102,22 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
                       << " (requested " << max_frames << ", token estimate "
                       << token_limited_frames << ")\n";
         }
-        auto gen = make_gen(voice, text_tokens, effective_max_frames, eos_extra);
+        // MyTTS (idea from the TeraTTS fork, 1.9.1): now and then the end-of-speech signal comes close but does not
+        // cross the threshold, and the model fills the time left by repeating the last words. Read normally a
+        // phrase ends well before 11 letters a second + 1 s (book prose: 13-25 letters a second). So the first try
+        // is capped there; a phrase that has not ended by then is said again with other noise (that one almost
+        // always ends) under the old cap, and taken as it is. Frames are therefore held until the try is known
+        // good: the phrase starts after its generation (~0.2 of its length) instead of after the first frames.
+        size_t letters = 0;
+        for (size_t i = 0; i < prepared.size(); ++i) {
+            const unsigned char c = static_cast<unsigned char>(prepared[i]);
+            if ((c & 0xC0) == 0x80) continue;                                  // UTF-8 continuation byte
+            if (c == 0xCC && i + 1 < prepared.size() && static_cast<unsigned char>(prepared[i + 1]) == 0x81) continue;  // U+0301
+            if (c != ' ') ++letters;
+        }
+        const int speech_limit = static_cast<int>(std::ceil((letters / 11.0 + 1.0) * 12.5)) + eos_extra + 1;
+        const int first_cap = std::min(effective_max_frames, speech_limit);
+        auto gen = make_gen(voice, text_tokens, first_cap, eos_extra);
         dec_runner_->reset_state();  // zero existing buffers, no reallocation
         
         // Pipelined: generator thread produces latent frames into a queue,
@@ -2100,20 +2133,28 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
         
         std::thread gen_thread([&]() {
             try {
-            while (gen.has_next()) {
-                {
-                    std::lock_guard<std::mutex> lock(mtx);
-                    if (aborted) return;
+            std::vector<Tensor> held;
+            for (int attempt = 0; attempt < 2; ++attempt) {
+                held.clear();
+                auto g = attempt == 0 ? std::move(gen) : make_gen(voice, text_tokens, effective_max_frames, eos_extra);
+                while (g.has_next()) {
+                    {
+                        std::lock_guard<std::mutex> lock(mtx);
+                        if (aborted) return;
+                    }
+                    auto f = g.next();
+                    if (f.numel() == 0) break;
+                    held.push_back(std::move(f));
                 }
-                auto f = gen.next();
-                if (f.numel() == 0) break;
-                {
-                    std::lock_guard<std::mutex> lock(mtx);
-                    if (aborted) return;
-                    queue.push_back(std::move(f));
-                }
-                cv.notify_one();
+                if (g.ended() || first_cap >= effective_max_frames) break;
+                if (attempt == 0) LOGI_POCKET("Shtorm: no end of speech in %.1f s, saying it again", first_cap / 12.5);
             }
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                if (aborted) return;
+                for (auto& f : held) queue.push_back(std::move(f));
+            }
+            cv.notify_one();
             } catch (...) {
                 std::lock_guard<std::mutex> lock(mtx);
                 generation_error = std::current_exception();

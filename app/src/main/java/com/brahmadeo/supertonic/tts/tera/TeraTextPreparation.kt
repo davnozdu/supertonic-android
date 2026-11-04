@@ -31,6 +31,16 @@ internal object TeraTextPreparation {
         }.replace(Regex("[ \\t]+"), " ").trim()
     }
 
+    /** «Замена запятых» (azimutspb, TeraTTS-GUI; форк TeraTTS 1.7): паузу, отмеченную кавычками, Tera читает
+     * естественнее запятой — «улыбнулся " " кивнул». Запятые и точки с запятой внутри фразы; одна в самом конце
+     * убирается (паузу после неё MyTTS добавляет тишиной). Тире к этому моменту уже стали запятыми. */
+    fun commaQuotes(text: String): String {
+        val body = text.trimEnd().trimEnd(',', ';')
+        val out = StringBuilder(text.length + 8)
+        for (c in body) if (c == ',' || c == ';') out.append(" \" \"") else out.append(c)
+        return out.toString()
+    }
+
     fun explicitStress(text: String): String = acute.replace(text) { "+${it.groupValues[1]}" }
 
     // A capitalised word (stress marks allowed): "Тень", "Т+ени", "+Анна"; not all-caps abbreviations.

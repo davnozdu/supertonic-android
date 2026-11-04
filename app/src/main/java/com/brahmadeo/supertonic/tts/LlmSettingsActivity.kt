@@ -541,6 +541,12 @@ class LlmSettingsActivity : ComponentActivity() {
                                 pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraEngine.LOWER_NAMES, it).apply()
                             }
                             Text("Tera принимает слово с заглавной буквы за иностранное имя и читает «Тень» как «тэнь». Для модели такие слова пишутся строчными; ударения уже расставлены, первое слово предложения не меняется.",style=MaterialTheme.typography.bodySmall)
+                            var commaQuotes by remember { mutableStateOf(pausePrefs.getBoolean(com.brahmadeo.supertonic.tts.tera.TeraEngine.COMMA_QUOTES, false)) }
+                            Toggle("Замена запятых", commaQuotes) {
+                                commaQuotes = it
+                                pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraEngine.COMMA_QUOTES, it).apply()
+                            }
+                            Text("Запятые внутри фразы передаются модели как кавычки — «улыбнулся \" \" кивнул»: по наблюдению azimutspb (TeraTTS-GUI) Tera так читает паузу естественнее. Дело вкуса — сравните на слух. Текст книги не меняется.",style=MaterialTheme.typography.bodySmall)
                             Toggle("Не растягивать короткие реплики",shortWordCap) {
                                 shortWordCap=it
                                 pausePrefs.edit().putBoolean(com.brahmadeo.supertonic.tts.tera.TeraDurationCap.KEY,it).apply()
@@ -567,6 +573,13 @@ class LlmSettingsActivity : ComponentActivity() {
                                 onValueChange = { temperature = (Math.round(it * 20) / 20f).coerceIn(.1f, .8f) },
                                 onValueChangeFinished = { pausePrefs.edit().putFloat(com.brahmadeo.supertonic.tts.pocket.PocketEngine.TEMPERATURE, temperature).apply() })
                             Text("Температура выборки Shtorm. Меньше — ровнее и предсказуемее, больше — живее интонация, но чаще сбои и оговорки. Сравните на слух. Нагрузку не меняет.",style=MaterialTheme.typography.bodySmall)
+                            var brightness by remember { mutableStateOf(com.brahmadeo.supertonic.tts.pocket.PocketEngine.brightness(this@LlmSettingsActivity)) }
+                            Text("Яркость: " + if (brightness < .1f) "выключена" else "+${brightness.toInt()} дБ")
+                            Slider(value = brightness, valueRange = 0f..12f, steps = 11,
+                                onValueChange = { brightness = Math.round(it).toFloat() },
+                                onValueChangeFinished = { pausePrefs.edit().putFloat(com.brahmadeo.supertonic.tts.pocket.PocketEngine.BRIGHTNESS, brightness).apply() })
+                            Text("Поднимает частоты выше 3 кГц: кодек Shtorm смягчает верха, и голос может звучать глуховато. В форке TeraTTS " +
+                                "на слух выбрали +8 дБ. Дело вкуса — сравните. Нагрузку почти не меняет.",style=MaterialTheme.typography.bodySmall)
                         }
                         if(com.brahmadeo.supertonic.tts.utils.AssetManager.isKokoro(this@LlmSettingsActivity)) {
                             Text("Звук Kokoro",style=MaterialTheme.typography.titleMedium)
