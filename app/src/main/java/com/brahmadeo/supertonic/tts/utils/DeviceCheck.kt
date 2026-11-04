@@ -25,7 +25,12 @@ object DeviceCheck {
         val soc: String, val npu: Npu, val ramGb: Double, val availGb: Double, val swapGb: Double, val cores: Int,
         val maxGhz: Double, val android: String, val freeStorageGb: Double, val tier: String,
         val items: List<Item>, val current: List<String>, val tips: List<String>,
-    )
+    ) {
+        /** Что подходит этому телефону и что нет — от оперативной памяти и NPU. */
+        val can get() = items.filter { it.verdict == Verdict.GOOD }.map { it.name }
+        val slow get() = items.filter { it.verdict == Verdict.SLOW }.map { it.name }
+        val cannot get() = items.filter { it.verdict == Verdict.NO }.map { it.name }
+    }
 
     fun npu(): Npu {
         val model = (if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE).uppercase()
@@ -128,20 +133,50 @@ object DeviceCheck {
         return Report(soc, n, ram, avail, swap, cores, maxGhz, Build.VERSION.RELEASE, storage, tier, items, current, tips)
     }
 
-    /** Включить ускорители, которые подходят этому телефону (не скачивает моделей, не меняет голос и модель). */
-    fun applyAccelerators(context: Context): List<String> {
+    /** «Подобрать всё за меня»: настройки под память и NPU этого телефона. Меняет только переключатели и выбор
+     * вариантов моделей (полная/Q8, малая/средняя, движок Gemma); голос не меняет и ничего не скачивает — что нужно
+     * сделать руками (скачать лёгкую модель, сменить голос), возвращает отдельным списком. */
+    class Tuning(val changed: List<String>, val manual: List<String>)
+    fun optimize(context: Context): Tuning {
         val n = npu()
-        val done = ArrayList<String>()
-        if (n != Npu.V81 && n != Npu.V79) return done
+        val hasNpu = n == Npu.V81 || n == Npu.V79
+        val am = context.getSystemService(ActivityManager::class.java)
+        val ram = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.totalMem / 1073741824.0
+        val strong = hasNpu && ram >= 11
         val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
-        prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, true).putBoolean("ambience_npu", true).apply()
-        done += "«Ускоритель NPU» для голоса (Tera, Kokoro) включён"
-        done += "«Генерация на NPU» для фоновых звуков включена"
-        if (n == Npu.V81 && com.brahmadeo.supertonic.tts.llm.LocalModelDownload.ready(context, com.brahmadeo.supertonic.tts.llm.LocalModelDownload.HEXAGON)) {
-            context.getSharedPreferences("llm_settings", 0).edit().putString(com.brahmadeo.supertonic.tts.llm.LocalModelDownload.ENGINE_KEY, "npu").apply()
-            done += "Локальная Gemma переключена на NPU"
+        val llm = context.getSharedPreferences("llm_settings", 0)
+        val e = prefs.edit()
+        val changed = ArrayList<String>(); val manual = ArrayList<String>()
+        fun bool(key: String, value: Boolean, on: String, off: String, def: Boolean = false) {
+            if (prefs.getBoolean(key, def) != value) { e.putBoolean(key, value); changed += if (value) on else off }
         }
-        return done
+        fun str(key: String, def: String, value: String, text: String) {
+            if (prefs.getString(key, def) != value) { e.putString(key, value); changed += text }
+        }
+        bool(com.brahmadeo.supertonic.tts.utils.Npu.KEY, hasNpu, "Ускоритель NPU для голоса — включён", "Ускоритель NPU для голоса — выключен (подходящего NPU нет)")
+        bool("ambience_npu", hasNpu, "Генерация фоновых звуков на NPU — включена", "Генерация фоновых звуков на NPU — выключена (NPU нет)")
+        if (com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullReady(context))
+            bool("kokoro_full_precision", hasNpu || ram >= 7.5, "Kokoro — полная точность (быстрее на NPU)", "Kokoro — Q8 (меньше памяти)", def = true)
+        str("music_model", "small", if (strong) prefs.getString("music_model", "small")!! else "small", "Модель музыки — малая (средней не хватит памяти или NPU)")
+        if (!strong) str(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.EVENTS_MODEL, "small", "small", "Звуки событий — малая модель")
+        if (ram < 7.5) {
+            bool(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.MOOD_MUSIC, false, "", "Музыка по настроению — выключена (генерация не влезет в память)")
+        }
+        if (hasNpu) {
+            val way = MemoryRelief.way()
+            if (way != MemoryRelief.Way.MANUAL) bool(MemoryRelief.KEY, true, "Освобождать память для быстрой генерации — включено (${way.title})", "")
+            else manual += "Установите Shizuku (или выдайте MyTTS root) — тогда MyTTS сможет сама освобождать память для NPU."
+        }
+        val engine = llm.getString(com.brahmadeo.supertonic.tts.llm.LocalModelDownload.ENGINE_KEY, "gpu")
+        val gemmaNpu = n == Npu.V81 && com.brahmadeo.supertonic.tts.llm.LocalModelDownload.ready(context, com.brahmadeo.supertonic.tts.llm.LocalModelDownload.HEXAGON)
+        if (gemmaNpu && engine != "npu") { llm.edit().putString(com.brahmadeo.supertonic.tts.llm.LocalModelDownload.ENGINE_KEY, "npu").apply(); changed += "Локальная Gemma — на NPU" }
+        if (!gemmaNpu && engine == "npu") { llm.edit().putString(com.brahmadeo.supertonic.tts.llm.LocalModelDownload.ENGINE_KEY, "gpu").apply(); changed += "Локальная Gemma — на GPU (NPU для неё нет)" }
+        e.apply()
+        val model = prefs.getString("selected_model", AssetManager.DEFAULT_MODEL)
+        if (model == AssetManager.KOKORO_MODEL && !hasNpu && ram < 7.5)
+            manual += "Смените голос: Kokoro тяжела для этого телефона. Возьмите Silero (самая лёгкая) или Tera — меню → «Модели»."
+        if (ram < 7.5) manual += "Для подготовки текста используйте облачную LLM (DeepSeek/Gemini) — локальная Gemma не влезет в память вместе с голосом."
+        return Tuning(changed.filter { it.isNotEmpty() }, manual)
     }
 
     private fun meminfo(key: String): Long = runCatching {

@@ -24,7 +24,7 @@ class DeviceCheckActivity : ComponentActivity() {
         setContent { SupertonicTheme {
             val scope = rememberCoroutineScope()
             var report by remember { mutableStateOf<DeviceCheck.Report?>(null) }
-            var applied by remember { mutableStateOf("") }
+            var tuned by remember { mutableStateOf<DeviceCheck.Tuning?>(null) }
             LaunchedEffect(Unit) { report = withContext(Dispatchers.IO) { DeviceCheck.run(this@DeviceCheckActivity) } }
             Scaffold(topBar = { TopAppBar(title = { Text("Проверить мой телефон") }, navigationIcon = {
                 TextButton(onClick = { finish() }) { Text("Назад") }
@@ -40,6 +40,28 @@ class DeviceCheckActivity : ComponentActivity() {
                     Text("Ускоритель NPU: ${r.npu.title}")
                     Text("Свободно на диске: ${f(r.freeStorageGb)} ГБ")
                     Text("Класс: ${r.tier}", style = MaterialTheme.typography.bodyMedium)
+                } }
+                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Что можно на этом телефоне", style = MaterialTheme.typography.titleMedium)
+                    Text("Главное — оперативная память: ${f(r.ramGb)} ГБ" +
+                        (if (r.npu == DeviceCheck.Npu.V81 || r.npu == DeviceCheck.Npu.V79) " и ускоритель NPU." else ", NPU нет — всё считает процессор."),
+                        style = MaterialTheme.typography.bodyMedium)
+                    if (r.can.isNotEmpty()) Text("✓ Подходит: ${r.can.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
+                    if (r.slow.isNotEmpty()) Text("⚠ Можно, но медленно или греет: ${r.slow.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
+                    if (r.cannot.isNotEmpty()) Text("✗ Не хватит памяти: ${r.cannot.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = {
+                        scope.launch {
+                            tuned = withContext(Dispatchers.IO) { DeviceCheck.optimize(this@DeviceCheckActivity) }
+                            report = withContext(Dispatchers.IO) { DeviceCheck.run(this@DeviceCheckActivity) }
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Подобрать всё за меня") }
+                    Text("Выставит настройки под память и ускоритель этого телефона: NPU, варианты моделей, освобождение памяти. " +
+                        "Голос не меняет и ничего не скачивает — что сделать вручную, подскажет ниже.", style = MaterialTheme.typography.bodySmall)
+                    tuned?.let { t ->
+                        if (t.changed.isEmpty()) Text("Всё уже настроено оптимально.", style = MaterialTheme.typography.bodyMedium)
+                        else { Text("Изменено:", style = MaterialTheme.typography.titleSmall); t.changed.forEach { Text("✓ $it", style = MaterialTheme.typography.bodySmall) } }
+                        if (t.manual.isNotEmpty()) { Text("Сделайте вручную:", style = MaterialTheme.typography.titleSmall); t.manual.forEach { Text("→ $it", style = MaterialTheme.typography.bodySmall) } }
+                    }
                 } }
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Ваши настройки", style = MaterialTheme.typography.titleMedium)
@@ -58,16 +80,6 @@ class DeviceCheckActivity : ComponentActivity() {
                 if (r.tips.isNotEmpty()) {
                     Text("Советы", style = MaterialTheme.typography.titleMedium)
                     r.tips.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
-                }
-                if (r.npu == DeviceCheck.Npu.V81 || r.npu == DeviceCheck.Npu.V79) {
-                    Button(onClick = {
-                        val done = DeviceCheck.applyAccelerators(this@DeviceCheckActivity)
-                        applied = if (done.isEmpty()) "Нечего включать." else done.joinToString("\n") { "✓ $it" }
-                        scope.launch { report = withContext(Dispatchers.IO) { DeviceCheck.run(this@DeviceCheckActivity) } }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Включить ускорители NPU") }
-                    Text("Включает только переключатели NPU; модели и голос не меняются, ничего не скачивается. " +
-                        "Если что-то на NPU не заработает, MyTTS сама посчитает это процессором.", style = MaterialTheme.typography.bodySmall)
-                    if (applied.isNotEmpty()) Text(applied, style = MaterialTheme.typography.bodyMedium)
                 }
                 OutlinedButton(onClick = { report = null; scope.launch { report = withContext(Dispatchers.IO) { DeviceCheck.run(this@DeviceCheckActivity) } } },
                     modifier = Modifier.fillMaxWidth()) { Text("Проверить снова") }
