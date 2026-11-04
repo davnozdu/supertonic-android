@@ -51,6 +51,11 @@
             android:excludeFromRecents="true" android:taskAffinity="" />
         <receiver android:name=".service.SleepTimerReceiver" android:exported="false" />
         <receiver android:name=".service.ReadingControlReceiver" android:exported="false" />
+        <receiver android:name=".utils.MemoryRelief$MemoryReliefReceiver" android:exported="false" />
+        <!-- Shizuku передаёт MyTTS свой binder через этот провайдер. -->
+        <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false" android:enabled="true" android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <activity android:name=".MusicDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <activity android:name=".SpeechDiagnosticsActivity" android:exported="false" android:excludeFromRecents="true" />
         <service android:name=".utils.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />

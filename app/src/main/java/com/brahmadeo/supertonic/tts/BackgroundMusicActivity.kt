@@ -67,6 +67,9 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var eventSeconds by remember { mutableFloatStateOf(AmbienceSettings.eventSeconds(prefs)) }
                 var eventsMedium by remember { mutableStateOf(AmbienceSettings.eventsMedium(prefs)) }
                 var npuShort by remember { mutableStateOf(AmbienceSettings.npuShort(prefs)) }
+                var freeMemory by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.MemoryRelief.enabled(this@BackgroundMusicActivity)) }
+                var reliefWay by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.MemoryRelief.way()) }
+                var shizukuAsk by remember { mutableStateOf(com.brahmadeo.supertonic.tts.utils.MemoryRelief.shizukuNeedsPermission()) }
                 var eventLead by remember { mutableIntStateOf(AmbienceSettings.eventLead(prefs)) }
                 var eventsDensity by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,
                     com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.DEFAULT_DENSITY)) }
@@ -564,6 +567,30 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 Text("Звуки событий (8 с) считаются тем же 30-секундным графом NPU и обрезаются: процессор нагружен в " +
                                     "несколько раз меньше, по времени примерно так же. Звук немного отличается от расчёта на процессоре.",
                                     style=MaterialTheme.typography.bodySmall)
+                            }
+                            if (ambienceNpu) {
+                                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                                    Text("Освобождать память для быстрой генерации",Modifier.weight(1f))
+                                    Switch(checked=freeMemory,enabled=!busy,onCheckedChange={
+                                        freeMemory=it; prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.utils.MemoryRelief.KEY,it).apply()
+                                        reliefWay=com.brahmadeo.supertonic.tts.utils.MemoryRelief.way()
+                                        shizukuAsk=com.brahmadeo.supertonic.tts.utils.MemoryRelief.shizukuNeedsPermission()
+                                    })
+                                }
+                                Text("Модели на NPU нужно 3–6,5 ГБ свободной памяти. Если её не хватает, а переключатель выключен, клип " +
+                                    "считает процессор: в 5–10 раз медленнее (средняя модель — около 27 с на клип вместо 2–3 с), " +
+                                    "зато фоновые приложения не трогаются. Включён — MyTTS закрывает фоновые приложения (как смахнуть их " +
+                                    "из «Недавних»): открытое приложение, музыка, читалка и всё с постоянным уведомлением остаются, " +
+                                    "закрытые откроются снова, когда понадобятся. " + when (reliefWay) {
+                                        com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.SHIZUKU -> "Закрывает через Shizuku."
+                                        com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.ROOT -> "Закрывает через root."
+                                        com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.MANUAL -> "Нет Shizuku и root: MyTTS попросит " +
+                                            "уведомлением закрыть приложения самому и подождёт минуту. Чтобы закрывала сама, установите Shizuku."
+                                    },style=MaterialTheme.typography.bodySmall)
+                                if (shizukuAsk) Button(onClick={
+                                    com.brahmadeo.supertonic.tts.utils.MemoryRelief.requestShizuku()
+                                    shizukuAsk=false
+                                }) { Text("Разрешить MyTTS работать через Shizuku") }
                             }
                             if (ambienceNpu) {
                                 Text("Подготовка NPU (компиляция графов, один раз)",style=MaterialTheme.typography.titleMedium)

@@ -133,19 +133,25 @@ object AmbienceModel {
     /** Хватит ли памяти на загрузку NPU-модели: availMem системы с запасом. Нет — модель берётся на процессоре.
      * Причина — в журнал и в cache/ambience-memory.txt (журнал приложения прошивка глушит). */
     fun enoughMemory(context: Context, needMb: Long, what: String): Boolean {
-        val info = android.app.ActivityManager.MemoryInfo()
-        context.getSystemService(android.app.ActivityManager::class.java)?.getMemoryInfo(info) ?: return true
-        val availMb = info.availMem / 1048576
+        val am = context.getSystemService(android.app.ActivityManager::class.java) ?: return true
+        fun availMb(): Long = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem / 1048576
         // Подкачка (zram) тоже место: система вытесняет туда фоновые приложения. Половина свободной подкачки —
         // запас на сжатие. Но совсем без свободной RAM не грузимся: нужно хотя бы [needMb]/2 «живыми».
+        fun shortMb(): Long { val a = availMb(); return maxOf(needMb - (a + swapFreeMb() / 2), needMb / 2 - a, 0L) }
+        if (shortMb() == 0L) return true
+        // «Освобождать память для быстрой генерации»: закрыть фоновые приложения (Shizuku/root) и проверить снова.
+        if (com.brahmadeo.supertonic.tts.utils.MemoryRelief.relieve(context, what, shortMb()) { shortMb() == 0L }) {
+            Log.i("Ambience", "$what: память для NPU освобождена, свободно ${availMb()} МБ")
+            return true
+        }
+        val availMb = availMb()
         val swapFreeMb = swapFreeMb()
-        val usable = availMb + swapFreeMb / 2
-        if (usable >= needMb && availMb >= needMb / 2) return true
         val line = "${java.util.Date()}: $what на NPU не загружается — свободно $availMb МБ, подкачки $swapFreeMb МБ, " +
             "нужно $needMb (с учётом половины подкачки); считает процессор"
         Log.w("Ambience", line)
         runCatching { File(context.cacheDir, "ambience-memory.txt").appendText(line + "\n") }
-        lowMemory = "Мало свободной памяти ($availMb МБ): $what считает процессор, медленнее. Перезагрузите телефон, чтобы вернуть скорость NPU."
+        lowMemory = "Мало свободной памяти ($availMb МБ): $what считает процессор, медленнее. Закройте фоновые приложения или " +
+            "включите «Освобождать память для быстрой генерации» в настройках фоновой музыки."
         notifyLowMemory(context, lowMemory!!)
         return false
     }

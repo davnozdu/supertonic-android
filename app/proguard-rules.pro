@@ -57,3 +57,8 @@
     public static void lockHtp();
     public static void unlockHtp();
 }
+
+# Shizuku создаёт пользовательский сервис по имени класса в своём процессе.
+-keep class com.brahmadeo.supertonic.tts.utils.MemoryReliefUserService { *; }
+-keep interface com.brahmadeo.supertonic.tts.utils.IMemoryRelief { *; }
+-keep class com.brahmadeo.supertonic.tts.utils.IMemoryRelief$Stub { *; }
