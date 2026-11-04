@@ -90,6 +90,7 @@ fun MainScreen(
     onMiniPlayerPlayPauseClick: () -> Unit,
     onSettingsSectionClick: (com.brahmadeo.supertonic.tts.LlmSettingsActivity.Section) -> Unit = {},
     onBackgroundMusicClick: () -> Unit = {},
+    onDeviceCheckClick: () -> Unit = {},
     onMultilingualClick: () -> Unit = {},
     onBooksClick: () -> Unit = {},
     onSmartBookClick: () -> Unit = {},
@@ -133,6 +134,8 @@ fun MainScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(text = { Text("Проверить мой телефон") },
+                            onClick = { showMenu = false; onDeviceCheckClick() })
                         DropdownMenuItem(text = { Text("Читать по ссылке") },
                             onClick = { showMenu = false; onArticleLinkClick() })
                         DropdownMenuItem(text = { Text("Таймер сна") },

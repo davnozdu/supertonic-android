@@ -652,6 +652,7 @@ class MainActivity : ComponentActivity() {
                         onLexiconClick = { startActivity(Intent(this, LexiconActivity::class.java)) },
                         onSettingsSectionClick = { startActivity(LlmSettingsActivity.intent(this, it)) },
                         onBackgroundMusicClick = { startActivity(Intent(this, BackgroundMusicActivity::class.java)) },
+                        onDeviceCheckClick = { startActivity(Intent(this, DeviceCheckActivity::class.java)) },
                         onMultilingualClick = { startActivity(Intent(this, MultilingualActivity::class.java)) },
                         onBooksClick = { startActivity(Intent(this, BooksActivity::class.java)) },
                         onSmartBookClick = { startActivity(Intent(this, SmartBookActivity::class.java)) },
