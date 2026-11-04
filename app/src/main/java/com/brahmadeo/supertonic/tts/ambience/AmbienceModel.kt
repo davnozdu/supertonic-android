@@ -123,7 +123,9 @@ object AmbienceModel {
 
     /** Свободная память (МБ), без которой NPU-модель не загружается — см. [enoughMemory]. */
     // Замер (CPH2745, 3 ноября): средняя на NPU — пик расхода ~5,5 ГБ (буферы NPU 3,4 ГБ + скачок памяти процесса
-    // при загрузке), свободная падала с 7,2 до 1,64 ГБ. Порог — пик + ~1 ГБ запаса.
+    // при загрузке), свободная падала с 7,2 до 1,64 ГБ. Порог — пик + ~1 ГБ запаса. После beta201 (кэш NPU без
+    // встроенной копии) процесс держит ~2,9 ГБ вместо 5,6, а сама проверка учитывает половину свободной подкачки:
+    // 4 ноября при 3,9–5,3 ГБ свободной RAM и 5 ГБ подкачки музыка зря уходила на процессор (26 с на клип).
     private const val NEED_MEDIUM_MB = 6500L
     private const val NEED_SMALL_MB = 3000L
     private const val NEED_SAMEL_MB = 2500L
@@ -134,14 +136,24 @@ object AmbienceModel {
         val info = android.app.ActivityManager.MemoryInfo()
         context.getSystemService(android.app.ActivityManager::class.java)?.getMemoryInfo(info) ?: return true
         val availMb = info.availMem / 1048576
-        if (availMb >= needMb) return true
-        val line = "${java.util.Date()}: $what на NPU не загружается — свободно $availMb МБ, нужно $needMb; считает процессор"
+        // Подкачка (zram) тоже место: система вытесняет туда фоновые приложения. Половина свободной подкачки —
+        // запас на сжатие. Но совсем без свободной RAM не грузимся: нужно хотя бы [needMb]/2 «живыми».
+        val swapFreeMb = swapFreeMb()
+        val usable = availMb + swapFreeMb / 2
+        if (usable >= needMb && availMb >= needMb / 2) return true
+        val line = "${java.util.Date()}: $what на NPU не загружается — свободно $availMb МБ, подкачки $swapFreeMb МБ, " +
+            "нужно $needMb (с учётом половины подкачки); считает процессор"
         Log.w("Ambience", line)
         runCatching { File(context.cacheDir, "ambience-memory.txt").appendText(line + "\n") }
         lowMemory = "Мало свободной памяти ($availMb МБ): $what считает процессор, медленнее. Перезагрузите телефон, чтобы вернуть скорость NPU."
         notifyLowMemory(context, lowMemory!!)
         return false
     }
+
+    private fun swapFreeMb(): Long = runCatching {
+        File("/proc/meminfo").readLines().firstOrNull { it.startsWith("SwapFree:") }
+            ?.split(Regex("\\s+"))?.getOrNull(1)?.toLong()?.div(1024) ?: 0L
+    }.getOrDefault(0L)
 
     /** Последнее предупреждение о нехватке памяти (для итогового сообщения о звуках книги); сбрасывается при чтении. */
     @Volatile private var lowMemory: String? = null
