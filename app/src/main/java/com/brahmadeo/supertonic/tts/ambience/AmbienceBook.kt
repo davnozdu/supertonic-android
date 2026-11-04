@@ -264,9 +264,9 @@ object AmbienceBook {
                     val wall = SystemClock.elapsedRealtime(); val cpu = Process.getElapsedCpuTime()
                     val g = generator!!
                     fun produceNpu(job: Job) = job to g.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled))
-                    fun save(job: Job, result: Sa3Generator.Result) {
+                    fun save(job: Job, result: Sa3Generator.Result, onNpu: Boolean = true) {
                         progress(place[job] ?: 0, ordered.size, job.label)
-                        synchronized(doc) { saveClip(context, sha, dir, doc, job, result, npu = true) }
+                        synchronized(doc) { saveClip(context, sha, dir, doc, job, result, npu = onNpu) }
                     }
                     // Третье звено: громкость + AAC (~1,2 с на клип 30 с) в своём потоке, пока декодер берёт следующий
                     // клип. Раньше декодер ждал сохранения, и клип занимал декод + сохранение (~3 с вместо ~1,8 с).
@@ -274,36 +274,71 @@ object AmbienceBook {
                     val saver = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "sa3-save") }
                     val pending = java.util.ArrayDeque<java.util.concurrent.Future<*>>()
                     fun drain(keep: Int) { while (pending.size > keep) pending.removeFirst().get() }
+                    fun hand(job: Job, result: Sa3Generator.Result) { drain(1); pending.addLast(saver.submit(java.util.concurrent.Callable { save(job, result) })) }
+                    // NPU снова после сбоя: DiT и (у музыки) большой декодер, если он был на NPU.
+                    val decoderOnNpu = g.npuDecoder != null
+                    fun reopen(): Boolean {
+                        npu = AmbienceModel.npuDit(context, music = batch.gen != Gen.SMALL,
+                            model = if (batch.gen == Gen.MEDIUM_SFX) AmbienceModel.MEDIUM_MUSIC else null)
+                        g.attachNpu(npu)
+                        if (npu != null && decoderOnNpu && g.npuDecoder == null) g.npuDecoder = AmbienceModel.largeDecoderNpu(context)
+                        return npu != null
+                    }
                     try {
-                        ClipPipeline(batch.jobs,
-                            produce = { job -> produceNpu(job) },
-                            consume = { (job, latents) ->
-                                val result = g.decode(latents, job.seconds)
-                                drain(1)
-                                pending.addLast(saver.submit(java.util.concurrent.Callable { save(job, result) }))
-                            }).run()
-                        drain(0)
-                        npuFailures = 0
-                        Log.i("Ambience", "batch ${batch.gen} npu=true clips=${batch.jobs.size} " +
+                        var rest = batch.jobs.filter { !File(dir, it.file).isFile }
+                        while (rest.isNotEmpty()) {
+                            if (cancelled()) throw InterruptedException("cancelled")
+                            if (npu == null) {
+                                // После сбоя NPU ждёт паузу (30 с, 1, 2… мин): пока — процессор, по клипу, потом NPU снова,
+                                // а не весь остаток пачки на процессоре (музыка — 14 с вместо ~8 на клип и нагрев).
+                                if (SystemClock.elapsedRealtime() >= npuRetryAt) {
+                                    if (!reopen()) npuRetryAt = SystemClock.elapsedRealtime() + com.brahmadeo.supertonic.tts.utils.Npu.retryDelayMs(++npuFailures)
+                                    else Log.i("Ambience", "NPU back after a failure, ${rest.size} clips left")
+                                    continue
+                                }
+                                val job = rest.first()
+                                drain(0)
+                                save(job, g.generate(job.prompt, job.seconds, job.seed, cancelled), onNpu = false)
+                                rest = rest.drop(1)
+                                continue
+                            }
+                            try {
+                                if (g.npuDecoder != null) {
+                                    // Декодер тоже на NPU: модель и декодер строго по очереди в одном потоке (как «Своя
+                                    // музыка»). Два потока с двумя NPU-контекстами роняли DSP (PD_ERR, 4 ноября); по времени
+                                    // это то же — HTP один, они и так шли по очереди.
+                                    for (job in rest) {
+                                        if (cancelled()) throw InterruptedException("cancelled")
+                                        val (_, latents) = produceNpu(job)
+                                        hand(job, g.decode(latents, job.seconds))
+                                    }
+                                } else ClipPipeline(rest,
+                                    produce = { job -> produceNpu(job) },
+                                    consume = { (job, latents) -> hand(job, g.decode(latents, job.seconds)) }).run()
+                                drain(0)
+                                npuFailures = 0
+                                rest = emptyList()
+                            } catch (e: InterruptedException) {
+                                throw e
+                            } catch (e: Throwable) {
+                                // Клипы, уже отданные на сохранение, дописываем (их PCM готов).
+                                runCatching { drain(0) }
+                                rest = rest.filter { !File(dir, it.file).isFile }
+                                Log.w("Ambience", "NPU failed mid-batch, ${rest.size} clips left " +
+                                    "(${e.javaClass.simpleName}: ${e.message}); CPU until the NPU is retried")
+                                runCatching { npu!!.close() }
+                                npu = null
+                                g.attachNpu(null)
+                                // Сбой DSP рушит и сессии декодера: его тоже закрываем, до возврата NPU декодирует процессор.
+                                g.npuDecoder?.let { runCatching { it.close() } }; g.npuDecoder = null
+                                npuRetryAt = SystemClock.elapsedRealtime() + com.brahmadeo.supertonic.tts.utils.Npu.retryDelayMs(++npuFailures)
+                            }
+                        }
+                        Log.i("Ambience", "batch ${batch.gen} clips=${batch.jobs.size} " +
                             "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
                     } catch (e: InterruptedException) {
                         saver.shutdownNow()
                         throw e
-                    } catch (e: Throwable) {
-                        // Клипы, уже отданные на сохранение, дописываем (их PCM готов); ошибка сохранения — как и раньше.
-                        runCatching { drain(0) }
-                        Log.w("Ambience", "NPU failed mid-batch after ${batch.jobs.count { File(dir, it.file).isFile }} clips " +
-                            "(${e.javaClass.simpleName}: ${e.message}); the rest on the CPU")
-                        runCatching { npu!!.close() }
-                        npu = null
-                        npuRetryAt = SystemClock.elapsedRealtime() + com.brahmadeo.supertonic.tts.utils.Npu.retryDelayMs(++npuFailures)
-                        generator!!.attachNpu(null)
-                        for (job in batch.jobs) {
-                            if (File(dir, job.file).isFile) continue
-                            if (cancelled()) throw InterruptedException("cancelled")
-                            progress(place[job] ?: 0, ordered.size, job.label)
-                            saveClip(context, sha, dir, doc, job, generator!!.generate(job.prompt, job.seconds, job.seed, cancelled), npu = false)
-                        }
                     } finally {
                         saver.shutdown()
                     }
