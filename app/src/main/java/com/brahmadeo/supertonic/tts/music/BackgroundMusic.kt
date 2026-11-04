@@ -320,8 +320,8 @@ object BackgroundMusic {
         // Outside scenes, with the music on: the book's music of this mood instead of the track. Its clips are at
         // −14 LUFS with the +10 dB headroom of the player, so it plays 10 dB under the music slider to match the tracks.
         val moodOn = enabled() && prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(it) } == true
-        val level = tension?.coerceIn(0, 3)
-        val moody = if (located == null && moodOn) mood?.let { m -> if (level != null) intense(m, level) else m } else null
+        val tensionLevel = tension?.coerceIn(0, 3)
+        val moody = if (located == null && moodOn) mood?.let { m -> if (tensionLevel != null) intense(m, tensionLevel) else m } else null
         val current = located ?: moody
         // What sounds now and why (verbose trace only; logged when it changes): finds a music that stops mid-reading.
         val decision = "decide ${current?.key ?: "track"} tension=${tension ?: "-"} reading=${reading.playing()} hold=${now < holdUntil} gap=${now < gapUntil} enabled=${enabled()}"
@@ -337,12 +337,12 @@ object BackgroundMusic {
                 }
                 val musicVolume = volume() / 3.16f
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current,
-                    if (current === moody) musicVolume * (level?.let { MUSIC_GAIN[it] } ?: 1f)
-                    else ambienceVolume() * (level?.let { BED_GAIN[it] } ?: 1f))
+                    if (current === moody) musicVolume * (tensionLevel?.let { MUSIC_GAIN[it] } ?: 1f)
+                    else ambienceVolume() * (tensionLevel?.let { BED_GAIN[it] } ?: 1f))
                 // «Нагнетание»: в сцене с локацией на тревожных местах под её фон тихо входит музыка настроения.
                 val m = mood
-                if (located != null && moodOn && level != null && level >= 1 && m != null)
-                    com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.layer(intense(m, level), musicVolume * LAYER_GAIN[level])
+                if (located != null && moodOn && tensionLevel != null && tensionLevel >= 1 && m != null)
+                    com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.layer(intense(m, tensionLevel), musicVolume * LAYER_GAIN[tensionLevel])
                 else com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.layer(null, 0f)
             } else {
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.pause()
