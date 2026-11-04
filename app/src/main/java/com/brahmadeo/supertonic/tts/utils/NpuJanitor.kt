@@ -42,7 +42,7 @@ object NpuJanitor {
         releaseAll = release
         idleExtra = idle
         val app = context.applicationContext
-        note(app, "started: sweep ${SWEEP_MS / 1000} s, idle ${IDLE_MS / 1000} s, residual ${RESIDUAL_MB} MB")
+        // Без записи «started» на каждый запуск процесса: в файл идёт только то, что уборщик сделал (бережём флеш).
         ScheduledThreadPoolExecutor(1) { r -> Thread(r, "NpuJanitor").apply { isDaemon = true } }
             .apply { removeOnCancelPolicy = true }
             .scheduleWithFixedDelay({ runCatching { sweep(app) }.onFailure { Log.w(TAG, "janitor: ${it.javaClass.simpleName}: ${it.message}") } },

@@ -54,7 +54,11 @@ object SoundBank {
         // манифеста при новой версии сразу удаляет старые клипы, поэтому и её не делаем по мобильной сети.
         val had = dir(ctx).listFiles()?.any { it.name.endsWith(".$FORMAT") } == true
         val metered = runCatching { ctx.getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered }.getOrDefault(true)
-        if (!had || metered || !on(ctx)) { autoChecking = false; return }
+        // Не чаще раза в сутки: версия базы меняется редко, а каждая проверка — скачивание 0,9 МБ.
+        val prefs = ctx.getSharedPreferences("SupertonicPrefs", 0)
+        val now = System.currentTimeMillis()
+        if (!had || metered || !on(ctx) || now - prefs.getLong("sound_bank_checked_at", 0L) < 24 * 3600_000L) { autoChecking = false; return }
+        prefs.edit().putLong("sound_bank_checked_at", now).apply()
         Thread({
             runCatching {
                 val before = version(ctx)
@@ -81,7 +85,10 @@ object SoundBank {
         val file = File(dir(context), "manifest.json")
         if (!file.isFile || refresh) {
             val text = fetch("$BASE/manifest.json", 8L * 1024 * 1024)
-            if (text != null) runCatching { dir(context).mkdirs(); file.writeText(String(text, Charsets.UTF_8)) }
+            // Бережём флеш: 0,9 МБ манифеста переписываются, только если на GitHub он действительно изменился.
+            if (text != null) runCatching {
+                if (!file.isFile || !file.readBytes().contentEquals(text)) { dir(context).mkdirs(); file.writeBytes(text) }
+            }
         }
         val parsed = if (!file.isFile) emptyMap() else runCatching {
             val root = JSONObject(file.readText())

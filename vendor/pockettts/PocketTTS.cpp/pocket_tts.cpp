@@ -2181,7 +2181,10 @@ void PocketTTS::stream(const std::string& text, const Tensor& voice, StreamCallb
                 if (aborted) break;
                 
                 finished = gen_done;
-                int take = gen_done ? (int)queue.size() : std::min((int)queue.size(), want);
+                // Never more than one chunk per decoder call: the streaming Mimi decoder fed a whole phrase at once
+                // returns audio of the right length whose beginning is silent (MyTTS: frames now arrive together,
+                // after the end-of-speech check, so this case is the normal one).
+                int take = std::min((int)queue.size(), want);
                 for (int i = 0; i < take; ++i) {
                     batch.push_back(std::move(queue.front()));
                     queue.pop_front();
