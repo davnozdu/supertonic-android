@@ -247,16 +247,30 @@ object AmbienceBook {
                         progress(place[job] ?: 0, ordered.size, job.label)
                         synchronized(doc) { saveClip(context, sha, dir, doc, job, result, npu = true) }
                     }
+                    // Третье звено: громкость + AAC (~1,2 с на клип 30 с) в своём потоке, пока декодер берёт следующий
+                    // клип. Раньше декодер ждал сохранения, и клип занимал декод + сохранение (~3 с вместо ~1,8 с).
+                    // Очередь сохранения не длиннее двух клипов (PCM 30 с ≈ 10 МБ каждый).
+                    val saver = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "sa3-save") }
+                    val pending = java.util.ArrayDeque<java.util.concurrent.Future<*>>()
+                    fun drain(keep: Int) { while (pending.size > keep) pending.removeFirst().get() }
                     try {
                         ClipPipeline(batch.jobs,
                             produce = { job -> produceNpu(job) },
-                            consume = { (job, latents) -> save(job, g.decode(latents, job.seconds)) }).run()
+                            consume = { (job, latents) ->
+                                val result = g.decode(latents, job.seconds)
+                                drain(1)
+                                pending.addLast(saver.submit(java.util.concurrent.Callable { save(job, result) }))
+                            }).run()
+                        drain(0)
                         npuFailures = 0
                         Log.i("Ambience", "batch ${batch.gen} npu=true clips=${batch.jobs.size} " +
                             "wall=${SystemClock.elapsedRealtime() - wall} cpu=${Process.getElapsedCpuTime() - cpu}")
                     } catch (e: InterruptedException) {
+                        saver.shutdownNow()
                         throw e
                     } catch (e: Throwable) {
+                        // Клипы, уже отданные на сохранение, дописываем (их PCM готов); ошибка сохранения — как и раньше.
+                        runCatching { drain(0) }
                         Log.w("Ambience", "NPU failed mid-batch after ${batch.jobs.count { File(dir, it.file).isFile }} clips " +
                             "(${e.javaClass.simpleName}: ${e.message}); the rest on the CPU")
                         runCatching { npu!!.close() }
@@ -269,6 +283,8 @@ object AmbienceBook {
                             progress(place[job] ?: 0, ordered.size, job.label)
                             saveClip(context, sha, dir, doc, job, generator!!.generate(job.prompt, job.seconds, job.seed, cancelled), npu = false)
                         }
+                    } finally {
+                        saver.shutdown()
                     }
                 } else {
                     for (job in batch.jobs) {
@@ -320,6 +336,7 @@ object AmbienceBook {
      * базу звуков. В конвейере это второй поток, пока первый считает следующий клип. */
     private fun saveClip(context: Context, sha: String, dir: File, doc: JSONObject, job: Job,
                          result: Sa3Generator.Result, npu: Boolean) {
+        val saveStart = SystemClock.elapsedRealtime()
         val pcm = result.pcm
         if (job.music && MusicEnhance.enabled(context)) MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
         val event = job.id.startsWith("k_") || job.id.startsWith("e")
@@ -340,6 +357,6 @@ object AmbienceBook {
         doc.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
         manifest(context, sha).writeText(doc.toString())
         Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=$npu, music=${job.music}, " +
-            result.stages.joinToString(" ") { "${it.name}=${it.wallMs}" } + ")")
+            result.stages.joinToString(" ") { "${it.name}=${it.wallMs}" } + " save=${SystemClock.elapsedRealtime() - saveStart})")
     }
 }
