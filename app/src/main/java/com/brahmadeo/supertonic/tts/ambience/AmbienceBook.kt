@@ -239,6 +239,10 @@ object AmbienceBook {
                     music = batch.gen != Gen.SMALL, model = if (batch.gen == Gen.MEDIUM_SFX) AmbienceModel.MEDIUM_MUSIC else null,
                     onCompile = { k, n -> progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU, часть $k из $n (один раз)") })
                 generator!!.attachNpu(npu)
+                // Музыка: DiT уже на NPU — большой декодер тоже на NPU, если хватает памяти (иначе — процессор).
+                if (batch.gen == Gen.MUSIC && npu != null && generator!!.npuDecoder == null && AmbienceModel.decoderWithDit(context))
+                    generator!!.npuDecoder = AmbienceModel.largeDecoderNpu(context, onCompile = {
+                        progress(place[batch.jobs.first()] ?: 0, ordered.size, "подготовка NPU: большой декодер (один раз)") })
                 generator!!.npuShort = AmbienceSettings.npuShort(prefs)
                 if (npu != null) {
                     // Конвейер: NPU считает DiT следующего клипа, пока CPU декодирует предыдущий.

@@ -85,6 +85,12 @@ object AmbienceModel {
     fun largeDecoderNpuPlanned(context: Context) = largeDecoderWanted(context) && largeDecoderReady(context) &&
         npuWanted(context, SAMEL_SCOPE) && largeDecoderNpuReady(context)
 
+    /** Большой декодер на NPU и тогда, когда DiT тоже на NPU (по очереди на одном HTP вместо конвейера NPU || CPU):
+     * по времени примерно так же, но процессор почти свободен — меньше нагрев и расход батареи. Раньше вдвоём не
+     * помещались в память; после beta201 (кэш NPU без лишней копии) — помещаются. Не хватит памяти — процессор. */
+    const val SAMEL_WITH_DIT = "ambience_samel_with_dit"
+    fun decoderWithDit(context: Context) = prefs(context).getBoolean(SAMEL_WITH_DIT, true)
+
     /** Сессия SAME-L на NPU (первый раз — компиляция, затем из кэша за секунды) или null — тогда декодирует CPU. */
     fun largeDecoderNpu(context: Context, allowCompile: Boolean = !AmbienceSettings.npuNight(prefs(context)),
                         onCompile: () -> Unit = {}, diagnostic: Boolean = false): Sa3Generator.NpuDecoder? {
