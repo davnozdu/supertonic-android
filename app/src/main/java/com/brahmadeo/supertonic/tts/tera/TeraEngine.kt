@@ -174,7 +174,7 @@ class TeraEngine(private val root: File, context: Context,
         val voiceDir = File(path.substringBefore(';')).parentFile
         require(voiceDir.parentFile.name == "styles")
         // «Ритм голоса»: у своего голоса ритм (style_dp) может быть взят у родного голоса Tera — тембр остаётся свой.
-        val donor = if (voiceDir.name.startsWith(TeraCustomVoices.PREFIX)) TeraVoiceRhythm.donor(context, voiceDir.name) else ""
+        val donor = if (voiceDir.name.startsWith(TeraCustomVoices.PREFIX)) TeraVoiceRhythm.donor(appContext, voiceDir.name) else ""
         val dpFile = File(if (donor.isEmpty()) voiceDir else File(voiceDir.parentFile, donor), "style_dp.npy")
         return styles.getOrPut(voiceDir.name + "|" + donor) {
             loadNpy(dpFile.takeIf { it.isFile } ?: File(voiceDir, "style_dp.npy"), 128) to
