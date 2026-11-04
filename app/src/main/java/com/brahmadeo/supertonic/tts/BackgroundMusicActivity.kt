@@ -74,6 +74,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var eventsDensity by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.EVENTS_DENSITY,
                     com.brahmadeo.supertonic.tts.books.prepare.SceneMarking.DEFAULT_DENSITY)) }
                 var moodMusic by remember { mutableStateOf(AmbienceSettings.moodMusic(prefs)) }
+                var tension by remember { mutableStateOf(AmbienceSettings.tension(prefs)) }
                 var moodByChapter by remember { mutableStateOf(AmbienceSettings.moodByChapter(prefs)) }
                 var room by remember { mutableStateOf(prefs.getBoolean(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.KEY,false)) }
                 var roomStrength by remember { mutableIntStateOf(prefs.getInt(com.brahmadeo.supertonic.tts.ambience.VoiceRoom.STRENGTH,100).coerceIn(0,200)) }
@@ -513,6 +514,18 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("По сценам",Modifier.padding(end=16.dp))
                             RadioButton(selected=moodByChapter,onClick={ moodByChapter=true; prefs.edit().putString(AmbienceSettings.MOOD_SCOPE,"chapter").apply() })
                             Text("По главам")
+                        }
+                        if (moodMusic) {
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                                Text("Нагнетание напряжения",Modifier.weight(1f))
+                                Switch(checked=tension,enabled=!busy,onCheckedChange={ tension=it; prefs.edit().putBoolean(AmbienceSettings.TENSION,it).apply() })
+                            }
+                            Text("Музыка следует напряжению текста. При подготовке книги нейросеть отмечает, где спокойно, тревожно, страшно и " +
+                                "где кульминация; три фрагмента каждого настроения становятся тремя силами — от тихого до напряжённого. " +
+                                "Когда напряжение растёт, музыка за несколько секунд переходит на более сильный фрагмент и становится громче, а в " +
+                                "сцене с локацией тихо входит под её фон; когда спадает — так же плавно возвращается. Работает в любом жанре. " +
+                                "Нужна подготовка книги в этой версии (уровни) и новые фрагменты музыки — кнопка «Создать фоновые звуки».",
+                                style=MaterialTheme.typography.bodySmall)
                         }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                             Text("Акустика помещения для голоса",Modifier.weight(1f))

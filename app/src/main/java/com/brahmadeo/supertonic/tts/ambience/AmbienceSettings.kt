@@ -68,6 +68,12 @@ object AmbienceSettings {
     fun moodMusic(prefs: SharedPreferences) = prefs.getBoolean(MOOD_MUSIC, false)
     fun moodByChapter(prefs: SharedPreferences) = prefs.getString(MOOD_SCOPE, "scene") == "chapter"
 
+    /** «Нагнетание напряжения»: музыка следует уровню напряжения текста (0–3, ставит LLM при подготовке книги) —
+     * сильнее фрагмент и громче по мере нарастания, в сцене с локацией музыка тихо входит под её фон на тревожных
+     * местах. Нужна переподготовка книги (уровни) и новые фрагменты музыки. Выключено по умолчанию. */
+    const val TENSION = "ambience_tension"
+    fun tension(prefs: SharedPreferences) = prefs.getBoolean(TENSION, false)
+
     fun breathe(prefs: SharedPreferences) = prefs.getBoolean(BREATHE, false)
     fun chapters(prefs: SharedPreferences) = prefs.getBoolean(CHAPTERS, false)
 

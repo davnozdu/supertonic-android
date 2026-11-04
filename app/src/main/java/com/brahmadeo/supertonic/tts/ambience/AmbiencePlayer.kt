@@ -33,7 +33,9 @@ internal object AmbiencePlayer {
 
     private class Voice(val player: MediaPlayer, val scene: Scene, val clip: Int,
                         /** One-shots keep their impact: the compressor is for the accents inside the steady bed. */
-                        private val tameable: Boolean = !scene.music) {
+                        private val tameable: Boolean = !scene.music,
+                        /** «Нагнетание»: музыка, тихо подложенная под звук сцены (второй слой). */
+                        val layer: Boolean = false) {
         private val dynamics: Any? = if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.create(player.audioSessionId, tameable) else null
         private val boost: android.media.audiofx.LoudnessEnhancer? = if (dynamics != null) null else runCatching {
             android.media.audiofx.LoudnessEnhancer(player.audioSessionId).apply { setTargetGain(BOOST_MB); enabled = true }
@@ -73,7 +75,16 @@ internal object AmbiencePlayer {
 
     private val voices = ArrayList<Voice>()
     private var scene: Scene? = null
+    /** Громкость сцены: [volumeTarget] задаёт вызов, [volume] идёт к ней плавно ([VOLUME_MS]) — нагнетание и
+     * спад звучат как нарастание, а не скачок. Первая сцена начинается сразу с нужной громкости. */
     private var volume = 0.3f
+    private var volumeTarget = 0.3f
+    private const val VOLUME_MS = 5000L
+    /** «Нагнетание»: второй слой — музыка настроения под звуком сцены; своя громкость, тоже плавно. */
+    private var layerScene: Scene? = null
+    private var layerVolume = 0f
+    private var layerVolumeTarget = 0f
+    private const val LAYER_FADE_MS = 5000L
     private var playing = false
     private var context: Context? = null
     /** «Дыхание звука»: [duck] lowers the scene under speech (−3 dB) and lifts it in the pauses; [establish] makes a new
@@ -129,11 +140,12 @@ internal object AmbiencePlayer {
 
     fun play(ctx: Context, target: Scene, volume: Float) {
         context = ctx.applicationContext
-        this.volume = volume
+        if (scene == null && voices.none { !it.layer }) this.volume = volume
+        volumeTarget = volume
         if (scene?.key != target.key) {
             Log.i("Ambience", "Scene ${target.key} «${target.name}» (${target.files.size} clips)")
             AmbienceScenes.trace(ctx, "play ${target.key} clips=${target.files.size} volume=${"%.2f".format(volume)}")
-            for (v in voices) { v.target = 0f; v.fadeMs = SCENE_FADE_MS }
+            for (v in voices) if (!v.layer) { v.target = 0f; v.fadeMs = SCENE_FADE_MS }
             scene = target
             establishUntil = android.os.SystemClock.uptimeMillis() + SCENE_FADE_MS + ESTABLISH_HOLD_MS
             start(target, 0, SCENE_FADE_MS)
@@ -154,16 +166,31 @@ internal object AmbiencePlayer {
     /** Back to the music (no scene here): fade out, then release. */
     fun fadeOut() {
         if (scene == null && voices.isEmpty()) return
-        scene = null
+        scene = null; layerScene = null
         for (v in voices) { v.target = 0f; v.fadeMs = SCENE_FADE_MS }
         if (playing) schedule() else release()
+    }
+
+    /** «Нагнетание»: музыка [target] вторым слоем под звуком сцены с громкостью [volume] (входит и уходит за
+     * [LAYER_FADE_MS]); null — слой плавно уходит. Новая сила музыки (другой ключ) — перекрёстно за то же время. */
+    fun layer(target: Scene?, volume: Float) {
+        layerVolumeTarget = if (target == null) 0f else volume
+        if (target?.key != layerScene?.key) {
+            for (v in voices) if (v.layer) { v.target = 0f; v.fadeMs = LAYER_FADE_MS }
+            layerScene = target
+            if (target != null) {
+                if (voices.none { it.layer }) layerVolume = volume
+                start(target, 0, LAYER_FADE_MS, layer = true)
+            }
+        }
+        if (playing) schedule()
     }
 
     fun release() {
         handler.removeCallbacks(tick)
         cancelShots()
         voices.forEach { it.release() }
-        voices.clear(); scene = null; playing = false; master = 0f; masterTarget = 0f
+        voices.clear(); scene = null; layerScene = null; playing = false; master = 0f; masterTarget = 0f
     }
 
     /** A one-shot sound (an event, the chapter transition) over the background after [delayMs], with the headroom and
@@ -279,11 +306,11 @@ internal object AmbiencePlayer {
     /** Equal power (sqrt): a crossfade of two sounds keeps the loudness. */
     private fun applyGain(v: Voice) {
         val now = android.os.SystemClock.uptimeMillis()
-        val g = (kotlin.math.sqrt(v.level) * master * volume * duck * establishGain(now) * chapterGain(now)).coerceAtMost(1f)
+        val g = (kotlin.math.sqrt(v.level) * master * (if (v.layer) layerVolume else volume * establishGain(now)) * duck * chapterGain(now)).coerceAtMost(1f)
         runCatching { v.player.setVolume(g, g) }
     }
 
-    private fun start(target: Scene, clip: Int, fadeMs: Long) {
+    private fun start(target: Scene, clip: Int, fadeMs: Long, layer: Boolean = false) {
         val ctx = context ?: return
         val file = target.files.getOrNull(clip % target.files.size) ?: return
         try {
@@ -293,7 +320,7 @@ internal object AmbiencePlayer {
             p.setDataSource(file.path)
             p.prepare()
             p.setVolume(0f, 0f) // fades in from silence: no click
-            val v = Voice(p, target, clip % target.files.size).apply { this.fadeMs = fadeMs }
+            val v = Voice(p, target, clip % target.files.size, layer = layer).apply { this.fadeMs = fadeMs }
             p.setOnCompletionListener { handler.post { voices.remove(v); v.release() } }
             voices += v
             if (playing) p.start()
@@ -310,6 +337,11 @@ internal object AmbiencePlayer {
         master = if (master < masterTarget) minOf(masterTarget, master + mStep) else maxOf(masterTarget, master - mStep)
         val dStep = TICK_MS.toFloat() / DUCK_MS * (1f - DUCK)
         duck = if (duck < duckTarget) minOf(duckTarget, duck + dStep) else maxOf(duckTarget, duck - dStep)
+        // Нагнетание и спад — плавно: громкость сцены и слоя идёт к цели за VOLUME_MS / LAYER_FADE_MS.
+        val vStep = TICK_MS.toFloat() / VOLUME_MS
+        volume = if (volume < volumeTarget) minOf(volumeTarget, volume + vStep) else maxOf(volumeTarget, volume - vStep)
+        val lStep = TICK_MS.toFloat() / LAYER_FADE_MS
+        layerVolume = if (layerVolume < layerVolumeTarget) minOf(layerVolumeTarget, layerVolume + lStep) else maxOf(layerVolumeTarget, layerVolume - lStep)
         for (v in voices.toList()) {
             val step = TICK_MS.toFloat() / v.fadeMs
             // While pausing the crossfades hold: they continue after the resume.
@@ -317,10 +349,10 @@ internal object AmbiencePlayer {
             applyGain(v)
             if (v.target == 0f && v.level == 0f) { voices.remove(v); v.release(); continue }
             // Before the clip ends the next variant fades in over it.
-            val current = scene
+            val current = if (v.layer) layerScene else scene
             if (masterTarget > 0f && !v.next && v.target > 0f && current != null && v.scene.key == current.key) {
                 val left = runCatching { v.player.duration - v.player.currentPosition }.getOrDefault(Int.MAX_VALUE)
-                if (left in 1..CROSSFADE_MS) { v.next = true; v.target = 0f; v.fadeMs = CROSSFADE_MS; start(current, nextClip(current, v.clip), CROSSFADE_MS) }
+                if (left in 1..CROSSFADE_MS) { v.next = true; v.target = 0f; v.fadeMs = CROSSFADE_MS; start(current, nextClip(current, v.clip), CROSSFADE_MS, v.layer) }
             }
         }
         if (masterTarget == 0f && master == 0f) {

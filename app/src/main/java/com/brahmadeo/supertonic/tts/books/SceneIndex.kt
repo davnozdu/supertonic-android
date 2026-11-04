@@ -10,7 +10,9 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
                                      /** «Звуки событий» of the book (empty when none were marked). */
                                      val events: EventIndex = EventIndex.EMPTY,
                                      /** «Музыка по настроению» of the book (empty when none were marked). */
-                                     val moods: MoodIndex = MoodIndex.EMPTY) {
+                                     val moods: MoodIndex = MoodIndex.EMPTY,
+                                     /** «Нагнетание напряжения»: уровень 0–3 по тексту (пусто — книга размечена раньше). */
+                                     val tension: TensionIndex = TensionIndex.EMPTY) {
     /** [sound]: the English prompt of the steady background for the ambience generator; [accents]: occasional events
      * of the place (a distant locomotive whistle), each in a variant of its own; [paragraphs]: how much of the book is there. */
     data class Location(val id: String, val name: String, val sound: String, val paragraphs: Int, val accents: List<String> = emptyList(),
@@ -54,6 +56,7 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
             .put("index", java.util.Base64.getEncoder().encodeToString(bytes.array()))
             .apply { if (events.events.isNotEmpty()) put("events", events.toJson()) }
             .apply { if (moods.moods.isNotEmpty()) put("moods", moods.toJson()) }
+            .apply { if (!tension.isEmpty) put("tension", tension.toJson()) }
     }
 
     companion object {
@@ -80,9 +83,9 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
                     if (old != null && old != value) { entries.remove(k); clash += k }
                 }
             }
-            fun build(events: EventIndex = EventIndex.EMPTY, moods: MoodIndex = MoodIndex.EMPTY): SceneIndex {
+            fun build(events: EventIndex = EventIndex.EMPTY, moods: MoodIndex = MoodIndex.EMPTY, tension: TensionIndex = TensionIndex.EMPTY): SceneIndex {
                 val sorted = entries.entries.sortedBy { it.key }
-                return SceneIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, locations, events, moods)
+                return SceneIndex(LongArray(sorted.size) { sorted[it].key }, ShortArray(sorted.size) { sorted[it].value.toShort() }, locations, events, moods, tension)
             }
         }
 
@@ -108,7 +111,8 @@ class SceneIndex private constructor(private val keys: LongArray, private val va
             }
             val events = o.optJSONObject("events")?.let { EventIndex.parse(it) } ?: EventIndex.EMPTY
             val moods = o.optJSONObject("moods")?.let { MoodIndex.parse(it) } ?: MoodIndex.EMPTY
-            return SceneIndex(keys, values, locations, events, moods)
+            val tension = o.optJSONObject("tension")?.let { runCatching { TensionIndex.parse(it) }.getOrNull() } ?: TensionIndex.EMPTY
+            return SceneIndex(keys, values, locations, events, moods, tension)
         }
 
         val EMPTY = SceneIndex(LongArray(0), ShortArray(0), emptyList())

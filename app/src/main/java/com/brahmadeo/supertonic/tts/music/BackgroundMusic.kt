@@ -49,6 +49,21 @@ object BackgroundMusic {
     @Volatile private var scene: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
     /** «Музыка по настроению» of the sounding utterance: played instead of the track where there is no scene. */
     @Volatile private var mood: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene? = null
+    /** «Нагнетание напряжения»: уровень 0–3 звучащего места (null — выключено или книга без уровней). */
+    @Volatile private var tension: Int? = null
+    /** Сила фрагмента настроения по уровню: 0 — спокойный (_0), 1 — как описан (_1), 2–3 — напряжённый (_2). Ключ
+     * сцены свой у каждой силы — смена уровня даёт плавный переход на другой фрагмент. */
+    private fun intense(m: com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene, level: Int): com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene {
+        val k = when { level <= 0 -> 0; level == 1 -> 1; else -> 2 }
+        val files = m.files.filter { it.name.endsWith("_$k.m4a") }.ifEmpty { m.files }
+        return com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.Scene(m.key + "#" + k, m.name, files)
+    }
+    /** Громкость музыки по уровню: −2 дБ в покое, +2 и +3,5 дБ на напряжении и пике. */
+    private val MUSIC_GAIN = floatArrayOf(0.8f, 1f, 1.25f, 1.5f)
+    /** Музыка под звуком сцены: на тревоге — едва слышно, на напряжении — заметно, на пике — в полную силу. */
+    private val LAYER_GAIN = floatArrayOf(0f, 0.35f, 0.7f, 1f)
+    /** Фон места на пике чуть уступает музыке. */
+    private val BED_GAIN = floatArrayOf(1f, 1f, 0.9f, 0.8f)
     /** Scene and sounds of a file-mode sentence that has not started playing yet. */
     private class Pending(val tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, val text: String?, val release: Runnable)
     private val pendingTag = HashMap<Any, Pending>()
@@ -92,7 +107,7 @@ object BackgroundMusic {
             startedNotes[owner to id] = android.os.SystemClock.uptimeMillis() to found.words
             handler.post { playMoments(found, owner) }
             if (next?.key != scene?.key) context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "sounding scene=${next?.key ?: "music"}") }
-            scene = next; mood = found.mood
+            scene = next; mood = found.mood; tension = found.tension
         } ?: context?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(it, "started without a tagged utterance") }
         reading.start(owner,id); refresh()
     }
@@ -135,7 +150,7 @@ object BackgroundMusic {
     /** Applies the scene and the sound cues of [tag] now: the sentence is sounding (queue) or the reader said so. */
     private fun applyTag(owner: Any, tag: com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.Tag, fileMode: Boolean) {
         pendingTag.remove(owner)?.let { handler.removeCallbacks(it.release) }
-        scene = tag.scene; mood = tag.mood
+        scene = tag.scene; mood = tag.mood; tension = tag.tension
         // Плагин сообщает точный момент старта фразы, поэтому упреждение «раньше текста» работает и в файловом режиме.
         handler.post { playMoments(tag, owner) }
     }
@@ -304,10 +319,12 @@ object BackgroundMusic {
         val located = scene?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.enabled(it) } == true }
         // Outside scenes, with the music on: the book's music of this mood instead of the track. Its clips are at
         // −14 LUFS with the +10 dB headroom of the player, so it plays 10 dB under the music slider to match the tracks.
-        val moody = if (located == null && enabled()) mood?.takeIf { prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(it) } == true } else null
+        val moodOn = enabled() && prefs?.let { com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(it) } == true
+        val level = tension?.coerceIn(0, 3)
+        val moody = if (located == null && moodOn) mood?.let { m -> if (level != null) intense(m, level) else m } else null
         val current = located ?: moody
         // What sounds now and why (verbose trace only; logged when it changes): finds a music that stops mid-reading.
-        val decision = "decide ${current?.key ?: "track"} reading=${reading.playing()} hold=${now < holdUntil} gap=${now < gapUntil} enabled=${enabled()}"
+        val decision = "decide ${current?.key ?: "track"} tension=${tension ?: "-"} reading=${reading.playing()} hold=${now < holdUntil} gap=${now < gapUntil} enabled=${enabled()}"
         if (decision != lastDecision) { lastDecision = decision; com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx, decision) }
         if (current != null) {
             if (prepared && player?.isPlaying == true) fadeTo(0f, SCENE_FADE_MS)
@@ -318,7 +335,15 @@ object BackgroundMusic {
                     com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.tame = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.tame(it)
                     com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.breathe = com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.breathe(it)
                 }
-                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current, if (current === moody) volume() / 3.16f else ambienceVolume())
+                val musicVolume = volume() / 3.16f
+                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.play(ctx, current,
+                    if (current === moody) musicVolume * (level?.let { MUSIC_GAIN[it] } ?: 1f)
+                    else ambienceVolume() * (level?.let { BED_GAIN[it] } ?: 1f))
+                // «Нагнетание»: в сцене с локацией на тревожных местах под её фон тихо входит музыка настроения.
+                val m = mood
+                if (located != null && moodOn && level != null && level >= 1 && m != null)
+                    com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.layer(intense(m, level), musicVolume * LAYER_GAIN[level])
+                else com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.layer(null, 0f)
             } else {
                 com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.pause()
                 handler.removeCallbacks(idleRelease); handler.postDelayed(idleRelease, 120_000)

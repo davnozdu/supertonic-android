@@ -55,6 +55,15 @@ object AmbienceBook {
      * одно и то же возвращается слишком часто. */
     private const val MUSIC_VARIANTS = 3
 
+    /** Сила фрагмента настроения [k] при «Нагнетании»: 0 — тише и реже, 1 — как описано, 2 — напряжённее. Добавки
+     * общие для любого жанра и настроения: меняют плотность, регистр и пульс, а не стиль книги. */
+    private const val TENSION_RECIPE = " | tension-v1"
+    fun intensity(music: String, k: Int): String = when (k) {
+        0 -> "$music, soft and sparse, gentle and restrained, low intensity"
+        2 -> "$music, intensified: darker and fuller arrangement, stronger low register, steady pulsing rhythm, rising tension"
+        else -> music
+    }
+
     /** Event sounds are short one-shots; the chapter transition a little shorter. */
     const val EVENT_SECONDS = 8f
     private const val CHAPTER_SECONDS = 3f
@@ -77,9 +86,15 @@ object AmbienceBook {
             Job("$id.m4a", com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, CHAPTER_SECONDS, 1L, id,
                 com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, "переход главы")
         }
-        val music = if (!AmbienceSettings.moodMusic(context.getSharedPreferences("SupertonicPrefs", 0))) emptyList()
+        val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
+        // «Нагнетание напряжения»: три фрагмента настроения — три силы (спокойнее, как есть, напряжённее), плеер
+        // выбирает по уровню текста. Рецепт другой — при включении/выключении фрагменты делаются заново.
+        val tension = AmbienceSettings.tension(prefs)
+        val music = if (!AmbienceSettings.moodMusic(prefs)) emptyList()
             else scenes.moods.moods.flatMap { m -> (0 until MUSIC_VARIANTS).map { k ->
-                Job("${m.id}_$k.m4a", MusicEnhance.prompt(m.music), SECONDS, m.music.hashCode().toLong() * 31 + k, m.id, m.music, "музыка: ${m.name}", music = true)
+                val prompt = if (tension) intensity(m.music, k) else m.music
+                Job("${m.id}_$k.m4a", MusicEnhance.prompt(prompt), SECONDS, m.music.hashCode().toLong() * 31 + k, m.id,
+                    if (tension) m.music + TENSION_RECIPE else m.music, "музыка: ${m.name}", music = true)
             } }
         return places + events + chapter + music
     }
@@ -146,7 +161,7 @@ object AmbienceBook {
         for (f in files) {
             val id = idOf(f)
             // Mood music stays when the switch is only turned off (it would be made again on).
-            if (id.startsWith("m") && current[id] == null && scenes.moods.moods.any { it.id == id && it.music == known.optString(id) }) continue
+            if (id.startsWith("m") && current[id] == null && scenes.moods.moods.any { it.id == id && known.optString(id).startsWith(it.music) }) continue
             if (current[id] == null || known.optString(id) != current[id]) f.delete()
         }
     }

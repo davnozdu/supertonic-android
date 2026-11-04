@@ -12,7 +12,7 @@ import com.brahmadeo.supertonic.tts.books.ReplyIndex
 internal object AmbienceScenes {
     /** [matcher]: this reader's key in BookMatcher (lives as long as the reader's entry here). */
     private class State(var before: List<String> = emptyList(), var scene: AmbiencePlayer.Scene? = null, val matcher: Any = Any(),
-                        var section: Pair<Long, String>? = null, var mood: AmbiencePlayer.Scene? = null)
+                        var section: Pair<Long, String>? = null, var mood: AmbiencePlayer.Scene? = null, var tension: Int = 0)
 
     /** What an utterance brings: its scene (null: music), whether a new section of the book starts with it (and that
      * book's transition sound), the event sounds each with the word it starts at (an utterance may hold several), and
@@ -21,7 +21,9 @@ internal object AmbienceScenes {
     data class Tag(val scene: AmbiencePlayer.Scene?, val chapter: Boolean, val chapterSound: java.io.File? = null,
                    val events: List<Moment> = emptyList(), val words: Int = 0,
                    /** «Музыка по настроению»: the music of the passage (or chapter), played where there is no scene. */
-                   val mood: AmbiencePlayer.Scene? = null)
+                   val mood: AmbiencePlayer.Scene? = null,
+                   /** «Нагнетание напряжения»: уровень 0–3 этого места (null — выключено или книга без уровней). */
+                   val tension: Int? = null)
     private val states = java.util.WeakHashMap<Any, State>()
 
     /** The scene for [text] of [owner], or null (no prepared book here, no location, no sounds: the music plays). */
@@ -40,6 +42,8 @@ internal object AmbienceScenes {
         val moments = ArrayList<Moment>()
         var wordCount = 0
         var mood: AmbiencePlayer.Scene? = null
+        var tension: Int? = null
+        val withTension = AmbienceSettings.tension(prefs)
         val scene = runCatching {
             val words = ReplyIndex.words(text)
             wordCount = words.size
@@ -61,6 +65,13 @@ internal object AmbienceScenes {
                 val file = BookFiles.event(context, sha, com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(hit.event)) ?: continue
                 moments += Moment(file, hit.word)
                 trace(context, "event ${hit.event.id} at word ${hit.word} of ${words.size}")
+            }
+            if (withTension && !scenes.tension.isEmpty) {
+                // В новой главе напряжение начинается с нуля; кусок без узнанных слов держит прежний уровень.
+                if (chapter) state.tension = 0
+                scenes.tension.find(text, before)?.let { state.tension = it }
+                tension = state.tension
+                trace(context, "tension ${state.tension}")
             }
             if (withMood) {
                 val found = if (AmbienceSettings.moodByChapter(prefs)) scenes.moods.ofSection(position.section) else scenes.moods.find(text, before)
@@ -84,7 +95,7 @@ internal object AmbienceScenes {
             AmbiencePlayer.Scene("$sha/${location.id}", location.name, files).takeIf { files.isNotEmpty() }.also { state.scene = it }
         }.getOrElse { trace(context, "error ${it.javaClass.simpleName}"); null }
         if (chapter) trace(context, "chapter starts")
-        return Tag(scene, chapter, chapterSound, moments, wordCount, mood)
+        return Tag(scene, chapter, chapterSound, moments, wordCount, mood, tension)
     }
 
     /** Last decisions (no book text), with verbose logs only (no flash writes while reading otherwise): in
