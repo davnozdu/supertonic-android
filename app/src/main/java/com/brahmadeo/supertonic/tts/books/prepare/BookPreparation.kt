@@ -396,15 +396,17 @@ object BookPreparation {
             translate = { text -> runCatching { com.brahmadeo.supertonic.tts.ambience.MusicPrompt.englishSound(ctx, text) }.getOrNull() },
             // Second pass: the descriptions of the actions no kind of the closed list could name are grouped into kinds
             // of their own (one request per book); a lone action is dropped instead of played as «something else».
-            group = { prompt -> jsonRequest(folder, "event-kinds", prompt, PromptOverrides.get("event-kinds"),
-                SceneMarking.groupSchema(), "groups", source, cancel) },
+            // Этап виден в уведомлении: один запрос на всю книгу, с размышлением — минуты (раньше висело «Локации сцен 7/10»).
+            group = { prompt -> mutable.value = State(true, "Звуки событий: группировка новых видов (облако)", startedAt = startedAt)
+                jsonRequest(folder, "event-kinds", prompt, PromptOverrides.get("event-kinds"), SceneMarking.groupSchema(), "groups", source, cancel) },
             // «Есть в базе звуков» — тоже известный вид: такое действие берётся даже при одном упоминании.
             known = { k -> com.brahmadeo.supertonic.tts.books.EventKinds.proper(k) ||
                 (com.brahmadeo.supertonic.tts.ambience.SoundBank.known(ctx, k) &&
                     // Свои «голосовые» виды, досозданные прежними версиями (storytelling_voice), больше не берём.
                     (!SceneMarking.speechLike(k, "") || com.brahmadeo.supertonic.tts.ambience.SoundBank.manifest(ctx).containsKey(k))) },
             // Добивка: абзацы, где событий не нашлось вовсе, идут отдельными короткими запросами.
-            fill = { prompt -> jsonRequest(folder, "scene-fill", prompt, PromptOverrides.get("scenes"), SceneMarking.fillSchema(), null, source, cancel) },
+            fill = { prompt -> mutable.value = State(true, "Звуки событий: абзацы без событий (облако)", startedAt = startedAt)
+                jsonRequest(folder, "scene-fill", prompt, PromptOverrides.get("scenes"), SceneMarking.fillSchema(), null, source, cancel) },
             // Правило базы: вид, который в базе есть, звучит с одного упоминания; вида нет — создаётся, только если
             // книга упоминает его два раза и больше (одиночное неопознанное действие лучше пропустить).
             newKindMentions = SceneMarking.NEW_KIND_MENTIONS)
