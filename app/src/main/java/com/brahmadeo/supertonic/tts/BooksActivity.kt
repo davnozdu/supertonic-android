@@ -91,6 +91,16 @@ class BooksActivity : ComponentActivity() {
                 }
                 val ambience by com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.collectAsState()
                 var extractBook by remember { mutableStateOf<BookLibrary.Entry?>(null) }
+                var soundsFor by remember { mutableStateOf<Long?>(null) }
+                soundsFor?.let { id -> AlertDialog(
+                    onDismissRequest = { soundsFor = null },
+                    title = { Text("Создать фоновые звуки") },
+                    text = { Column(Modifier.verticalScroll(rememberScrollState())) { MemoryNote(this@BooksActivity) } },
+                    confirmButton = { TextButton(onClick = {
+                        soundsFor = null
+                        com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.start(this@BooksActivity, id); allowBackground()
+                    }) { Text("Начать") } },
+                    dismissButton = { TextButton(onClick = { soundsFor = null }) { Text("Отмена") } }) }
                 val extractPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
                     val book = extractBook; extractBook = null
                     if (uri != null && book != null) scope.launch {
@@ -136,12 +146,15 @@ class BooksActivity : ComponentActivity() {
                 if (pendingUri != null && pendingSource != null) AlertDialog(
                     onDismissRequest = { pendingUri = null; pendingSource = null },
                     title = { Text("Подготовить книгу") },
-                    text = { Text("${pendingSource!!.label}\n\nВ облако уйдёт список кандидатов с короткими примерами, а не вся книга. " +
+                    text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("${pendingSource!!.label}\n\nВ облако уйдёт список кандидатов с короткими примерами, а не вся книга. " +
                         "Режим размышления ${if (pendingSource!!.thinking) "включён" else "выключен"}. " +
                         (if (repliesOn) "Затем реплики будут размечены по голосам (абзацы с речью уходят в облако). " else "") +
                         (if (smartOn) "Умная книга: текст каждого раздела уйдёт в облако для краткого содержания, текст книги сохранится в файле. " else "") +
                         (if (scenesOn) "Локации: весь текст книги уйдёт в облако по частям, чтобы определить места действия; затем на телефоне будут созданы их звуки. " else "") +
-                        "Подготовка может занять 10–15 минут и продолжится при выключенном экране.") },
+                        "Подготовка может занять 10–15 минут и продолжится при выключенном экране.")
+                        if (scenesOn) MemoryNote(this@BooksActivity)
+                    } },
                     confirmButton = { TextButton(onClick = {
                         val uri = pendingUri!!; val source = pendingSource!!
                         pendingUri = null; pendingSource = null
@@ -353,7 +366,8 @@ class BooksActivity : ComponentActivity() {
                                                 OutlinedButton(onClick = com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration::stop) { Text("Остановить") }
                                             } else if (missing > 0) OutlinedButton(enabled = !busy && !ambience.running && com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(this@BooksActivity),
                                                 modifier = Modifier.fillMaxWidth(), onClick = {
-                                                    com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.start(this@BooksActivity, book.id); allowBackground()
+                                                    if ((com.brahmadeo.supertonic.tts.ambience.AmbienceModel.memoryStatus(this@BooksActivity)?.shortMb ?: 0L) > 0L) soundsFor = book.id
+                                                    else { com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.start(this@BooksActivity, book.id); allowBackground() }
                                                 }) { Text("Создать фоновые звуки") }
                                             if (ambience.book == book.id && ambience.message.isNotBlank()) Text(ambience.message, style = MaterialTheme.typography.bodySmall)
                                         }
@@ -586,5 +600,44 @@ class BooksActivity : ComponentActivity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }, "Поделиться книгой"))
+    }
+}
+
+/** Перед созданием звуков книги: хватит ли памяти, чтобы считать их на NPU. Не хватает — сколько, что делать и кнопка
+ * «Освободить память» (Shizuku или root закрывают фоновые приложения, как смахнуть их из «Недавних»). */
+@Composable
+internal fun MemoryNote(context: android.content.Context) {
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.AmbienceModel.memoryStatus(context)) }
+    var freeing by remember { mutableStateOf(false) }
+    val way = remember { com.brahmadeo.supertonic.tts.utils.MemoryRelief.way() }
+    val st = status ?: return
+    fun gb(mb: Long) = "%.1f".format(mb / 1024.0)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (st.shortMb == 0L) {
+            Text("Память: свободно ${gb(st.availMb)} ГБ (+ ${gb(st.swapFreeMb)} ГБ подкачки) — для звуков на NPU (${st.what}) хватает.",
+                style = MaterialTheme.typography.bodySmall)
+            return@Column
+        }
+        Text("⚠ Мало памяти для быстрой генерации звуков", style = MaterialTheme.typography.titleSmall)
+        Text("Свободно ${gb(st.availMb)} ГБ (+ ${gb(st.swapFreeMb)} ГБ подкачки), ${st.what} на NPU нужно ${gb(st.needMb)} ГБ — " +
+            "не хватает ~${gb(st.shortMb)} ГБ. Без этого звуки посчитает процессор: в 5–10 раз медленнее и горячее.\n" +
+            "Что сделать: закройте фоновые приложения (смахните их из «Недавних»)" +
+            (if (way == com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.MANUAL)
+                ", или установите Shizuku и включите «Освобождать память для быстрой генерации» в настройках фоновой музыки — тогда MyTTS закроет их сама."
+            else ", или нажмите «Освободить память» — MyTTS закроет их сама (${way.title}). Открытое приложение, музыка и всё с постоянным " +
+                "уведомлением останутся; закрытые откроются снова, когда понадобятся."),
+            style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (way != com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.MANUAL)
+                OutlinedButton(enabled = !freeing, onClick = {
+                    freeing = true
+                    scope.launch {
+                        withContext(Dispatchers.IO) { com.brahmadeo.supertonic.tts.utils.MemoryRelief.free(context); Thread.sleep(3000) }
+                        status = com.brahmadeo.supertonic.tts.ambience.AmbienceModel.memoryStatus(context); freeing = false
+                    }
+                }) { Text(if (freeing) "Освобождаю…" else "Освободить память") }
+            TextButton(onClick = { status = com.brahmadeo.supertonic.tts.ambience.AmbienceModel.memoryStatus(context) }) { Text("Проверить снова") }
+        }
     }
 }

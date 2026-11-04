@@ -156,6 +156,24 @@ object AmbienceModel {
         return false
     }
 
+    /** Память перед подготовкой книги: сколько свободно, сколько нужно NPU-модели, которой будут считаться звуки,
+     * и сколько не хватает (0 — хватает). null — звуки на NPU не планируются (NPU выключен или графов нет). */
+    class MemStatus(val availMb: Long, val swapFreeMb: Long, val needMb: Long, val shortMb: Long, val what: String)
+    fun memoryStatus(context: Context): MemStatus? {
+        val p = prefs(context)
+        if (!p.getBoolean(NPU_KEY, false)) return null
+        val mediumMusic = AmbienceSettings.moodMusic(p) && music(context) == MEDIUM_MUSIC && npuPlanned(context, true)
+        val mediumEvents = AmbienceSettings.events(p) && AmbienceSettings.eventsMedium(p) && mediumNpuPlanned(context)
+        val small = npuPlanned(context, false)
+        if (!mediumMusic && !mediumEvents && !small) return null
+        val need = if (mediumMusic || mediumEvents) NEED_MEDIUM_MB else NEED_SMALL_MB
+        val am = context.getSystemService(android.app.ActivityManager::class.java) ?: return null
+        val avail = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem / 1048576
+        val swap = swapFreeMb()
+        val short = maxOf(need - (avail + swap / 2), need / 2 - avail, 0L)
+        return MemStatus(avail, swap, need, short, if (need == NEED_MEDIUM_MB) "средняя модель" else "малая модель")
+    }
+
     private fun swapFreeMb(): Long = runCatching {
         File("/proc/meminfo").readLines().firstOrNull { it.startsWith("SwapFree:") }
             ?.split(Regex("\\s+"))?.getOrNull(1)?.toLong()?.div(1024) ?: 0L
