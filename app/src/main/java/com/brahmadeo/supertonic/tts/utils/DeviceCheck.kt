@@ -67,8 +67,8 @@ object DeviceCheck {
         }
         val items = ArrayList<Item>()
         fun add(s: String, name: String, v: Verdict, why: String) = items.add(Item(s, name, v, why))
-        val voice = "Голос"
-        add(voice, "Silero (RU, CIS)", Verdict.GOOD, "~0,3 ГБ памяти, быстрее всех и экономнее всех — подходит любому телефону.")
+        val voice = "Голос — дело вкуса: послушайте разные модели (проба голоса в выборе модели). Ниже — как каждая запустится на этом телефоне"
+        add(voice, "Silero (RU, CIS)", Verdict.GOOD, "~0,3 ГБ памяти, самая быстрая и экономная — запустится на любом телефоне.")
         add(voice, "Tera", if (ram >= 4) Verdict.GOOD else Verdict.SLOW,
             "~0,8 ГБ, 2 потока процессора" + (if (hasNpu) "; часть считает NPU (включите «Ускоритель NPU»)." else "."))
         add(voice, "Shtorm", if (ram >= 5.5) Verdict.GOOD else Verdict.SLOW, "0,7–0,9 ГБ, быстрее реального времени на среднем телефоне.")
@@ -77,9 +77,9 @@ object DeviceCheck {
             ram >= 7.5 -> Verdict.SLOW
             else -> Verdict.NO
         }, if (hasNpu) "~1,1 ГБ; на NPU вдвое быстрее и в 7 раз меньше нагружает процессор — включите NPU у Kokoro."
-            else "~1,2 ГБ и тяжело для процессора без NPU: паузы на старте абзацев, расход батареи. Лучше Silero или Tera.")
+            else "~1,2 ГБ и тяжело для процессора без NPU: возможны паузы на старте абзацев и больший расход батареи.")
         add(voice, "Kokoro, Q8", if (ram >= 5.5) (if (hasNpu) Verdict.GOOD else Verdict.SLOW) else Verdict.NO,
-            "~1 ГБ, на процессоре медленнее полной версии; смысл есть только ради места на диске.")
+            "~1 ГБ; на процессоре медленнее полной версии, зато меньше места на диске.")
         val llm = "Подготовка текста (LLM)"
         add(llm, "Облачная LLM (DeepSeek, Gemini, Ollama)", Verdict.GOOD, "Работает на любом телефоне, нужен интернет. Лучшие ударения.")
         add(llm, "Локальная Gemma 4", when {
@@ -113,7 +113,7 @@ object DeviceCheck {
         val model = prefs.getString("selected_model", AssetManager.DEFAULT_MODEL)
         val npuOn = prefs.getBoolean(com.brahmadeo.supertonic.tts.utils.Npu.KEY, false)
         if (model == AssetManager.KOKORO_MODEL && !hasNpu && ram < 7.5)
-            current += "Выбрана Kokoro — для этого телефона тяжело. Рекомендуется Silero или Tera."
+            current += "Выбрана Kokoro — на этом телефоне она может читать с паузами. Если звучание нравится — оставьте; если мешают паузы, послушайте Silero или Tera."
         if (model == AssetManager.KOKORO_MODEL && hasNpu && !npuOn) current += "Kokoro считается без NPU — включите «Ускоритель NPU» (вдвое быстрее, меньше батареи)."
         if (hasNpu && !npuOn && model == AssetManager.TERA_MODEL) current += "У Tera выключен «Ускоритель NPU» — включите, вокодер станет быстрее."
         if (!hasNpu && npuOn) current += "Включён «Ускоритель NPU», но подходящего NPU нет — переключатель ничего не даёт."
@@ -174,7 +174,7 @@ object DeviceCheck {
         e.apply()
         val model = prefs.getString("selected_model", AssetManager.DEFAULT_MODEL)
         if (model == AssetManager.KOKORO_MODEL && !hasNpu && ram < 7.5)
-            manual += "Смените голос: Kokoro тяжела для этого телефона. Возьмите Silero (самая лёгкая) или Tera — меню → «Модели»."
+            manual += "Kokoro на этом телефоне может читать с паузами. Голос — дело вкуса: если паузы мешают, послушайте Silero или Tera (меню → «Модели»)."
         if (ram < 7.5) manual += "Для подготовки текста используйте облачную LLM (DeepSeek/Gemini) — локальная Gemma не влезет в память вместе с голосом."
         return Tuning(changed.filter { it.isNotEmpty() }, manual)
     }

@@ -46,9 +46,9 @@ class DeviceCheckActivity : ComponentActivity() {
                     Text("Главное — оперативная память: ${f(r.ramGb)} ГБ" +
                         (if (r.npu == DeviceCheck.Npu.V81 || r.npu == DeviceCheck.Npu.V79) " и ускоритель NPU." else ", NPU нет — всё считает процессор."),
                         style = MaterialTheme.typography.bodyMedium)
-                    if (r.can.isNotEmpty()) Text("✓ Подходит: ${r.can.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
-                    if (r.slow.isNotEmpty()) Text("⚠ Можно, но медленно или греет: ${r.slow.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
-                    if (r.cannot.isNotEmpty()) Text("✗ Не хватит памяти: ${r.cannot.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
+                    if (r.can.isNotEmpty()) Text("✓ Запустится нормально: ${r.can.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
+                    if (r.slow.isNotEmpty()) Text("⚠ Запустится, но медленно или греет: ${r.slow.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
+                    if (r.cannot.isNotEmpty()) Text("✗ Не запустится — не хватит памяти: ${r.cannot.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
                     Button(onClick = {
                         scope.launch {
                             tuned = withContext(Dispatchers.IO) { DeviceCheck.optimize(this@DeviceCheckActivity) }
@@ -67,7 +67,7 @@ class DeviceCheckActivity : ComponentActivity() {
                     Text("Ваши настройки", style = MaterialTheme.typography.titleMedium)
                     r.current.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
                 } }
-                Text("✓ — рекомендуется, ⚠ — будет медленно или греть, ✗ — не хватит памяти", style = MaterialTheme.typography.bodySmall)
+                Text("✓ — запустится нормально, ⚠ — запустится, но медленно или греет, ✗ — не хватит памяти", style = MaterialTheme.typography.bodySmall)
                 r.items.groupBy { it.section }.forEach { (section, list) ->
                     Text(section, style = MaterialTheme.typography.titleMedium)
                     list.forEach { item ->
