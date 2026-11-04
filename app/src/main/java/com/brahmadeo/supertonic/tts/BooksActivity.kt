@@ -603,13 +603,14 @@ class BooksActivity : ComponentActivity() {
     }
 }
 
-/** Перед созданием звуков книги: хватит ли памяти, чтобы считать их на NPU. Не хватает — сколько, что делать и кнопка
- * «Освободить память» (Shizuku или root закрывают фоновые приложения, как смахнуть их из «Недавних»). */
+/** Перед созданием звуков книги: хватит ли памяти, чтобы считать их на NPU. Не хватает — сколько, что делать и одна
+ * кнопка «Освободить память» (Shizuku или root закрывают фоновые приложения, как смахнуть их из «Недавних»). */
 @Composable
 internal fun MemoryNote(context: android.content.Context) {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.AmbienceModel.memoryStatus(context)) }
     var freeing by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf("") }
     val way = remember { com.brahmadeo.supertonic.tts.utils.MemoryRelief.way() }
     val st = status ?: return
     fun gb(mb: Long) = "%.1f".format(mb / 1024.0)
@@ -617,23 +618,37 @@ internal fun MemoryNote(context: android.content.Context) {
         if (st.shortMb == 0L) {
             Text("Память: свободно ${gb(st.availMb)} ГБ (+ ${gb(st.swapFreeMb)} ГБ подкачки) — для звуков на NPU (${st.what}) хватает.",
                 style = MaterialTheme.typography.bodySmall)
+            if (result.isNotEmpty()) Text(result, style = MaterialTheme.typography.bodySmall)
             return@Column
         }
         Text("⚠ Мало памяти для быстрой генерации звуков", style = MaterialTheme.typography.titleSmall)
         Text("Свободно ${gb(st.availMb)} ГБ (+ ${gb(st.swapFreeMb)} ГБ подкачки), ${st.what} на NPU нужно ${gb(st.needMb)} ГБ — " +
-            "не хватает ~${gb(st.shortMb)} ГБ. Без этого звуки посчитает процессор: в 5–10 раз медленнее и горячее.\n" +
-            "Что сделать: закройте фоновые приложения (смахните их из «Недавних»)" +
-            (if (way == com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.MANUAL)
-                ", или установите Shizuku и включите «Освобождать память для быстрой генерации» в настройках фоновой музыки — тогда MyTTS закроет их сама."
-            else ", или нажмите «Освободить память» — MyTTS закроет их сама (${way.title}). Открытое приложение, музыка и всё с постоянным " +
-                "уведомлением останутся; закрытые откроются снова, когда понадобятся."),
+            "не хватает ~${gb(st.shortMb)} ГБ. Без этого звуки посчитает процессор: в 5–10 раз медленнее и горячее.",
             style = MaterialTheme.typography.bodySmall)
+        Text(when (way) {
+            com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.SHIZUKU ->
+                "Нажмите «Освободить память» — MyTTS через Shizuku закроет фоновые приложения."
+            com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.ROOT ->
+                "Нажмите «Освободить память» — MyTTS через root закроет фоновые приложения. В первый раз Magisk спросит доступ — " +
+                    "разрешите MyTTS; в KernelSU или APatch заранее выдайте MyTTS доступ root в их приложении."
+            com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.MANUAL ->
+                "Смахните ненужные приложения из «Недавних» и нажмите «Проверить снова». Чтобы это делалось одной кнопкой, " +
+                    "установите Shizuku или выдайте MyTTS root (в Magisk, KernelSU или APatch)."
+        } + " Закрываются только фоновые: открытое приложение, музыка и всё с постоянным уведомлением остаются. Закрытые " +
+            "останутся в «Недавних» и откроются с того же места; после генерации MyTTS покажет их список.",
+            style = MaterialTheme.typography.bodySmall)
+        if (result.isNotEmpty()) Text(result, style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (way != com.brahmadeo.supertonic.tts.utils.MemoryRelief.Way.MANUAL)
-                OutlinedButton(enabled = !freeing, onClick = {
+                Button(enabled = !freeing, onClick = {
                     freeing = true
                     scope.launch {
-                        withContext(Dispatchers.IO) { com.brahmadeo.supertonic.tts.utils.MemoryRelief.free(context); Thread.sleep(3000) }
+                        val ok = withContext(Dispatchers.IO) {
+                            com.brahmadeo.supertonic.tts.utils.MemoryRelief.free(context).also { Thread.sleep(2000) } }
+                        val names = com.brahmadeo.supertonic.tts.utils.MemoryRelief.closedNames(context)
+                        result = if (!ok) com.brahmadeo.supertonic.tts.utils.MemoryRelief.lastError.orEmpty()
+                            else if (names.isEmpty()) "Фоновых приложений для закрытия не нашлось."
+                            else "Закрыто: ${names.take(10).joinToString(", ")}${if (names.size > 10) " и ещё ${names.size - 10}" else ""}."
                         status = com.brahmadeo.supertonic.tts.ambience.AmbienceModel.memoryStatus(context); freeing = false
                     }
                 }) { Text(if (freeing) "Освобождаю…" else "Освободить память") }

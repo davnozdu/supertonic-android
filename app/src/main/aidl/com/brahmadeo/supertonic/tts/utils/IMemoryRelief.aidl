@@ -4,6 +4,6 @@ package com.brahmadeo.supertonic.tts.utils;
 interface IMemoryRelief {
     /** Код транзакции, которым Shizuku останавливает свой пользовательский сервис. */
     void destroy() = 16777114;
-    /** `am kill-all`: код выхода команды. */
-    int killBackground() = 1;
+    /** `am kill-all`; возвращает список процессов до, строку "---" и список после (для перечня закрытых). */
+    String killBackground() = 1;
 }

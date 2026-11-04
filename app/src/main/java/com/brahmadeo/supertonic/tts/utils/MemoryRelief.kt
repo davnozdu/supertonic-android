@@ -66,26 +66,75 @@ object MemoryRelief {
         .any { java.io.File(it).exists() } ||
         System.getenv("PATH").orEmpty().split(':').any { java.io.File(it, "su").exists() }
 
+    /** Какие приложения закрыты ради NPU (имена пакетов). Только в оперативной памяти: несколько строк, на флешку
+     * не пишется. После генерации — одно уведомление со списком, затем список очищается ([finish]). */
+    private val closed = java.util.LinkedHashSet<String>()
+    @Volatile var lastError: String? = null
+        private set
+
     /** Закрыть фоновые приложения. true — команда выполнилась. Блокирует до ~10 с: не вызывать из главного потока. */
     fun free(context: Context): Boolean {
         val way = way()
-        val ok = when (way) {
+        lastError = null
+        val out = when (way) {
             Way.SHIZUKU -> viaShizuku(context)
             Way.ROOT -> viaRoot()
-            Way.MANUAL -> false
+            Way.MANUAL -> null
         }
-        Log.i(TAG, "am kill-all via ${way.title}: ${if (ok) "done" else "failed"}")
-        return ok
+        if (out == null && way == Way.ROOT) lastError = "Root не дал доступ. Разрешите MyTTS root в Magisk, KernelSU или APatch и нажмите ещё раз."
+        if (out == null && way == Way.SHIZUKU) lastError = "Shizuku не ответил. Проверьте, что Shizuku запущен, и нажмите ещё раз."
+        out?.let { record(context, it) }
+        Log.i(TAG, "am kill-all via ${way.title}: ${if (out != null) "done, closed ${closed.size}" else "failed"}")
+        return out != null
     }
 
-    private fun viaRoot(): Boolean = runCatching {
-        val p = ProcessBuilder("su", "-c", "am kill-all").redirectErrorStream(true).start()
-        p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0
-    }.getOrDefault(false)
+    /** Разница списков процессов «до» и «после»: пакеты, у которых не осталось ни одного процесса. */
+    private fun record(context: Context, out: String) {
+        val parts = out.split("\n---\n")
+        if (parts.size != 2) return
+        fun packages(list: String) = list.lines().map { it.trim().substringBefore(':') }
+            .filter { it.contains('.') && !it.startsWith("/") && !it.contains(' ') }.toSet()
+        val gone = packages(parts[0]) - packages(parts[1]) - context.packageName
+        synchronized(closed) { closed.addAll(gone) }
+    }
 
-    private fun viaShizuku(context: Context): Boolean {
+    /** Названия закрытых приложений для показа (без системных служб без значка). */
+    fun closedNames(context: Context): List<String> {
+        val pm = context.packageManager
+        return synchronized(closed) { closed.toList() }.mapNotNull { pkg ->
+            runCatching { pm.getLaunchIntentForPackage(pkg) ?: return@mapNotNull null
+                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrNull()
+        }.distinct()
+    }
+
+    /** Генерация закончена: если ради неё закрывали приложения — одно уведомление со списком, список очищается. */
+    fun finish(context: Context) {
+        val names = closedNames(context)
+        synchronized(closed) { closed.clear() }
+        if (names.isEmpty()) return
+        runCatching {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            manager.createNotificationChannel(NotificationChannel(CHANNEL, "Память для NPU", NotificationManager.IMPORTANCE_HIGH))
+            val text = "Для быстрой генерации было закрыто: ${names.take(12).joinToString(", ")}" +
+                (if (names.size > 12) " и ещё ${names.size - 12}" else "") +
+                ". Они остались в «Недавних» и откроются с того же места; уведомления и фоновые службы Android вернёт сам."
+            manager.notify(NOTIFICATION + 1, NotificationCompat.Builder(context, CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_notify_more).setContentTitle("MyTTS: звуки готовы")
+                .setContentText(text).setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT).setAutoCancel(true).build())
+        }
+    }
+
+    private fun viaRoot(): String? = runCatching {
+        val p = ProcessBuilder("su", "-c", "ps -A -o NAME=; echo ---; am kill-all; sleep 1; ps -A -o NAME=")
+            .redirectErrorStream(true).start()
+        val text = p.inputStream.bufferedReader().readText()
+        if (p.waitFor(20, TimeUnit.SECONDS) && p.exitValue() == 0) text else null
+    }.getOrNull()
+
+    private fun viaShizuku(context: Context): String? {
         val args = Shizuku.UserServiceArgs(ComponentName(context.packageName, MemoryReliefUserService::class.java.name))
-            .daemon(false).processNameSuffix("memory_relief").version(1)
+            .daemon(false).processNameSuffix("memory_relief").version(2)
         val latch = CountDownLatch(1)
         var service: IMemoryRelief? = null
         val connection = object : ServiceConnection {
@@ -97,10 +146,10 @@ object MemoryRelief {
         }
         return try {
             Shizuku.bindUserService(args, connection)
-            latch.await(10, TimeUnit.SECONDS) && service?.killBackground() == 0
+            if (latch.await(10, TimeUnit.SECONDS)) service?.killBackground() else null
         } catch (t: Throwable) {
             Log.w(TAG, "Shizuku: ${t.javaClass.simpleName}: ${t.message}")
-            false
+            null
         } finally {
             runCatching { Shizuku.unbindUserService(args, connection, true) }
         }

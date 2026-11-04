@@ -174,7 +174,9 @@ object AmbienceBook {
     fun generate(context: Context, sha: String, scenes: SceneIndex, threads: Int = 4,
                  progress: (Int, Int, String) -> Unit = { _, _, _ -> }, cancelled: () -> Boolean = { false }) {
         if (AmbienceModel.busy) progress(0, 0, "ждёт окончания другой работы генератора")
-        AmbienceModel.exclusive { generateLocked(context, sha, scenes, threads, progress, cancelled) }
+        try { AmbienceModel.exclusive { generateLocked(context, sha, scenes, threads, progress, cancelled) } }
+        // Закрывали ради NPU фоновые приложения — сказать какие (список только в RAM, затем очищается).
+        finally { com.brahmadeo.supertonic.tts.utils.MemoryRelief.finish(context) }
     }
 
     private fun generateLocked(context: Context, sha: String, scenes: SceneIndex, threads: Int,
