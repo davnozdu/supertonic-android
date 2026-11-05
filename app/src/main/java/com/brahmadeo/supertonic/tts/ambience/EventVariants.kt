@@ -6,9 +6,9 @@ import java.io.File
 object EventVariants {
     fun files(base: File): List<File> {
         val stem = base.nameWithoutExtension
-        val pattern = Regex("${Regex.escape(stem)}_(\\d+)\\.m4a")
         return base.parentFile?.listFiles()?.mapNotNull { f ->
-            val n = if (f.name == base.name) 1 else pattern.matchEntire(f.name)?.groupValues?.get(1)?.toIntOrNull()
+            val n = if (f.name == base.name) 1 else if (f.name.startsWith("${stem}_") && f.extension == "m4a")
+                f.nameWithoutExtension.removePrefix("${stem}_").toIntOrNull()?.takeIf { it >= 2 } else null
             if (n != null && n >= 1 && f.isFile && f.length() > 0) n to f else null
         }?.sortedBy { it.first }?.map { it.second }.orEmpty()
     }
