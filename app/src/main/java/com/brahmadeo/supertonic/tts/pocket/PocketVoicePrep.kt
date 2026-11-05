@@ -177,19 +177,21 @@ object PocketVoicePrep {
         }
         keep.add(intArrayOf(a, minOf(w.size, last + 6)))
         // joined: each seam cross-faded over 10 ms (in a pause, so nothing is heard)
-        val out = ArrayList<Float>(y.size)
+        // Primitive storage: a two-minute recording must not create millions of boxed Floats.
+        val out = FloatArray(y.size)
+        var size = 0
         for ((k, r) in keep.withIndex()) {
             val from = r[0] * WIN; val to = minOf(y.size, r[1] * WIN)
-            if (k == 0 || out.size < FADE) { for (n in from until to) out.add(y[n]); continue }
-            val base = out.size - FADE
+            if (k == 0 || size < FADE) { for (n in from until to) out[size++] = y[n]; continue }
+            val base = size - FADE
             for (n in 0 until FADE) {
                 val g = (n + 0.5f) / FADE
                 val b = if (from + n < to) y[from + n] else 0f
                 out[base + n] = out[base + n] * (1 - g) + b * g
             }
-            for (n in from + FADE until to) out.add(y[n])
+            for (n in from + FADE until to) out[size++] = y[n]
         }
-        return out.toFloatArray()
+        return out.copyOf(size)
     }
 
     // ---- the piece ----

@@ -43,7 +43,8 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
             // Кэш голосов (.cache) зависит от весов: у 8-битного графа — своя папка, чтобы не смешивать состояния.
             val voices = if (int8) File(root, "int8").apply { mkdirs() } else root
             val engine=native ?: NativePocketTts(root.path,voices.path,if (int8) "int8" else "fp32",temperature,steps,
-                threads,180,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads slow=$slow int8=$int8 steps=$steps") }
+                // Added silence belongs to the Kotlin policy below, which can change without reloading weights.
+                threads,0,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads slow=$slow int8=$int8 steps=$steps") }
             val output=ByteArrayOutputStream()
             val start=android.os.SystemClock.elapsedRealtime()
             for(chunk in PocketText.chunks(text)) {
@@ -73,9 +74,10 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
                     phrase.write(bytes)
                     output.write(bytes);listener?.onAudioChunk(sid,bytes)
                 }
-                if (chunk.trimEnd('"', '\'', '»', ')', ']').lastOrNull() in listOf('.', '!', '?', '…')) {
+                val pauseMs = com.brahmadeo.supertonic.tts.utils.SentencePauses.milliseconds(prefs)
+                if (pauseMs > 0 && chunk.trimEnd('"', '\'', '»', '”', ')', ']', ' ').lastOrNull() in listOf('.', '!', '?', '…')) {
                     val missing = com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.missingSilenceSamples(phrase.toByteArray(),
-                        com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.endPauseMs(chunk, 180), 24000)
+                        com.brahmadeo.supertonic.tts.tera.TeraPunctuationPauses.endPauseMs(chunk, pauseMs), 24000)
                     if (missing > 0) {
                         val silence = ByteArray(missing * 2)
                         output.write(silence); listener?.onAudioChunk(sid, silence)

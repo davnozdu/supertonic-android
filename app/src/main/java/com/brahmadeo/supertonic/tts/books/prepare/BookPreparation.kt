@@ -122,6 +122,7 @@ object BookPreparation {
             ctx.stopService(Intent(ctx, BookPreparationService::class.java)); return
         }
         pendingSource = null
+        BookQueue.started(ctx, uri)
         val cancel = cancellation ?: LlmProviders.CloudCancellation()
         cancellation = cancel
         val startedAt = System.currentTimeMillis()

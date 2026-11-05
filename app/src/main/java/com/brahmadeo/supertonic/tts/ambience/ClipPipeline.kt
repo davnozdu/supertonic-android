@@ -26,7 +26,10 @@ class ClipPipeline<T, R>(private val items: List<T>, private val produce: (T) ->
             try {
                 for (item in items) {
                     if (stopped.get() || Thread.currentThread().isInterrupted) break
-                    queue.put(produce(item))
+                    val result = produce(item)
+                    // Native calls may clear/ignore interrupt. Never block on a full queue after the consumer left.
+                    if (stopped.get() || Thread.currentThread().isInterrupted) break
+                    queue.put(result)
                 }
             } catch (t: Throwable) {
                 // An interrupt is our own signal that the consumer has already failed or the user stopped the book.
@@ -46,13 +49,18 @@ class ClipPipeline<T, R>(private val items: List<T>, private val produce: (T) ->
         } catch (t: Throwable) {
             stopped.set(true)
             failure.compareAndSet(null, t)
+            if (t is InterruptedException) Thread.currentThread().interrupt()
             throw t
         } finally {
             stopped.set(true)
             producer.interrupt()
-            // A DiT step on the NPU does not answer to an interrupt: wait for it, but never hang the caller on it
-            // (the thread is a daemon and the graphs are closed right after).
-            runCatching { producer.join(60_000) }
+            // The caller owns the graphs and closes them as soon as we return. A timeout or an interrupted join
+            // must not release that ownership while a native call still uses them.
+            var interrupted = Thread.interrupted()
+            while (producer.isAlive) {
+                try { producer.join() } catch (_: InterruptedException) { interrupted = true }
+            }
+            if (interrupted) Thread.currentThread().interrupt()
         }
         failure.get()?.let { throw it }
     }

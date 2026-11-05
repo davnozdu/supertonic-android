@@ -332,8 +332,7 @@ object SupertonicTTS {
     private fun sentencePauseMs(ctx: Context): Int {
         if (!AssetManager.isKokoro(ctx) && !AssetManager.isPocket(ctx)) return 0
         val prefs = ctx.getSharedPreferences("SupertonicPrefs", 0)
-        if (!prefs.getBoolean("tera_punctuation_pauses", true)) return 0
-        return prefs.getInt("tera_sentence_pause_ms", 420).coerceIn(0, 900)
+        return com.brahmadeo.supertonic.tts.utils.SentencePauses.milliseconds(prefs)
     }
 
     /** «Акустика помещения» only on characters' lines: the synthesis paths mark them for the call on this thread. */
@@ -381,7 +380,10 @@ object SupertonicTTS {
     private fun generateAudioOne(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean, aheadOwner: String?): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
         touchAudio()
-        val cacheKey=routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() }
+        val generation = com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation
+        // Resolve the scene once per request, before the model lock. Fast lookup and insertion share this full key.
+        val room = routeContext(stylePath)?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.forText(it, text, dialogue.get() == true) }
+        val cacheKey=routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() + "\u0000room=" + (room?.let { r -> r.name + ":" + com.brahmadeo.supertonic.tts.ambience.VoiceRoom.strength(it) } ?: "") }
         if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val foreground=preparationGeneration==null
         // The monitor is unfair: a look-ahead loop could re-take it between its own sentences.
@@ -392,9 +394,12 @@ object SupertonicTTS {
         try {
             return synchronized(this) {
                 if(counted) { foregroundWaiting.decrementAndGet(); counted=false }
+                // Settings may have changed while waiting: do not synthesize new settings under an old key/room.
+                if (generation != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation)
+                    return@synchronized generateAudioOne(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
                 val elapsed=android.os.SystemClock.elapsedRealtime()-waiting
                 if(elapsed>100) Log.i("ReaderAhead","Uncached model lock wait=${elapsed}ms chars=${text.length} foreground=$foreground")
-                generateAudioLocked(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner)
+                generateAudioLocked(text,lang,stylePath,speed,bufferDuration,steps,gain,listener,preparationGeneration,skipDictionary,aheadOwner,room,cacheKey)
             }
         } finally { if(counted) foregroundWaiting.decrementAndGet() }
     }
@@ -412,13 +417,8 @@ object SupertonicTTS {
     }
 
     /** Called only under the model monitor; cached delivery never enters it. */
-    private fun generateAudioLocked(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean, aheadOwner: String?): ByteArray? {
+    private fun generateAudioLocked(text: String, lang: String, stylePath: String, speed: Float, bufferDuration: Float, steps: Int, gain: Float, listener: ProgressListener?, preparationGeneration: Long?, skipDictionary: Boolean, aheadOwner: String?, room: com.brahmadeo.supertonic.tts.ambience.VoiceRoom.Room?, cacheKey: String?): ByteArray? {
         if(preparationGeneration != null && preparationGeneration != com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation) return null
-        // «Акустика помещения»: the room of this text's scene (null: dry), part of the cached audio.
-        // The room follows every text (it keeps the scene), but only a character's line sounds in it: the author,
-        // the narrator and «я» stay the same voice everywhere.
-        val room = routeContext(stylePath)?.let { com.brahmadeo.supertonic.tts.ambience.VoiceRoom.forText(it, text, dialogue.get() == true) }
-        val cacheKey = routeContext(stylePath)?.let { audioKey(it,text,lang,stylePath,speed,steps,gain,skipDictionary) + "\u0000output=" + getAudioSampleRate() + "\u0000room=" + (room?.let { r -> r.name + ":" + com.brahmadeo.supertonic.tts.ambience.VoiceRoom.strength(it) } ?: "") }
         if(cacheKey!=null) audioCache.get(cacheKey,consumeAhead=preparationGeneration==null,aheadOwner=aheadOwner)?.let { return deliverCached(text,it,listener) }
         val sid = sessionIdCounter.incrementAndGet()
         currentSession.set(SessionContext(sid, listener))

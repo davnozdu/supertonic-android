@@ -8,7 +8,6 @@ import android.media.MediaFormat
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.brahmadeo.supertonic.tts.tera.TeraCustomVoices
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -122,16 +121,30 @@ object PocketCustomVoices {
             val format = ex.getTrackFormat(track)
             var rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            if (rate !in 8000..192000 || channels !in 1..8) throw Failure("неподдерживаемая частота или число каналов записи")
             val codec = try { MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!) } catch (e: Exception) { throw Failure("формат записи не поддерживается") }
-            val out = ByteArrayOutputStream()
-            var pcmFloat = false
+            val runtime = Runtime.getRuntime()
+            val freeHeap = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory())
+            // Leave room for the block collector, contiguous mono, declipping, resampling and analysis/cleaning.
+            val maxSamples = minOf(PocketRecordingPcm.MAX_SAMPLES.toLong(), freeHeap / 32).toInt()
+            var pcm: PocketRecordingPcm? = null
+            fun output(format: MediaFormat): PocketRecordingPcm {
+                val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                val channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                val encoding = if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) format.getInteger(MediaFormat.KEY_PCM_ENCODING) else AudioFormat.ENCODING_PCM_16BIT
+                if (encoding != AudioFormat.ENCODING_PCM_16BIT && encoding != AudioFormat.ENCODING_PCM_FLOAT)
+                    throw Failure("формат PCM записи не поддерживается; сохраните её как обычный WAV или MP3")
+                return PocketRecordingPcm(sampleRate, channelCount, encoding == AudioFormat.ENCODING_PCM_FLOAT, maxSamples)
+            }
             try {
                 codec.configure(format, null, null, 0)
                 codec.start()
                 val info = MediaCodec.BufferInfo()
                 var inputDone = false
-                val deadline = System.currentTimeMillis() + 60_000
-                while (System.currentTimeMillis() < deadline) {
+                val deadline = android.os.SystemClock.elapsedRealtime() + 60_000
+                var complete = false
+                while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                    if (Thread.currentThread().isInterrupted) throw InterruptedException("voice import cancelled")
                     if (!inputDone) {
                         val i = codec.dequeueInputBuffer(10_000)
                         if (i >= 0) {
@@ -143,27 +156,32 @@ object PocketCustomVoices {
                     val o = codec.dequeueOutputBuffer(info, 10_000)
                     if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                         val f = codec.outputFormat
-                        rate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                        channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                        pcmFloat = f.containsKey(MediaFormat.KEY_PCM_ENCODING) && f.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
+                        val newRate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        val newChannels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        if (pcm != null && (newRate != rate || newChannels != channels)) throw Failure("формат звука изменился посреди записи")
+                        rate = newRate; channels = newChannels
+                        if (pcm == null) pcm = output(f)
                     } else if (o >= 0) {
-                        val buf = codec.getOutputBuffer(o)!!
-                        val bytes = ByteArray(info.size)
-                        buf.position(info.offset); buf.get(bytes)
-                        out.write(bytes)
-                        codec.releaseOutputBuffer(o, false)
-                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
-                        if (out.size() > rate * channels * (if (pcmFloat) 4 else 2) * 120) break
+                        try {
+                            if (pcm == null) pcm = output(codec.outputFormat)
+                            if (info.size > 0) {
+                                val buf = codec.getOutputBuffer(o)!!.duplicate()
+                                buf.position(info.offset); buf.limit(info.offset + info.size)
+                                pcm!!.append(buf)
+                            }
+                        } finally { codec.releaseOutputBuffer(o, false) }
+                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0 || pcm!!.full) { complete = true; break }
                     }
                 }
+                if (!complete) throw Failure("декодирование записи заняло слишком долго; выберите более короткий фрагмент")
+            } catch (e: PocketRecordingPcm.Failure) {
+                throw Failure(e.message ?: "запись слишком большая")
             } finally {
                 runCatching { codec.stop() }; codec.release()
             }
-            if (rate !in 8000..192000) throw Failure("необычная частота записи: $rate Гц")
-            val raw = ByteBuffer.wrap(out.toByteArray()).order(ByteOrder.LITTLE_ENDIAN)
-            val samples = if (pcmFloat) FloatArray(raw.remaining() / 4) { raw.float } else FloatArray(raw.remaining() / 2) { raw.short / 32768f }
-            val ch = channels.coerceAtLeast(1)
-            val mono = FloatArray(samples.size / ch) { i -> var a = 0f; for (c in 0 until ch) a += samples[i * ch + c]; a / ch }
+            val decoded = pcm ?: throw Failure("в записи нет звуковых кадров")
+            rate = decoded.rate
+            val mono = decoded.samples()
             // overloaded peaks drawn round at the recording's own rate, before resampling smears the flat tops
             val (fixed, runs) = PocketVoicePrep.declip(mono)
             return Decoded(PocketVoicePrep.resample(fixed, rate, RATE), rate, runs)

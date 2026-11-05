@@ -113,8 +113,8 @@ android {
         applicationId "com.davnozdu.supertonic.tts.fork"
         minSdk 24
         targetSdk 36
-        versionCode 461
-        versionName "5.0.6-beta217"
+        versionCode 462
+        versionName "5.0.6-beta218"
         // The app is Russian whatever the system language: the default strings are Russian and the
         // older partial es/fr/ko/pt translations stay out of the APK (they mixed with Russian text).
         resourceConfigurations += ["ru"]

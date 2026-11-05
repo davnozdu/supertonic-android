@@ -34,12 +34,29 @@ object BookQueue {
 
     private fun dir(context: Context) = File(context.filesDir, "book-queue")
     private fun prefs(context: Context) = context.getSharedPreferences("book_preparation", 0)
+    private fun readEntry(directory: File) = android.util.AtomicFile(File(directory, "entry.json")).openRead()
+        .bufferedReader().use { JSONObject(it.readText()) }
+    private fun writeEntry(directory: File, json: JSONObject) {
+        val file = android.util.AtomicFile(File(directory, "entry.json"))
+        val output = file.startWrite()
+        try { output.write(json.toString().toByteArray(Charsets.UTF_8)); file.finishWrite(output) }
+        catch (t: Throwable) { file.failWrite(output); throw t }
+    }
+    private fun queued(context: Context, uri: Uri): File? {
+        if (uri.scheme != "file") return null
+        val source = uri.path?.let { File(it) } ?: return null
+        val directory = BookQueuePath.directory(dir(context), source) ?: return null
+        return runCatching {
+            val name = readEntry(directory).getString("name")
+            directory.takeIf { source.canonicalFile == File(directory, name).canonicalFile }
+        }.getOrNull()
+    }
     fun nightOn(context: Context) = prefs(context).getBoolean(NIGHT_KEY, false)
     fun setNight(context: Context, on: Boolean) { prefs(context).edit().putBoolean(NIGHT_KEY, on).apply(); BookNightJob.schedule(context) }
 
     fun refresh(context: Context): List<Entry> {
         val list = dir(context).listFiles()?.filter { it.isDirectory }?.mapNotNull { d -> runCatching {
-            val o = JSONObject(File(d, "entry.json").readText())
+            val o = readEntry(d)
             val file = File(d, o.getString("name")).takeIf { it.isFile } ?: return@runCatching null
             Entry(d.name, o.getString("name"), file, o.optBoolean("replies", true), o.optBoolean("smart"), o.optBoolean("scenes"),
                 o.optBoolean("thinking", true), o.optInt("failures"), o.optBoolean("text"),
@@ -62,8 +79,8 @@ object BookQueue {
                 while (true) { val n = input.read(buf); if (n < 0) break; size += n
                     require(size <= EpubBook.MAX_BYTES) { "Файл книги больше 50 МБ" }; out.write(buf, 0, n) }
             } } ?: error("Не удалось открыть книгу")
-            File(d, "entry.json").writeText(JSONObject().put("name", name).put("replies", replies).put("smart", smart)
-                .put("scenes", scenes).put("thinking", thinking).put("text", text).toString())
+            writeEntry(d, JSONObject().put("name", name).put("replies", replies).put("smart", smart)
+                .put("scenes", scenes).put("thinking", thinking).put("text", text))
         } catch (t: Throwable) { d.deleteRecursively(); throw t }
         refresh(context); BookNightJob.schedule(context)
         return requireNotNull(mutable.value.firstOrNull { it.id == d.name })
@@ -73,10 +90,9 @@ object BookQueue {
      * встаёт в очередь «на паузе» и продолжится сама через 1 / 5 / 15 / 30 мин, потом раз в час ([BookResumeJob]). */
     fun pause(context: Context, uri: Uri, copy: File?, replies: Boolean, smart: Boolean, scenes: Boolean, text: Boolean,
               thinking: Boolean, reason: String): Entry {
-        val queued = if (uri.scheme == "file") uri.path?.let { File(it) }?.parentFile?.takeIf { it.parentFile == dir(context) } else null
+        val queued = queued(context, uri)
         val d = queued ?: File(dir(context), System.currentTimeMillis().toString()).apply { mkdirs() }
-        val entry = File(d, "entry.json")
-        val o = if (queued != null) JSONObject(entry.readText()) else {
+        val o = if (queued != null) readEntry(d) else {
             val name = runCatching { context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
                 if (it.moveToFirst()) it.getString(0) else null } }.getOrNull()?.trim()
                 ?.takeIf { com.brahmadeo.supertonic.tts.books.BookFiles.validSourceName(it) } ?: "book.epub"
@@ -92,7 +108,7 @@ object BookQueue {
         val pauses = o.optInt("pauses") + 1
         val delay = PAUSE_STEPS_MIN.getOrElse(pauses - 1) { PAUSE_STEPS_MIN.last() } * 60_000L
         o.put("paused", reason.ifBlank { "облако недоступно" }).put("resume_at", System.currentTimeMillis() + delay).put("pauses", pauses)
-        entry.writeText(o.toString())
+        writeEntry(d, o)
         refresh(context)
         BookResumeJob.schedule(context)
         return requireNotNull(mutable.value.firstOrNull { it.id == d.name })
@@ -105,25 +121,26 @@ object BookQueue {
         if (BookPreparation.state.value.running || com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.value.running) return false
         val next = refresh(context).filter { it.paused && (now || it.resumeAt <= System.currentTimeMillis()) }.minByOrNull { it.resumeAt } ?: return false
         val source = runCatching { BookPreparation.source(context).withThinking(next.thinking) }.getOrNull() ?: return false
-        return runCatching { BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies, smart = next.smart,
-            scenes = next.scenes, text = next.text) }.getOrDefault(false).also { if (it) running = next.id }
+        return launch(context, next, source)
     }
 
-    fun remove(context: Context, id: String) { File(dir(context), id).deleteRecursively(); refresh(context); BookNightJob.schedule(context) }
+    fun remove(context: Context, id: String) {
+        File(dir(context), id).deleteRecursively(); refresh(context)
+        BookNightJob.schedule(context); BookResumeJob.schedule(context)
+    }
 
     fun inNight(now: Calendar = Calendar.getInstance()) = now.get(Calendar.HOUR_OF_DAY) in NIGHT_FROM until NIGHT_TO
 
     /** Starts the next book (night rules unless [now]); false when the queue is empty, LLM is not set up or busy. */
     fun startNext(context: Context, now: Boolean = false): Boolean {
+        if (BookPreparation.state.value.running) return false
         if (!now && (!inNight() || !com.brahmadeo.supertonic.tts.ambience.NpuNightJob.charging(context))) return false
         // Never beside the generator's own work (an NPU compile holds the chip and several GB).
         if (com.brahmadeo.supertonic.tts.ambience.AmbienceGeneration.state.value.running) return false
         // Книги на паузе ждут своего времени (BookResumeJob); «Подготовить сейчас» берёт и их.
         val next = refresh(context).firstOrNull { it.failures < MAX_FAILURES && (now || !it.paused) } ?: return false
         val source = runCatching { BookPreparation.source(context).withThinking(next.thinking) }.getOrNull() ?: return false
-        return runCatching { BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies, smart = next.smart,
-            scenes = next.scenes, text = next.text) }
-            .getOrDefault(false).also { if (it) running = next.id }
+        return launch(context, next, source)
     }
 
     /** After the night NPU compile: the queue continues if it is still night and the phone charges. */
@@ -134,6 +151,29 @@ object BookQueue {
 
     @Volatile private var running: String? = null
     @Volatile private var chain = false
+    internal fun isRunning(id: String) = running == id
+
+    @Synchronized private fun launch(context: Context, next: Entry, source: BookPreparation.Source): Boolean {
+        if (BookPreparation.state.value.running) return false
+        val previous = running
+        return try {
+            // Persist before starting the service: execute() may run before start() returns to us.
+            val directory = File(dir(context), next.id)
+            writeEntry(directory, readEntry(directory).put("chain", chain))
+            running = next.id
+            BookPreparation.start(context, Uri.fromFile(next.file), source, replies = next.replies,
+                smart = next.smart, scenes = next.scenes, text = next.text).also { if (!it) running = previous }
+        } catch (_: Exception) { running = previous; false }
+    }
+
+    /** Called before the service's lazy worker starts, including START_REDELIVER_INTENT in a new process. */
+    internal fun started(context: Context, uri: Uri) {
+        val directory = queued(context, uri) ?: return
+        if (running != directory.name) {
+            running = directory.name
+            chain = runCatching { readEntry(directory).optBoolean("chain") }.getOrDefault(false)
+        }
+    }
     /** «Подготовить сейчас»: the whole queue now, one book after another, whatever the time. */
     fun startAll(context: Context): Boolean { chain = true; return startNext(context, now = true).also { if (!it) chain = false } }
 
@@ -141,17 +181,24 @@ object BookQueue {
      * failure (twice — it stays, skipped, for the user to see); then the next one, while the night lasts. */
     internal fun finished(context: Context, uri: Uri, prepared: Boolean, paused: Boolean = false) {
         // Пауза облака — не неудача книги: счётчик ошибок не растёт, продолжение по таймеру.
-        if (paused) { if (running != null && uri.path?.contains("/book-queue/$running/") == true) running = null; chain = false; return }
-        val id = running ?: return
-        if (uri.scheme != "file" || uri.path?.contains("/book-queue/$id/") != true) return
+        val directory = queued(context, uri)
+        if (paused) {
+            if (running == directory?.name) running = null
+            chain = false
+            BookResumeJob.schedule(context)
+            return
+        }
+        // The source URI survives process death; a RAM-only running id does not.
+        if (directory == null) { BookResumeJob.schedule(context); return }
         running = null
-        val d = File(dir(context), id)
+        val d = directory
         if (prepared) d.deleteRecursively() else runCatching {
             // Ошибка самой книги (не облака): пауза снимается, книга остаётся с отметкой неудачи.
-            val f = File(d, "entry.json"); val o = JSONObject(f.readText()); o.remove("paused")
-            f.writeText(o.put("failures", o.optInt("failures") + 1).toString())
+            val o = readEntry(d); o.remove("paused")
+            writeEntry(d, o.put("failures", o.optInt("failures") + 1))
         }
         refresh(context)
+        BookResumeJob.schedule(context)
         Handler(Looper.getMainLooper()).postDelayed({
             if (!startNext(context, now = chain)) { chain = false; BookNightJob.schedule(context) }
         }, 3000)
@@ -204,7 +251,7 @@ class BookResumeJob : JobService() {
             // Android мог не разрешить фоновый запуск (экономия заряда): напоминаем уведомлением и пробуем позже.
             if (due && !BookPreparation.state.value.running) remind(this)
             schedule(this, minDelayMs = 15 * 60_000L)
-        }
+        } else schedule(this)
         return false
     }
 
@@ -227,7 +274,8 @@ class BookResumeJob : JobService() {
         fun schedule(context: Context, minDelayMs: Long = 60_000L) {
             val jobs = context.getSystemService(JobScheduler::class.java) ?: return
             jobs.cancel(ID)
-            val next = BookQueue.refresh(context).filter { it.paused }.minOfOrNull { it.resumeAt } ?: return
+            // A resumed entry keeps its pause metadata until it succeeds or pauses again. Do not schedule it twice.
+            val next = BookQueue.refresh(context).filter { it.paused && !BookQueue.isRunning(it.id) }.minOfOrNull { it.resumeAt } ?: return
             jobs.schedule(JobInfo.Builder(ID, ComponentName(context, BookResumeJob::class.java))
                 .setMinimumLatency((next - System.currentTimeMillis()).coerceAtLeast(minDelayMs))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(false).build())
