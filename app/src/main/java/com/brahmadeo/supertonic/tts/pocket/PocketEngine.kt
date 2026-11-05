@@ -13,12 +13,16 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
     /** Stability <-> expressiveness: the sampling temperature (0.3 so far; lower is steadier). */
     val temperature: Float = temperature(context),
     /** «8 бит»: главный граф int8 (быстрее, на слух почти не отличается). */
-    val int8: Boolean = PocketDownload.int8Enabled(context, slow)) : AutoCloseable {
+    val int8: Boolean = PocketDownload.int8Enabled(context, slow),
+    /** «Качество звука»: шагов потоковой головы на кадр (1 — как было; 2 и 4 чище и медленнее, форк TeraTTS 1.24). */
+    val steps: Int = steps(context)) : AutoCloseable {
     companion object {
         const val TEMPERATURE = "shtorm_temperature"
         fun temperature(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getFloat(TEMPERATURE, .3f).coerceIn(.1f, .8f)
         /** «Яркость», дБ выше ~3 кГц (0 — выключено, по умолчанию). В форке TeraTTS на слух выбрали +8. */
         const val BRIGHTNESS = "shtorm_brightness_db"
+        const val STEPS = "shtorm_steps"
+        fun steps(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getInt(STEPS, 1).let { if (it in setOf(1, 2, 4)) it else 1 }
         fun brightness(context: Context) = context.getSharedPreferences("SupertonicPrefs", 0).getFloat(BRIGHTNESS, 0f).coerceIn(0f, 12f)
     }
     private val root=PocketDownload.modelDir(context, slow)
@@ -38,8 +42,8 @@ class PocketEngine(context: Context, val threads: Int = com.brahmadeo.supertonic
         try {
             // Кэш голосов (.cache) зависит от весов: у 8-битного графа — своя папка, чтобы не смешивать состояния.
             val voices = if (int8) File(root, "int8").apply { mkdirs() } else root
-            val engine=native ?: NativePocketTts(root.path,voices.path,if (int8) "int8" else "fp32",temperature,1,
-                threads,180,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads slow=$slow int8=$int8") }
+            val engine=native ?: NativePocketTts(root.path,voices.path,if (int8) "int8" else "fp32",temperature,steps,
+                threads,180,50).also { native=it; Log.i("PocketTTS","Runtime loaded threads=$threads slow=$slow int8=$int8 steps=$steps") }
             val output=ByteArrayOutputStream()
             val start=android.os.SystemClock.elapsedRealtime()
             for(chunk in PocketText.chunks(text)) {

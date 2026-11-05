@@ -56,7 +56,7 @@ object SupertonicTTS {
         val prefs=context.getSharedPreferences("SupertonicPrefs",0)
         // prefs.all copies the whole map; take one snapshot per key, not one per setting.
         val all=prefs.all
-        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_int8","tera_steps","tera_noise_scale","tera_lower_names","tera_comma_quotes","shtorm_temperature","shtorm_brightness_db","shtorm_int8","clean_speed_max_"+AssetManager.getModelType(context),"tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
+        val settings=listOf("voice_loudness_normalization","tera_teacher","tera_int8","tera_steps","tera_noise_scale","tera_lower_names","tera_comma_quotes","shtorm_temperature","shtorm_brightness_db","shtorm_int8","shtorm_steps","clean_speed_max_"+AssetManager.getModelType(context),"tera_punctuation_pauses","tera_short_word_cap","npu_enabled","tera_npu_sampler_steps","tera_comma_pause_ms","tera_sentence_pause_ms","silero_intonation","silero_fixed_pauses","foreign_tts","foreign_engine","foreign_language").map { all[it] }
         val kokoroFull=AssetManager.isKokoro(context) && com.brahmadeo.supertonic.tts.kokoro.KokoroDownload.fullEnabled(context)
         val pocketSlow=AssetManager.isPocket(context) && com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowEnabled(context)
         return listOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(context),com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.generation,AssetManager.getModelType(context),kokoroFull,pocketSlow,text,lang,style,speed,steps,gain,skipDictionary,settings).joinToString("\u0000")
@@ -72,8 +72,9 @@ object SupertonicTTS {
         val slow = com.brahmadeo.supertonic.tts.pocket.PocketDownload.slowEnabled(context)
         val temperature = com.brahmadeo.supertonic.tts.pocket.PocketEngine.temperature(context)
         val int8 = com.brahmadeo.supertonic.tts.pocket.PocketDownload.int8Enabled(context, slow)
-        pocketEngine?.let { if (it.threads == threads && it.slow == slow && it.temperature == temperature && it.int8 == int8) return it; it.close(); pocketEngine = null }
-        return com.brahmadeo.supertonic.tts.pocket.PocketEngine(context, threads, slow, temperature, int8).also { pocketEngine = it }
+        val steps = com.brahmadeo.supertonic.tts.pocket.PocketEngine.steps(context)
+        pocketEngine?.let { if (it.threads == threads && it.slow == slow && it.temperature == temperature && it.int8 == int8 && it.steps == steps) return it; it.close(); pocketEngine = null }
+        return com.brahmadeo.supertonic.tts.pocket.PocketEngine(context, threads, slow, temperature, int8, steps).also { pocketEngine = it }
     }
     @Synchronized private fun maybeSileroEngine(context: Context): com.brahmadeo.supertonic.tts.silero.SileroEngine {
         val model = AssetManager.getModelType(context)

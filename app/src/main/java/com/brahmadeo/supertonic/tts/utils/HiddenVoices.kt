@@ -33,13 +33,16 @@ object HiddenVoices {
         val key = BookVoiceRef(model, voice).key
         val result = when {
             model == AssetManager.TERA_MODEL && TeraCustomVoices.isCustom(voice) -> { TeraCustomVoices.delete(ctx, voice); Result.DELETED }
+            model == AssetManager.POCKET_MODEL && com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.isCustom(voice) -> {
+                com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.delete(ctx, voice); Result.DELETED
+            }
             model == AssetManager.TERA_MODEL && TeraVoiceLibrary.isLibrary(voice) -> {
                 // Deleted, and remembered as removed so the download button does not bring it back on its own.
                 File(TeraVoiceLibrary.root(ctx), voice).deleteRecursively(); add(ctx, key); Result.DELETED
             }
             else -> { add(ctx, key); Result.HIDDEN }
         }
-        if (model == AssetManager.TERA_MODEL && (TeraCustomVoices.isCustom(voice))) runCatching { VoiceGenderSettings.save(ctx, key, null) }
+        if ((model == AssetManager.TERA_MODEL || model == AssetManager.POCKET_MODEL) && TeraCustomVoices.isCustom(voice)) runCatching { VoiceGenderSettings.save(ctx, key, null) }
         SpeechPreparationCache.clear()
         return result
     }

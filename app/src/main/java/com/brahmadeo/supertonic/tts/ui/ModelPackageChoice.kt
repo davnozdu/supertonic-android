@@ -64,8 +64,22 @@ fun ModelPackageChoice(model: String) {
             }
         }) { Text(if (kokoro) "Скачать полную точность · 622 МБ" else "Скачать спокойную подачу · ${PocketDownload.slowSizeMb(context)} МБ") }
         if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
-        if (!kokoro) ShtormInt8()
+        if (!kokoro) { ShtormInt8(); ShtormQuality() }
     }
+}
+
+/** Shtorm «Качество звука»: шагов потоковой головы на кадр — 1 (по умолчанию), 2 или 4 (форк TeraTTS 1.24). */
+@Composable
+private fun ShtormQuality() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE) }
+    var steps by remember { mutableStateOf(com.brahmadeo.supertonic.tts.pocket.PocketEngine.steps(context)) }
+    val names = linkedMapOf(1 to "Обычное · 1 шаг", 2 to "Высокое · 2 шага", 4 to "Наилучшее · 4 шага")
+    DropdownSelector(label = "Качество звука Shtorm", options = names.values.toList(), selectedOption = names.getValue(steps),
+        onOptionSelected = { choice -> steps = names.entries.first { it.value == choice }.key
+            prefs.edit().putInt(com.brahmadeo.supertonic.tts.pocket.PocketEngine.STEPS, steps).apply() })
+    Text("Сколько шагов нейросеть делает на каждый кусочек звука: больше — чище, но дольше и больше нагрузки на процессор " +
+        "(по замерам форка TeraTTS 2 шага ≈ +10% времени, 4 ≈ +20%). Сравните на слух.", style = MaterialTheme.typography.bodySmall)
 }
 
 /** Shtorm «8 бит»: главный граф int8 (76 МБ вместо 302) — быстрее; на слух почти не отличается (форк TeraTTS 1.10). */

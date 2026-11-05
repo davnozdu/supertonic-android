@@ -27,9 +27,11 @@ object PocketVoices {
         File(dir(context),"verified").readText()==files(context).joinToString { it.sha } &&
             files(context).all { File(dir(context),"${it.name}.wav").length()==it.size }
     }.getOrDefault(false)
-    fun installed(context: Context)=if(ready(context)) names else listOf("alba")
+    /** The model's references plus the user's own recordings ([PocketCustomVoices]). */
+    fun installed(context: Context)=(if(ready(context)) names else listOf("alba")) + PocketCustomVoices.installed(context)
     fun voiceFile(context: Context,selected: String): File {
         val name=File(selected).name.removeSuffix(".json").removeSuffix(".wav")
+        if(PocketCustomVoices.isCustom(name) && '/' !in name) PocketCustomVoices.file(context,name).takeIf { it.isFile }?.let { return it }
         if(ready(context) && name in names) return File(dir(context),"$name.wav")
         return File(PocketDownload.root(context),"alba.wav")
     }

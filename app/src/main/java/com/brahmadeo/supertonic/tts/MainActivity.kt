@@ -878,7 +878,8 @@ class MainActivity : ComponentActivity() {
         }
         if (AssetManager.isPocket(this)) {
             AssetManager.russianVoices(this).forEach {
-                viewModel.voiceFiles["${it.replaceFirstChar { c -> c.uppercase() }} · Shtorm RU"]="$it.json"
+                val label=if (com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.isCustom(it)) com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.label(it) else it.replaceFirstChar { c -> c.uppercase() }
+                viewModel.voiceFiles["$label · Shtorm RU"]="$it.json"
             }
             return
         }

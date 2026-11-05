@@ -387,6 +387,7 @@ fun MainScreen(
                         ModelPackageChoice(modelType)
 
                         if (isTeraModel) TeraVoiceImport(onChanged = onTeraVoicesChanged)
+                        if (modelType == com.brahmadeo.supertonic.tts.utils.AssetManager.POCKET_MODEL) PocketVoiceImport(onChanged = onTeraVoicesChanged)
 
                         if (!isTeraModel) Row(
                             verticalAlignment = Alignment.CenterVertically,
