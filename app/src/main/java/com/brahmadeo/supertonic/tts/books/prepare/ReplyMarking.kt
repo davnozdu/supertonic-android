@@ -84,7 +84,31 @@ internal object ReplyMarking {
                 if (plan == null) failed++ else { marked++; plans[i] = plan }
             }
         }
-        progress(batches.size, batches.size)
+        // In a large dialogue batch a model can overlook recalled speech without dashes, even with an explicit
+        // speech tag. Review only those otherwise-author paragraphs in isolation, retaining the preceding context.
+        // This remains an LLM decision: indirect speech must not be turned into a character's line by a regexp.
+        val review = paragraphs.indices.filter { i ->
+            !ReplyIndex.isDialogue(paragraphs[i].text) && speechReport.containsMatchIn(paragraphs[i].text) &&
+                plans[i]?.all { it.role == com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR } == true
+        }
+        for ((n, i) in review.withIndex()) {
+            check(); progress(batches.size + n, batches.size + review.size)
+            val p = paragraphs[i]
+            val section = pkg.sections.getOrNull(p.section)?.id ?: continue
+            val cast = pkg.castOf(section) ?: BookPackage.Cast(emptyList(), emptyList(), emptyList())
+            val context = BookContext(0, section, cast, emptyMap())
+            val before = paragraphs.take(i).filter { it.section == p.section }.asReversed()
+                .fold("") { acc, prev -> if (acc.length >= CONTEXT_CHARS) acc else prev.text + "\n" + acc }.takeLast(CONTEXT_CHARS)
+            val firstPerson = firstPerson(paragraphs.filter { it.section == p.section }.map { it.text })
+            val prompt = JSONObject(VoiceRoleProtocol.prompt(listOf(p.text), before, context, firstPerson))
+                .put("review", "Проверь отдельно слова персонажа без тире и кавычек. Ремарка вроде «сказала она» или «сказал Иван» может стоять внутри вспоминаемой прямой речи: слова перед ремаркой и её продолжение принадлежат говорящему, сама ремарка и окружающее повествование — автору. First_person относится только к рассказчику, не к другим персонажам в его воспоминаниях. Если это косвенная речь или пересказ, оставь author. Верни диапазоны исходных units, не переписывай текст.")
+                .toString()
+            val corrected = runCatching {
+                VoiceRoleProtocol.parseValidated(ask(Batch(section, listOf(i), prompt)), listOf(p.text), context).singleOrNull()
+            }.getOrElse { e -> if (e is java.util.concurrent.CancellationException) throw e; null }
+            if (corrected != null) plans[i] = corrected
+        }
+        progress(batches.size + review.size, batches.size + review.size)
         // Локальные правила (без сети) страхуют разметку: модель иногда оставляет целую реплику за автором,
         // и тогда персонаж читается голосом рассказчика. Правила знают тире, ремарки и очерёдность реплик.
         val local = com.brahmadeo.supertonic.tts.llm.LocalSpeakers()
