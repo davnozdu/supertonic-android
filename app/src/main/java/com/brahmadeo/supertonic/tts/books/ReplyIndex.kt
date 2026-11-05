@@ -78,6 +78,9 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
             private val window = ArrayDeque<String>()
             private val entries = HashMap<Long, Voice>()
             private val clash = HashSet<Long>()
+            // Narration is not exported, but its windows still disqualify a matching character window. Otherwise
+            // a common phrase such as «и вот ты уже» can colour an unrelated narration paragraph with one hit.
+            private val narration = HashSet<Long>()
             val size get() = entries.size
             val clashes get() = clash.size
             fun add(paragraph: String, plan: List<VoiceRoleText>?) {
@@ -86,15 +89,30 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
                     for (part in p) { for (i in part.text.indices) a[pos + i] = part; pos += part.text.length }
                     a
                 }
+                val prefix = ArrayDeque<String>()
+                fun markNarration(k: Long) {
+                    narration += k
+                    if (entries[k]?.role?.let { it != VoiceRole.AUTHOR } == true) {
+                        entries.remove(k); clash += k
+                    }
+                }
                 for (m in unit.findAll(paragraph)) {
                     val w = letters(m.value); if (w.isEmpty()) continue
                     window.addLast(w); while (window.size > WINDOW) window.removeFirst()
                     // Начало абзаца: четырёх слов ещё нет, но реплика уже началась. Раньше такие слова молча
                     // выпадали, и первая реплика абзаца читалась голосом рассказчика.
-                    if (roleAt == null || window.isEmpty()) continue
+                    if (window.isEmpty()) continue
+                    val k = key(window)
+                    if (roleAt == null) {
+                        markNarration(k)
+                        // A reader can start a paragraph without preceding words. Protect its short initial windows
+                        // too, against the short keys at the beginning of a dialogue/book.
+                        if (prefix.size < WINDOW - 1) { prefix.addLast(w); markNarration(key(prefix)) }
+                        continue
+                    }
                     val part = roleAt[m.range.first + m.value.indexOfFirst { it.isLetterOrDigit() }] ?: continue
                     val v = Voice(part.role, part.character?.takeIf { part.role != VoiceRole.AUTHOR })
-                    val k = key(window)
+                    if (k in narration && v.role != VoiceRole.AUTHOR) { entries.remove(k); clash += k }
                     if (k in clash) continue
                     val old = entries.putIfAbsent(k, v)
                     if (old != null && old != v) { entries.remove(k); clash += k }

@@ -280,16 +280,21 @@ object LlmPreparation {
         }
         val start: com.brahmadeo.supertonic.tts.books.BookMatcher.Position = position!!
         val book = runCatching { com.brahmadeo.supertonic.tts.books.BookVoices.context(ctx, start) }.getOrNull()
-        var plan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
-            runCatching { bookRoles(ctx, book, listOf(text), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()
+        // The synthesis receives the prepared spelling, including stress marks and ё. Its plan must cover those
+        // exact characters too; a plan over the incoming spelling is rejected by VoiceRolePlan.safe as a whole.
+        val spoken = ready ?: return null
+        val indexedPlan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
+            pkg?.replies?.resolve(spoken, lastReaderWords) { role, who -> book.voiceOf(role, who) } else null
+        var plan = indexedPlan ?: if (book != null && LlmSettings.multiVoiceEnabled(ctx))
+            runCatching { bookRoles(ctx, book, listOf(spoken), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()
         else null
         // Короткие куски читалки присылают без контекста: окна в 4 слова у начала куска не находятся, и вся реплика
         // осталась бы за автором. Локальные правила (тире, ремарки, очерёдность) закрывают такие места — без сети.
-        if (book != null && LlmSettings.multiVoiceEnabled(ctx) && plan.orEmpty().all { it.role == com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR }) {
+        if (indexedPlan == null && book != null && LlmSettings.multiVoiceEnabled(ctx) && plan.orEmpty().all { it.role == com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR }) {
             val local = runCatching {
                 // Один экземпляр на всё чтение: очерёдность реплик (кто говорил в прошлом куске) важна для выбора.
                 // Повествование от первого лица («я вошёл») читает рассказчик, а «— сказал я» — тоже он, а не персонаж.
-                localSpeakers.plan(text,
+                localSpeakers.plan(spoken,
                     book.cast.characters.map { com.brahmadeo.supertonic.tts.llm.LocalSpeakers.Person(it.id, it.gender, it.forms) },
                     firstPerson = com.brahmadeo.supertonic.tts.books.BookVoices.firstPerson(ctx, start.book)
                         ?: LlmSettings.firstPerson(ctx))
@@ -298,7 +303,7 @@ object LlmPreparation {
         }
         com.brahmadeo.supertonic.tts.utils.DiagLog.i("LlmPreparation",
             "Готовый текст книги: LLM не нужна chars=${text.length} book=${start.book} roles=${plan?.joinToString { it.role.name }}")
-        val result = Result(ready ?: return null, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
+        val result = Result(spoken, "книга", SystemClock.elapsedRealtime() - started, false, "Готовый текст книги",
             voicePlan = plan.orEmpty(), rolesReady = plan != null, roleProvider = if (plan != null) "book" else null)
         // Если фрагмент уже стоит в очереди (её успели поставить до того, как книга была узнана), закрываем его
         // здесь же: иначе рабочий поток отправит тот же текст в облако и заплатит за это временем.

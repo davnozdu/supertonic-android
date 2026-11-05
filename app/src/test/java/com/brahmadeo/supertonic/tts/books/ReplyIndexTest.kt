@@ -7,6 +7,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ReplyIndexTest {
+    @Test fun sharedFourWordsNeverSpreadCharacterVoiceIntoNarration() {
+        val speech = "— И вот ты уже проиграл эту игру."
+        val prose = "И вот ты уже думаешь лишь о предстоящей игре и забываешь вчерашнюю обиду."
+        for (speechFirst in listOf(true, false)) {
+            val builder = ReplyIndex.Companion.Builder()
+            fun line() = builder.add(speech, listOf(VoiceRoleText(speech, VoiceRole.FEMALE, "anna")))
+            if (speechFirst) line()
+            builder.add(prose, null)
+            if (!speechFirst) line()
+            val (codes, data) = builder.export()
+            val idx = ReplyIndex.parse(codes, data)
+            assertNull(idx.resolve(prose, emptyList()) { _, _ -> null })
+            assertEquals(VoiceRole.FEMALE, idx.resolve(speech, emptyList()) { _, _ -> null }!!.first().role)
+        }
+    }
     private val narration = "Черноволосый сосед в крытом тулупе всё это разглядел, частию от нечего делать, и наконец спросил."
     private val ask = "— Зябко?"
     private val paragraph = "— Очень, — ответил сосед с чрезвычайною готовностью, — и заметьте, это еще оттепель. Что ж, если бы мороз?"
