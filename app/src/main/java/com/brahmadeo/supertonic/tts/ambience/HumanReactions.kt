@@ -14,7 +14,7 @@ object HumanReactions {
         "cabbie_shout", "newsboy", "cursing", "laugh_hysterical", "sob_muffled", "scream_child", "sigh_tired", "moan_relief",
         "prayer_murmur", "harbour_crowd", "market_trader", "street_children", "whisper_close", "cry_baby", "scream_pain",
         "groan_sleep", "battle_cry", "audience_laugh", "sniffle", "chuckle", "giggle", "yawn", "hiccup", "spit", "spittoon",
-        "applause", "clap_single"
+        "applause", "clap_single", "panting", "burp", "nose_blow", "teeth_grind"
     )
     private val vocalKind = Regex("^(?:laugh(?:ter)?|scream|shout|cry(?:ing)?|sigh|sob(?:bing)?|gasp|groan|moan|cough|sneeze|whisper|weeping|breath(?:ing)?|snore|snort)(?:_|$)")
     private val vocalDescription = Regex("(?iu)\\b(?:sigh\\w*|laugh\\w*|scream\\w*|shout\\w*|cry(?:ing)?|weeping|sob\\w*|gasp\\w*|groan\\w*|moan\\w*|cough\\w*|sneez\\w*|whisper\\w*|snor\\w*|breath\\w*|вздох\\p{L}*|сме[хя]\\p{L}*|плач\\p{L}*|крич\\p{L}*|крик\\p{L}*|рыда\\p{L}*|всхлип\\p{L}*|стон\\p{L}*|каш\\p{L}*|чих\\p{L}*|ш[её]пот\\p{L}*|шепч\\p{L}*)")

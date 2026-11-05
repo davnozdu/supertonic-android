@@ -6,7 +6,8 @@ import org.junit.Test
 class HumanReactionsTest {
     @Test fun allVocalReactionsAndTheirVariantsCanBeMuted() {
         for (kind in listOf("sigh", "cry", "weeping", "scream_woman", "scream_child", "laugh_soft", "sob_muffled",
-                "breath_shaky", "crowd_gasp", "chuckle", "giggle", "sniffle", "yawn", "hiccup"))
+                "breath_shaky", "crowd_gasp", "chuckle", "giggle", "sniffle", "yawn", "hiccup",
+                "panting", "burp", "nose_blow", "teeth_grind"))
             assertTrue("missing category: $kind", HumanReactions.contains(kind))
     }
     @Test fun objectsAndAnimalsKeepTheirSounds() {
