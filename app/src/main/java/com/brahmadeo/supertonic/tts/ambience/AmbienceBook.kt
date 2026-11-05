@@ -119,9 +119,9 @@ object AmbienceBook {
     }
 
     /** l3_0.m4a -> l3; m2_1.m4a -> m2; e5.m4a -> e5; k_door_slam.m4a -> k_door_slam (a clip of a kind of action). */
-    private fun idOf(file: File) = when {
+    private fun idOf(file: File, known: Set<String>) = when {
         // k_door_slam_2.m4a -> k_door_slam: варианты одного вида чистятся вместе с ним.
-        file.name.startsWith("k_") -> file.name.substringBeforeLast('.').removeSuffix("_2").removeSuffix("_3")
+        file.name.startsWith("k_") -> EventVariants.id(file.nameWithoutExtension, known)
         file.name.startsWith("e") -> file.name.substringBefore('.')
         else -> file.name.substringBefore('_')
     }
@@ -159,7 +159,7 @@ object AmbienceBook {
         if (known.optDouble(LUFS_KEY, -20.0) != Loudness.TARGET_LUFS) { files.forEach { it.delete() }; manifest(context, sha).delete(); return }
         val current = jobs(context, scenes).associate { it.id to it.recipe }
         for (f in files) {
-            val id = idOf(f)
+            val id = idOf(f, current.keys)
             // Mood music stays when the switch is only turned off (it would be made again on).
             if (id.startsWith("m") && current[id] == null && scenes.moods.moods.any { it.id == id && known.optString(id).startsWith(it.music) }) continue
             if (current[id] == null || known.optString(id) != current[id]) f.delete()

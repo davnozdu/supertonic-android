@@ -29,7 +29,7 @@ object SoundBank {
     data class Variant(val file: String, val sha: String, val url: String)
 
     /** [file]: основной клип; [sha]: его контрольная сумма; [prompt]: английское описание звука (по нему ищется
-     * тот же звук, если модель назвала вид по-другому); [variants]: два-три варианта на выбор. */
+     * тот же звук, если модель назвала вид по-другому); [variants]: все варианты на выбор. */
     data class Entry(val file: String, val sha: String, val prompt: String, val variants: List<Variant> = emptyList()) {
         fun all(): List<Variant> = variants.ifEmpty { listOf(Variant(file, sha, "$BASE/$file")) }
     }
@@ -94,13 +94,6 @@ object SoundBank {
             val root = JSONObject(file.readText())
             val version = root.optInt("bank", 1)
             val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
-            if (prefs.getInt(VERSION_KEY, 1) != version) {
-                // Другая версия содержимого: старые клипы тихие/не такие — выкидываем, скачивание возьмёт новые.
-                val old = dir(context).listFiles()?.count { it.name.endsWith(".$FORMAT") } ?: 0
-                dir(context).listFiles()?.filter { it.name.endsWith(".$FORMAT") }?.forEach { it.delete() }
-                prefs.edit().putInt(VERSION_KEY, version).apply()
-                Log.i("SoundBank", "новая версия базы $version: старых клипов удалено $old")
-            }
             archives = root.optJSONObject("zip")?.let { z ->
                 listOf("base", "second", "more").mapNotNull { k ->
                     val url = z.optString(k).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
@@ -110,7 +103,7 @@ object SoundBank {
                 }
             }.orEmpty()
             val sounds = root.optJSONArray("sounds") ?: return emptyMap()
-            (0 until sounds.length()).mapNotNull { i ->
+            val entries = (0 until sounds.length()).mapNotNull { i ->
                 val s = sounds.optJSONObject(i) ?: return@mapNotNull null
                 val key = s.optString("key").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
                 val file = s.optString("file").ifEmpty { "$key.$FORMAT" }
@@ -123,6 +116,13 @@ object SoundBank {
                 }.orEmpty()
                 key to Entry(file, s.optString("sha256"), s.optString("prompt"), variants)
             }.toMap()
+            if (entries.isNotEmpty() && prefs.getInt(VERSION_KEY, 1) != version) {
+                val expected = entries.values.flatMap { it.all() }.associate { it.file to it.sha }
+                val removed = BankRetention.prune(dir(context), expected, local(context).values.toSet())
+                prefs.edit().putInt(VERSION_KEY, version).apply()
+                Log.i("SoundBank", "база $version: изменённых/удалённых клипов удалено $removed; неизменённые и свои сохранены")
+            }
+            entries
         }.getOrElse { emptyMap() }
         cache = parsed
         return parsed
