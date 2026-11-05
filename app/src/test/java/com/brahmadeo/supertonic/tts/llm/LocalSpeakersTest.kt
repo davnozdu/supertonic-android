@@ -4,6 +4,37 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LocalSpeakersTest {
+    @Test fun asciiHyphensSeparateTheRemarkFromSpeech() {
+        val text = "- Смелее, - повторил Кресснер. - Продолжайте."
+        val cast = listOf(LocalSpeakers.Person("kressner", "m", listOf("Кресснер")))
+        val parts = LocalSpeakers().plan(text, cast, firstPerson = true)
+        assertEquals(text, parts.joinToString("") { it.text })
+        assertEquals(listOf(VoiceRole.MALE, VoiceRole.AUTHOR, VoiceRole.MALE), parts.map { it.role })
+        assertEquals("kressner", parts.first().character)
+    }
+
+    @Test fun narratorSpeechIsNotStolenByAWomansNameLaterInTheRemark() {
+        val text = "- Я согласен, - сказал я и отвернулся. Анна молчала у окна."
+        val parts = LocalSpeakers().plan(text, listOf(LocalSpeakers.Person("anna", "f", listOf("Анна"))), true)
+        assertEquals(text, parts.joinToString("") { it.text })
+        assertEquals(listOf(VoiceRole.AUTHOR), parts.map { it.role })
+    }
+
+    @Test fun narratorParticipatesInDialogueTurns() {
+        val speakers = LocalSpeakers()
+        val cast = listOf(LocalSpeakers.Person("kressner", "m", listOf("Кресснер")))
+        speakers.plan("- Согласны? - спросил Кресснер.", cast, true)
+        speakers.plan("- Пока нет, - ответил я.", cast, true)
+        assertEquals(VoiceRole.MALE, speakers.plan("- Подумайте.", cast, true).first().role)
+        assertEquals(VoiceRole.AUTHOR, speakers.plan("- Хорошо.", cast, true).single().role)
+    }
+
+    @Test fun pronounInTheSpeechTagWinsOverANameInLaterNarration() {
+        val parts = LocalSpeakers().plan("- Я согласен, - сказал он. Анна отошла к двери.",
+            listOf(LocalSpeakers.Person("anna", "f", listOf("Анна"))))
+        assertEquals(VoiceRole.MALE, parts.first().role)
+        assertEquals(VoiceRole.AUTHOR, parts.last().role)
+    }
     private fun show(parts: List<VoiceRoleText>) = parts.joinToString(" | ") { "${it.role.name.first()}${it.character?.let { c -> ":$c" } ?: ""}=${it.text.trim()}" }
 
     @Test fun dialogueWithRemarksAndAlternation() {

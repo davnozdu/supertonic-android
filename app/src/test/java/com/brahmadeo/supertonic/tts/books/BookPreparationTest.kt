@@ -147,6 +147,14 @@ class BookPreparationTest {
     private fun answer(chars: String, other: String = "[]") = JSONObject("""{"characters":[$chars],"other":$other}""")
     private fun character(id: String, name: String, refs: String, gender: String = "m") =
         """{"id":"$id","name":"$name","gender":"$gender","candidates":[$refs]}"""
+
+    @Test fun twoEqualMergesWithDifferentGendersStillNeedTheThirdVote() {
+        val r = request(candidate("c1", "Саша"))
+        val male = answer(character("sasha", "Саша", "\"c1\"", "m"))
+        val female = answer(character("sasha", "Саша", "\"c1\"", "f"))
+        assertFalse(CastCheck.sameMerges(male, female, r))
+        assertTrue(CastCheck.sameMerges(female, answer(character("alexandra", "Саша", "\"c1\"", "f")), r))
+    }
     private fun checks(vararg verdicts: Triple<String, String, String>, character: String = "g") = JSONObject().put("checks", JSONArray(verdicts.map {
         JSONObject().put("character", character).put("anchor", it.first).put("candidate", it.second).put("verdict", it.third)
     }))

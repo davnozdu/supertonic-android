@@ -17,7 +17,7 @@ internal object AmbienceScenes {
     /** What an utterance brings: its scene (null: music), whether a new section of the book starts with it (and that
      * book's transition sound), the event sounds each with the word it starts at (an utterance may hold several), and
      * its length in words (the delay of an event follows the voice's own pace). */
-    data class Moment(val file: java.io.File, val word: Int)
+    data class Moment(val file: java.io.File, val word: Int, val humanReaction: Boolean = false)
     data class Tag(val scene: AmbiencePlayer.Scene?, val chapter: Boolean, val chapterSound: java.io.File? = null,
                    val events: List<Moment> = emptyList(), val words: Int = 0,
                    /** «Музыка по настроению»: the music of the passage (or chapter), played where there is no scene. */
@@ -62,8 +62,9 @@ internal object AmbienceScenes {
             val sha = BookLibrary.contentSha(context, position.book) ?: return@runCatching null
             if (chapter) chapterSound = BookFiles.event(context, sha, com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID)
             if (withEvents) for (hit in scenes.events.hitAll(text, before)) {
+                val human = HumanReactions.contains(hit.event.kind, hit.event.sound)
                 val file = BookFiles.event(context, sha, com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(hit.event)) ?: continue
-                moments += Moment(file, hit.word)
+                moments += Moment(file, hit.word, human)
                 trace(context, "event ${hit.event.id} at word ${hit.word} of ${words.size}")
             }
             if (withTension && !scenes.tension.isEmpty) {

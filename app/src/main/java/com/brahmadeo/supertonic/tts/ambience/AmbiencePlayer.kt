@@ -35,7 +35,8 @@ internal object AmbiencePlayer {
                         /** One-shots keep their impact: the compressor is for the accents inside the steady bed. */
                         private val tameable: Boolean = !scene.music,
                         /** «Нагнетание»: музыка, тихо подложенная под звук сцены (второй слой). */
-                        val layer: Boolean = false) {
+                        val layer: Boolean = false,
+                        val humanReaction: Boolean = false) {
         private val dynamics: Any? = if (android.os.Build.VERSION.SDK_INT >= 28) Dynamics.create(player.audioSessionId, tameable) else null
         private val boost: android.media.audiofx.LoudnessEnhancer? = if (dynamics != null) null else runCatching {
             android.media.audiofx.LoudnessEnhancer(player.audioSessionId).apply { setTargetGain(BOOST_MB); enabled = true }
@@ -214,10 +215,11 @@ internal object AmbiencePlayer {
     }
 
     /** [mix]: «Накладывать звуки» — не ждать конца предыдущего: до [EventMix.MAX_SHOTS] звуков одновременно. */
-    fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float, mix: Boolean = false) {
+    fun oneShot(ctx: Context, file: java.io.File, delayMs: Long, volume: Float, mix: Boolean = false, humanReaction: Boolean = false) {
         lateinit var run: Runnable
         run = Runnable {
             pending.remove(run)
+            if (humanReaction && !AmbienceSettings.humanReactions(ctx.getSharedPreferences("SupertonicPrefs", 0))) return@Runnable
             // Reading paused or stopped in between: the moment is gone. Причина видна в журнале: без неё «звука не было»
             // невозможно отличить от «не размечено».
             if (!EventShot.allowed(speechNow, playing, masterTarget)) {
@@ -238,7 +240,7 @@ internal object AmbiencePlayer {
                 val p = MediaPlayer()
                 p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 p.setDataSource(clip.path); p.prepare()
-                val v = Voice(p, Scene(clip.name, clip.name, listOf(clip)), 0, tameable = false)
+                val v = Voice(p, Scene(clip.name, clip.name, listOf(clip)), 0, tameable = false, humanReaction = humanReaction)
                 // Плавное появление: 4 шага по 20 мс от нуля — нет щелчка в начале клипа.
                 p.setVolume(0f, 0f)
                 shots += v
@@ -287,6 +289,14 @@ internal object AmbiencePlayer {
     /** Когда закончится звучащий сейчас звук события: следующий ранее этого не начинается. */
     private var shotUntil = 0L
     private val pending = ArrayList<Runnable>()
+
+    /** A live settings change stops only vocal event clips; pending ones recheck the preference in their callback. */
+    fun stopHumanReactions() {
+        val vocal = shots.filter { it.humanReaction }
+        vocal.forEach { runCatching { it.player.setVolume(0f, 0f) }; it.release() }
+        shots.removeAll(vocal.toSet())
+        if (shots.isEmpty()) shotUntil = 0L
+    }
 
 
     /** Pause, stop: the events and chapter sounds still waiting are dropped and the sounding ones stop. Main thread. */

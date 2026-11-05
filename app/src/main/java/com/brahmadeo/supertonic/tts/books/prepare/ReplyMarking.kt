@@ -18,6 +18,10 @@ internal object ReplyMarking {
     /** Narration between two lines up to this length goes into the request: it names who speaks («ответил он»). */
     private const val GAP_CHARS = 1500
     private val firstPersonWord = Regex("(?iu)(?<![\\p{L}])(я|мне|меня|мной|мой|моя|моё|мое|мои|моего|моей|моих)(?![\\p{L}])")
+    private val speechReport = Regex("(?iu)(?<![\\p{L}])(?:сказал[аи]?|говорил[аи]?|говорит|ответил[аи]?|спросил[аи]?|прошептал[аи]?|шепнул[аи]?|проговорил[аи]?|произн[её]с(?:ла|ли)?|воскликнул[аи]?|добавил[аи]?|повторил[аи]?|крикнул[аи]?|предупредил[аи]?)(?![\\p{L}])")
+
+    /** A speech tag can introduce recalled words without any typographic dash/quotes. The LLM decides the ranges. */
+    internal fun mayHaveSpeech(text: String) = ReplyIndex.isDialogue(text) || speechReport.containsMatchIn(text)
 
     /** A section narrated in the first person: «я» in a third or more of its narration paragraphs. */
     fun firstPerson(texts: List<String>): Boolean {
@@ -42,7 +46,7 @@ internal object ReplyMarking {
             var pending = mutableListOf<Int>()         // narration after the last line of the current group
             for (i in inSection) {
                 val text = paragraphs[i].text
-                if (!ReplyIndex.isDialogue(text)) { if (current != null) pending += i; continue }
+                if (!mayHaveSpeech(text)) { if (current != null) pending += i; continue }
                 val size = current?.sumOf { paragraphs[it].text.length } ?: 0
                 val gap = pending.sumOf { paragraphs[it].text.length }
                 if (current == null || gap > GAP_CHARS || size + gap + text.length > BATCH_CHARS) {
@@ -76,7 +80,7 @@ internal object ReplyMarking {
             // Narration sent along for context is the author's anyway: only the lines are kept and counted.
             for ((k, plan) in result.withIndex()) {
                 val i = batch.paragraphs[k]
-                if (!ReplyIndex.isDialogue(paragraphs[i].text)) continue
+                if (!mayHaveSpeech(paragraphs[i].text)) continue
                 if (plan == null) failed++ else { marked++; plans[i] = plan }
             }
         }

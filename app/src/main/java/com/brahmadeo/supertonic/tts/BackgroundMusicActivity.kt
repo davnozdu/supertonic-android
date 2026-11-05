@@ -61,6 +61,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                 var ambienceTame by remember { mutableStateOf(AmbienceSettings.tame(prefs)) }
                 var breathe by remember { mutableStateOf(AmbienceSettings.breathe(prefs)) }
                 var events by remember { mutableStateOf(AmbienceSettings.events(prefs)) }
+                var humanReactions by remember { mutableStateOf(AmbienceSettings.humanReactions(prefs)) }
                 var eventGap by remember { mutableIntStateOf(AmbienceSettings.eventGap(prefs)) }
                 var mixEvents by remember { mutableStateOf(AmbienceSettings.mix(prefs)) }
                 var eventsVolume by remember { mutableIntStateOf(AmbienceSettings.eventsVolume(prefs)) }
@@ -326,6 +327,14 @@ class BackgroundMusicActivity : ComponentActivity() {
                             Text("Звуки событий",Modifier.weight(1f))
                             Switch(checked=events,enabled=!busy,onCheckedChange={ events=it; prefs.edit().putBoolean(AmbienceSettings.EVENTS,it).apply() })
                         }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Человеческие реакции",Modifier.weight(1f))
+                            Switch(checked=humanReactions,enabled=!busy,onCheckedChange={ humanReactions=it
+                                prefs.edit().putBoolean(AmbienceSettings.HUMAN_REACTIONS,it).apply() })
+                        }
+                        Text("Вздохи, смех, плач, крики, стоны, кашель и другие голосовые звуки событий. " +
+                            "Действует сразу и в уже подготовленных книгах. Отдельный переключатель не меняет основной голос, " +
+                            "звуки предметов и фон локаций.",style=MaterialTheme.typography.bodySmall)
                         Text("Короткие звуки того, что происходит в тексте: хлопнула дверь, шаги, шелест бумаг, выстрел — в момент, " +
                             "когда голос до этого доходит. Один звук создаётся на вид действия (дверь, бумаги, вода, посуда) и звучит " +
                             "во всех местах книги, поэтому моментов много, а клипов немного. Нужна книга, подготовленная в этой " +

@@ -71,13 +71,13 @@ object CastCheck {
 
     // ------------------------------------------------------------ votes
 
-    /** Two answers that pick the same characters and merge the same candidates: a third vote cannot change the
-     * majority (every decision already has two of three), so it is not asked. */
+    /** Two answers must agree on both the character groups and their gender before the third vote is redundant. */
     fun sameMerges(a: JSONObject, b: JSONObject, r: BookPreparationPlan.Request): Boolean {
         val own = r.candidates.map { it.id }.toSet()
-        fun groups(answer: JSONObject) = characters(answer).map { raw ->
+        fun groups(answer: JSONObject) = characters(answer).mapNotNull { raw ->
             strings(raw.optJSONArray("candidates")).filter { it in own }.distinct().sorted()
-        }.filter { it.isNotEmpty() }.toSet()
+                .takeIf { it.isNotEmpty() }?.let { it to raw.optString("gender", "?") }
+        }.toSet()
         return groups(a) == groups(b)
     }
 

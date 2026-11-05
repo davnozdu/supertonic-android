@@ -6,6 +6,22 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ReplyMarkingTest {
+    @Test fun recalledSpeechWithoutDashesReachesTheLlmAndItsFemaleVoiceSurvives() {
+        val text = "Будь осторожен, сказала Анна. Здесь опасно."
+        val input = listOf(EpubBook.Paragraph(0, text))
+        val batches = ReplyMarking.batches(listOf(EpubBook.Section("s1", "I")), input, pkg)
+        assertEquals(listOf(listOf(0)), batches.map { it.paragraphs })
+        val answer = """{"paragraphs":[{"id":0,"segments":[{"start":0,"end":2,"role":"female","confidence":"clear"},{"start":2,"end":4,"role":"author","confidence":"clear"},{"start":4,"end":6,"role":"female","confidence":"clear"}]}]}"""
+        val result = ReplyMarking.mark(input, batches, pkg, { answer })
+        assertEquals(1, result.marked)
+        val codes = result.replies.getJSONArray("codes")
+        assertEquals(true, (0 until codes.length()).any { codes.getString(it) == "f" })
+    }
+
+    @Test fun simpleNarrationStillNeedsNoCloudRoleRequest() {
+        assertEquals(false, ReplyMarking.mayHaveSpeech("Вечерело. На улице шёл дождь."))
+        assertEquals(true, ReplyMarking.mayHaveSpeech("Он опасен, сказала она. Не ходи туда."))
+    }
     private val pkg = BookPackage("Т", "", "f", "c", "book", listOf(BookPackage.Section("s1", "I", 0)),
         listOf(BookPackage.Cast(listOf("s1"), listOf(BookPackage.Character("rogozhin", "Рогожин", "m", 1, 1, listOf("Рогожин"), null)), emptyList())),
         emptyMap())

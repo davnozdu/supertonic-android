@@ -43,6 +43,8 @@ object AmbienceSettings {
 
     const val EVENTS = "ambience_events"
     fun events(prefs: SharedPreferences) = prefs.getBoolean(EVENTS, false)
+    const val HUMAN_REACTIONS = "ambience_human_reactions"
+    fun humanReactions(prefs: SharedPreferences) = prefs.getBoolean(HUMAN_REACTIONS, true)
     /** «Громкость звуков событий» (0–100 %, its own slider): by default a little above the location sounds. */
     const val EVENTS_VOLUME = "ambience_events_volume"
     const val DEFAULT_EVENTS_VOLUME = 40

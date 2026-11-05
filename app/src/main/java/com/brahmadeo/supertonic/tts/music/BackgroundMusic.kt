@@ -32,6 +32,9 @@ object BackgroundMusic {
     val status = message.asStateFlow()
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == null || key.startsWith("background_music_") || key.startsWith("ambience_")) handler.post {
+            if ((key == null || key == com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.HUMAN_REACTIONS) &&
+                prefs?.let { !com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.humanReactions(it) } == true)
+                com.brahmadeo.supertonic.tts.ambience.AmbiencePlayer.stopHumanReactions()
             previewVolume = null
             failedTrack = ""
             update()
@@ -248,16 +251,18 @@ object BackgroundMusic {
             val gap = gapMs.toLong()
             // Времена всех размеченных звуков куска: каждый у своего слова, но два звука никогда не начинаются
             // в один миг — даже при наложении они идут чередой (иначе плотный абзац звучит одним слипшимся ударом).
-            val wanted = tag.events.map { (it.word * per - lead).toLong() }
+            // Tags can have been prepared before the switch changed: filter again when they start sounding.
+            val moments = tag.events.filter { !it.humanReaction || S.humanReactions(p) }
+            val wanted = moments.map { (it.word * per - lead).toLong() }
             val starts = com.brahmadeo.supertonic.tts.ambience.EventMix.scheduled(wanted, mix, gap)
             var lastAt = -gap
-            for ((i, moment) in tag.events.withIndex()) {
+            for ((i, moment) in moments.withIndex()) {
                 val at = starts[i]
                 if (!com.brahmadeo.supertonic.tts.ambience.EventMix.allowed(mix, gap, at, lastAt)) continue
                 lastAt = at
                 com.brahmadeo.supertonic.tts.ambience.AmbienceScenes.trace(ctx,
                     "event ${moment.file.name} at word ${moment.word} → ${at} ms (${"%.0f".format(per)} ms/word)")
-                player.oneShot(ctx, moment.file, at, level, mix)
+                player.oneShot(ctx, moment.file, at, level, mix, humanReaction = moment.humanReaction)
             }
         }
     }

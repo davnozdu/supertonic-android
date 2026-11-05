@@ -15,9 +15,9 @@ class LocalSpeakers {
 
     private val dash = Regex("^[\\s\\p{Z}]*[—–-][\\s\\p{Z}]")
     /** ", — " / "! — " / "? — " / "… — " between speech and remark (and back). */
-    private val turn = Regex("(?<=[,.!?…:])[\\s\\p{Z}]+[—–][\\s\\p{Z}]+")
+    private val turn = Regex("(?<=[,.!?…:])[\\s\\p{Z}]+[—–-][\\s\\p{Z}]+")
     // Speech in «…», „…“, “…” or "…" before a dash remark: books and readers use all four.
-    private val quoteLead = Regex("^[\\s\\p{Z}]*(?:«[^»]+»|„[^“”]+[“”]|“[^”]+”|\"[^\"]+\")[,!?…]?(?=[\\s\\p{Z}]+[—–][\\s\\p{Z}])")
+    private val quoteLead = Regex("^[\\s\\p{Z}]*(?:«[^»]+»|„[^“”]+[“”]|“[^”]+”|\"[^\"]+\")[,!?…]?(?=[\\s\\p{Z}]+[—–-][\\s\\p{Z}])")
     private val word = Regex("[А-Яа-яЁё]+")
     private val addressing = setOf("я", "мы", "ты", "вы", "вас", "вам", "вами", "меня", "мне", "мной", "тебя", "тебе", "тобой",
         "нас", "нам", "нами", "ваш", "ваша", "ваше", "ваши", "наш", "наша", "наше", "мой", "моя", "моё", "мое", "твой", "твоя")
@@ -43,12 +43,13 @@ class LocalSpeakers {
         }
         // Who speaks: the first remark naming someone, else the other participant of the dialogue.
         val remark = pieces.filter { !it.second }.joinToString(" ") { it.first }
-        val named = if (remark.isNotBlank()) fromRemark(remark, cast, firstPerson) else null
+        val named = if (remark.isNotBlank()) fromRemark(remark, cast) else null
         // A dash starts a new reply: the other participant. Without it (Readest drops the dash, so a new reply and the
         // next sentence of the same one look alike) the line stays with the current speaker.
         val speaker = named ?: (if (dashed) next() else current ?: next())
         current = speaker
-        if (speaker.role != VoiceRole.AUTHOR) remember(speaker)
+        // A first-person narrator is a real participant in the dialogue, with the author's voice.
+        remember(speaker)
         inSpeech = pieces.last().second
         val parts = pieces.map { (piece, speech) ->
             if (speech) VoiceRoleText(piece, speaker.role, speaker.character) else VoiceRoleText(piece, VoiceRole.AUTHOR)
@@ -129,16 +130,27 @@ class LocalSpeakers {
         return Regex("[А-Яа-яЁё]-с(?![А-Яа-яЁё])").containsMatchIn(t)
     }
 
-    private fun fromRemark(remark: String, cast: List<Person>, firstPerson: Boolean): Speaker? {
-        val words = word.findAll(remark).map { it.value }.toList()
+    private fun fromRemark(remark: String, cast: List<Person>): Speaker? {
+        // Later narration can mention a different character: «сказал я. Анна посмотрела в окно».
+        val head = remark.takeWhile { it !in ".!?…" }
+        val words = word.findAll(head).map { it.value }.take(12).toList()
         val lower = words.map { it.lowercase() }
-        val phrase = " " + lower.joinToString(" ") + " "
+        var named: Pair<Int, Speaker>? = null
         for (person in cast) {
-            // One-word forms by word, several-word forms («Настасья Филипповна») as a phrase.
-            if (person.forms.any { form -> val f = word.findAll(form.lowercase()).joinToString(" ") { it.value }
-                    f.isNotEmpty() && " $f " in phrase }) return Speaker(role(person.gender), person.id)
+            for (form in person.forms) {
+                val tokens = word.findAll(form.lowercase()).map { it.value }.toList()
+                if (tokens.isEmpty() || tokens.size > lower.size) continue
+                val at = (0..lower.size - tokens.size).firstOrNull { lower.subList(it, it + tokens.size) == tokens } ?: continue
+                if (named == null || at < named!!.first) named = at to Speaker(role(person.gender), person.id)
+            }
         }
-        if (firstPerson && "я" in lower) return Speaker(VoiceRole.AUTHOR, null)
+        val pronoun = lower.indexOfFirst { it in listOf("я", "он", "она") }
+        if (pronoun >= 0 && (named == null || pronoun < named!!.first)) return when (lower[pronoun]) {
+            "я" -> Speaker(VoiceRole.AUTHOR, null)
+            "она" -> Speaker(VoiceRole.FEMALE, null)
+            else -> Speaker(VoiceRole.MALE, null)
+        }
+        named?.let { return it.second }
         // The verb or pronoun nearest the dash: «ответил сосед», «сказала она», «— и, ответив, молодой человек оглядел».
         for (w in lower.take(8)) {
             if (w == "он") return Speaker(VoiceRole.MALE, null)
