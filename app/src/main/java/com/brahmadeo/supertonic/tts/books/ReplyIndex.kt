@@ -26,10 +26,11 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
         val words = units.indices.filter { letters(units[it].value).isNotEmpty() }
         if (words.isEmpty()) return null
         val window = ArrayDeque(before.takeLast(WINDOW - 1))
-        val found = words.map { u ->
+        val start = words.take(WINDOW).map { letters(units[it].value) }
+        val found = words.mapIndexed { i, u ->
             window.addLast(letters(units[u].value)); while (window.size > WINDOW) window.removeFirst()
             // Короткое окно — начало куска: там ключ тоже есть, если слова стоят в начале абзаца книги.
-            voiceOf(key(window))
+            voiceOf(key(window)) ?: if (i < WINDOW - 1) voiceOf(startKey(start, i)) else null
         }
         if (found.all { it == null }) return null
         // A word not found takes the voice of the word before it (or, at the start, the first one found).
@@ -61,6 +62,9 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
         /** Lowercase letters and digits of a word (ё → е, no stress marks). */
         fun letters(word: String) = BookFingerprint.letters(word)
         fun key(window: Collection<String>) = BookFingerprint.hash(window.joinToString(" "))
+        /** Separate namespace for the first words of a paragraph: enough following words identify its beginning
+         * when a reader starts here without the preceding paragraph. Ordinary word windows stay unchanged. */
+        private fun startKey(words: List<String>, offset: Int) = BookFingerprint.hash("\u0001start$offset " + words.joinToString(" "))
         /** The words of [text] in reading order (for the window of the next text). */
         fun words(text: String): List<String> = unit.findAll(text).map { letters(it.value) }.filter { it.isNotEmpty() }.toList()
         /** A paragraph that may hold speech; the others are narration and are not in the index (the author reads them). */
@@ -96,6 +100,20 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
                         entries.remove(k); clash += k
                     }
                 }
+                fun putVoice(k: Long, v: Voice) {
+                    if (k in narration && v.role != VoiceRole.AUTHOR) { entries.remove(k); clash += k }
+                    if (k in clash) return
+                    val old = entries.putIfAbsent(k, v)
+                    if (old != null && old != v) { entries.remove(k); clash += k }
+                }
+                val startUnits = unit.findAll(paragraph).filter { letters(it.value).isNotEmpty() }.take(WINDOW).toList()
+                val startWords = startUnits.map { letters(it.value) }
+                for ((i, m) in startUnits.take(WINDOW - 1).withIndex()) {
+                    val k = startKey(startWords, i)
+                    val part = roleAt?.get(m.range.first + m.value.indexOfFirst { it.isLetterOrDigit() })
+                    if (part == null) markNarration(k)
+                    else putVoice(k, Voice(part.role, part.character?.takeIf { part.role != VoiceRole.AUTHOR }))
+                }
                 for (m in unit.findAll(paragraph)) {
                     val w = letters(m.value); if (w.isEmpty()) continue
                     window.addLast(w); while (window.size > WINDOW) window.removeFirst()
@@ -112,10 +130,7 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
                     }
                     val part = roleAt[m.range.first + m.value.indexOfFirst { it.isLetterOrDigit() }] ?: continue
                     val v = Voice(part.role, part.character?.takeIf { part.role != VoiceRole.AUTHOR })
-                    if (k in narration && v.role != VoiceRole.AUTHOR) { entries.remove(k); clash += k }
-                    if (k in clash) continue
-                    val old = entries.putIfAbsent(k, v)
-                    if (old != null && old != v) { entries.remove(k); clash += k }
+                    putVoice(k, v)
                 }
             }
             /** (codes, base64 index) for the package. */

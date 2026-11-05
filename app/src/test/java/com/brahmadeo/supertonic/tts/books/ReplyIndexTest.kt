@@ -7,6 +7,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ReplyIndexTest {
+    @Test fun startingAtADialogueParagraphKeepsItsFirstWordsBeforeTheAuthorRemark() {
+        val text = "— Ну, смелее, — повторил Павел. — Загляни в пакет."
+        val plan = listOf(VoiceRoleText("— Ну, смелее, ", VoiceRole.MALE, "pavel"),
+            VoiceRoleText("— повторил Павел. ", VoiceRole.AUTHOR),
+            VoiceRoleText("— Загляни в пакет.", VoiceRole.MALE, "pavel"))
+        val builder = ReplyIndex.Companion.Builder()
+        builder.add("Повествование перед разговором и несколько предыдущих слов.", null)
+        builder.add(text, plan)
+        val (codes, data) = builder.export()
+        val ready = "— Ну, смеле́е, — повтори́л Па́вел. — Загляни́ в паке́т."
+        val actual = ReplyIndex.parse(codes, data).resolve(ready, emptyList()) { _, _ -> null }!!
+        assertEquals(listOf(VoiceRole.MALE, VoiceRole.AUTHOR, VoiceRole.MALE), actual.map { it.role })
+        assertEquals("— Ну, смеле́е, ", actual.first().text)
+        assertEquals(ready, actual.joinToString("") { it.text })
+    }
     @Test fun sharedFourWordsNeverSpreadCharacterVoiceIntoNarration() {
         val speech = "— И вот ты уже проиграл эту игру."
         val prose = "И вот ты уже думаешь лишь о предстоящей игре и забываешь вчерашнюю обиду."
