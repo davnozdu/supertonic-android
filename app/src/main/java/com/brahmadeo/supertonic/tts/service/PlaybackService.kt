@@ -758,7 +758,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     private fun skipParagraph(direction: Int) {
         val item = activeReadingItem ?: return
         synthesizeAndPlay(item.text, item.lang, item.style, item.speed, item.steps,
-            item.chunks.moveParagraph(currentSentenceIndex, direction))
+            item.chunks.moveParagraph(currentSentenceIndex, direction), item.voiceTest)
     }
 
     fun pause() {
