@@ -70,23 +70,25 @@ object AmbienceBook {
 
     /** Every clip the book needs: its locations' variants, its events and the chapter transition. */
     private fun jobs(context: Context, scenes: SceneIndex): List<Job> {
+        val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
+        val eventPolicy = AmbienceSettings.bankRecipe(prefs, true)
+        val scenePolicy = AmbienceSettings.bankRecipe(prefs, false)
         val n = variants(context, scenes.locations.size)
         val places = scenes.locations.flatMap { loc -> (0 until n).map { k ->
-            Job("${loc.id}_$k.m4a", prompt(loc, k), SECONDS, loc.sound.hashCode().toLong() * 31 + k, loc.id, recipe(loc), loc.name)
+            Job("${loc.id}_$k.m4a", prompt(loc, k), SECONDS, loc.sound.hashCode().toLong() * 31 + k, loc.id, recipe(loc) + " | " + scenePolicy, loc.name)
         } }
         // One clip per kind of action: a door slammed in chapter 1 is the same sound in chapter 30.
         val events = scenes.events.events.groupBy { com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(it) }.map { (key, same) ->
             val prompt = scenes.events.kinds[key.removePrefix("k_")] ?: same.first().sound
             // Всегда 8 с, как клипы базы: ползунок «Длина звука события» обрезает при воспроизведении, и его можно
             // поднять позже без новой генерации.
-            Job("$key.m4a", prompt, EVENT_SECONDS, key.hashCode().toLong(), key, prompt,
+            Job("$key.m4a", prompt, EVENT_SECONDS, key.hashCode().toLong(), key, prompt + " | " + eventPolicy,
                 "событие: " + same.first().kind.ifEmpty { prompt.take(40) })
         }
         val chapter = com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_ID.let { id ->
             Job("$id.m4a", com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, CHAPTER_SECONDS, 1L, id,
                 com.brahmadeo.supertonic.tts.books.EventIndex.CHAPTER_SOUND, "переход главы")
         }
-        val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
         // «Нагнетание напряжения»: три фрагмента настроения — три силы (спокойнее, как есть, напряжённее), плеер
         // выбирает по уровню текста. Рецепт другой — при включении/выключении фрагменты делаются заново.
         val tension = AmbienceSettings.tension(prefs)
@@ -101,12 +103,25 @@ object AmbienceBook {
 
     /** Copies the clips of [job] from the shared bank into the book — all variants of the kind, so the same action
      * sounds different each time (k_door_slam.m4a, k_door_slam_2.m4a, k_door_slam_3.m4a). */
-    private fun adoptFromBank(context: Context, dir: File, job: Job, salt: Int = 0): Boolean {
+    private fun adoptFromBank(context: Context, dir: File, job: Job, salt: Int = 0, cancelled: () -> Boolean = { false }): Boolean {
+        if (!SoundBank.on(context) || job.music) return false
+        if (!job.event) {
+            val target = File(dir, job.file)
+            if (target.isFile && target.length() > 0L) return true
+            val variant = job.file.substringBeforeLast('.').substringAfterLast('_').toIntOrNull() ?: 0
+            val source = OpenSoundBank.scene(context, job.prompt, salt + variant, cancelled) ?: return false
+            val part = File(dir, job.file + ".part")
+            return try {
+                source.copyTo(part, overwrite = true)
+                check(part.renameTo(target))
+                Log.i("Ambience", "real scene ${source.name} -> ${job.file}, full duration")
+                true
+            } finally { part.delete() }
+        }
         if (!job.id.startsWith("k_")) return false
-        if (!SoundBank.on(context)) return false
         val target = File(dir, job.file)
         if (target.isFile && target.length() > 0L) return true
-        val sources = SoundBank.all(context, job.id.removePrefix("k_"), job.prompt)
+        val sources = SoundBank.all(context, job.id.removePrefix("k_"), job.prompt, cancelled)
         var taken = false
         for ((n, source) in sources.withIndex()) {
             val file = if (n == 0) target else File(dir, "${job.id}_${n + 1}.m4a")
@@ -196,16 +211,16 @@ object AmbienceBook {
 
     private fun generateLocked(context: Context, sha: String, scenes: SceneIndex, threads: Int,
                                progress: (Int, Int, String) -> Unit, cancelled: () -> Boolean) {
-        require(AmbienceModel.ready(context)) { "Скачайте генератор фоновых звуков в разделе «Фоновая музыка»" }
         // Music without its model (not downloaded yet) waits for it; the sounds are made now.
         val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
         // «База звуков» first: a clip already made for another book is copied and nothing is generated for it.
         // Версия базы, из которой взяты звуки событий: без неё sync() принял бы их за устаревшие и удалил.
-        val manifest0 = readManifest(context, sha).put("bank", SoundBank.version(context)).put(MUSIC_KEY, MUSIC_VERSION)
+        val manifest0 = readManifest(context, sha).put("bank", SoundBank.version(context)).put(MUSIC_KEY, MUSIC_VERSION).put(LUFS_KEY, Loudness.TARGET_LUFS)
         var reused = 0
         val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
             .filter { job ->
-                if (job.music || !adoptFromBank(context, dir, job, sha.hashCode())) return@filter true
+                if (cancelled()) throw InterruptedException("cancelled")
+                if (job.music || !adoptFromBank(context, dir, job, sha.hashCode(), cancelled)) return@filter true
                 manifest0.put(job.id, job.recipe)
                 reused++
                 false
@@ -215,6 +230,10 @@ object AmbienceBook {
             Log.i("Ambience", "$reused sounds taken from the bank, no generation")
         }
         if (todo.isEmpty()) return
+        if (!AmbienceModel.ready(context)) {
+            Log.i("Ambience", "${todo.size} sounds await a generator; ready bank clips kept")
+            return
+        }
         // Один генератор и одна NPU-сессия на пачку подряд идущих клипов одной модели (малая, средняя для событий,
         // музыка) и одного места счёта DiT.
         val prefs = context.getSharedPreferences("SupertonicPrefs", 0)

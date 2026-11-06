@@ -57,7 +57,7 @@ object SoundBank {
         // Не чаще раза в сутки: версия базы меняется редко, а каждая проверка — скачивание 0,9 МБ.
         val prefs = ctx.getSharedPreferences("SupertonicPrefs", 0)
         val now = System.currentTimeMillis()
-        if (!had || metered || !on(ctx) || now - prefs.getLong("sound_bank_checked_at", 0L) < 24 * 3600_000L) { autoChecking = false; return }
+        if (!had || metered || !legacyOn(ctx) || now - prefs.getLong("sound_bank_checked_at", 0L) < 24 * 3600_000L) { autoChecking = false; return }
         prefs.edit().putLong("sound_bank_checked_at", now).apply()
         Thread({
             runCatching {
@@ -76,15 +76,27 @@ object SoundBank {
 
     /** Тумблер «Брать готовые звуки из базы» (по умолчанию включён). */
     fun on(context: Context): Boolean =
-        AmbienceSettings.soundBank(context.getSharedPreferences("SupertonicPrefs", 0))
+        legacyOn(context) || OpenSoundBank.enabled(context, "events") || OpenSoundBank.enabled(context, "scenes")
+
+    fun legacyOn(context: Context): Boolean = AmbienceSettings.soundBank(context.getSharedPreferences("SupertonicPrefs", 0))
+
+    fun removeLegacy(context: Context) {
+        context.getSharedPreferences("SupertonicPrefs", 0).edit().putBoolean(AmbienceSettings.SOUND_BANK, false).apply()
+        cache = null
+        archives.forEach { File(context.cacheDir, it.name).delete() }
+        archives = emptyList()
+        File(context.filesDir, "sound-bank").deleteRecursively()
+    }
 
     /** Список базы: вид действия -> клип. Кэшируется в files/sound-bank/manifest.json и в памяти. */
     @Synchronized
     fun manifest(context: Context, refresh: Boolean = false): Map<String, Entry> {
+        if (!legacyOn(context)) return emptyMap()
         if (!refresh) cache?.let { return it }
         val file = File(dir(context), "manifest.json")
         if (!file.isFile || refresh) {
             val text = fetch("$BASE/manifest.json", 8L * 1024 * 1024)
+            if (!legacyOn(context)) return emptyMap()
             // Бережём флеш: 0,9 МБ манифеста переписываются, только если на GitHub он действительно изменился.
             if (text != null) runCatching {
                 if (!file.isFile || !file.readBytes().contentEquals(text)) { dir(context).mkdirs(); file.writeBytes(text) }
@@ -136,9 +148,17 @@ object SoundBank {
 
     /** Есть ли такой вид в базе (скачанный или свой): такой звук берётся даже при одном упоминании. */
     fun known(context: Context, kind: String): Boolean =
-        kind.isNotEmpty() && (local(context).containsKey(kind) || manifest(context).containsKey(kind))
+        kind.isNotEmpty() && (OpenSoundBank.known(context, kind) ||
+            (legacyOn(context) && (local(context).containsKey(kind) || manifest(context).containsKey(kind))))
 
-    fun size(context: Context): Int = (manifest(context).keys + local(context).keys).size
+    fun size(context: Context): Int {
+        val keys = cache?.keys ?: runCatching {
+            val file = File(context.filesDir, "sound-bank/manifest.json")
+            val sounds = JSONObject(file.readText()).getJSONArray("sounds")
+            (0 until sounds.length()).map { sounds.getJSONObject(it).getString("key") }.toSet()
+        }.getOrDefault(emptySet())
+        return (keys + local(context).keys).size
+    }
 
     /** Свои и импортированные клипы: вид -> файл (files/sound-bank/index-local.json). */
     fun local(context: Context): Map<String, String> {
@@ -160,6 +180,10 @@ object SoundBank {
 
     /** Клип вида [kind] из базы: уже скачанный или скачанный сейчас (null — нет в базе или нет сети). */
     fun clip(context: Context, kind: String, salt: Int = 0): File? {
+        OpenSoundBank.events(context, kind).let { primary ->
+            if (primary.isNotEmpty()) return primary[Math.floorMod(salt, primary.size)]
+        }
+        if (!legacyOn(context)) return null
         // Своя (и импортированная) часть базы: файл уже на телефоне.
         local(context)[kind]?.let { name -> File(dir(context), name).takeIf { it.isFile && it.length() > 0L } }?.let { return it }
         val entry = manifest(context)[kind] ?: return null
@@ -173,7 +197,9 @@ object SoundBank {
 
     /** Все клипы вида (до трёх вариантов), скачивая недостающие: в книге они звучат по кругу, чтобы одно и то же
      * действие не повторялось одним и тем же звуком. Консервативно: вида нет в базе — пусто (клип будет свой). */
-    fun all(context: Context, kind: String, prompt: String): List<File> {
+    fun all(context: Context, kind: String, prompt: String, cancelled: () -> Boolean = { false }): List<File> {
+        OpenSoundBank.events(context, kind, cancelled).takeIf { it.isNotEmpty() }?.let { return it }
+        if (!legacyOn(context)) return emptyList()
         local(context)[kind]?.let { name -> File(dir(context), name).takeIf { it.isFile && it.length() > 0L } }
             ?.let { return listOf(it) }
         val key = manifest(context)[kind]?.let { kind } ?: run {
@@ -191,6 +217,7 @@ object SoundBank {
      * описания базы должны совпасть почти целиком (иначе — ничего, звук будет сделан заново). */
     fun find(context: Context, kind: String, prompt: String, salt: Int = 0): File? {
         clip(context, kind, salt)?.let { return it }
+        if (!legacyOn(context)) return null
         val words = BankText.tokens("$kind $prompt")
         if (words.isEmpty()) return null
         val bank = manifest(context).mapValues { (key, entry) -> "$key ${entry.prompt}" }
@@ -200,7 +227,7 @@ object SoundBank {
 
     /** Кладёт клип книги в базу (база растёт) — его возьмут следующие книги. */
     fun store(context: Context, kind: String, file: File, custom: Boolean = false) {
-        if (kind.isEmpty() || !file.isFile || file.length() == 0L) return
+        if (!legacyOn(context) || kind.isEmpty() || !file.isFile || file.length() == 0L) return
         runCatching {
             val dir = dir(context).apply { mkdirs() }
             val target = File(dir, "$kind.$FORMAT")
@@ -222,6 +249,7 @@ object SoundBank {
      * отдаёт файл за 100–300 мс. Порядок не важен, sha256 каждого файла проверяется как раньше.
      * [progress] получает счётчик ФАЙЛОВ (готово, всего) и вид — по видам полоса замирала бы на трёх шагах подряд. */
     fun downloadAll(context: Context, progress: (Int, Int, String) -> Unit = { _, _, _ -> }): Int {
+        if (!legacyOn(context)) return 0
         val list = manifest(context, refresh = true)
         if (archives.isNotEmpty() && unzipAll(context, progress)) return list.size
         val variants = list.flatMap { (kind, entry) -> entry.all().map { kind to it } }
@@ -234,6 +262,7 @@ object SoundBank {
             val workers = (1..PARALLEL).map {
                 pool.submit {
                     while (true) {
+                        if (!legacyOn(context)) break
                         val (kind, variant) = queue.poll() ?: break
                         val target = File(dir(context), variant.file)
                         val ok = if (target.isFile && target.length() > 0L) true else download(context, variant) != null
@@ -257,6 +286,7 @@ object SoundBank {
         val total = archives.sumOf { it.bytes }.takeIf { it > 0 } ?: archives.size.toLong()
         var done = 0L
         for ((n, a) in archives.withIndex()) {
+            if (!legacyOn(context)) return false
             val zip = File(context.cacheDir, a.name)
             val ok = runCatching {
                 if (!zip.isFile || (a.bytes > 0 && zip.length() != a.bytes)) {
@@ -275,6 +305,7 @@ object SoundBank {
                 }
                 java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zin ->
                     while (true) {
+                        if (!legacyOn(context)) return false
                         val e = zin.nextEntry ?: break
                         if (e.isDirectory) continue
                         val name = File(e.name).name
@@ -360,7 +391,9 @@ object SoundBank {
     }
 
     private fun download(context: Context, variant: Variant): File? {
+        if (!legacyOn(context)) return null
         val bytes = fetch(variant.url, MAX_CLIP) ?: return null
+        if (!legacyOn(context)) return null
         if (variant.sha.isNotEmpty() && sha256(bytes) != variant.sha) {
             Log.w("SoundBank", "${variant.file}: sha256 не совпал, клип не взят")
             return null

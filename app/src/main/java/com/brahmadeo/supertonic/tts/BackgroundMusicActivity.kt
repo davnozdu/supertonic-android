@@ -406,50 +406,51 @@ class BackgroundMusicActivity : ComponentActivity() {
                                 "из текста; повтор одного и того же действия новых звуков не требует — клип делается один раз на вид " +
                                 "действия.", style=MaterialTheme.typography.bodySmall)
                         }
-                        // «База готовых звуков»: клипы событий, сделанные один раз для всех книг (фон локаций в неё
-                        // не входит — он делается на телефоне). Скачанная база экономит генерацию: книга берёт готовое.
+                        RealBankControls("events", "Новая база: реальные звуки событий",
+                            "Основная база. Короткие реальные записи; если подходящей нет — старая база, когда она включена, затем генератор.", busy)
+                        RealBankControls("scenes", "Фон локаций: реальные записи",
+                            "Лес, улица, помещения и другая обстановка. Готовый фон используется первым, его длительность сохраняется. Если подходящего нет — генератор телефона.", busy)
                         var bankCount by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)) }
                         var bankBusy by remember { mutableStateOf(false) }
                         var bankNote by remember { mutableStateOf("") }
-                        // Полоса загрузки: 678 видов — это 2034 файла, поэтому считаем файлы, а не виды.
                         var bankDone by remember { mutableStateOf(0) }
                         var bankTotal by remember { mutableStateOf(0) }
                         var bankKind by remember { mutableStateOf("") }
-                        var bankOn by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.soundBank(prefs)) }
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                            Text("База готовых звуков событий",Modifier.weight(1f))
-                            Switch(checked=bankOn,enabled=!busy,onCheckedChange={ bankOn=it
-                                prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.SOUND_BANK,it).apply() })
-                        }
-                        Text(if (bankCount > 0) "В базе $bankCount видов" else "Список базы ещё не скачан",
-                            style=MaterialTheme.typography.bodyMedium)
-                        Text("Готовые клипы событий на все книги: двери, бумаги, шаги, вода, посуда, животные, голоса, эмоции — " +
-                            "8 секунд каждый, три варианта на вид. Скачиваются тремя архивами и обновляются сами по Wi-Fi, когда выходит " +
-                            "новая версия. Если готовый звук есть, он используется даже когда действие " +
-                            "упомянуто в книге один раз; если его нет — новый вид создаётся, когда книга упоминает его два раза и больше, и " +
-                            "дописывается в базу с пометкой «сделан для книги». Фон локаций в базу не входит — он делается " +
-                            "на телефоне.", style=MaterialTheme.typography.bodySmall)
+                        var bankOn by remember { mutableStateOf(AmbienceSettings.soundBank(prefs)) }
                         val startedAt=remember { longArrayOf(0L) }
-                        Button(enabled=!bankBusy,onClick={
+                        val loadLegacy: () -> Unit = {
                             bankBusy=true; bankNote=""; bankDone=0; bankTotal=0; bankKind=""
                             startedAt[0]=android.os.SystemClock.elapsedRealtime()
                             scope.launch {
                                 val n=runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                     com.brahmadeo.supertonic.tts.ambience.SoundBank.downloadAll(this@BackgroundMusicActivity) { done, total, kind ->
                                         bankDone=done; bankTotal=total; bankKind=kind
-                                        if (done>0 && done%200==0) Log.i("SoundBank","прогресс $done/$total")
                                     } } }
                                 bankBusy=false
                                 val secs=((android.os.SystemClock.elapsedRealtime()-startedAt[0])/1000).toInt()
                                 bankCount=com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)
-                                bankNote=n.fold({ "Готово: в базе $it видов, файлов $bankDone из $bankTotal, ${secs} с" },
-                                    { "Не удалось: ${it.message ?: it.javaClass.simpleName} (взято $bankDone из $bankTotal)" })
+                                bankNote=n.fold({ "Готово: $it видов, ${secs} с" }, { "Не удалось: ${it.message.orEmpty()}" })
                             }
-                        }) { Text(when {
-                            bankBusy && bankTotal>0 -> "Скачивание… $bankDone из $bankTotal"
-                            bankBusy -> "Скачивание…"
-                            bankCount > 0 -> "Обновить список базы"
-                            else -> "Скачать список базы" }) }
+                        }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                            Text("Старая база: сгенерированные события",Modifier.weight(1f))
+                            Switch(checked=bankOn,enabled=!busy,onCheckedChange={ value ->
+                                bankOn=value; prefs.edit().putBoolean(AmbienceSettings.SOUND_BANK,value).apply()
+                                if (value && !bankBusy) loadLegacy()
+                            })
+                        }
+                        Text("Резерв после реальных записей. Выключенная база не используется и не скачивается. " +
+                            "При включении загружается база; выключение сохраняет файлы до удаления.",style=MaterialTheme.typography.bodySmall)
+                        Text("В старой базе $bankCount видов",style=MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Button(enabled=bankOn && !bankBusy && !busy,onClick=loadLegacy) { Text("Скачать старую базу") }
+                            OutlinedButton(enabled=!bankBusy && !busy,onClick={
+                                bankOn=false; prefs.edit().putBoolean(AmbienceSettings.SOUND_BANK,false).apply()
+                                scope.launch { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.brahmadeo.supertonic.tts.ambience.SoundBank.removeLegacy(this@BackgroundMusicActivity)
+                                }; bankCount=0; bankNote="Старая база удалена" }
+                            }) { Text("Удалить базу") }
+                        }
                         if (bankBusy && bankTotal > 0) {
                             LinearProgressIndicator(progress={ bankDone.toFloat()/bankTotal.coerceAtLeast(1) },
                                 modifier=Modifier.fillMaxWidth())
@@ -475,10 +476,10 @@ class BackgroundMusicActivity : ComponentActivity() {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(enabled=!bankBusy,onClick={
                                 bankExport.launch("sound-bank.zip")
-                            }) { Text("Выгрузить базу") }
+                            }) { Text("Выгрузить старую базу") }
                             OutlinedButton(enabled=!bankBusy,onClick={
                                 bankImport.launch(arrayOf("application/zip","application/octet-stream"))
-                            }) { Text("Импортировать базу") }
+                            }) { Text("Импортировать старую базу") }
                         }
                         Text("Выгрузка: все клипы базы одним zip (manifest.json + файлы). Импорт: тот же zip — приложение " +
                             "спросит, заменить базу целиком или слить; при слиянии одинаковые файлы (по sha256) пропускаются, " +
@@ -686,4 +687,57 @@ private fun compositions(n: Int) = when {
     n % 10 == 1 -> "композиция"
     n % 10 in 2..4 -> "композиции"
     else -> "композиций"
+}
+
+@Composable
+private fun RealBankControls(channel: String, title: String, description: String, busy: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { context.getSharedPreferences("SupertonicPrefs", 0) }
+    val key = if (channel == "events") AmbienceSettings.REAL_EVENTS else AmbienceSettings.REAL_SCENES
+    var enabled by remember(channel) { mutableStateOf(prefs.getBoolean(key, false)) }
+    var count by remember(channel) { mutableIntStateOf(com.brahmadeo.supertonic.tts.ambience.OpenSoundBank.downloaded(context, channel)) }
+    var downloading by remember { mutableStateOf(false) }
+    var done by remember { mutableIntStateOf(0) }
+    var total by remember { mutableIntStateOf(0) }
+    var note by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val load: () -> Unit = {
+        downloading=true; done=0; total=0; note=""
+        scope.launch {
+            val result = runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.brahmadeo.supertonic.tts.utils.ModelDownloadForeground.run(context) {
+                    com.brahmadeo.supertonic.tts.ambience.OpenSoundBank.downloadAll(context, channel) { n, all, _ -> done=n; total=all }
+                }
+            } }
+            count=com.brahmadeo.supertonic.tts.ambience.OpenSoundBank.downloaded(context, channel)
+            downloading=false
+            note=result.fold({ if (enabled) "Готово: $count файлов" else "База выключена" }, { "Не удалось: ${it.message.orEmpty()}" })
+        }
+    }
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+        Text(title,Modifier.weight(1f))
+        Switch(checked=enabled,enabled=!busy,onCheckedChange={ value ->
+            enabled=value; prefs.edit().putBoolean(key,value).apply()
+            if (value && !downloading) load()
+        })
+    }
+    Text(description,style=MaterialTheme.typography.bodySmall)
+    Text("При включении загружается база. Скачано файлов: $count.",style=MaterialTheme.typography.bodySmall)
+    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        Button(enabled=enabled && !downloading && !busy,onClick=load) { Text("Скачать базу") }
+        OutlinedButton(enabled=!busy,onClick={
+            enabled=false; prefs.edit().putBoolean(key,false).apply()
+            scope.launch { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.brahmadeo.supertonic.tts.ambience.OpenSoundBank.remove(context, channel)
+            }; count=0; note="База удалена" }
+        }) { Text("Удалить базу") }
+    }
+    if (downloading) {
+        if (total > 0) LinearProgressIndicator(progress={ done.toFloat()/total },modifier=Modifier.fillMaxWidth())
+        else LinearProgressIndicator(Modifier.fillMaxWidth())
+        Text("Загрузка: $done из $total",style=MaterialTheme.typography.bodySmall)
+    }
+    if (note.isNotBlank()) Text(note,style=MaterialTheme.typography.bodySmall)
+    TextButton(onClick={ context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+        android.net.Uri.parse(com.brahmadeo.supertonic.tts.ambience.OpenSoundBank.LICENSES_URL))) }) { Text("Источники и лицензии") }
 }

@@ -416,9 +416,9 @@ object BookPreparation {
      * book's card. Never fails the preparation: the book without sounds plays the music. */
     private fun generateSounds(ctx: Context, pkg: BookPackage, cancel: LlmProviders.CloudCancellation, startedAt: Long,
                                stop: () -> Boolean = { runCatching { cancel.check() }.isFailure }): String {
-        if (!com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx)) return "Звуки не созданы: скачайте генератор в разделе «Фоновая музыка» и создайте их в карточке книги. "
         return try {
-            if (com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(ctx.getSharedPreferences("SupertonicPrefs", 0)) &&
+            if (com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx) &&
+                com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(ctx.getSharedPreferences("SupertonicPrefs", 0)) &&
                 !com.brahmadeo.supertonic.tts.ambience.AmbienceModel.musicReady(ctx)) runBlocking {
                 com.brahmadeo.supertonic.tts.ambience.AmbienceModel.download(ctx) { text, _ -> soundLine = text; mutable.value = mutable.value.copy(sounds = text) }
             }
@@ -428,7 +428,11 @@ object BookPreparation {
                     mutable.value = mutable.value.copy(sounds = soundLine) },
                 cancelled = stop)
             com.brahmadeo.supertonic.tts.ambience.NpuNightJob.schedule(ctx)
-            "Фоновые звуки созданы. " + (com.brahmadeo.supertonic.tts.ambience.AmbienceModel.takeLowMemory()?.let { "$it " } ?: "")
+            val remaining = com.brahmadeo.supertonic.tts.ambience.AmbienceBook.missing(ctx, pkg.contentSha256, pkg.scenes).size
+            (if (remaining > 0 && !com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx))
+                "Готовые звуки взяты из баз; для $remaining недостающих скачайте генератор фоновых звуков. "
+             else "Фоновые звуки созданы. ") +
+                (com.brahmadeo.supertonic.tts.ambience.AmbienceModel.takeLowMemory()?.let { "$it " } ?: "")
         } catch (e: InterruptedException) { throw CancellationException("stopped")
         } catch (e: Exception) { report(ctx, e); "Фоновые звуки не созданы (${e.javaClass.simpleName}); можно повторить в карточке книги. " }
     }
