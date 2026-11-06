@@ -1,0 +1,389 @@
+RECORD	0080	apartment	241.6	Paris Apartment. Closed Window.
+RECORD	0081	apartment	243.4	Paris Apartment. Open Window
+RECORD	0090	train	131.2	Metro, Paris #1
+RECORD	0092	train	54.5	Metro, Paris #2
+RECORD	0093	train	36.9	Metro corridor, Paris #1
+RECORD	0100	forest	54.358005	Forest
+RECORD	0107	church	9.472993	Church Square
+RECORD	0108	unclassified	17.832993	Manifestation #1
+RECORD	0110	farm	75.510998	Campaign at night #1
+RECORD	0114	farm	46.649002	Campaign at night #2
+RECORD	0122	road	77.02	Highway
+RECORD	0123	road	55.703991	Under a highway bridge
+RECORD	0124	rain	42.770998	Rain and Thunder #1
+RECORD	0130	market	68.336009	Flea #1
+RECORD	0131	market	48.576009	Flea #2
+RECORD	0132	unclassified	75.603991	Tractor #1
+RECORD	0133	unclassified	115.867007	Tractor #2
+RECORD	0136	forest	152.416009	Rambouillet forest
+RECORD	0146	wind	78.552993	Strong Wind #1
+RECORD	0147	wind	105.0	Whistling of the Wind #1
+RECORD	0152	wind	49.643991	Strong wind #2
+RECORD	0153	wind	127.826009	Strong wind #3
+RECORD	0154	wind	51.339002	Strong wind #4
+RECORD	0155	wind	43.258005	Whistling of the Wind #2
+RECORD	0171	unclassified	52.825011	Woman Takes a Shower
+RECORD	0210	unclassified	146.192993	Salzburg at 10pm
+RECORD	0212	unclassified	127.57	Car micheline
+RECORD	0222	birds	174.822993	Birds Waking #1
+RECORD	0265	sea	57.237007	Beach: Small Waves
+RECORD	0266	sea	57.840998	Sea: Waves
+RECORD	0267	sea	57.561995	Sea Waves with Tern Calls
+RECORD	0282	unclassified	17.949002	Henhouse
+RECORD	0315	birds	126.525011	Birds at Night
+RECORD	0333	unclassified	33.808005	Heavy Atmosphere of Science Fiction
+RECORD	0370	street	27.793991	Children in the Street
+RECORD	0423	unclassified	100.123991	Washing machine
+RECORD	0480	restaurant	94.040998	Atmosphere Bar #2
+RECORD	0481	restaurant	29.233991	Atmosphere Bar #2
+RECORD	0502	office	58.722993	Noisy office industry
+RECORD	0503	unclassified	120.0	Industry Workshop
+RECORD	0504	unclassified	54.59	Technical room of an industry
+RECORD	0505	unclassified	60.022993	Car, Interior, 80km/h
+RECORD	0506	church	298.491995	Office cathedral of Chartres
+RECORD	0515	unclassified	77.67	Indoor riding arena
+RECORD	0526	street	94.389002	Pedestrian Place
+RECORD	0527	street	72.422993	Small pedestrian street
+RECORD	0544	park	140.990998	Lecocq Garden in Clermont-Ferrand
+RECORD	0598	church	79.272993	Cathedral: Voice and Organ
+RECORD	0602	street	65.085011	Pedestrian plaza #2
+RECORD	0604	unclassified	286.092993	Underground parking
+RECORD	0608	street	126.27	Street and Roads
+RECORD	0624	restaurant	90.440998	Restaurant
+RECORD	0625	wind	90.767007	Strong Wind in a Village
+RECORD	0631	unclassified	73.375011	Roadworks #1
+RECORD	0634	station	238.678005	Gare du Nord, Paris
+RECORD	0635	train	76.509002	Eurostar car
+RECORD	0636	train	215.341995	Eurostar car in a tunnel
+RECORD	0637	train	160.287007	Eurostar toilet
+RECORD	0638	station	68.312993	Dock Station King's Cross St. Pancras (London)
+RECORD	0639	station	128.336009	King's Cross St. Pancras Station (London)
+RECORD	0640	street	171.92	Chinese New Year on a street in London
+RECORD	0641	street	157.849002	London Street
+RECORD	0642	unclassified	164.629002	Intermission at the Palace Theater
+RECORD	0643	street	67.779002	London Street #2
+RECORD	0644	unclassified	261.223991	London bus
+RECORD	0645	unclassified	173.103991	Parade in London
+RECORD	0646	unclassified	154.946009	Small shopping arcade in London
+RECORD	0647	station	134.49	Dock Gare du Nord, Paris
+RECORD	0659	wind	115.472993	Wind in a Tree
+RECORD	0680	street	80.828005	Paris by Night
+RECORD	0681	unclassified	79.528005	Evening with Friends: Sofia Coppola
+RECORD	0684	crowd	120.349002	Walla Group: Averages Discussions
+RECORD	0685	crowd	114.821995	Walla Group: Strong Discussions
+RECORD	0694	unclassified	108.669002	Boat - Foredeck
+RECORD	0695	unclassified	105.232993	Boat - Lower deck in front
+RECORD	0696	unclassified	88.211995	Boat - Lower deck in rearward
+RECORD	0697	unclassified	91.253991	Boat - Back deck
+RECORD	0698	sea	166.765011	Sea Waves
+RECORD	0699	forest	40.147007	Forests of Gironde, France
+RECORD	0700	unclassified	21.570998	Boat - Cabin
+RECORD	0716	street	39.52	Suburb of Toulouse
+RECORD	0740	rain	157.965011	Rain and Thunder #2
+RECORD	0749	unclassified	524.469002	Metallurgical factory
+RECORD	0750	apartment	86.819002	Inside a House
+RECORD	0754	birds	32.321995	Crows #1
+RECORD	0755	park	77.856009	Urban undergrowth
+RECORD	0812	unclassified	9.009002	Applause about 25-50 people #1
+RECORD	0814	unclassified	9.751995	Applause Bbout 25-50 People #3
+RECORD	0815	unclassified	9.333991	Applause about 25-50 people #4
+RECORD	0817	unclassified	54.288005	Two Cats Fighting
+RECORD	0820	rain	209.49	Rain and thunder in a tent
+RECORD	0821	unclassified	75.627007	Small herd of goats
+RECORD	0822	unclassified	72.143991	Many flies
+RECORD	0824	pool	151.091995	Outdoor pool in Spain
+RECORD	0825	crowd	80.340998	Spanish crowd
+RECORD	0827	unclassified	421.999002	Beginning of a procession, Spain
+RECORD	0828	unclassified	135.186009	Muixeranga
+RECORD	0869	unclassified	144.196009	Country town #1
+RECORD	0870	unclassified	111.85	Country town #2
+RECORD	0871	river	69.751995	Small dam
+RECORD	0874	unclassified	148.792993	Motherhood: Corridor
+RECORD	0888	unclassified	147.609002	Motocross circuit
+RECORD	0898	farm	72.4	Countryside #2
+RECORD	0907	wind	180.117007	Wind in shrub
+RECORD	0908	wind	85.123991	Wind in Tall Grass
+RECORD	0909	unclassified	161.007007	Bus stop in Japan
+RECORD	0910	street	183.507007	Crossroads in Japan
+RECORD	0911	farm	150.023991	Campaign afternoon
+RECORD	0912	farm	168.066009	Campaign Morning
+RECORD	0913	unclassified	61.671995	Fountain of a Japanese Temple
+RECORD	0914	unclassified	128.660998	Excavator
+RECORD	0915	sea	132.446009	Slightly Agitated Sea
+RECORD	0934	unclassified	126.247007	100 Meters from the Stall
+RECORD	0948	unclassified	128.429002	Tractor and shredder
+RECORD	0949	unclassified	32.275011	Tractor and baler
+RECORD	0953	unclassified	191.03	Passage of a combine harvester #1
+RECORD	0954	unclassified	329.398005	Passage of a combine harvester #2
+RECORD	0958	farm	67.129002	Pheasant and soundscape campaign
+RECORD	0991	farm	235.055011	Barn with cows #1
+RECORD	0992	farm	124.852993	Barn with cows #2
+RECORD	0993	farm	76.115011	Barn with cows #3
+RECORD	0997	unclassified	90.231995	Frogs #1
+RECORD	0998	unclassified	149.373991	Frogs #2
+RECORD	0999	birds	245.249002	Birds Waking #3
+RECORD	1003	park	81.292993	Children in the garden of plants
+RECORD	1004	unclassified	112.338005	Hall of the monkeys of the menagerie of Paris
+RECORD	1005	unclassified	80.759002	Fauverie of the menagerie of Paris
+RECORD	1006	unclassified	90.440998	Hall of reptiles of the menagerie of Paris
+RECORD	1015	birds	38.266009	Swallows #1
+RECORD	1016	birds	6.222993	Swallows #2
+RECORD	1018	unclassified	39.799002	Lawn tractors #1
+RECORD	1046	sea	137.578005	Small Waves Facing the Ocean
+RECORD	1047	sea	89.838005	Small Waves Back to the Ocean
+RECORD	1051	wind	152.693991	Wind and tree squeaks
+RECORD	1053	unclassified	54.659002	Song of the common midwife toad #1
+RECORD	1054	unclassified	51.989002	Song of the common midwife toad #2
+RECORD	1059	sea	82.662993	Beach and Sea
+RECORD	1066	unclassified	211.602993	Evening in Gironde, France
+RECORD	1072	unclassified	502.270998	School Playground, Football
+RECORD	1078	road	234.428005	Parisian ring road, tunnel
+RECORD	1079	road	80.039002	Parisian ring road, cockpit
+RECORD	1080	road	76.323991	Parisian Ring Road #1
+RECORD	1081	unclassified	185.736009	Parisian paved square, fountain
+RECORD	1082	park	145.566009	Parisian park, children's games
+RECORD	1097	farm	204.241995	Wind in a cornfield
+RECORD	1163	unclassified	62.926009	Entrance to Thoiry zoo
+RECORD	1164	unclassified	98.22	Australian aviary of Thoiry zoo #1
+RECORD	1165	unclassified	114.961995	Australian aviary of Thoiry zoo #2
+RECORD	1166	unclassified	121.230998	Glass tunnel of lions of Thoiry zoo
+RECORD	1167	park	166.556009	Safari Air Park of Thoiry Zoo #1
+RECORD	1168	park	95.666009	Safari Air Park of Thoiry Zoo #2
+RECORD	1210	pool	350.389002	Indoor pool #1
+RECORD	1211	pool	156.362993	Indoor pool #2
+RECORD	1346	street	242.903991	Village, city center #1
+RECORD	1347	street	215.712993	Village, City Center #2
+RECORD	1348	forest	411.597007	Forest #2
+RECORD	1349	unclassified	326.262993	Froux peat bogs
+RECORD	1350	farm	233.43	Fields of rapeseed
+RECORD	1376	unclassified	67.245011	Bunny hutch
+RECORD	1377	unclassified	16.648005	Goat and Young Goat
+RECORD	1438	street	406.510998	Downtown of Maintenon, France
+RECORD	1439	forest	343.26	Forest, France #1
+RECORD	1440	forest	273.368005	Forest, France #2
+RECORD	1445	sea	235.009002	Small waves, rocks and beach
+RECORD	1447	sea	97.616009	Small Waves, Froth and Beach
+RECORD	1448	sea	373.655011	Small waves and beach #2
+RECORD	1449	unclassified	200.340998	Truck, maneuvering and unloading
+RECORD	1450	wind	118.166009	Strong wind and trees #1
+RECORD	1451	wind	372.493991	Strong wind and trees #2
+RECORD	1452	wind	207.029002	Strong wind and trees #3
+RECORD	1453	unclassified	41.121995	Rollercoaster, Goudurix #1
+RECORD	1454	unclassified	39.960998	Rollercoaster, Goudurix #2
+RECORD	1455	unclassified	41.819002	Rollercoaster, Goudurix #3
+RECORD	1456	unclassified	24.333991	Rollercoaster, OzIris #1
+RECORD	1457	unclassified	41.819002	Rollercoaster, Goudurix #4
+RECORD	1458	unclassified	26.47	Rollercoaster, OzIris #2
+RECORD	1459	unclassified	23.753991	Rollercoaster, OzIris #3
+RECORD	1460	unclassified	23.753991	Rollercoaster, OzIris #4
+RECORD	1461	unclassified	12.282993	Aquatic attraction, Menhir Express
+RECORD	1462	unclassified	111.897007	Attraction, flying chairs
+RECORD	1469	farm	150.419002	Campaign at night #3
+RECORD	1470	unclassified	151.556009	Nocturnal Insects #4
+RECORD	1536	unclassified	401.078005	Sawmill #1
+RECORD	1537	unclassified	377.300998	Sawmill #2
+RECORD	1538	unclassified	215.341995	Sawmill #3
+RECORD	1636	unclassified	212.23	Roadworks #3
+RECORD	1637	unclassified	85.287007	Roadworks #4
+RECORD	1638	unclassified	190.798005	Roadworks #5
+RECORD	1700	unclassified	62.251995	Kindergarten bus
+RECORD	1701	unclassified	63.808005	Kindergarten bus #2
+RECORD	1711	unclassified	28.652993	Elevator, 3 floors
+RECORD	1713	street	116.796009	Little Parisian Street
+RECORD	1714	wind	112.686009	Wind from inside #1
+RECORD	1716	wind	148.398005	Wind from Inside #3
+RECORD	1859	birds	236.309002	Evening Birds
+RECORD	1880	farm	299.119002	Campaign at Night #4
+RECORD	1903	birds	63.437007	Starlings, few
+RECORD	1904	birds	68.406009	Starlings, many
+RECORD	1905	birds	50.898005	Starlings, numerous
+RECORD	1906	birds	377.835011	Birds Waking #4
+RECORD	1907	birds	44.093991	Baby birds in a nest #1
+RECORD	1908	birds	24.195011	Baby birds in a nest #2
+RECORD	1911	farm	104.581995	Countryside #3
+RECORD	2129	unclassified	1013.528005	Halloween Soundscape #1
+RECORD	2130	unclassified	496.163991	Halloween Soundscape #2
+RECORD	2372	street	53.847007	Cheerful Street
+RECORD	2387	apartment	232.291995	Apartment Closed Window
+RECORD	2388	apartment	225.650998	Apartment open window
+RECORD	2442	unclassified	21.617007	French-speaking hikers
+RECORD	2457	park	72.446009	City garden atmosphere
+RECORD	2479	unclassified	6.478005	Applause Concert Bar #1
+RECORD	2480	unclassified	7.268005	Applause concert bar #2
+RECORD	2481	unclassified	2.647007	Applause concert bar #3
+RECORD	2482	unclassified	2.298005	Applause Concert Bar #4
+RECORD	2483	unclassified	3.459002	Applause concert bar #5
+RECORD	2484	unclassified	7.987007	Applause concert bar #6
+RECORD	2485	unclassified	9.333991	Applause concert bar #7
+RECORD	2486	unclassified	7.940998	Applause Concert Bar #8
+RECORD	2487	unclassified	9.729002	Applause concert bar #9
+RECORD	2561	restaurant	242.788005	Coffee Shop at the Capucins
+RECORD	2562	market	283.028005	Hall of the Capuchins
+RECORD	2563	unclassified	142.151995	In front of the Capucins
+RECORD	2564	sea	210.698005	Sea of the beach of Dellec #1
+RECORD	2565	sea	285.466009	Sea of the Beach of Dellec #2
+RECORD	2567	sea	348.112993	Sea of the beach of Dellec #4
+RECORD	2570	unclassified	332.718005	Cliff #1
+RECORD	2572	unclassified	320.017007	Cliff #2
+RECORD	2573	harbor	114.056009	Gulls on the Harbor
+RECORD	2673	unclassified	35.549002	Games room #1
+RECORD	2674	unclassified	154.110998	Old merry-go-round
+RECORD	2675	unclassified	66.152993	Games room #2
+RECORD	2676	street	95.410998	Lourdes pedestrian street
+RECORD	2677	unclassified	46.671995	Group of Asian tourists
+RECORD	2678	church	147.933991	Square of the Basilica of Lourdes
+RECORD	2679	rain	31.253991	Rain Under an Umbrella
+RECORD	2682	unclassified	71.68	Atmosphere: "Muchas Bandas" #1
+RECORD	2683	unclassified	85.773991	Atmosphere: "Muchas Bandas" #2
+RECORD	2684	forest	1487.121995	Forest, France #3
+RECORD	2714	forest	229.575011	Forest and stream #2
+RECORD	2715	forest	160.611995	Forest #3
+RECORD	2716	forest	218.661995	Forest and Stream #3
+RECORD	2717	rain	40.286009	Rain and Thunder #3
+RECORD	2720	crowd	71.958005	Average Middle School Discussions
+RECORD	2723	station	112.129002	Train in Station #1
+RECORD	2724	station	143.870998	Train in station #2
+RECORD	2725	station	199.923991	Train in station #3
+RECORD	2726	station	111.897007	Train in station #4
+RECORD	2728	market	199.018005	Outdoor Market #1
+RECORD	2730	market	198.577007	Outdoor market #3
+RECORD	2731	unclassified	97.036009	Vehicle Siren
+RECORD	2732	unclassified	234.916009	2 helicopters, start and takeoff #1
+RECORD	2733	unclassified	232.199002	2 helicopters, start and takeoff #2
+RECORD	2734	unclassified	172.849002	2 helicopters, landing and takeoff #1
+RECORD	2735	unclassified	202.965011	2 helicopters, landing and takeoff #2
+RECORD	2736	unclassified	170.433991	2 helicopters, landing and takeoff #3
+RECORD	2737	unclassified	193.027007	2 helicopters, landing and takeoff #4
+RECORD	2738	unclassified	184.157007	2 helicopters, landing and takeoff #5
+RECORD	2739	unclassified	201.828005	2 helicopters, landing and takeoff #6
+RECORD	2741	unclassified	269.56	Recreation kindergarten #2
+RECORD	2742	unclassified	270.000998	Recreation kindergarten #3
+RECORD	2743	unclassified	231.805011	Recreation kindergarten #4
+RECORD	2744	unclassified	148.979002	Recreation kindergarten #5
+RECORD	2745	unclassified	121.741995	Recreation kindergarten #6
+RECORD	2748	unclassified	262.291995	Recreation kindergarten #8
+RECORD	2749	forest	225.882993	Forest #4
+RECORD	2750	unclassified	28.931995	Chainsaw and falling tree
+RECORD	2754	river	321.572993	Mountain stream #1
+RECORD	2755	river	289.110998	Mountain stream #2
+RECORD	2756	river	231.619002	Mountain stream #3
+RECORD	2759	unclassified	49.341995	Cycling - Peloton passage #1
+RECORD	2760	street	19.712993	Gendarmerie motorcycle crossing
+RECORD	2761	unclassified	95.178005	Cycling - Peloton passage #2
+RECORD	2762	street	157.965011	City center #1
+RECORD	2789	church	153.855011	Mass: Organ and singing #1
+RECORD	2790	church	5.130998	Mass: Amen
+RECORD	2791	church	61.718005	Mass: Organ and singing #2
+RECORD	2792	church	567.912993	Mass: Organ and singing #3
+RECORD	2793	church	333.74	Mass: Organ, singing and exit
+RECORD	2794	church	79.876009	Mass: Exit
+RECORD	2795	church	306.781995	Mass: Exit and bells
+RECORD	2848	unclassified	45.440998	WW2 trucks, passage #1
+RECORD	2849	unclassified	28.467007	WW2 trucks, passage #2
+RECORD	2850	unclassified	31.625011	WW2 trucks, passage #3
+RECORD	2968	crowd	234.196009	Outside Talks #1
+RECORD	2969	crowd	134.257007	Outside Talks #2
+RECORD	2970	crowd	239.582993	Outside talks #3
+RECORD	2971	unclassified	70.588005	Herd of 300 sheep #1
+RECORD	2972	unclassified	97.430998	Herd of 300 Sheep #2
+RECORD	2980	unclassified	78.437007	Manifestation #2
+RECORD	2981	unclassified	61.671995	Manifestation #3
+RECORD	2982	unclassified	52.731995	Manifestation #4
+RECORD	2983	unclassified	40.332993	Manifestation #5
+RECORD	3002	unclassified	48.482993	Cicadas
+RECORD	3009	unclassified	39.567007	Steam Locomotive, Passage
+RECORD	3018	train	224.978005	Steam Locomotive #2
+RECORD	3027	road	241.719002	Parisian ring road #2
+RECORD	3028	station	134.721995	Gantry gates at St Lazare station
+RECORD	3029	station	178.515011	Soundscape at St Lazare station
+RECORD	3030	street	136.208005	Parisian crossing #1
+RECORD	3031	street	201.850998	Parisian crossing #2
+RECORD	3032	station	157.106009	Metro station entrance
+RECORD	3039	train	66.152993	Metro: Stopping and starting #1
+RECORD	3041	train	69.265011	Metro: Stopping and starting #2
+RECORD	3042	train	133.722993	Recent metro, interior
+RECORD	3085	forest	97.245011	Forest #5
+RECORD	3094	crowd	57.33	Outside Talks #4
+RECORD	3095	crowd	145.263991	Outside talks #5
+RECORD	3096	crowd	97.756009	Outside Talks #6
+RECORD	3188	street	175.820998	City center of Nogent le Rotrou, France #1
+RECORD	3189	street	143.615011	City Center of Nogent le Rotrou, France #2
+RECORD	3203	unclassified	164.629002	Mountain, Evening #1
+RECORD	3220	unclassified	120.465011	Flock of Sheep and Cows
+RECORD	3221	unclassified	108.273991	Cows in a stable
+RECORD	3222	river	147.725011	Mountain Stream #7
+RECORD	3224	unclassified	95.410998	Wind turbine, contact #1
+RECORD	3225	unclassified	105.14	Wind turbine, contact #2
+RECORD	3226	unclassified	139.668005	Wind turbine #5
+RECORD	3344	street	231.596009	Crossing at Levallois-Perret #1
+RECORD	3345	street	217.478005	Crossing at Levallois-Perret #2
+RECORD	3346	market	106.741995	Covered market #1
+RECORD	3347	market	205.218005	Covered market #2
+RECORD	3348	market	210.372993	Covered market #3
+RECORD	3349	market	173.29	Covered market #4
+RECORD	3372	unclassified	13.467007	Tram passing #2
+RECORD	3373	unclassified	18.158005	Tram passing #3
+RECORD	3374	unclassified	13.931995	Tram Passing #4
+RECORD	3375	unclassified	13.513991	Tram passing #5
+RECORD	3376	restaurant	157.988005	Restaurant #2
+RECORD	3377	restaurant	88.607007	Restaurant #3
+RECORD	3378	market	169.575011	Outdoor Market #2
+RECORD	3379	market	140.318005	Outdoor Market #3
+RECORD	3380	market	248.198005	Outdoor Market #4
+RECORD	3381	market	321.828005	Outdoor Market #5
+RECORD	3382	unclassified	82.360998	Manifestation #6
+RECORD	3383	unclassified	93.041995	Manifestation #7
+RECORD	3384	unclassified	384.591995	Batucada
+RECORD	3385	unclassified	128.823991	Manifestation #8
+RECORD	3386	unclassified	113.499002	Manifestation #9
+RECORD	3387	unclassified	71.726009	Manifestation #10
+RECORD	3388	unclassified	106.300998	Manifestation #11
+RECORD	3389	unclassified	268.817007	Manifestation #12
+RECORD	3390	unclassified	141.479002	Manifestation #13
+RECORD	3391	unclassified	169.412993	Manifestation #14
+RECORD	3414	unclassified	31.277007	Passage of a train #5
+RECORD	3415	unclassified	58.607007	Passage of a train #7
+RECORD	3416	unclassified	35.502993	Passage of a train #6
+RECORD	3431	unclassified	178.583991	Chambord Castle, France #1
+RECORD	3432	unclassified	197.392993	Chambord Castle, France #2
+RECORD	3433	unclassified	173.011995	Chambord Castle, France #3
+RECORD	3436	unclassified	17.577007	Car honking at 90 km/h #1
+RECORD	3437	unclassified	11.191995	Car honking at 90 km/h #2
+RECORD	3438	unclassified	7.105011	Car Honking at 90 km/h #3
+RECORD	3515	crowd	108.135011	Crowd of 50-60 People #1
+RECORD	3516	crowd	200.458005	Crowd of 50-60 People #2
+RECORD	3517	unclassified	31.671995	Applause from 40 People #1
+RECORD	3518	unclassified	8.87	Applause from 40 People #2
+RECORD	3519	unclassified	14.28	Applause from 40 People #3
+RECORD	3520	unclassified	21.733991	Applause from 40 People #4
+RECORD	3521	unclassified	8.172993	Applause from 40 People #5
+RECORD	3522	unclassified	15.186009	Applause from 40 People #6
+RECORD	3523	unclassified	15.325011	Applause from 40 People #7
+RECORD	3525	train	142.57	Tram Interior #1
+RECORD	3526	unclassified	96.618005	Urban Works #1
+RECORD	3538	unclassified	12.608005	Tram Starts and Departs #1
+RECORD	3539	unclassified	20.781995	Tram Passing #1
+RECORD	3540	unclassified	18.39	Tram Starts and Departs #2
+RECORD	3541	unclassified	32.02	Tram Passing #2
+RECORD	3542	restaurant	164.071995	Small Restaurant Conversations
+RECORD	3559	unclassified	35.572993	Troglodyte and other
+RECORD	3573	birds	121.928005	Barn Swallows in the City #2
+RECORD	3574	birds	204.428005	Barn Swallows in the City #3
+RECORD	3575	birds	87.4	Birds in the City #1
+RECORD	3577	unclassified	26.260998	Garbage truck #1
+RECORD	3578	unclassified	151.671995	Garbage truck #2
+RECORD	3592	station	154.620998	Montparnasse Station, Paris
+RECORD	3599	unclassified	127.012993	Pinball and arcade show ambience #1
+RECORD	3600	unclassified	164.001995	Pinball and arcade show ambience #2
+RECORD	3616	forest	121.045011	Forest ambience, sika deer rut calls
+QUERY	high penthouse by a floor-to-ceiling glass wall, soft carpet, distant muffled city far below	0080
+QUERY	narrow stone ledge high on a skyscraper, wind buffeting wall, faint city traffic far below	0680,1438,1713
+QUERY	open balcony high above the city, steady wind rushing past railing, faint traffic below	0680,1438
+QUERY	quiet forest with birds	1439,1440,2715,2749
+QUERY	forest at midnight	0699
+QUERY	sea waves on beach	0265,0267,0698,1046,1047,1059,1445,1447,1448
+QUERY	mountain stream	2754,2755,2756,3222
+QUERY	outdoor market	2728,2730,3378,3379,3380,3381
+QUERY	restaurant without music	0480,0624,3376,3377,3542
+QUERY	city street traffic	0680,1713
+QUERY	medieval street with horses	

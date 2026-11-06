@@ -16,7 +16,8 @@ object OpenSoundBank {
     private const val RETRY_MS = 10 * 60_000L
     private data class Clip(val id: String, val file: String, val url: String, val sha: String, val bytes: Long,
                             val kinds: Set<String>, val concepts: Set<String>, val tags: Set<String>,
-                            val archiveUrl: String, val archiveBytes: Long, val archiveSha: String)
+                            val archiveUrl: String, val archiveBytes: Long, val archiveSha: String,
+                            val title: String, val seconds: Double)
     private val catalogs = ConcurrentHashMap<String, List<Clip>>()
     private val attempted = ConcurrentHashMap<String, Long>()
     private val locks = ConcurrentHashMap<String, Any>()
@@ -58,7 +59,7 @@ object OpenSoundBank {
                 (url.isNotEmpty() && !url.startsWith("$BASE/")) ||
                 (url.isEmpty() && (!archiveUrl.startsWith("$BASE/") || archiveBytes !in 1..1024L * 1024 * 1024 ||
                     !archiveSha.matches(Regex("[a-fA-F0-9]{64}")))) || bytes !in 1..256L * 1024 * 1024) null
-            else Clip(s.getString("id"), name, url, sha, bytes, strings(s, "kinds"), strings(s, "concepts"), strings(s, "match_tags"), archiveUrl, archiveBytes, archiveSha)
+            else Clip(s.getString("id"), name, url, sha, bytes, strings(s, "kinds"), strings(s, "concepts"), strings(s, "match_tags"), archiveUrl, archiveBytes, archiveSha, s.optString("title"), s.optDouble("seconds", 0.0))
         }
     }
 
@@ -184,17 +185,17 @@ object OpenSoundBank {
         } finally { c.disconnect() }
     }
 
-    fun known(ctx: Context, kind: String): Boolean = catalog(ctx, "events").any { kind in it.kinds }
+    fun known(ctx: Context, kind: String): Boolean = catalog(ctx, "events").any { OpenEventMatch.matches(kind, it.id, it.kinds) }
 
     fun events(ctx: Context, kind: String, cancelled: () -> Boolean = { false }): List<File> {
-        val matching = catalog(ctx, "events").filter { kind in it.kinds }
+        val matching = catalog(ctx, "events").filter { OpenEventMatch.matches(kind, it.id, it.kinds) }
         // Several takes, never an arbitrary similar event (cry of pain is not sobbing).
         return matching.take(3).mapNotNull { clip(ctx, "events", it, cancelled) }
     }
 
     fun scene(ctx: Context, prompt: String, salt: Int, cancelled: () -> Boolean = { false }): File? {
         val clips = catalog(ctx, "scenes")
-        val matching = OpenBankMatch.scenes(prompt, clips.map { OpenBankMatch.Scene(it.id, it.concepts, it.tags) })
+        val matching = OpenBankMatch.scenes(prompt, clips.map { OpenBankMatch.Scene(it.id, it.concepts, it.tags, it.title, it.seconds) })
         if (matching.isEmpty()) return null
         val offset = Math.floorMod(salt, matching.size)
         for (i in matching.indices) {
