@@ -599,7 +599,7 @@ class MainActivity : ComponentActivity() {
                                     com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.save(this@MainActivity,
                                         com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR, it.removeSuffix(".json"))
                                 }
-                                val resetIntent = Intent(this, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
+                                val resetIntent = Intent(this@MainActivity, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
                                 startService(resetIntent)
                             }
                             } catch(t: kotlinx.coroutines.CancellationException) { throw t }
