@@ -46,7 +46,7 @@ object OpenBankMatch {
             has("station", "gare") -> "station"
             has("metro", "tram", "eurostar", "train", "locomotive") -> "train"
             has("highway", "motorway") || "ring road" in title.lowercase() -> "road"
-            has("harbor", "harbour") -> "harbor"
+            has("harbor", "harbour") && !has("gulls", "birds", "swallows") -> "harbor"
             has("garden", "park", "undergrowth") -> "park"
             has("office") -> "office"
             has("pool") -> "pool"
@@ -54,7 +54,7 @@ object OpenBankMatch {
             has("countryside", "campaign", "field", "fields", "cornfield") -> "farm"
             has("rain", "thunder") -> "rain"
             has("wind", "whistling") -> "wind"
-            has("birds", "bird", "swallows", "crows", "starlings") -> "birds"
+            has("birds", "bird", "swallows", "crows", "starlings", "gulls") -> "birds"
             has("crowd", "walla", "talks", "discussions") -> "crowd"
             has("street", "crossroads", "crossing", "downtown", "suburb", "pedestrian") ||
                 "city center" in title.lowercase() || "paris by night" in title.lowercase() -> "street"
@@ -66,8 +66,11 @@ object OpenBankMatch {
     fun scenes(prompt: String, candidates: List<Scene>): List<String> {
         // The suffix contains separate events. It must not change the location being searched.
         val location = prompt.substringBefore('|')
-        val words = BankText.tokens(location)
-        val wanted = concepts(location).toMutableSet()
+        val negative = Regex("\\b(?:no|without)\\s+(?:(?:human|any|audible|background|nearby|distant)\\s+)?(rain|wind|traffic|birds|birdsong|voices|speech|talking|music|cars|crowd|people)\\b", RegexOption.IGNORE_CASE)
+        val forbidden = negative.findAll(location).map { it.groupValues[1].lowercase() }.toSet()
+        val positive = negative.replace(location, " ")
+        val words = BankText.tokens(positive)
+        val wanted = concepts(positive).toMutableSet()
         val interior = words.any { it in setOf("interior", "indoors", "indoor", "penthouse", "apartment", "flat") } &&
             words.none { it in setOf("ledge", "balcony", "rooftop", "outside", "outdoors") }
         val elevatedCity = words.any { it in setOf("penthouse", "skyscraper", "ledge", "balcony", "rooftop") }
@@ -81,8 +84,8 @@ object OpenBankMatch {
         val historical = words.any { it in setOf("medieval", "carriage", "horses", "nineteenth", "ancient") }
         val night = words.any { it in setOf("night", "midnight", "nocturnal") }
         val day = words.any { it in setOf("morning", "dawn", "daytime") }
-        val noVoices = Regex("(?:no|without)\\s+(?:human\\s+)?(?:voices|speech|talking)", RegexOption.IGNORE_CASE).containsMatchIn(location)
-        val noMusic = Regex("(?:no|without)\\s+music", RegexOption.IGNORE_CASE).containsMatchIn(location)
+        val noVoices = forbidden.any { it in setOf("voices", "speech", "talking", "crowd", "people") } || Regex("(?:no|without)\\s+(?:human\\s+)?(?:voices|speech|talking)", RegexOption.IGNORE_CASE).containsMatchIn(location)
+        val noMusic = "music" in forbidden || Regex("(?:no|without)\\s+music", RegexOption.IGNORE_CASE).containsMatchIn(location)
         val ranked = candidates.asSequence().filter { c ->
             val tags = c.tags + BankText.tokens(c.title)
             val rainy = tags.any { it in setOf("rain", "rainy", "rainfall", "raining", "thunder", "storm") }
@@ -91,7 +94,12 @@ object OpenBankMatch {
                 "musicians", "musician", "celebration", "dancers", "dancer") }
             val titleWords = BankText.tokens(c.title)
             val outdoor = words.any { it in setOf("outside", "outdoor", "outdoors", "openair") }
+            val traffic = tags.any { it in setOf("traffic", "car", "cars", "motor", "truck", "bus", "road") }
+            val birdCalls = tags.any { it in setOf("bird", "birds", "birdsong", "chirping", "gulls", "crows") }
             c.seconds >= 30.0 && habitat(c.title) == primary &&
+                (forbidden.none { it in setOf("traffic", "cars") } || !traffic) &&
+                (forbidden.none { it in setOf("birds", "birdsong") } || !birdCalls) &&
+                ("wind" !in forbidden || tags.none { it in setOf("wind", "windy") }) &&
                 (!outdoor || tags.none { it in setOf("indoor", "indoors", "covered", "interior") }) &&
                 (primary != "forest" || "river" in wanted || titleWords.none { it in setOf("river", "stream", "waterfall") }) &&
                 (primary != "forest" || words.any { it in setOf("deer", "sika", "rut") } || "rut" !in titleWords) &&

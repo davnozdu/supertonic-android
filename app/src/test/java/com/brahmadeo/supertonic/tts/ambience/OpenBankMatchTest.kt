@@ -66,4 +66,13 @@ class OpenBankMatchTest {
         assertFalse(OpenEventMatch.matches("sit_down_chair", "0666", emptySet()))
         assertTrue(OpenEventMatch.matches("phone", "0250", setOf("phone")))
     }
+
+    @Test fun explicitAbsenceNeverBecomesPositiveSearchTerm() {
+        assertEquals(listOf("forest"), OpenBankMatch.scenes("forest without rain", listOf(forest, rain)))
+        assertTrue(OpenBankMatch.scenes("street without traffic", listOf(street)).isEmpty())
+        assertTrue(OpenBankMatch.scenes("forest without birds", listOf(forest)).isEmpty())
+    }
+    @Test fun harborBirdCallsAreNotGeneralHarborAmbience() {
+        assertEquals("birds", OpenBankMatch.habitat("Gulls on the Harbor"))
+    }
 }
