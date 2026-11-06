@@ -548,7 +548,7 @@ class MainActivity : ComponentActivity() {
                         isSynthesizing = viewModel.isSynthesizing.value,
                         onSynthesizeClick = {
                             val textToPlay = viewModel.inputText.value.ifEmpty { placeholder }
-                            generateAndPlay(textToPlay)
+                            generateAndPlay(textToPlay, voiceTest = true)
                         },
 
                         languages = localizedLanguages,
@@ -919,7 +919,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun generateAndPlay(text: String) {
+    private fun generateAndPlay(text: String, voiceTest: Boolean = false) {
         if (!AssetManager.isReady(this)) {
             startDownload()
             return
@@ -947,14 +947,18 @@ class MainActivity : ComponentActivity() {
         HistoryManager.saveItem(this, text, voiceName)
 
         try {
-            if (playbackService?.isServiceActive == true) {
+            if (voiceTest) {
+                if (playbackService?.isServiceActive == true && !com.brahmadeo.supertonic.tts.utils.ReadingMemory.voiceTest) {
+                    Toast.makeText(this,"Остановите чтение перед пробой голоса",Toast.LENGTH_SHORT).show()
+                } else launchPlaybackActivity(text,stylePath,voiceTest=true)
+            } else if (playbackService?.isServiceActive == true) {
                 viewModel.queueDialogText = text
                 viewModel.showQueueDialog.value = true
             } else {
                 launchPlaybackActivity(text, stylePath)
             }
         } catch (_: Exception) {
-            launchPlaybackActivity(text, stylePath)
+            launchPlaybackActivity(text, stylePath, voiceTest)
         }
     }
 
@@ -1003,13 +1007,14 @@ class MainActivity : ComponentActivity() {
         launchPlaybackActivity(text, stylePath)
     }
 
-    private fun launchPlaybackActivity(text: String, stylePath: String) {
+    private fun launchPlaybackActivity(text: String, stylePath: String, voiceTest: Boolean = false) {
         val intent = Intent(this, PlaybackActivity::class.java).apply {
             putExtra(PlaybackActivity.EXTRA_TEXT, com.brahmadeo.supertonic.tts.utils.TextHandoff.wrap(text))
             putExtra(PlaybackActivity.EXTRA_VOICE_PATH, stylePath)
             putExtra(PlaybackActivity.EXTRA_SPEED, viewModel.currentSpeed.floatValue)
             putExtra(PlaybackActivity.EXTRA_STEPS, viewModel.currentSteps.intValue)
             putExtra(PlaybackActivity.EXTRA_LANG, viewModel.currentLang.value)
+            putExtra(PlaybackActivity.EXTRA_VOICE_TEST, voiceTest)
         }
         startActivity(intent)
     }

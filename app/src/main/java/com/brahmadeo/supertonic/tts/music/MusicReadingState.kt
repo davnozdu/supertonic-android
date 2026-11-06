@@ -36,6 +36,6 @@ internal class MusicReadingState {
     }
     @Synchronized fun stop(owner: Any) { clients.remove(owner) }
     @Synchronized fun stopTts() { clients.clear() }
-    @Synchronized fun app(playing: Boolean) { appPlaying = playing }
+    @Synchronized fun app(playing: Boolean, voiceTest: Boolean = false) { appPlaying = playing && !voiceTest }
     @Synchronized fun playing(): Boolean = appPlaying || clients.values.any { it.reading && it.entries.isNotEmpty() }
 }

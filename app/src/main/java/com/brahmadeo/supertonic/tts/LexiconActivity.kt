@@ -563,7 +563,7 @@ class LexiconActivity : ComponentActivity() {
         Toast.makeText(this, testMsg, Toast.LENGTH_SHORT).show()
 
         try {
-            playbackService?.synthesizeAndPlay(finalText, selectedLang, stylePath, 1.0f, testSteps, 0)
+            playbackService?.synthesizeAndPlay(finalText, selectedLang, stylePath, 1.0f, testSteps, 0, true)
         } catch (e: RemoteException) {
             e.printStackTrace()
         }

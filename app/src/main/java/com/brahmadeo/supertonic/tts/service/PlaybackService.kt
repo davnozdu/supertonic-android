@@ -44,8 +44,8 @@ import java.io.File
 class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.OnAudioFocusChangeListener {
 
     private val binder = object : IPlaybackService.Stub() {
-        override fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int) {
-            this@PlaybackService.synthesizeAndPlay(text, lang, stylePath, speed, steps, startIndex)
+        override fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int, voiceTest: Boolean) {
+            this@PlaybackService.synthesizeAndPlay(text, lang, stylePath, speed, steps, startIndex, voiceTest)
         }
 
         override fun addToQueue(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int) {
@@ -103,6 +103,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
     private var audioTrack: AudioTrack? = null
     private var lastTrackRate: Int = -1
     @Volatile private var isPlaying = false
+    @Volatile private var voiceTestPlayback = false
     @Volatile private var isSynthesizing = false
     private val textNormalizer = TextNormalizer()
     private var resumeOnFocusGain = false
@@ -132,7 +133,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
      * a particularly long sentence) without an underrun click.
      */
     private data class ReadingItem(val text: String, val lang: String, val style: String, val speed: Float, val steps: Int,
-        val chunks: com.brahmadeo.supertonic.tts.utils.ReadingTextChunks) {
+        val chunks: com.brahmadeo.supertonic.tts.utils.ReadingTextChunks, val voiceTest: Boolean) {
         val contentId = com.brahmadeo.supertonic.tts.utils.PlaybackContentGate.fingerprint(text)
     }
     private data class AudioPacket(val bytes: ByteArray, val index: Int = -1, val item: ReadingItem? = null)
@@ -264,7 +265,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
         synthesisJob?.cancelAndJoin()
     }
 
-    fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int = 0) {
+    fun synthesizeAndPlay(text: String, lang: String, stylePath: String, speed: Float, steps: Int, startIndex: Int = 0, voiceTest: Boolean = false) {
         SleepTimer.manualResume()
         ReadingControls.internalStarted()
         serviceScope.launch {
@@ -279,6 +280,8 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
             ensureAudioTrack(rate)
             try { audioTrack?.pause(); audioTrack?.flush() } catch (_: Exception) {}
 
+            voiceTestPlayback = voiceTest
+            Log.i(TAG,"Playback mode=${if(voiceTest) "voice-test" else "reading"} background=${!voiceTest}")
             isSynthesizing = true
             isPlaying = true
             SupertonicTTS.setCancelled(false)
@@ -387,7 +390,11 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             if (activeReadingItem !== item) {
                                 val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
                                 memory.text = item.text; memory.voicePath = item.style; memory.lang = item.lang
-                                memory.speed = item.speed; memory.steps = item.steps
+                                memory.speed = item.speed; memory.steps = item.steps; memory.voiceTest = item.voiceTest
+                                if(voiceTestPlayback != item.voiceTest) {
+                                    voiceTestPlayback = item.voiceTest
+                                    com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this@PlaybackService,isPlaying && statePromotedToPlaying,item.voiceTest)
+                                }
                             }
                             activeReadingItem = item; currentSentenceIndex = packet.index
                             persistIndex()
@@ -411,6 +418,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                 var curSpeed = speed
                 var curSteps = steps
                 var curStart = startIndex
+                var curVoiceTest = voiceTest
                 var producedSentences = 0
                 var lastTotal = 0
                 try {
@@ -419,7 +427,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                             curText, curLang, preservePunctuation = com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(this@PlaybackService)
                         )
                         val sentences = chunks.sentences
-                        val readingItem = ReadingItem(curText, curLang, curStyle, curSpeed, curSteps, chunks)
+                        val readingItem = ReadingItem(curText, curLang, curStyle, curSpeed, curSteps, chunks, curVoiceTest)
                         val totalSentences = sentences.size
                         lastTotal = totalSentences
                         val validStartIndex = if (curStart in 0 until totalSentences) curStart else 0
@@ -514,6 +522,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
                         curSpeed = nextItem.speed
                         curSteps = nextItem.steps
                         curStart = nextItem.startIndex
+                        curVoiceTest = false
                     }
                 } finally {
                     // Edge cases for the pre-roll gate:
@@ -915,7 +924,7 @@ class PlaybackService : Service(), SupertonicTTS.ProgressListener, AudioManager.
 
     private fun updatePlaybackState(state: Int) {
         com.brahmadeo.supertonic.tts.music.BackgroundMusic.app(this,
-            state==PlaybackStateCompat.STATE_PLAYING && isPlaying)
+            state==PlaybackStateCompat.STATE_PLAYING && isPlaying,voiceTestPlayback)
         if (state == PlaybackStateCompat.STATE_STOPPED || state == PlaybackStateCompat.STATE_NONE) {
             // Android can select an INACTIVE session belonging to the last
             // audio UID (the TTS engine). Release it so Moon receives buttons.

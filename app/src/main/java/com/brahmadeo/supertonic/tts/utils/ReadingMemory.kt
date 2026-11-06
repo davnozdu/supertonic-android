@@ -14,6 +14,7 @@ object ReadingMemory {
     @Volatile var steps = 5
     @Volatile var index = 0
     @Volatile var playing = false
+    @Volatile var voiceTest = false
 
     private val legacyKeys = listOf("last_text", "last_voice_path", "last_lang", "last_speed", "last_steps", "last_index", "is_playing")
     private val legacyFiles = listOf("playback_queue.json", "synthesis_history.json")

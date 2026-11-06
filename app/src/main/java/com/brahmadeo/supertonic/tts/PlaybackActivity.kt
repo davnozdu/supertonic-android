@@ -35,6 +35,7 @@ class PlaybackActivity : ComponentActivity() {
     private var currentSpeed = 1.0f
     private var currentSteps = 5
     private var currentLang = "en"
+    private var currentVoiceTest = false
     private val contentGate = com.brahmadeo.supertonic.tts.utils.PlaybackContentGate()
 
     companion object {
@@ -43,6 +44,7 @@ class PlaybackActivity : ComponentActivity() {
         const val EXTRA_SPEED = "extra_speed"
         const val EXTRA_STEPS = "extra_steps"
         const val EXTRA_LANG = "extra_lang"
+        const val EXTRA_VOICE_TEST = "extra_voice_test"
     }
 
     private val playbackListenerStub = object : IPlaybackListener.Stub() {
@@ -58,6 +60,7 @@ class PlaybackActivity : ComponentActivity() {
                 val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
                 val text = memory.text
                 if (!contentGate.accept(contentId.orEmpty(), text, total)) return@runOnUiThread
+                currentVoiceTest = memory.voiceTest
                 if (text.isNotBlank() && text != currentText) {
                     currentText = text
                     currentVoicePath = memory.voicePath.ifEmpty { currentVoicePath }
@@ -127,6 +130,7 @@ class PlaybackActivity : ComponentActivity() {
         currentSpeed = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
         currentSteps = intent.getIntExtra(EXTRA_STEPS, 5)
         currentLang = intent.getStringExtra(EXTRA_LANG) ?: "en"
+        currentVoiceTest = intent.getBooleanExtra(EXTRA_VOICE_TEST,false)
 
         if (intent.getBooleanExtra("is_resume", false) && currentText.isEmpty()) {
              val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
@@ -135,6 +139,7 @@ class PlaybackActivity : ComponentActivity() {
              currentSpeed = memory.speed
              currentSteps = memory.steps
              currentLang = memory.lang
+             currentVoiceTest = memory.voiceTest
              currentIndexState.intValue = memory.index
         }
 
@@ -171,6 +176,7 @@ class PlaybackActivity : ComponentActivity() {
                 currentSpeed = memory.speed
                 currentSteps = memory.steps
                 currentLang = memory.lang
+                currentVoiceTest = memory.voiceTest
                 currentIndexState.intValue = memory.index
                 setupList(currentText)
             }
@@ -228,7 +234,7 @@ class PlaybackActivity : ComponentActivity() {
         android.util.Log.i("ArticleReader", "Playback request chars=${currentText.length} contentId=${com.brahmadeo.supertonic.tts.utils.PlaybackContentGate.fingerprint(currentText).take(12)}")
         saveState()
         try {
-            playbackService?.synthesizeAndPlay(currentText, currentLang, currentVoicePath, currentSpeed, currentSteps, 0)
+            playbackService?.synthesizeAndPlay(currentText, currentLang, currentVoicePath, currentSpeed, currentSteps, 0, currentVoiceTest)
         } catch (e: RemoteException) {
             e.printStackTrace()
         }
@@ -239,7 +245,7 @@ class PlaybackActivity : ComponentActivity() {
         contentGate.expect(currentText)
         saveState()
         try {
-            playbackService?.synthesizeAndPlay(currentText, currentLang, currentVoicePath, currentSpeed, currentSteps, index)
+            playbackService?.synthesizeAndPlay(currentText, currentLang, currentVoicePath, currentSpeed, currentSteps, index, currentVoiceTest)
         } catch (e: RemoteException) {
             e.printStackTrace()
         }
@@ -248,7 +254,7 @@ class PlaybackActivity : ComponentActivity() {
     private fun saveState() {
         val memory = com.brahmadeo.supertonic.tts.utils.ReadingMemory
         memory.text = currentText; memory.voicePath = currentVoicePath; memory.speed = currentSpeed
-        memory.steps = currentSteps; memory.lang = currentLang; memory.playing = true
+        memory.steps = currentSteps; memory.lang = currentLang; memory.playing = true; memory.voiceTest = currentVoiceTest
     }
 
     private fun updateIndexState(index: Int) {
@@ -288,6 +294,7 @@ class PlaybackActivity : ComponentActivity() {
             currentSpeed = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
             currentSteps = intent.getIntExtra(EXTRA_STEPS, 5)
             currentLang = intent.getStringExtra(EXTRA_LANG) ?: "en"
+            currentVoiceTest = intent.getBooleanExtra(EXTRA_VOICE_TEST,false)
             currentIndexState.intValue = -1
             contentGate.expect(text)
             setupList(text)

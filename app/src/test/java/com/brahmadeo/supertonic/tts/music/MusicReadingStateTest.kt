@@ -62,4 +62,23 @@ class MusicReadingStateTest {
         state.app(true);state.stopTts();assertTrue(state.playing())
         state.app(false);assertFalse(state.playing())
     }
+    @Test fun internalVoiceTestDoesNotStartMusicButExternalReaderStillDoes() {
+        val state=MusicReadingState()
+        state.app(true,voiceTest=true)
+        assertFalse(state.playing())
+        state.enqueue("Moon","paragraph",false);state.start("Moon","paragraph")
+        assertTrue(state.playing())
+        state.app(false,voiceTest=true)
+        assertTrue(state.playing())
+        state.stop("Moon")
+        assertFalse(state.playing())
+    }
+    @Test fun testPauseResumeAndFollowingNormalReadingKeepTheirOwnModes() {
+        val state=MusicReadingState()
+        state.app(true,voiceTest=true);assertFalse(state.playing())
+        state.app(false,voiceTest=true);state.app(true,voiceTest=true)
+        assertFalse(state.playing())
+        state.app(true,voiceTest=false);assertTrue(state.playing())
+        state.app(false);assertFalse(state.playing())
+    }
 }

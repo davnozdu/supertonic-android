@@ -203,7 +203,7 @@ object BackgroundMusic {
         pendingTag.values.forEach { handler.removeCallbacks(it.release) }; pendingTag.clear()
         reading.stopTts(); endGap(); refresh()
     }
-    fun app(ctx: Context, playing: Boolean) { initialize(ctx); reading.app(playing); if (!playing) endGap(); refresh() }
+    fun app(ctx: Context, playing: Boolean, voiceTest: Boolean = false) { initialize(ctx); reading.app(playing,voiceTest); if (!playing || voiceTest) endGap(); refresh() }
     private fun endGap() { handler.post { gapUntil = 0L; holdUntil = 0L; handler.removeCallbacks(gapEnd); handler.removeCallbacks(holdEnd) } }
     fun volumePreview(percent: Int) { handler.post { previewVolume = percent.coerceIn(0,100); updateVolume() } }
     internal data class Snapshot(val reading: Boolean,val prepared: Boolean,val playing: Boolean,val looping: Boolean,val position: Int)
