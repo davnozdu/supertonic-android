@@ -9,84 +9,96 @@
       "label": "Антон",
       "size": 61101,
       "sha256": "6cb1bd179b8c5950e1e4a8222be45e1a9c253ec038a1dbf38f255cfc3c074766",
-      "seconds": 5.0
+      "seconds": 5.0,
+      "gender": "m"
     },
     {
       "name": "pack_eugene",
       "label": "Евгений",
       "size": 117837,
       "sha256": "26934be5ad5ce7aa33a3bd55866b402bd4cfbf78b063c37cae952da30a528c39",
-      "seconds": 9.74
+      "seconds": 9.74,
+      "gender": "m"
     },
     {
       "name": "pack_igor",
       "label": "Игорь",
       "size": 118989,
       "sha256": "33c46cb4000b4be4f372e1dadc4412860b7ca72a3e930b985afef544336f0a25",
-      "seconds": 9.84
+      "seconds": 9.84,
+      "gender": "m"
     },
     {
       "name": "pack_kluvin",
       "label": "Клювин",
       "size": 120429,
       "sha256": "05ce2e9b8381bee36970a404cc2d371edcd9d84e3a70028e3be6739fafcfe524",
-      "seconds": 9.94
+      "seconds": 9.94,
+      "gender": "m"
     },
     {
       "name": "pack_livanov",
       "label": "Ливанов",
       "size": 121005,
       "sha256": "112abedbfd8a3e28094fbb6edc06cf644baa5901a1e3f421b92bcbdd371b2106",
-      "seconds": 10.0
+      "seconds": 10.0,
+      "gender": "m"
     },
     {
       "name": "pack_marcus",
       "label": "Маркус",
       "size": 49869,
       "sha256": "d1b01089676148db2a791b1d93077c955dad74a600bc6ef49f686ddae9480db0",
-      "seconds": 4.08
+      "seconds": 4.08,
+      "gender": "m"
     },
     {
       "name": "pack_mario",
       "label": "Марио",
       "size": 121005,
       "sha256": "12c9ddc32ad42464297968636295789de88f1909610fbc8c1708df76a51e7ccd",
-      "seconds": 10.0
+      "seconds": 10.0,
+      "gender": "m"
     },
     {
       "name": "pack_maxim",
       "label": "Максим",
       "size": 51309,
       "sha256": "cc9d4fc9e87e22445d91f09d13436062412a7704e2f2aedb402c4243f558c035",
-      "seconds": 4.2
+      "seconds": 4.2,
+      "gender": "m"
     },
     {
       "name": "pack_pavel",
       "label": "Павел",
       "size": 72909,
       "sha256": "1310b43fcf95eb3f5344906a19c8539d49fde1e023063491f09ccf5c4ec7bc84",
-      "seconds": 5.98
+      "seconds": 5.98,
+      "gender": "m"
     },
     {
       "name": "pack_stanislav",
       "label": "Станислав",
       "size": 121005,
       "sha256": "8685f846a53b6359d4fb8141827d0d039da06e450106cb47d97ad729a301cd3e",
-      "seconds": 10.0
+      "seconds": 10.0,
+      "gender": "m"
     },
     {
       "name": "pack_vasko",
       "label": "Васько",
       "size": 106605,
       "sha256": "de4db8925072e8d48911ee31809137ea6d618d58797844d2bc72d06008260b67",
-      "seconds": 8.8
+      "seconds": 8.8,
+      "gender": "m"
     },
     {
       "name": "pack_yurski",
       "label": "Юрский",
       "size": 99117,
       "sha256": "2e72b8a896ba7e587f29dc2642fe2422ff5c4bdb144b4ed579ae6216565f2974",
-      "seconds": 8.18
+      "seconds": 8.18,
+      "gender": "m"
     }
   ]
 }

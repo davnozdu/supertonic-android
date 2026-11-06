@@ -505,20 +505,6 @@ class MainActivity : ComponentActivity() {
                     var cpuThreads by remember(threadModel) { mutableStateOf(com.brahmadeo.supertonic.tts.utils.EngineThreads.selected(this@MainActivity, threadModel)) }
                     MainScreen(
                         modelType = threadModel,
-                        showPocketVoicesDownload=AssetManager.isPocket(this@MainActivity) && !com.brahmadeo.supertonic.tts.pocket.PocketVoices.ready(this@MainActivity),
-                        onPocketVoicesDownload={
-                            viewModel.isDownloading.value=true
-                            lifecycleScope.launch {
-                                try {
-                                    com.brahmadeo.supertonic.tts.pocket.PocketVoices.download(this@MainActivity) { status,progress ->
-                                        viewModel.downloadStatus.value=status;viewModel.downloadProgress.floatValue=progress
-                                    }
-                                    setupVoicesMap(viewModel.currentLang.value)
-                                    com.brahmadeo.supertonic.tts.utils.SpeechPreparationCache.clear()
-                                } catch(t: Exception) { Toast.makeText(this@MainActivity,"Не удалось скачать голоса: ${t.message}",Toast.LENGTH_LONG).show() }
-                                finally { viewModel.isDownloading.value=false }
-                            }
-                        },
                         onTeraVoicesChanged = { setupVoicesMap(viewModel.currentLang.value) },
                         hiddenVoiceCount = remember(threadModel, voicesVersion) { com.brahmadeo.supertonic.tts.utils.HiddenVoices.hidden(this@MainActivity, threadModel).size },
                         onRestoreHiddenVoices = {
@@ -577,34 +563,13 @@ class MainActivity : ComponentActivity() {
                         voices = viewModel.voiceFiles,
                         selectedVoiceFile = viewModel.selectedVoiceFile.value,
                         isTeraModel = AssetManager.isRussianModel(this@MainActivity),
-                        onVoiceChange = { selected ->
-                            val selectedModel=AssetManager.getModelType(this@MainActivity)
-                            lifecycleScope.launch {
-                            try {
-                                val voice=selected.removeSuffix(".json")
-                                if(selectedModel==AssetManager.POCKET_MODEL && com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.isExtra(voice)) {
-                                    viewModel.isDownloading.value=true
-                                    com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.ensure(this@MainActivity,voice) { status,progress ->
-                                        viewModel.downloadStatus.value=status;viewModel.downloadProgress.floatValue=progress
-                                    }
-                                    setupVoicesMap(viewModel.currentLang.value)
-                                }
-                            if (AssetManager.getModelType(this@MainActivity)==selectedModel && viewModel.selectedVoiceFile.value != selected) {
-                                val it=selected
-                                viewModel.selectedVoiceFile.value = it
-                                saveStringPref("selected_voice", it)
-                                // The main voice is the narrator: with multi-voice reading on, the author role read the
-                                // text with its own saved voice and this choice seemed to change nothing.
-                                if (AssetManager.isRussianModel(this@MainActivity)) runCatching {
-                                    com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.save(this@MainActivity,
-                                        com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR, it.removeSuffix(".json"))
-                                }
-                                val resetIntent = Intent(this@MainActivity, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
-                                startService(resetIntent)
-                            }
-                            } catch(t: kotlinx.coroutines.CancellationException) { throw t }
-                              catch(t: Exception) { Toast.makeText(this@MainActivity,"Не удалось скачать голос: ${t.message}",Toast.LENGTH_LONG).show() }
-                              finally { viewModel.isDownloading.value=false }
+                        onVoiceChange = { voice ->
+                            if(viewModel.selectedVoiceFile.value!=voice) {
+                                viewModel.selectedVoiceFile.value=voice
+                                saveStringPref("selected_voice",voice)
+                                if(AssetManager.isRussianModel(this@MainActivity)) com.brahmadeo.supertonic.tts.llm.MultiVoiceSettings.save(
+                                    this@MainActivity,com.brahmadeo.supertonic.tts.llm.VoiceRole.AUTHOR,voice.removeSuffix(".json"))
+                                startService(Intent(this@MainActivity,PlaybackService::class.java).apply { action="RESET_ENGINE" })
                             }
                         },
 
@@ -901,17 +866,23 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (AssetManager.isPocket(this)) {
-            com.brahmadeo.supertonic.tts.utils.HiddenVoices.filter(this,AssetManager.POCKET_MODEL,
-                (AssetManager.russianVoices(this)+com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.assets(this).map { it.name }).distinct()).forEach {
-                val extra=com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.isExtra(it)
-                val label=if(extra) com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.label(this,it)+(if(com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.ready(this,it)) "" else " · скачать")
-                else if (com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.isCustom(it)) com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.label(it) else it.replaceFirstChar { c -> c.uppercase() }
-                viewModel.voiceFiles["$label · Shtorm RU"]="$it.json"
+            AssetManager.russianVoices(this).forEach {
+                val name=if(com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.isExtra(it))
+                    com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.label(this,it)
+                    else if(com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.isCustom(it)) com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.label(it)
+                    else it.replaceFirstChar { c -> c.uppercase() }
+                val sex=when(com.brahmadeo.supertonic.tts.books.VoiceGenderSettings.gender(this,
+                    com.brahmadeo.supertonic.tts.books.BookVoiceRef(AssetManager.POCKET_MODEL,it).key)) { "m" -> "мужской";"f" -> "женский";else -> "пол не задан" }
+                viewModel.voiceFiles["$name · $sex · Shtorm RU"]="$it.json"
             }
             return
         }
         if (AssetManager.isSilero(this)) {
-            AssetManager.russianVoices(this).forEach { viewModel.voiceFiles[it] = "$it.json" }
+            AssetManager.russianVoices(this).forEach { voice ->
+                val label=com.brahmadeo.supertonic.tts.books.BookVoiceCatalog.label(this,
+                    com.brahmadeo.supertonic.tts.books.BookVoiceRef(AssetManager.getModelType(this),voice).key)
+                viewModel.voiceFiles[label]="$voice.json"
+            }
             return
         }
         if (AssetManager.isTera(this)) {

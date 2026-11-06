@@ -335,14 +335,14 @@ class SpeechDiagnosticsActivity : ComponentActivity() {
                                 override fun onDone(id: String?) { done.complete(Unit) }
                                 override fun onError(id: String?) { done.completeExceptionally(IllegalStateException("Voice preview failed")) }
                             })
-                            val output=File(cacheDir,"voice-preview-probe.wav")
+                            val output=File(cacheDir,"voice-preview-$voice.wav")
                             try {
                                 check(tts!!.synthesizeToFile(com.brahmadeo.supertonic.tts.llm.VoicePreview.SAMPLE,
                                     com.brahmadeo.supertonic.tts.llm.VoicePreview.params(this@SpeechDiagnosticsActivity),output,"preview-$voice")==TextToSpeech.SUCCESS)
                                 done.get(30,TimeUnit.SECONDS)
                                 check(output.length()>44)
                                 Log.i("SpeechCheck","VOICE PREVIEW PASSED model=$model voice=$voice wavBytes=${output.length()}")
-                            } finally { output.delete() }
+                            } finally { if(!intent.getBooleanExtra("retainAudio",false)) output.delete() }
                         }
                         Log.i("SpeechCheck","ALL VOICE PREVIEWS PASSED model=$model count=${voices.size}; multivoice enabled during check")
                         return@withContext

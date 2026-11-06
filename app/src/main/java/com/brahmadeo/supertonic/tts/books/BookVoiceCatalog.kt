@@ -39,6 +39,10 @@ object BookVoiceCatalog {
         val voice = if(ref.voice.startsWith("pack_")) ref.voice.removePrefix("pack_").replaceFirstChar { it.uppercase() } else when (ref.voice) {
             "sveta" -> "Света"; "masha" -> "Маша"; "dima" -> "Дима"
             "aidar" -> "Айдар"; "eugene" -> "Евгений"; "kseniya" -> "Ксения"; "baya" -> "Бая"; "xenia" -> "Ксения (Xenia)"
+            "chulsky" -> "Чульский"; "anyanov" -> "Аньянов"; "tovarisch" -> "Товарищ"; "kazbek" -> "Казбек"
+            "grinberg" -> "Гринберг"; "solokha" -> "Солоха"; "ponomarenko" -> "Пономаренко"
+            "ruslan" -> "Руслан"; "pavel" -> "Павел"; "oleg" -> "Олег"; "ivan" -> "Иван"; "boris" -> "Борис"; "dmitri" -> "Дмитрий"
+            "wp_gk_tramrunner" -> "GK tramrunner"; "wp_muratov" -> "Муратов"; "ilya" -> "Илья"; "olga" -> "Ольга"
             "ru_roman" -> "Роман"; "ru_alexandr" -> "Александр"; "ru_dmitriy" -> "Дмитрий"; "ru_bogdan" -> "Богдан"
             // The line below names the gender itself (also a changed one), so no "(муж)" from the library label.
             else -> if (com.brahmadeo.supertonic.tts.tera.TeraVoiceLibrary.isLibrary(ref.voice))

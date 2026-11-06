@@ -97,9 +97,7 @@ fun MainScreen(
     onArticleLinkClick: () -> Unit = {},
     onSleepTimerClick: () -> Unit = {},
     onModelSelectionClick: () -> Unit = {},
-    showPocketVoicesDownload: Boolean = false,
     modelType: String = "",
-    onPocketVoicesDownload: () -> Unit = {},
     onTeraVoicesChanged: () -> Unit = {},
     /** Long press on a voice: delete it (imported/downloaded Tera voices) or hide it (built-in voices). */
     onVoiceRemove: (String) -> Unit = {},
@@ -352,9 +350,6 @@ fun MainScreen(
                         TextButton(onClick = onModelSelectionClick, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(AppR.string.action_model_packs))
                         }
-                        if(showPocketVoicesDownload) TextButton(onClick=onPocketVoicesDownload,modifier=Modifier.fillMaxWidth()) {
-                            Text("Скачать 7 голосов Shtorm")
-                        }
                         DropdownSelector(
                             label = stringResource(AppR.string.language_label),
                             options = languages.keys.toList(),
@@ -373,7 +368,7 @@ fun MainScreen(
                             AlertDialog(
                                 onDismissRequest = { removeVoice = null },
                                 title = { Text("Удалить голос «$name»?") },
-                                text = { Text("Свой или скачанный голос удаляется с телефона (скачанный можно вернуть кнопкой «Скачать голоса Tera»). " +
+                                text = { Text("Свой или скачанный голос удаляется с телефона (скачанный можно вернуть кнопкой «Скачать пак голосов»). " +
                                     "Встроенный голос модели скрывается из всех списков — главного, ролей и персонажей книг; его можно вернуть.") },
                                 confirmButton = { TextButton(onClick = { voices[name]?.let(onVoiceRemove); removeVoice = null }) { Text("Удалить") } },
                                 dismissButton = { TextButton(onClick = { removeVoice = null }) { Text("Отмена") } }
@@ -386,7 +381,8 @@ fun MainScreen(
 
                         ModelPackageChoice(modelType)
 
-                        if (isTeraModel) TeraVoiceImport(onChanged = onTeraVoicesChanged)
+                        VoicePackDownload(modelType,revision=voices.values.toList().hashCode(),onChanged=onTeraVoicesChanged)
+                        if (modelType == com.brahmadeo.supertonic.tts.utils.AssetManager.TERA_MODEL) TeraVoiceImport(onChanged = onTeraVoicesChanged)
                         if (modelType == com.brahmadeo.supertonic.tts.utils.AssetManager.POCKET_MODEL) PocketVoiceImport(onChanged = onTeraVoicesChanged)
 
                         if (!isTeraModel) Row(
