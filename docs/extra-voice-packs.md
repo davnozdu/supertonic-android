@@ -15,3 +15,7 @@
 `ruvoice-pack-ru_voices` — format 2 / v5.5 с 22 speaker IDs (5 штатных +17 дополнительных). TorchScript mel проверен на компьютере для всех 22 IDs: конечные различные выходы. Backbone/head имеют поддерживаемый движком формат. Android-совместимость требует отдельного прогона после установки.
 
 Это отдельная модель `silero_ru_voices`, root `silero-ru-voices`; существующие v5.6 и CIS не заменяются. Архив `silero-ru-voices-v1/ruvoice-pack-ru_voices.zip`, 80 141 313 байт, SHA-256 `122ae0196d0b50f7e6f0659dd7fa854309ae256fcfdaecc68d69771e5f87a43d`. Исходный pack.json и его сведения о CC BY-NC-SA 4.0 / источниках RUSLAN и Wikipedia сохранены, LICENSES.md приложен отдельно. Общие веса скачиваются при выборе модели; 22 маленьких speaker JSON создаются локально.
+
+## Проверено на Android
+
+Beta224 code470 установлена поверх. Все22 Silero и все19 Shtorm (7прежних+12новых MP3) прошли настоящий voicePreviewProbe через synthesizeToFile на OnePlus CPH2745. Пробы без проигрывания аудио, исходные модель/голос/LLM восстановлены. Слуховая оценка — пользователь слушает сам. CI42191076591 и Android Release42191078312 success.
