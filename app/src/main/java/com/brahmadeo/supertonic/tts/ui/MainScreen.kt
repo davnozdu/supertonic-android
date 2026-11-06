@@ -723,5 +723,5 @@ fun MainScreenPreview() {
 /** The Russian models whose voices can be removed from the list (the old English Supertonic voice styles stay). */
 private fun isRussianVoiceModel(model: String) = model in setOf(
     com.brahmadeo.supertonic.tts.utils.AssetManager.TERA_MODEL, com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_MODEL,
-    com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_CIS_MODEL, com.brahmadeo.supertonic.tts.utils.AssetManager.KOKORO_MODEL,
+    com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_CIS_MODEL, com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_VOICES_MODEL, com.brahmadeo.supertonic.tts.utils.AssetManager.KOKORO_MODEL,
     com.brahmadeo.supertonic.tts.utils.AssetManager.POCKET_MODEL)

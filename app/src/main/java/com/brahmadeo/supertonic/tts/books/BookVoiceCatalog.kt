@@ -25,6 +25,7 @@ object BookVoiceCatalog {
             (relative.startsWith("${AssetManager.MODEL_VERSION}/tera/styles/") || relative.startsWith("${AssetManager.MODEL_VERSION}/tera/library/styles/")) &&
                 file.name == "style_ttl.npy" -> BookVoiceRef(AssetManager.TERA_MODEL, file.parentFile!!.name)
             file.parentFile == File(root, "silero-v5_5_ru") -> BookVoiceRef(AssetManager.SILERO_MODEL, file.nameWithoutExtension)
+            file.parentFile == File(root, "silero-ru-voices") -> BookVoiceRef(AssetManager.SILERO_VOICES_MODEL,file.nameWithoutExtension)
             file.parentFile == File(root, "silero-cis_ru") -> BookVoiceRef(AssetManager.SILERO_CIS_MODEL, file.nameWithoutExtension)
             file.parentFile == File(root, "kokoro-ru-v2") -> BookVoiceRef(AssetManager.KOKORO_MODEL, file.nameWithoutExtension)
             relative.startsWith("shtorm-pocket-v2/") -> BookVoiceRef(AssetManager.POCKET_MODEL, file.nameWithoutExtension)
@@ -35,7 +36,7 @@ object BookVoiceCatalog {
     fun label(ctx: Context, value: String): String = label(value, VoiceGenderSettings.gender(ctx, value))
     fun label(value: String, sex: String? = BookVoiceAssign.gender(value)): String {
         val ref = BookVoiceRef.parse(value) ?: return com.brahmadeo.supertonic.tts.tera.TeraVoices.label(value)
-        val voice = when (ref.voice) {
+        val voice = if(ref.voice.startsWith("pack_")) ref.voice.removePrefix("pack_").replaceFirstChar { it.uppercase() } else when (ref.voice) {
             "sveta" -> "Света"; "masha" -> "Маша"; "dima" -> "Дима"
             "aidar" -> "Айдар"; "eugene" -> "Евгений"; "kseniya" -> "Ксения"; "baya" -> "Бая"; "xenia" -> "Ксения (Xenia)"
             "ru_roman" -> "Роман"; "ru_alexandr" -> "Александр"; "ru_dmitriy" -> "Дмитрий"; "ru_bogdan" -> "Богдан"

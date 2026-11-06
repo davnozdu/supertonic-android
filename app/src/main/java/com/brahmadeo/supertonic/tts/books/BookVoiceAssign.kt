@@ -18,6 +18,7 @@ object BookVoiceAssign {
         "ru_vika" to "f", "ru_karina" to "f", "ru_kejilgan" to "f", "ru_kermen" to "f", "ru_nurgul" to "f",
         "ru_oksana" to "f", "ru_ramilia" to "f", "ru_saida" to "f", "ru_zara" to "f", "ru_zhadyra" to "f",
         "ru_zhazira" to "f", "ru_zinaida" to "f",
+        "pack_anton" to "m", "pack_eugene" to "m", "pack_igor" to "m", "pack_kluvin" to "m", "pack_livanov" to "m", "pack_marcus" to "m", "pack_mario" to "m", "pack_maxim" to "m", "pack_pavel" to "m", "pack_stanislav" to "m", "pack_vasko" to "m", "pack_yurski" to "m",
         // Kokoro and Shtorm PocketTTS
         "dima" to "m", "masha" to "f", "sveta" to "f",
         "marius" to "m", "jean" to "m", "javert" to "m", "alba" to "f", "eponine" to "f", "fantine" to "f", "cosette" to "f",

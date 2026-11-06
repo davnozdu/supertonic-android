@@ -334,11 +334,19 @@ class MainActivity : ComponentActivity() {
                                         )
                                         Column {
                                             Text("Shtorm PocketTTS RU v2 · экспериментальная",style=MaterialTheme.typography.titleMedium)
-                                            Text("Для книг · ≈439 МБ · CPU · 7 скачиваемых голосов. Короткие фразы, поддержка ударений. Живая подача; спокойная (slow, ещё ≈341 МБ) — на главном экране под стилем голоса.",style=MaterialTheme.typography.bodySmall)
+                                            Text("Для книг · ≈439 МБ · CPU · 7 основных + 12 дополнительных голосов MP3, скачиваются при выборе. Короткие фразы, поддержка ударений. Живая подача; спокойная (slow, ещё ≈341 МБ) — на главном экране под стилем голоса.",style=MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }
                                 if (com.brahmadeo.supertonic.tts.silero.SileroDownload.supported()) {
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        androidx.compose.material3.RadioButton(selected=viewModel.selectedModel.value==AssetManager.SILERO_VOICES_MODEL,
+                                            onClick={ viewModel.selectedModel.value=AssetManager.SILERO_VOICES_MODEL })
+                                        Column {
+                                            Text("Silero RU · 22 голоса · экспериментальная",style=MaterialTheme.typography.titleMedium)
+                                            Text("Отдельная модель v5.5 · ≈77 МБ · CC BY-NC-SA 4.0. 5 штатных и 17 дополнительных голосов.",style=MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
                                     androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
                                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                         androidx.compose.material3.RadioButton(
@@ -569,8 +577,20 @@ class MainActivity : ComponentActivity() {
                         voices = viewModel.voiceFiles,
                         selectedVoiceFile = viewModel.selectedVoiceFile.value,
                         isTeraModel = AssetManager.isRussianModel(this@MainActivity),
-                        onVoiceChange = {
-                            if (viewModel.selectedVoiceFile.value != it) {
+                        onVoiceChange = { selected ->
+                            val selectedModel=AssetManager.getModelType(this@MainActivity)
+                            lifecycleScope.launch {
+                            try {
+                                val voice=selected.removeSuffix(".json")
+                                if(selectedModel==AssetManager.POCKET_MODEL && com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.isExtra(voice)) {
+                                    viewModel.isDownloading.value=true
+                                    com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.ensure(this@MainActivity,voice) { status,progress ->
+                                        viewModel.downloadStatus.value=status;viewModel.downloadProgress.floatValue=progress
+                                    }
+                                    setupVoicesMap(viewModel.currentLang.value)
+                                }
+                            if (AssetManager.getModelType(this@MainActivity)==selectedModel && viewModel.selectedVoiceFile.value != selected) {
+                                val it=selected
                                 viewModel.selectedVoiceFile.value = it
                                 saveStringPref("selected_voice", it)
                                 // The main voice is the narrator: with multi-voice reading on, the author role read the
@@ -581,6 +601,10 @@ class MainActivity : ComponentActivity() {
                                 }
                                 val resetIntent = Intent(this, PlaybackService::class.java).apply { action = "RESET_ENGINE" }
                                 startService(resetIntent)
+                            }
+                            } catch(t: kotlinx.coroutines.CancellationException) { throw t }
+                              catch(t: Exception) { Toast.makeText(this@MainActivity,"Не удалось скачать голос: ${t.message}",Toast.LENGTH_LONG).show() }
+                              finally { viewModel.isDownloading.value=false }
                             }
                         },
 
@@ -877,8 +901,11 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (AssetManager.isPocket(this)) {
-            AssetManager.russianVoices(this).forEach {
-                val label=if (com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.isCustom(it)) com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.label(it) else it.replaceFirstChar { c -> c.uppercase() }
+            com.brahmadeo.supertonic.tts.utils.HiddenVoices.filter(this,AssetManager.POCKET_MODEL,
+                (AssetManager.russianVoices(this)+com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.assets(this).map { it.name }).distinct()).forEach {
+                val extra=com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.isExtra(it)
+                val label=if(extra) com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.label(this,it)+(if(com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.ready(this,it)) "" else " · скачать")
+                else if (com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.isCustom(it)) com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.label(it) else it.replaceFirstChar { c -> c.uppercase() }
                 viewModel.voiceFiles["$label · Shtorm RU"]="$it.json"
             }
             return

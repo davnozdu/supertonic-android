@@ -22,15 +22,20 @@ object SileroDownload {
     private val cisSizes = mapOf("pack.json" to 1931L, "tts_mel.ptl" to 26940195L,
         "backbone.pte" to 53380608L, "head.ptl" to 4962917L)
     private val cisSpeakers = mapOf("ru_aigul" to 1, "ru_albina" to 3, "ru_alexandr" to 5, "ru_alfia" to 7, "ru_alfia2" to 9, "ru_bogdan" to 12, "ru_dmitriy" to 14, "ru_ekaterina" to 16, "ru_vika" to 18, "ru_gamat" to 20, "ru_igor" to 22, "ru_karina" to 24, "ru_kejilgan" to 26, "ru_kermen" to 28, "ru_marat" to 31, "ru_miyau" to 33, "ru_nurgul" to 35, "ru_oksana" to 37, "ru_onaoy" to 39, "ru_ramilia" to 41, "ru_roman" to 43, "ru_safarhuja" to 45, "ru_saida" to 47, "ru_sibday" to 49, "ru_zara" to 51, "ru_zhadyra" to 53, "ru_zhazira" to 55, "ru_zinaida" to 57, "ru_eduard" to 58)
+    private const val EXTRA_SHA="122ae0196d0b50f7e6f0659dd7fa854309ae256fcfdaecc68d69771e5f87a43d"
+    private const val EXTRA_BYTES=80141313L
+    private val extraSizes=mapOf("pack.json" to 1801L,"tts_mel.ptl" to 28314221L,"backbone.pte" to 53380480L,"head.ptl" to 4961893L)
+    private val extraVoices=listOf("aidar","baya","kseniya","eugene","xenia","chulsky","anyanov","tovarisch","kazbek","grinberg","solokha","ponomarenko","ruslan","pavel","oleg","ivan","boris","dmitri","wp_gk_tramrunner","wp_muratov","ilya","olga")
+    fun extra(context:Context)=com.brahmadeo.supertonic.tts.utils.AssetManager.getModelType(context)==com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_VOICES_MODEL
     fun cis(context: Context) = com.brahmadeo.supertonic.tts.utils.AssetManager.getModelType(context) == com.brahmadeo.supertonic.tts.utils.AssetManager.SILERO_CIS_MODEL
-    fun voices(context: Context) = if (cis(context)) cisSpeakers.keys.toList() else ruVoices
+    fun voices(context: Context) = if(extra(context)) extraVoices else if (cis(context)) cisSpeakers.keys.toList() else ruVoices
     fun defaultVoice(context: Context) = if (cis(context)) "ru_alexandr" else "kseniya"
-    private fun sha(context: Context) = if (cis(context)) CIS_SHA else RU_SHA
-    private fun sizes(context: Context) = if (cis(context)) cisSizes else ruSizes
-    private fun title(context: Context) = if (cis(context)) "Silero CIS · 29 голосов" else "Silero v5.6"
+    private fun sha(context: Context) = if(extra(context)) EXTRA_SHA else if (cis(context)) CIS_SHA else RU_SHA
+    private fun sizes(context: Context) = if(extra(context)) extraSizes else if (cis(context)) cisSizes else ruSizes
+    private fun title(context: Context) = if(extra(context)) "Silero RU · 22 голоса" else if (cis(context)) "Silero CIS · 29 голосов" else "Silero v5.6"
     fun supported() = android.os.Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a"
     // The RU folder keeps its v5.5 name: selected voice paths and book voices stay valid; the new SHA asks for v5.6.
-    fun root(context: Context) = File(context.filesDir, if (cis(context)) "silero-cis_ru" else "silero-v5_5_ru")
+    fun root(context: Context) = File(context.filesDir, if(extra(context)) "silero-ru-voices" else if (cis(context)) "silero-cis_ru" else "silero-v5_5_ru")
     fun ready(context: Context): Boolean {
         val dir = root(context)
         return File(dir, "verified.sha256").takeIf { it.isFile }?.readText() == sha(context) &&
@@ -48,7 +53,8 @@ object SileroDownload {
         stage.deleteRecursively(); check(stage.mkdirs())
         val archive = File(context.filesDir, dir.name + ".download.zip")
         try {
-            com.brahmadeo.supertonic.tts.utils.ResumableModelFile.fetch("$BASE/ruvoice-pack-${if (cis(context)) "cis_ru" else "ru-v5_6"}.zip",archive,if (cis(context)) 85285099L else 85221248L,SHA) { received,total ->
+            val url=if(extra(context)) "https://github.com/davnozdu/supertonic-android/releases/download/silero-ru-voices-v1/ruvoice-pack-ru_voices.zip" else "$BASE/ruvoice-pack-${if (cis(context)) "cis_ru" else "ru-v5_6"}.zip"
+            com.brahmadeo.supertonic.tts.utils.ResumableModelFile.fetch(url,archive,if(extra(context)) EXTRA_BYTES else if (cis(context)) 85285099L else 85221248L,SHA) { received,total ->
                 progress("$title: ${received / 1048576} / ${total / 1048576} МБ",(received.toFloat()/total*.85f).coerceAtMost(.85f))
             }
             progress("Проверка и распаковка $title", .9f)

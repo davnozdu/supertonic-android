@@ -9,6 +9,7 @@ import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.util.Log
 import com.brahmadeo.supertonic.tts.utils.AssetManager
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
@@ -28,6 +29,8 @@ class VoicePreview(context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private val mutableState = MutableStateFlow(State())
     val state = mutableState.asStateFlow()
+    private val scope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
+    private var download:Job?=null
     private var client: TextToSpeech? = null
     private var ready = false
     private var closed = false
@@ -45,6 +48,20 @@ class VoicePreview(context: Context) {
         val replacingOwn = currentId != null
         stop()
         val mixed = com.brahmadeo.supertonic.tts.books.BookVoiceRef.parse(name)
+        val scoped=if(mixed!=null) com.brahmadeo.supertonic.tts.utils.ModelContext(app,mixed.model) else app
+        val voiceName=(mixed?.voice ?: name).removeSuffix(".json")
+        if(AssetManager.isPocket(scoped) && com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.isExtra(voiceName) &&
+            !com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.ready(scoped,voiceName)) {
+            mutableState.value=State(name,true,"Скачивание голоса…")
+            download=scope.launch {
+                try {
+                    com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.ensure(scoped,voiceName) { status,_ -> mutableState.value=State(name,true,status) }
+                    download=null;mutableState.value=State();toggle(name)
+                } catch(t:CancellationException) { throw t }
+                  catch(t:Exception) { mutableState.value=State(message="Не удалось скачать голос: ${t.message}") }
+            }
+            return
+        }
         if (if (mixed != null) com.brahmadeo.supertonic.tts.books.BookVoiceCatalog.file(app, name) == null
             else name !in AssetManager.russianVoices(app) || !AssetManager.voiceFile(app, name).isFile) {
             mutableState.value = State(message = "Голос не установлен. Сначала скачайте его.")
@@ -113,6 +130,7 @@ class VoicePreview(context: Context) {
         override fun onStop(id: String?, interrupted: Boolean) = complete(id, false)
     }
     fun stop() {
+        download?.cancel();download=null
         handler.removeCallbacks(timeout)
         pending = null
         val hadUtterance = currentId != null
@@ -121,7 +139,7 @@ class VoicePreview(context: Context) {
         mutableState.value = State()
     }
     fun close() {
-        stop(); closed = true
+        stop(); closed = true;scope.cancel()
         client?.shutdown(); client = null; ready = false
     }
 }

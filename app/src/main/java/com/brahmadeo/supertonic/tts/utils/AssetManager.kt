@@ -39,6 +39,7 @@ object AssetManager {
     const val POCKET_MODEL = "shtorm_pocket_ru"
     const val KOKORO_MODEL = "kokoro_ru_v2"
     const val SILERO_MODEL = "silero_v5_5_ru"
+    const val SILERO_VOICES_MODEL = "silero_ru_voices"
     const val SILERO_CIS_MODEL = "silero_cis_ru"
     private const val TERA_REVISION = "f05ea799094571a3553904a555df3834fb0b963b"
     private const val TERA_BASE_URL = "https://huggingface.co/TeraSpace/TeraTTSv2/resolve/$TERA_REVISION"
@@ -62,7 +63,7 @@ object AssetManager {
     fun teraVoices(context: Context): List<String> = TERA_VOICES + com.brahmadeo.supertonic.tts.tera.TeraVoiceLibrary.installed(context) +
         com.brahmadeo.supertonic.tts.tera.TeraCustomVoices.installed(context)
     fun isTera(context: Context): Boolean = getModelType(context) == TERA_MODEL
-    fun isSilero(context: Context): Boolean = getModelType(context) in setOf(SILERO_MODEL, SILERO_CIS_MODEL)
+    fun isSilero(context: Context): Boolean = getModelType(context) in setOf(SILERO_MODEL, SILERO_CIS_MODEL, SILERO_VOICES_MODEL)
     fun isRussianModel(context: Context): Boolean = isTera(context) || isSilero(context) || isPocket(context) || isKokoro(context)
 
     fun voiceFile(context: Context, selected: String): File {

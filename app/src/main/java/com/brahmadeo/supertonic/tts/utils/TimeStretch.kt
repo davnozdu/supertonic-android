@@ -21,6 +21,7 @@ object TimeStretch {
         AssetManager.POCKET_MODEL to 2.5f,
         AssetManager.SILERO_MODEL to 2.5f,
         AssetManager.SILERO_CIS_MODEL to 2.5f,
+        AssetManager.SILERO_VOICES_MODEL to 2.5f,
     )
     fun maxSpeed(context: Context, model: String): Float =
         context.getSharedPreferences("SupertonicPrefs", 0).getFloat(PREFIX + model, defaults[model] ?: 2.5f).coerceIn(1f, 2.5f)

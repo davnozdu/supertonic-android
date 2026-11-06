@@ -36,6 +36,9 @@ object HiddenVoices {
             model == AssetManager.POCKET_MODEL && com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.isCustom(voice) -> {
                 com.brahmadeo.supertonic.tts.pocket.PocketCustomVoices.delete(ctx, voice); Result.DELETED
             }
+            model == AssetManager.POCKET_MODEL && com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.isExtra(voice) -> {
+                com.brahmadeo.supertonic.tts.pocket.PocketExtraVoices.delete(ctx,voice); add(ctx,key); Result.DELETED
+            }
             model == AssetManager.TERA_MODEL && TeraVoiceLibrary.isLibrary(voice) -> {
                 // Deleted, and remembered as removed so the download button does not bring it back on its own.
                 File(TeraVoiceLibrary.root(ctx), voice).deleteRecursively(); add(ctx, key); Result.DELETED
