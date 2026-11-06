@@ -44,7 +44,7 @@ object AmbienceSettings {
     fun realScenes(prefs: SharedPreferences) = prefs.getBoolean(REAL_SCENES, false)
     fun bankRecipe(prefs: SharedPreferences, event: Boolean): String = if (event)
         "banks-v2:real=${realEvents(prefs)}:legacy=${soundBank(prefs)}"
-        else "scene-bank-v2:real=${realScenes(prefs)}"
+        else "scene-bank-v3:real=${realScenes(prefs)}"
     const val SOUND_BANK = "sound_bank"
     fun soundBank(prefs: SharedPreferences) = prefs.getBoolean(SOUND_BANK, true)
 

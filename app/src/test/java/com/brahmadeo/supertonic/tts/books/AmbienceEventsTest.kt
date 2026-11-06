@@ -195,4 +195,20 @@ class AmbienceEventsTest {
         val group = """{"groups":[{"kind":"boy_voice_pleading","sound":"a young boy's voice pleading","items":[1,2]}]}"""
         assertEquals(0, SceneMarking.mark(paragraphs, { two }, group = { group }).kinds)
     }
+
+    @org.junit.Test fun balconyDoorAccentDoesNotTurnIndoorBackgroundIntoStreet() {
+        val location = SceneIndex.Location("l3", "пентхаус",
+            "high penthouse by a glass wall, soft carpet, distant city below", 10,
+            listOf("fabric of a coat rustles", "a faint gust rattles the balcony door frame"))
+        val scenes = listOf(
+            com.brahmadeo.supertonic.tts.ambience.OpenBankMatch.Scene("inside", emptySet(),
+                setOf("apartment", "city"), "Apartment closed window", 242.0),
+            com.brahmadeo.supertonic.tts.ambience.OpenBankMatch.Scene("outside", emptySet(),
+                setOf("city", "traffic"), "London Street", 117.0))
+        val jobs = AmbienceBook.locationJobs(location, 3, "scene-bank-v3:real=true")
+        assertTrue(jobs[2].prompt.contains("balcony door"))
+        for (job in jobs) {
+            assertEquals(listOf("inside"), com.brahmadeo.supertonic.tts.ambience.OpenBankMatch.scenes(job.bankPrompt, scenes))
+        }
+    }
 }

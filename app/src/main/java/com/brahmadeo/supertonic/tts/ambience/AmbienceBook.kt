@@ -45,7 +45,9 @@ object AmbienceBook {
     /** One clip to make: [file] in the book's ambience folder, from [prompt]; [id]/[recipe] go into sounds.json. */
     class Job(val file: String, val prompt: String, val seconds: Float, val seed: Long, val id: String, val recipe: String, val label: String,
               /** Made by the music model («Музыка по настроению»). */
-              val music: Boolean = false) {
+              val music: Boolean = false,
+              /** The steady location only; generated variants may additionally contain an accent. */
+              val bankPrompt: String = prompt) {
         /** Звук события или перехода главы (не фон локации и не музыка). */
         val event: Boolean get() = !music && (id.startsWith("k_") || id.startsWith("e"))
     }
@@ -68,15 +70,20 @@ object AmbienceBook {
     const val EVENT_SECONDS = 8f
     private const val CHAPTER_SECONDS = 3f
 
+    /** Bank retrieval must never mistake an accent (e.g. a balcony door) for the location. */
+    internal fun locationJobs(location: SceneIndex.Location, variants: Int, policy: String): List<Job> =
+        (0 until variants).map { k ->
+            Job("${location.id}_$k.m4a", prompt(location, k), SECONDS, location.sound.hashCode().toLong() * 31 + k,
+                location.id, recipe(location) + " | " + policy, location.name, bankPrompt = location.sound)
+        }
+
     /** Every clip the book needs: its locations' variants, its events and the chapter transition. */
     private fun jobs(context: Context, scenes: SceneIndex): List<Job> {
         val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
         val eventPolicy = AmbienceSettings.bankRecipe(prefs, true)
         val scenePolicy = AmbienceSettings.bankRecipe(prefs, false)
         val n = variants(context, scenes.locations.size)
-        val places = scenes.locations.flatMap { loc -> (0 until n).map { k ->
-            Job("${loc.id}_$k.m4a", prompt(loc, k), SECONDS, loc.sound.hashCode().toLong() * 31 + k, loc.id, recipe(loc) + " | " + scenePolicy, loc.name)
-        } }
+        val places = scenes.locations.flatMap { locationJobs(it, n, scenePolicy) }
         // One clip per kind of action: a door slammed in chapter 1 is the same sound in chapter 30.
         val events = scenes.events.events.groupBy { com.brahmadeo.supertonic.tts.books.EventIndex.fileKey(it) }.map { (key, same) ->
             val prompt = scenes.events.kinds[key.removePrefix("k_")] ?: same.first().sound
@@ -109,7 +116,7 @@ object AmbienceBook {
             val target = File(dir, job.file)
             if (target.isFile && target.length() > 0L) return true
             val variant = job.file.substringBeforeLast('.').substringAfterLast('_').toIntOrNull() ?: 0
-            val source = OpenSoundBank.scene(context, job.prompt, salt + variant, cancelled) ?: return false
+            val source = OpenSoundBank.scene(context, job.bankPrompt, salt + variant, cancelled) ?: return false
             val part = File(dir, job.file + ".part")
             return try {
                 source.copyTo(part, overwrite = true)
