@@ -33,6 +33,11 @@ class ReplyIndex private constructor(private val keys: LongArray, private val va
             voiceOf(key(window)) ?: if (i < WINDOW - 1) voiceOf(startKey(start, i)) else null
         }
         if (found.all { it == null }) return null
+        // An external context can accidentally make a single leading window match another reply.
+        // Do not paint a long, otherwise unknown fragment with that one speaker. A paragraph-start
+        // anchor or at least two in-fragment windows is independent of the reader's mutable history.
+        val anchoredStart = words.take(WINDOW - 1).indices.any { voiceOf(startKey(start, it)) != null }
+        if (words.size >= WINDOW * 2 && !anchoredStart && found.drop(WINDOW - 1).count { it != null } < 2) return null
         // A word not found takes the voice of the word before it (or, at the start, the first one found).
         val filled = ArrayList<Voice>(found.size)
         var last = found.first { it != null }!!

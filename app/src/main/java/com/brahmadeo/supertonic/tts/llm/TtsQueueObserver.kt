@@ -183,6 +183,7 @@ class TtsQueueObserver(private val context: Context, private val delegate: IBind
                     } else {
                         com.brahmadeo.supertonic.tts.music.BackgroundMusic.stop(caller)
                         LlmPreparation.cancel(caller)
+                        LlmPreparation.clearReaderHistory(getCallingUid())
                         if (caller in readingOwners) ReaderAudioAhead.cancel()
                     }
                 }

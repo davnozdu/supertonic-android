@@ -148,11 +148,13 @@ object LlmPreparation {
     private val directTexts = LinkedHashMap<String, List<VoiceRoleText>>()
     private val localSpeakers = LocalSpeakers()
     /** The last words a one-at-a-time reader sent: the context of the first words of its next text («Разметка реплик»). */
-    @Volatile private var lastReaderWords: List<String> = emptyList()
+    private val readerRequestContext = ReaderRequestContext()
+    fun clearReaderHistory(uid: Int) = readerRequestContext.clear(uid)
     const val DIRECT_KEY = "reader_direct_offline"
     /** Records how app [uid] queues text; true when the text should not wait for the LLM («Не ждать LLM в читалках
      * без очереди», on by default): the app sends one utterance at a time, so nothing can be prepared ahead. */
     fun directReader(ctx: Context, caller: Any, uid: Int, text: String, flush: Boolean): Boolean {
+        val before = readerRequestContext.record(uid, text)
         readerStyle.record(uid, flush)
         val roles = LlmSettings.multiVoiceEnabled(ctx) && com.brahmadeo.supertonic.tts.utils.AssetManager.isRussianModel(ctx)
         val direct = ctx.getSharedPreferences("SupertonicPrefs", Context.MODE_PRIVATE).getBoolean(DIRECT_KEY, true)
@@ -161,12 +163,9 @@ object LlmPreparation {
             // keeps its speaker once the app is recognised. Apps that queue ahead (Moon+) use the LLM instead.
             if (direct && roles && !readerStyle.queues(uid)) {
                 runCatching { synchronized(localSpeakers) { localSpeakers.plan(text) } }
-                lastReaderWords = (lastReaderWords + com.brahmadeo.supertonic.tts.books.ReplyIndex.words(text)).takeLast(com.brahmadeo.supertonic.tts.books.ReplyIndex.WINDOW - 1)
             }
             return false
         }
-        val before = lastReaderWords
-        lastReaderWords = (before + com.brahmadeo.supertonic.tts.books.ReplyIndex.words(text)).takeLast(com.brahmadeo.supertonic.tts.books.ReplyIndex.WINDOW - 1)
         val plan = if (roles) runCatching {
             // The prepared book (if this text belongs to one): its characters and voices, its first-person choice.
             val position = com.brahmadeo.supertonic.tts.books.BookMatcher.feed(ctx, caller, text)
@@ -247,9 +246,10 @@ object LlmPreparation {
     /** Готовый текст книги (PreparedText): ударения, ё и пунктуация посчитаны заранее при подготовке. Возвращает
      * null, если книга не узнана, файла нет или хотя бы одно предложение не совпало по буквам — тогда обычный путь. */
     /** Только готовый текст книги, без очереди и без облака: дёшево и можно спрашивать на каждом куске. */
-    fun preparedOnly(ctx: Context, text: String): Result? = preparedResult(ctx, text)
+    fun preparedOnly(ctx: Context, text: String, readerUid: Int? = null): Result? =
+        preparedResult(ctx, text, before = readerUid?.let { readerRequestContext.take(it, text) }.orEmpty())
 
-    private fun preparedResult(ctx: Context, text: String, known: com.brahmadeo.supertonic.tts.books.BookMatcher.Position? = null): Result? {
+    private fun preparedResult(ctx: Context, text: String, known: com.brahmadeo.supertonic.tts.books.BookMatcher.Position? = null, before: List<String> = emptyList()): Result? {
         if (text.length > 6000 || !text.any { it in 'А'..'я' || it == 'ё' || it == 'Ё' }) return null
         val started = SystemClock.elapsedRealtime()
         var position = known ?: com.brahmadeo.supertonic.tts.books.BookMatcher.recognised.value
@@ -284,9 +284,9 @@ object LlmPreparation {
         // exact characters too; a plan over the incoming spelling is rejected by VoiceRolePlan.safe as a whole.
         val spoken = ready ?: return null
         val indexedPlan = if (book != null && LlmSettings.multiVoiceEnabled(ctx))
-            pkg?.replies?.resolve(spoken, lastReaderWords) { role, who -> book.voiceOf(role, who) } else null
+            pkg?.replies?.resolve(spoken, before) { role, who -> book.voiceOf(role, who) } else null
         var plan = indexedPlan ?: if (book != null && LlmSettings.multiVoiceEnabled(ctx))
-            runCatching { bookRoles(ctx, book, listOf(spoken), lastReaderWords.joinToString(" "))?.firstOrNull() }.getOrNull()
+            runCatching { bookRoles(ctx, book, listOf(spoken), before.joinToString(" "))?.firstOrNull() }.getOrNull()
         else null
         // Короткие куски читалки присылают без контекста: окна в 4 слова у начала куска не находятся, и вся реплика
         // осталась бы за автором. Локальные правила (тире, ремарки, очерёдность) закрывают такие места — без сети.

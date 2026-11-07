@@ -7,21 +7,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Разметка реплик: решение модели и локальные правила складываются так, что ни одна реплика не остаётся
- * за автором, а narration — автором, и текст не теряет ни одного символа. */
+/** Validated model decisions win; local rules are a fallback for a missing answer. */
 class ReplyMarkingMergeTest {
     private val text = "— Ты уверена? — спросил он."
 
-    @Test fun modelAuthorIsReplacedByLocalSpeech() {
+    @Test fun modelNarratorIsNeverRepaintedAsALocalCharacter() {
         val model = listOf(VoiceRoleText(text, VoiceRole.AUTHOR))
-        val local = listOf(
-            VoiceRoleText("— Ты уверена?", VoiceRole.MALE, "ivan"),
-            VoiceRoleText(" — спросил он.", VoiceRole.AUTHOR))
-        val merged = RoleMerge.merge(model, local)!!
-        assertEquals(text, merged.joinToString("") { it.text })
-        assertEquals(VoiceRole.MALE, merged.first().role)
-        assertEquals("ivan", merged.first().character)
-        assertEquals(VoiceRole.AUTHOR, merged.last().role)
+        val local = listOf(VoiceRoleText(text, VoiceRole.MALE, "ivan"))
+        assertEquals(model, RoleMerge.merge(model, local))
     }
 
     @Test fun modelSpeechWinsOverLocalGuess() {
@@ -60,7 +53,7 @@ class ReplyMarkingMergeTest {
             VoiceRoleText("— Да.", VoiceRole.MALE, "ivan"),
             VoiceRoleText(" ", VoiceRole.AUTHOR),
             VoiceRoleText("— Нет.", VoiceRole.MALE, "petr"))
-        val merged = RoleMerge.merge(model, local)!!
+        val merged = RoleMerge.merge(null, local)!!
         assertEquals(full, merged.joinToString("") { it.text })
         assertEquals(listOf("ivan", "petr"), merged.filter { it.role == VoiceRole.MALE }.map { it.character })
     }
@@ -84,9 +77,25 @@ class ReplyMarkingMergeTest {
             VoiceRoleText("— Да.", VoiceRole.FEMALE, "anna"),
             VoiceRoleText(" ", VoiceRole.AUTHOR),
             VoiceRoleText("— Нет!", VoiceRole.MALE, "ivan"))
-        val merged = RoleMerge.merge(model, local)!!
+        val merged = RoleMerge.merge(null, local)!!
         assertEquals(full, merged.joinToString("") { it.text })
         assertEquals(listOf(VoiceRole.AUTHOR, VoiceRole.FEMALE, VoiceRole.AUTHOR, VoiceRole.MALE), merged.map { it.role })
         assertEquals(listOf("anna", "ivan"), merged.filter { it.character != null }.map { it.character })
+    }
+
+    @Test fun authorRemarkBetweenPartsOfTheSameSpeakerCannotBecomeAnotherVoice() {
+        val model = listOf(VoiceRoleText("— Да. ", VoiceRole.MALE, "first"),
+            VoiceRoleText("Он усмехнулся. ", VoiceRole.AUTHOR), VoiceRoleText("— Продолжим.", VoiceRole.MALE, "first"))
+        val local = listOf(VoiceRoleText(model.joinToString("") { it.text }, VoiceRole.MALE, "other"))
+        assertEquals(model, RoleMerge.merge(model, local))
+    }
+
+    @Test fun twoMaleSpeakersCannotCollapseIntoTheSameGenericVoice() {
+        val model = listOf(VoiceRoleText("— Вы закончили? ", VoiceRole.MALE, "first"),
+            VoiceRoleText("— Ещё нет.", VoiceRole.MALE, "second"))
+        val local = listOf(VoiceRoleText(model.joinToString("") { it.text }, VoiceRole.MALE, "first"))
+        val result = RoleMerge.merge(model, local)!!
+        assertEquals(listOf("first", "second"), result.map { it.character })
+        assertEquals(model, result)
     }
 }

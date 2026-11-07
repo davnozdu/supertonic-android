@@ -109,8 +109,8 @@ internal object ReplyMarking {
             if (corrected != null) plans[i] = corrected
         }
         progress(batches.size + review.size, batches.size + review.size)
-        // Локальные правила (без сети) страхуют разметку: модель иногда оставляет целую реплику за автором,
-        // и тогда персонаж читается голосом рассказчика. Правила знают тире, ремарки и очерёдность реплик.
+        // Local rules supply missing model answers only. A validated AUTHOR span may be a first-person
+        // narrator or an inline remark; overriding it also loses same-gender character identities.
         val local = com.brahmadeo.supertonic.tts.llm.LocalSpeakers()
         // «Я» в повествовании: тогда «— сказал я» — автор, а не персонаж (как и при чтении без книги).
         val sectionsFirstPerson = HashMap<Int, Boolean>()

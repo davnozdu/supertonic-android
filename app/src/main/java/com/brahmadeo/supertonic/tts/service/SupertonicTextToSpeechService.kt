@@ -313,9 +313,9 @@ class SupertonicTextToSpeechService : TextToSpeechService() {
         // Книга знает, кто говорит. Если звук, подготовленный наперёд, сделан с другими голосами (его успели слепить
         // до того, как книгу узнали, или с прежней разметкой), он не годится: он споёт всё автором. Тогда звук берём
         // из готового текста книги заново, с её разметкой.
-        val bookPrepared = if (voicePreview || foreign) null else com.brahmadeo.supertonic.tts.llm.LlmPreparation.preparedOnly(this, incomingText)
+        val bookPrepared = if (voicePreview || foreign) null else com.brahmadeo.supertonic.tts.llm.LlmPreparation.preparedOnly(this, incomingText, request.callerUid)
         fun planKey(list: List<com.brahmadeo.supertonic.tts.llm.VoiceRoleText>) =
-            list.joinToString("|") { "${it.role}:${it.character.orEmpty()}" }
+            list.joinToString("|") { "${it.role}:${it.character.orEmpty()}:${it.voice.orEmpty()}:${it.text}" }
         val aheadText = if (bookPrepared != null && bookPrepared.voicePlan.isNotEmpty() &&
             planKey(aheadPrepared?.voicePlan.orEmpty()) != planKey(bookPrepared.voicePlan)) null else aheadPrepared
         val preparation = if (aheadText == null && !voicePreview && !foreign)

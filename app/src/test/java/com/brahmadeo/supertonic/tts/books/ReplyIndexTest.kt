@@ -109,4 +109,15 @@ class ReplyIndexTest {
         val resolved = ReplyIndex.parse(codes, index)!!.resolve(text, emptyList()) { role, _ -> role.name }
         assertEquals(VoiceRole.AUTHOR, resolved!!.single().role)
     }
+
+    @Test fun unrelatedLongTextCannotInheritASpeakerFromOneExternalWindow() {
+        val spoken = "Вчера у дома Анна ждала меня очень долго."
+        val builder = ReplyIndex.Companion.Builder()
+        builder.add(spoken, listOf(VoiceRoleText(spoken, VoiceRole.FEMALE, "anna")))
+        val (codes, data) = builder.export()
+        val idx = ReplyIndex.parse(codes, data)
+        val unrelated = "Анна взяла старую книгу и спокойно ушла домой."
+        assertNull(idx.resolve(unrelated, listOf("вчера", "у", "дома")) { _, _ -> null })
+        assertEquals(VoiceRole.FEMALE, idx.resolve(spoken, emptyList()) { _, _ -> null }!!.first().role)
+    }
 }
