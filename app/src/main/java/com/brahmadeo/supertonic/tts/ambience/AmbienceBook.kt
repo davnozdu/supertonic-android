@@ -111,7 +111,20 @@ object AmbienceBook {
     /** Copies the clips of [job] from the shared bank into the book — all variants of the kind, so the same action
      * sounds different each time (k_door_slam.m4a, k_door_slam_2.m4a, k_door_slam_3.m4a). */
     private fun adoptFromBank(context: Context, dir: File, job: Job, salt: Int = 0, online: Boolean = false, cancelled: () -> Boolean = { false }): Boolean {
-        if ((!SoundBank.on(context) && !FreesoundSettings.enabled(context)) || job.music) return false
+        if (job.music) {
+            val target = File(dir, job.file)
+            if (target.isFile && target.length() > 0L) return true
+            val variant = job.file.substringBeforeLast('.').substringAfterLast('_').toIntOrNull() ?: 0
+            val source = MusicBank.find(context, job.prompt, salt + variant, online, cancelled) ?: return false
+            val part = File(dir, job.file + ".part")
+            return try {
+                source.copyTo(part, overwrite = true)
+                check(part.renameTo(target))
+                Log.i("Ambience", "ready mood music ${source.name} -> ${job.file}")
+                true
+            } finally { part.delete() }
+        }
+        if (!SoundBank.on(context) && !FreesoundSettings.enabled(context)) return false
         if (!job.event) {
             val target = File(dir, job.file)
             if (target.isFile && target.length() > 0L) return true
@@ -209,32 +222,32 @@ object AmbienceBook {
     fun missing(context: Context, sha: String, scenes: SceneIndex): List<Job> {
         sync(context, sha, scenes)
         val dir = BookFiles.ambience(context, sha)
-        return if (scenes.locations.isEmpty() && scenes.events.events.isEmpty()) emptyList()
+        return if (scenes.locations.isEmpty() && scenes.events.events.isEmpty() && scenes.moods.moods.isEmpty()) emptyList()
             else jobs(context, scenes).filter { !File(dir, it.file).isFile }
     }
 
     /** Generates the missing clips (one at a time; the 30 s ones on the NPU when switched on). [progress]: (done, total, place). */
     fun generate(context: Context, sha: String, scenes: SceneIndex, threads: Int = 4,
-                 progress: (Int, Int, String) -> Unit = { _, _, _ -> }, cancelled: () -> Boolean = { false }) {
+                 downloadMusic: Boolean = false, progress: (Int, Int, String) -> Unit = { _, _, _ -> }, cancelled: () -> Boolean = { false }) {
         if (AmbienceModel.busy) progress(0, 0, "ждёт окончания другой работы генератора")
-        try { AmbienceModel.exclusive { generateLocked(context, sha, scenes, threads, progress, cancelled) } }
+        try { AmbienceModel.exclusive { generateLocked(context, sha, scenes, threads, downloadMusic, progress, cancelled) } }
         // Закрывали ради NPU фоновые приложения — сказать какие (список только в RAM, затем очищается).
         finally { com.brahmadeo.supertonic.tts.utils.MemoryRelief.finish(context) }
     }
 
     private fun generateLocked(context: Context, sha: String, scenes: SceneIndex, threads: Int,
-                               progress: (Int, Int, String) -> Unit, cancelled: () -> Boolean) {
+                               downloadMusic: Boolean, progress: (Int, Int, String) -> Unit, cancelled: () -> Boolean) {
         // Music without its model (not downloaded yet) waits for it; the sounds are made now.
         val dir = BookFiles.ambience(context, sha).apply { mkdirs() }
         // «База звуков» first: a clip already made for another book is copied and nothing is generated for it.
         // Версия базы, из которой взяты звуки событий: без неё sync() принял бы их за устаревшие и удалил.
         val manifest0 = readManifest(context, sha).put("bank", SoundBank.version(context)).put(MUSIC_KEY, MUSIC_VERSION).put(LUFS_KEY, Loudness.TARGET_LUFS)
         var reused = 0
-        val requested = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
+        val requested = missing(context, sha, scenes)
         val todo = requested.filter { job ->
                 if (cancelled()) throw InterruptedException("cancelled")
                 progress(reused, requested.size, "Поиск готового звука: ${job.label}")
-                if (job.music || !adoptFromBank(context, dir, job, sha.hashCode(), online = true, cancelled = cancelled)) return@filter true
+                if (!adoptFromBank(context, dir, job, sha.hashCode(), online = true, cancelled = cancelled)) return@filter true
                 manifest0.put(job.id, job.recipe)
                 reused++
                 false
@@ -244,6 +257,15 @@ object AmbienceBook {
             Log.i("Ambience", "$reused sounds taken from the bank, no generation")
         }
         if (todo.isEmpty()) return
+        // A music model is downloaded only after all ready/online music sources have missed.
+        if (downloadMusic && todo.any { it.music } && !AmbienceModel.musicReady(context)) {
+            kotlinx.coroutines.runBlocking {
+                AmbienceModel.download(context) { text, _ ->
+                    if (cancelled()) throw InterruptedException("cancelled")
+                    progress(reused, requested.size, text)
+                }
+            }
+        }
         if (!AmbienceModel.ready(context)) {
             Log.i("Ambience", "${todo.size} sounds await a generator; ready bank clips kept")
             return
@@ -251,7 +273,11 @@ object AmbienceBook {
         // Один генератор и одна NPU-сессия на пачку подряд идущих клипов одной модели (малая, средняя для событий,
         // музыка) и одного места счёта DiT.
         val prefs = context.getSharedPreferences("SupertonicPrefs", 0)
-        val ordered = todo.sortedBy { genOf(context, it).ordinal }
+        val available = todo.filter { !it.music || AmbienceModel.musicReady(context) }
+        val aliases = MusicReuse.duplicates(available.filter { it.music }.map { MusicReuse.Clip(it.file, it.prompt, it.seconds) })
+        val duplicateFiles = aliases.values.flatten().toSet()
+        val ordered = available.filter { it.file !in duplicateFiles }.sortedBy { genOf(context, it).ordinal }
+        if (ordered.isEmpty()) return
         val place = HashMap<Job, Int>().apply { ordered.forEachIndexed { i, job -> put(job, i) } }
         var npu: Sa3Generator.NpuDit? = null
         var generator: Sa3Generator? = null
@@ -299,7 +325,7 @@ object AmbienceBook {
                     fun produceNpu(job: Job) = job to g.latents(job.prompt, job.seconds, job.seed, Sa3Generator.Track(cancelled))
                     fun save(job: Job, result: Sa3Generator.Result, onNpu: Boolean = true) {
                         progress(place[job] ?: 0, ordered.size, job.label)
-                        synchronized(doc) { saveClip(context, sha, dir, doc, job, result, npu = onNpu) }
+                        synchronized(doc) { saveClip(context, sha, dir, doc, job, result, npu = onNpu, aliases = aliases, allJobs = available) }
                     }
                     // Третье звено: громкость + AAC (~1,2 с на клип 30 с) в своём потоке, пока декодер берёт следующий
                     // клип. Раньше декодер ждал сохранения, и клип занимал декод + сохранение (~3 с вместо ~1,8 с).
@@ -379,7 +405,7 @@ object AmbienceBook {
                     for (job in batch.jobs) {
                         if (cancelled()) throw InterruptedException("cancelled")
                         progress(place[job] ?: 0, ordered.size, job.label)
-                        saveClip(context, sha, dir, doc, job, generator!!.generate(job.prompt, job.seconds, job.seed, cancelled), npu = false)
+                        saveClip(context, sha, dir, doc, job, generator!!.generate(job.prompt, job.seconds, job.seed, cancelled), npu = false, aliases = aliases, allJobs = available)
                     }
                 }
             }
@@ -424,7 +450,7 @@ object AmbienceBook {
     /** Всё, что делается с готовым звуком: выравнивание громкости, AAC в папку книги, строка манифеста и копия в
      * базу звуков. В конвейере это второй поток, пока первый считает следующий клип. */
     private fun saveClip(context: Context, sha: String, dir: File, doc: JSONObject, job: Job,
-                         result: Sa3Generator.Result, npu: Boolean) {
+                         result: Sa3Generator.Result, npu: Boolean, aliases: Map<String, List<String>> = emptyMap(), allJobs: List<Job> = emptyList()) {
         val saveStart = SystemClock.elapsedRealtime()
         val pcm = result.pcm
         if (job.music && MusicEnhance.enabled(context)) MusicEnhance.apply(pcm, Sa3Generator.SAMPLE_RATE)
@@ -443,6 +469,14 @@ object AmbienceBook {
         if (!job.music && job.id.startsWith("k_") && SoundBank.on(context))
             SoundBank.store(context, job.id.removePrefix("k_"), File(dir, job.file),
                 custom = !com.brahmadeo.supertonic.tts.books.EventKinds.known(job.id.removePrefix("k_")))
+        for (name in aliases[job.file].orEmpty()) {
+            val mirror = allJobs.first { it.file == name }
+            val temp = File(dir, name + ".part")
+            File(dir, job.file).copyTo(temp, overwrite = true)
+            check(temp.renameTo(File(dir, name)))
+            doc.put(mirror.id, mirror.recipe)
+            Log.i("Ambience", "identical mood request reused ${job.file} -> $name")
+        }
         doc.put(job.id, job.recipe).put(LUFS_KEY, Loudness.TARGET_LUFS)
         manifest(context, sha).writeText(doc.toString())
         Log.i("Ambience", "Sound ${job.file} ready (gain ${"%.1f".format(gain)} dB, npu=$npu, music=${job.music}, " +

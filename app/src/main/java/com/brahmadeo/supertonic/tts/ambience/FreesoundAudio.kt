@@ -10,7 +10,7 @@ import java.nio.ByteOrder
 
 /** Bounded platform decoding: short events or complete ambience <=90s, stereo preserved. */
 internal object FreesoundAudio {
-    fun prepare(source: File, target: File, event: Boolean, duration: Double, cancelled: () -> Boolean) {
+    fun prepare(source: File, target: File, event: Boolean, duration: Double, music: Boolean = false, clipSeconds: Int? = null, cancelled: () -> Boolean) {
         val ex = MediaExtractor()
         try {
             ex.setDataSource(source.path)
@@ -22,7 +22,7 @@ internal object FreesoundAudio {
             require(rate in 8000..48000 && channels in 1..2)
             val limit = if (event) 31 else 91
             require(duration > 0 && duration <= limit - 1)
-            val maxFrames = (minOf(duration + 0.75, limit.toDouble()) * rate).toInt()
+            val maxFrames = ((clipSeconds?.toDouble() ?: minOf(duration + 0.75, limit.toDouble())) * rate).toInt()
             val runtime = Runtime.getRuntime()
             val free = runtime.maxMemory() - runtime.totalMemory() + runtime.freeMemory()
             require(maxFrames.toLong() * 2 * 4 * 8 < free) { "Insufficient audio preparation memory" }
@@ -54,7 +54,7 @@ internal object FreesoundAudio {
                             val buf = codec.getOutputBuffer(o)!!.duplicate().order(ByteOrder.nativeOrder())
                             buf.position(info.offset); buf.limit(info.offset + info.size)
                             val frameBytes = channels * if (encoding == AudioFormat.ENCODING_PCM_FLOAT) 4 else 2
-                            while (buf.remaining() >= frameBytes) {
+                            while (buf.remaining() >= frameBytes && (clipSeconds == null || frames < maxFrames)) {
                                 require(frames < maxFrames) { "Preview exceeds declared duration" }
                                 fun sample() = if (encoding == AudioFormat.ENCODING_PCM_FLOAT) buf.float else buf.short / 32768f
                                 val left = sample(); val right = if (channels == 1) left else sample()
@@ -62,22 +62,22 @@ internal object FreesoundAudio {
                                 pcm[frames * 2] = left; pcm[frames * 2 + 1] = right; frames++
                             }
                         } finally { codec.releaseOutputBuffer(o, false) }
-                        complete = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                        complete = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0 || (clipSeconds != null && frames >= maxFrames)
                     }
                 }
                 check(complete && frames >= rate * 0.4)
             } finally { runCatching { codec.stop() }; codec.release() }
             var samples = pcm.copyOf(frames * 2)
-            if (event) samples = EventWindow.crop(samples, rate)
+            if (event && !music) samples = EventWindow.crop(samples, rate)
             check(samples.any { kotlin.math.abs(it) > 0.0001f }) { "Silent recording" }
-            Loudness.normalize(samples, rate, if (event) -22.0 else Loudness.TARGET_LUFS, maxPeakDb = -3.0)
+            Loudness.normalize(samples, rate, if (music) Loudness.MUSIC_LUFS else if (event) -22.0 else Loudness.TARGET_LUFS, maxPeakDb = if (music) Loudness.MUSIC_PEAK_DB else -3.0)
             val fade = minOf(rate / 100, samples.size / 4)
             for (i in 0 until fade) for (ch in 0..1) {
                 val g = i.toFloat() / fade
                 samples[i * 2 + ch] *= g; samples[samples.size - 2 - i * 2 + ch] *= g
             }
             if (cancelled()) throw InterruptedException("cancelled")
-            AacFile.write(target, samples, rate, if (event) 128_000 else 96_000)
+            AacFile.write(target, samples, rate, if (event || music) 128_000 else 96_000)
         } finally { ex.release() }
     }
 }

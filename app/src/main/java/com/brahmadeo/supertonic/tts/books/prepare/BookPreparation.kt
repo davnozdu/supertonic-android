@@ -417,12 +417,8 @@ object BookPreparation {
     private fun generateSounds(ctx: Context, pkg: BookPackage, cancel: LlmProviders.CloudCancellation, startedAt: Long,
                                stop: () -> Boolean = { runCatching { cancel.check() }.isFailure }): String {
         return try {
-            if (com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx) &&
-                com.brahmadeo.supertonic.tts.ambience.AmbienceSettings.moodMusic(ctx.getSharedPreferences("SupertonicPrefs", 0)) &&
-                !com.brahmadeo.supertonic.tts.ambience.AmbienceModel.musicReady(ctx)) runBlocking {
-                com.brahmadeo.supertonic.tts.ambience.AmbienceModel.download(ctx) { text, _ -> soundLine = text; mutable.value = mutable.value.copy(sounds = text) }
-            }
             com.brahmadeo.supertonic.tts.ambience.AmbienceBook.generate(ctx, pkg.contentSha256, pkg.scenes,
+                downloadMusic = com.brahmadeo.supertonic.tts.ambience.AmbienceModel.ready(ctx),
                 progress = { done, all, place ->
                     soundLine = "Фоновые звуки $done из $all${if (place.isNotEmpty()) ": $place" else ""}"
                     mutable.value = mutable.value.copy(sounds = soundLine) },

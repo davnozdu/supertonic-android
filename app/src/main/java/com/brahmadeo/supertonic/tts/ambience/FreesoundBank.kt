@@ -29,9 +29,9 @@ object FreesoundBank {
 
     /** [allowNetwork] is true only during book preparation. Cached audio still requires the opt-in switch. */
     @Synchronized fun find(context: Context, kind: String, prompt: String, event: Boolean,
-                           allowNetwork: Boolean = false, cancelled: () -> Boolean = { false }): File? {
+                           allowNetwork: Boolean = false, cancelled: () -> Boolean = { false }, music: Boolean = false): File? {
         if (!FreesoundSettings.enabled(context) || cancelled()) return null
-        val key = hash("v1|$event|$kind|${prompt.trim().lowercase()}")
+        val key = hash(if (music) "music-v1|${prompt.trim().lowercase()}" else "v1|$event|$kind|${prompt.trim().lowercase()}")
         val db = read(context); val row = db.optJSONObject(key)
         row?.optString("file")?.takeIf { it.matches(Regex("[a-f0-9]+\\.m4a")) }?.let { name ->
             File(root(context), name).takeIf { it.isFile && it.length() > 0 }?.let { return it }
@@ -39,7 +39,7 @@ object FreesoundBank {
         if (!allowNetwork || System.currentTimeMillis() < blockedUntil) return null
         if (row != null && System.currentTimeMillis() - row.optLong("checked") < DAY) return null
         val apiKey = FreesoundSettings.key(context).takeIf { it.isNotBlank() } ?: return null
-        val query = if (event) kind.replace('_', ' ') else {
+        val query = if (music) MusicMatch.query(prompt) ?: return null else if (event) kind.replace('_', ' ') else {
             val place = OpenBankMatch.habitat(prompt) ?: OpenBankMatch.concepts(prompt).firstOrNull()
             when (place) {
                 "apartment", "office", "kitchen" -> "$place room tone"
@@ -64,7 +64,9 @@ object FreesoundBank {
             val candidates = (0 until results.length()).map { results.getJSONObject(it) }.filter { s ->
                 FreesoundMatch.allowedLicense(s.optString("license")) && s.optDouble("duration") in (if (event) 0.4..30.0 else 30.0..90.0)
             }
-            val selected = if (event) candidates.firstOrNull { s ->
+            val selected = if (music) candidates.firstOrNull { s ->
+                MusicMatch.matches(prompt, s.optString("name"), s.optString("description"), tags(s))
+            } else if (event) candidates.firstOrNull { s ->
                 FreesoundMatch.event(kind, s.optString("name"), tags(s))
             } else {
                 val scenes = candidates.map { s -> OpenBankMatch.Scene(s.getLong("id").toString(),
@@ -85,19 +87,19 @@ object FreesoundBank {
             root(context).mkdirs()
             downloaded = File(root(context), "$key.source.part").apply { writeBytes(bytes) }
             output = File(root(context), "$key.m4a")
-            FreesoundAudio.prepare(downloaded, output, event, selected.getDouble("duration")) {
+            FreesoundAudio.prepare(downloaded, output, event, selected.getDouble("duration"), music = music) {
                 cancelled() || !FreesoundSettings.enabled(context)
             }
             check(output.isFile && output.length() > 0)
             if (cancelled() || !FreesoundSettings.enabled(context)) throw InterruptedException("cancelled")
             val credit = JSONObject().put("file", output.name).put("kind", kind).put("prompt", prompt).put("event", event)
-                .put("id", selected.getLong("id")).put("title", selected.getString("name"))
+                .put("music", music).put("id", selected.getLong("id")).put("title", selected.getString("name"))
                 .put("author", selected.getString("username")).put("license", selected.getString("license"))
                 .put("source_url", "https://freesound.org/s/${selected.getLong("id")}/")
                 .put("description", selected.optString("description")).put("checked", System.currentTimeMillis())
                 .put("changes", "Event window selection where applicable; loudness normalization; AAC encoding")
             db.put(key, credit); save(context, db)
-            Log.i("Ambience", "Freesound cached id=${selected.getLong("id")} event=$event")
+            Log.i("Ambience", "Freesound cached id=${selected.getLong("id")} event=$event music=$music")
             return output
         } catch (e: InterruptedException) {
             output?.delete(); throw e

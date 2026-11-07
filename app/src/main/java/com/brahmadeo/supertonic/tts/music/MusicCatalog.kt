@@ -12,14 +12,14 @@ import java.io.File
 
 /** Pinned catalog: downloads never become selectable until checksum verification succeeds. */
 object MusicCatalog {
-    data class Track(val id: String, val file: String, val title: String, val size: Long, val sha: String)
+    data class Track(val id: String, val file: String, val title: String, val size: Long, val sha: String, val prompt: String = "")
     private val lock = Mutex()
     private const val BASE = "https://github.com/davnozdu/supertonic-android/releases/download/reading-music-v1"
     fun tracks(context: Context): List<Track> = context.assets.open("reading_music_catalog.json").bufferedReader().use {
         val array = JSONArray(it.readText())
         List(array.length()) { index ->
             val item = array.getJSONObject(index)
-            Track(item.getString("id"), item.getString("file"), item.getString("title"), item.getLong("size"), item.getString("sha256"))
+            Track(item.getString("id"), item.getString("file"), item.getString("title"), item.getLong("size"), item.getString("sha256"), item.optString("prompt"))
                 .also { track -> require(track.file.matches(Regex("[A-Za-z0-9_]+\\.mp3")) && track.id.matches(Regex("[a-z0-9_]+"))) }
         }
     }

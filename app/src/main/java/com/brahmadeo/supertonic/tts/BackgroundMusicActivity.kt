@@ -758,7 +758,7 @@ private fun FreesoundControls(busy: Boolean) {
             prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.FreesoundSettings.ENABLED, value).apply()
         })
     }
-    Text("При подготовке книги: новая база → Freesound → старая база → генератор. Найденное сохраняется на телефоне. Во время чтения сетевого поиска нет.", style = MaterialTheme.typography.bodySmall)
+    Text("При подготовке книги: новая база → Freesound → старая база → генератор. Найденное сохраняется на телефоне. Также ищется инструментальная музыка по настроению при уверенном совпадении. Во время чтения сетевого поиска нет.", style = MaterialTheme.typography.bodySmall)
     if (enabled) {
         OutlinedTextField(value = key, onValueChange = { key = it; note = "" }, label = { Text("API-ключ Freesound") },
             singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth(),

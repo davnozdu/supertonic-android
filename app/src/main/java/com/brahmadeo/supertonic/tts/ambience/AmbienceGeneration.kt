@@ -190,10 +190,7 @@ class AmbienceGenerationService : Service() {
         val sha = requireNotNull(BookLibrary.contentSha(this, book)) { "Книга не найдена" }
         val scenes = BookLibrary.scenes(this, book)
         require(scenes.locations.isNotEmpty() || scenes.moods.moods.isNotEmpty()) { "В книге нет локаций: подготовьте её с «Локации и фоновые звуки»" }
-        // «Музыка по настроению» needs its model (and the NPU graphs when the NPU is on).
-        if (AmbienceSettings.moodMusic(getSharedPreferences("SupertonicPrefs", 0)) && !AmbienceModel.musicReady(this))
-            AmbienceModel.download(this) { text, _ -> report(AmbienceGeneration.State(true, book, place = text)) }
-        AmbienceBook.generate(this, sha, scenes, progress = { done, total, place -> report(AmbienceGeneration.State(true, book, done, total, place)) },
+        AmbienceBook.generate(this, sha, scenes, downloadMusic = true, progress = { done, total, place -> report(AmbienceGeneration.State(true, book, done, total, place)) },
             cancelled = { stopped })
         report(AmbienceGeneration.State(book = book, message = "Фоновые звуки созданы: ${scenes.locations.size} локаций" +
             (AmbienceModel.takeLowMemory()?.let { ". $it" } ?: "")))
