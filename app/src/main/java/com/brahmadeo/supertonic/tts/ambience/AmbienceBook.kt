@@ -110,13 +110,14 @@ object AmbienceBook {
 
     /** Copies the clips of [job] from the shared bank into the book — all variants of the kind, so the same action
      * sounds different each time (k_door_slam.m4a, k_door_slam_2.m4a, k_door_slam_3.m4a). */
-    private fun adoptFromBank(context: Context, dir: File, job: Job, salt: Int = 0, cancelled: () -> Boolean = { false }): Boolean {
-        if (!SoundBank.on(context) || job.music) return false
+    private fun adoptFromBank(context: Context, dir: File, job: Job, salt: Int = 0, online: Boolean = false, cancelled: () -> Boolean = { false }): Boolean {
+        if ((!SoundBank.on(context) && !FreesoundSettings.enabled(context)) || job.music) return false
         if (!job.event) {
             val target = File(dir, job.file)
             if (target.isFile && target.length() > 0L) return true
             val variant = job.file.substringBeforeLast('.').substringAfterLast('_').toIntOrNull() ?: 0
-            val source = OpenSoundBank.scene(context, job.bankPrompt, salt + variant, cancelled) ?: return false
+            val source = OpenSoundBank.scene(context, job.bankPrompt, salt + variant, cancelled)
+                ?: FreesoundBank.find(context, "", job.bankPrompt, false, online, cancelled) ?: return false
             val part = File(dir, job.file + ".part")
             return try {
                 source.copyTo(part, overwrite = true)
@@ -128,7 +129,12 @@ object AmbienceBook {
         if (!job.id.startsWith("k_")) return false
         val target = File(dir, job.file)
         if (target.isFile && target.length() > 0L) return true
-        val sources = SoundBank.all(context, job.id.removePrefix("k_"), job.prompt, cancelled)
+        val kind = job.id.removePrefix("k_")
+        val real = OpenSoundBank.events(context, kind, cancelled)
+        val sources = real.ifEmpty {
+            FreesoundBank.find(context, kind, job.prompt, true, online, cancelled)?.let { listOf(it) }
+                ?: SoundBank.all(context, kind, job.prompt, cancelled)
+        }
         var taken = false
         for ((n, source) in sources.withIndex()) {
             val file = if (n == 0) target else File(dir, "${job.id}_${n + 1}.m4a")
@@ -224,10 +230,11 @@ object AmbienceBook {
         // Версия базы, из которой взяты звуки событий: без неё sync() принял бы их за устаревшие и удалил.
         val manifest0 = readManifest(context, sha).put("bank", SoundBank.version(context)).put(MUSIC_KEY, MUSIC_VERSION).put(LUFS_KEY, Loudness.TARGET_LUFS)
         var reused = 0
-        val todo = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
-            .filter { job ->
+        val requested = missing(context, sha, scenes).filter { !it.music || AmbienceModel.musicReady(context) }
+        val todo = requested.filter { job ->
                 if (cancelled()) throw InterruptedException("cancelled")
-                if (job.music || !adoptFromBank(context, dir, job, sha.hashCode(), cancelled)) return@filter true
+                progress(reused, requested.size, "Поиск готового звука: ${job.label}")
+                if (job.music || !adoptFromBank(context, dir, job, sha.hashCode(), online = true, cancelled = cancelled)) return@filter true
                 manifest0.put(job.id, job.recipe)
                 reused++
                 false

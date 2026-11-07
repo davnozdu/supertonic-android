@@ -410,6 +410,7 @@ class BackgroundMusicActivity : ComponentActivity() {
                             "Основная база. Короткие реальные записи; если подходящей нет — старая база, когда она включена, затем генератор.", busy)
                         RealBankControls("scenes", "Фон локаций: реальные записи",
                             "Лес, улица, помещения и другая обстановка. Готовый фон используется первым, его длительность сохраняется. Если подходящего нет — генератор телефона.", busy)
+                        FreesoundControls(busy)
                         var bankCount by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.SoundBank.size(this@BackgroundMusicActivity)) }
                         var bankBusy by remember { mutableStateOf(false) }
                         var bankNote by remember { mutableStateOf("") }
@@ -740,4 +741,46 @@ private fun RealBankControls(channel: String, title: String, description: String
     if (note.isNotBlank()) Text(note,style=MaterialTheme.typography.bodySmall)
     TextButton(onClick={ context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
         android.net.Uri.parse(com.brahmadeo.supertonic.tts.ambience.OpenSoundBank.LICENSES_URL))) }) { Text("Источники и лицензии") }
+}
+
+@Composable
+private fun FreesoundControls(busy: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { context.getSharedPreferences("SupertonicPrefs", 0) }
+    var enabled by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.FreesoundSettings.enabled(context)) }
+    var key by remember { mutableStateOf(com.brahmadeo.supertonic.tts.ambience.FreesoundSettings.key(context)) }
+    var note by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Добирать звуки из онлайн-базы Freesound", modifier = Modifier.weight(1f))
+        Switch(enabled, enabled = !busy, onCheckedChange = { value ->
+            enabled = value
+            prefs.edit().putBoolean(com.brahmadeo.supertonic.tts.ambience.FreesoundSettings.ENABLED, value).apply()
+        })
+    }
+    Text("При подготовке книги: новая база → Freesound → старая база → генератор. Найденное сохраняется на телефоне. Во время чтения сетевого поиска нет.", style = MaterialTheme.typography.bodySmall)
+    if (enabled) {
+        OutlinedTextField(value = key, onValueChange = { key = it; note = "" }, label = { Text("API-ключ Freesound") },
+            singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth(),
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = !busy, onClick = {
+                note = runCatching {
+                    com.brahmadeo.supertonic.tts.ambience.FreesoundSettings.saveKey(context, key)
+                    com.brahmadeo.supertonic.tts.ambience.FreesoundBank.credentialsChanged()
+                    if (key.isBlank()) "Ключ удалён. Онлайн-поиск пропускается." else "Ключ сохранён на телефоне"
+                }.getOrDefault("Не удалось сохранить ключ")
+            }) { Text("Сохранить ключ") }
+            OutlinedButton(enabled = !busy, onClick = {
+                scope.launch {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.brahmadeo.supertonic.tts.ambience.FreesoundBank.remove(context) }
+                    note = "Кэш Freesound удалён"
+                }
+            }) { Text("Удалить кэш") }
+        }
+        if (key.isBlank()) Text("Введите и сохраните ключ для онлайн-поиска.", style = MaterialTheme.typography.bodySmall)
+        Text("Используются HQ MP3-превью, затем AAC и выравнивание громкости. Авторство и лицензия сохраняются в общем индексе. Кэш: ${com.brahmadeo.supertonic.tts.ambience.FreesoundBank.bytes(context) / 1024 / 1024} МБ.", style = MaterialTheme.typography.bodySmall)
+    }
+    if (note.isNotBlank()) Text(note, style = MaterialTheme.typography.bodySmall)
 }

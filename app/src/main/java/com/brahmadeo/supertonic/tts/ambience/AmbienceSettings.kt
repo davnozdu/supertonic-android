@@ -38,13 +38,14 @@ object AmbienceSettings {
     /** «Звуки событий»: short sounds of what the text describes (a door slams). Off by default. */
     /** «База готовых звуков»: брать клипы из общей базы и дописывать в неё то, что сделано для книги. Включено
      * по умолчанию — это и есть «стоимость ноль»: готовый звук не генерируется заново. */
+    const val FREESOUND = "freesound_online_enabled"
     const val REAL_EVENTS = "sound_bank_real_events"
     const val REAL_SCENES = "sound_bank_real_scenes"
     fun realEvents(prefs: SharedPreferences) = prefs.getBoolean(REAL_EVENTS, false)
     fun realScenes(prefs: SharedPreferences) = prefs.getBoolean(REAL_SCENES, false)
     fun bankRecipe(prefs: SharedPreferences, event: Boolean): String = if (event)
-        "banks-v2:real=${realEvents(prefs)}:legacy=${soundBank(prefs)}"
-        else "scene-bank-v3:real=${realScenes(prefs)}"
+        "banks-v2:real=${realEvents(prefs)}:legacy=${soundBank(prefs)}:online=${prefs.getBoolean(FREESOUND, false)}"
+        else "scene-bank-v3:real=${realScenes(prefs)}:online=${prefs.getBoolean(FREESOUND, false)}"
     const val SOUND_BANK = "sound_bank"
     fun soundBank(prefs: SharedPreferences) = prefs.getBoolean(SOUND_BANK, true)
 
