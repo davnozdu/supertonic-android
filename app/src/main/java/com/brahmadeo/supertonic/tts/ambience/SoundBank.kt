@@ -14,7 +14,7 @@ import java.net.URL
  * Всё, что пришлось сделать для книги самой, дописывается в базу, поэтому она растёт от книги к книге и в следующий
  * раз этот звук уже бесплатный. */
 object SoundBank {
-    private const val BASE = "https://github.com/davnozdu/supertonic-android/releases/download/sound-bank-v1"
+    private const val BASE = "https://github.com/davnozdu/mytts-sound-banks/releases/download/sound-bank-v12"
     private const val FORMAT = "m4a"
     /** Сколько файлов тянем одновременно. 8 — телефон держит без ошибок, 4 заметно медленнее. */
     private const val PARALLEL = 8

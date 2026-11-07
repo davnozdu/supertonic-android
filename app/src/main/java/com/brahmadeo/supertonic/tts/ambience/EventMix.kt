@@ -11,8 +11,8 @@ object EventMix {
     fun allowed(mix: Boolean, gap: Long, at: Long, lastAt: Long): Boolean =
         mix || gap <= 0L || at - lastAt >= gap
 
-    /** Сколько звуков событий может звучать одновременно при наложении (плотный абзац размечает до восьми). */
-    const val MAX_SHOTS = 3
+    /** Сколько звуков событий может звучать одновременно при наложении: защита ресурсов плеера, не квота на абзац. */
+    const val MAX_SHOTS = 32
 
     /** Не занят ли канал: без наложения — пока звучит предыдущий; с наложением — когда звучат уже [MAX_SHOTS]. */
     fun blocked(mix: Boolean, busy: Boolean, sounding: Int = 0): Boolean = if (mix) sounding >= MAX_SHOTS else busy

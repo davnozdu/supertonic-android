@@ -21,9 +21,7 @@ class EventIndex private constructor(private val keys: LongArray, private val va
     /** The first event in [text] after the words [before], or null. */
     fun hit(text: String, before: List<String>): Hit? = hitAll(text, before, 1).firstOrNull()
 
-    /** Every event of [text], in the order they sound, each with the word it starts at; at most [limit]. An utterance
-     * of a reader often holds several described actions, and only the first one used to sound. The same sound is not
-     * repeated inside one utterance: its clip lasts 8 s and the repeats would overlap. */
+    /** Every indexed occurrence, in reading order. No default quota per paragraph/utterance. */
     fun hitAll(text: String, before: List<String>, limit: Int = MAX_PER_TEXT): List<Hit> {
         if (keys.isEmpty() || limit <= 0) return emptyList()
         val window = ArrayDeque(before.takeLast(WINDOW - 1))
@@ -34,10 +32,6 @@ class EventIndex private constructor(private val keys: LongArray, private val va
             val i = keys.binarySearch(ReplyIndex.key(window))
             if (i < 0) continue
             val event = events.getOrNull(values[i].toInt()) ?: continue
-            // Тот же вид может звучать в этом же абзаце ещё раз (две двери, петли через полстраницы): повторяем,
-            // только если до прошлого раза прошло достаточно слов — иначе это одно действие, описанное дважды.
-            val prev = out.lastOrNull { it.event.id == event.id }
-            if (prev != null && n - prev.word < MIN_REPEAT_WORDS) continue
             out += Hit(event, n)
             if (out.size >= limit) break
         }
@@ -58,11 +52,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
 
     companion object {
         const val WINDOW = ReplyIndex.WINDOW
-        /** Event sounds an utterance may bring: a dense paragraph may describe six or seven actions, and every one of
-         * them is in the index; the player spaces them out so they do not pile up. */
-        const val MAX_PER_TEXT = 8
-        /** Слов между двумя проигрываниями одного вида в одном абзаце (≈2.5 с речи): ближе — это то же действие. */
-        const val MIN_REPEAT_WORDS = 8
+        /** No default quota per reader request. Explicit callers such as [hit] may request only the first hit. */
+        const val MAX_PER_TEXT = Int.MAX_VALUE
         /** The chapter transition («Переходы между главами»): a book-level sound of its own. */
         const val CHAPTER_ID = "e0"
         /** The clip of an event: one per kind ([kinds] of the book); a book marked before kinds is still read by id. */
@@ -70,20 +61,10 @@ class EventIndex private constructor(private val keys: LongArray, private val va
         const val CHAPTER_SOUND = "a soft page turn followed by a gentle low chime, quiet and warm"
         private val ID = Regex("e[0-9]{1,4}")
 
-        /** Where [quote] starts in [words], tolerating a re-worded or re-cut answer: the whole quote, then its first three
-         * words, then any three words of it in order. A model rewrites quotes by a word or two too often to lose the
-         * event over it, and the exact position inside the quote is not needed — the index key is a window ending in it. */
+        /** Exact normalized quote anchor. Unknown or rewritten quotes are refused, never guessed. */
         fun anchorStart(words: List<String>, quote: List<String>): Int? {
             if (words.isEmpty() || quote.isEmpty()) return null
             find(words, quote)?.let { return it }
-            if (quote.size >= 2) find(words, quote.take(minOf(3, quote.size)))?.let { return it }
-            if (quote.size >= 3) for (s in 1..quote.size - 3) find(words, quote.subList(s, s + 3))?.let { return it }
-            // Мягкая привязка: ответ модели часто расходится с текстом на слово-два (местоимение вместо предмета). Две
-            // слова подряд, затем самое длинное слово цитаты — лучше звук в соседнем месте абзаца, чем потерянное событие.
-            if (quote.size >= 2) for (s in 0..quote.size - 2) find(words, quote.subList(s, s + 2))?.let { return it }
-            quote.filter { it.length >= 6 }.maxByOrNull { it.length }?.let { long ->
-                words.indexOfFirst { it.equals(long, ignoreCase = true) }.takeIf { it >= 0 }?.let { return it }
-            }
             return null
         }
 
@@ -109,8 +90,8 @@ class EventIndex private constructor(private val keys: LongArray, private val va
                 for ((quote, event) in marks) {
                     val q = ReplyIndex.words(quote)
                     if (q.isEmpty()) continue
-                    // Совсем не нашли — ведём событие с начала абзаца: место внутри абзаца важнее, чем событие вовсе.
-                    val start = anchorStart(words, q) ?: 0
+                    // An unanchored quote is not an event at the paragraph start: refuse it.
+                    val start = anchorStart(words, q) ?: continue
                     // The first window that ends inside the quote (its first words with the ones before). Two actions of
                     // one sentence can end in the same window; then the neighbouring window keeps both findable.
                     val first = p + start + minOf(WINDOW - 1, q.size - 1)

@@ -35,13 +35,17 @@ class OpenBankCatalogTest {
         }
         assertTrue(OpenBankMatch.scenes("abandoned cellar with pipes", scenes()).isEmpty())
     }
+    @Test fun handSawNeverSelectsAMotorizedSaw() {
+        val selected = rows("events").filter { OpenEventMatch.matches("saw", it[0], it[2].split(',').toSet()) }
+        assertEquals(setOf("0016", "0559"), selected.map { it[0] }.toSet())
+    }
     @Test fun eventOverridesPointOnlyToExistingRecordings() {
         val all = rows("events")
         for (kind in listOf("clock_tick", "gunshot", "rifle_shot", "shotgun_shot", "door_slide", "chair", "paper", "match_strike", "electric_switch", "sigh")) {
             assertTrue(kind, all.any { OpenEventMatch.matches(kind, it[0], emptySet()) })
         }
         // Audited false positives stay rejected for every recording, not just the first variant.
-        for (kind in listOf("computer_beeps", "fishing_reel", "flies", "pig", "children_play")) {
+        for (kind in listOf("computer_beeps", "fishing_reel", "flies", "pig", "children_play", "wine", "horn", "bird", "typewriter", "door_grind", "box_open", "coin", "sneeze")) {
             assertFalse(kind, all.any { OpenEventMatch.matches(kind, it[0], it[2].split(',').toSet()) })
         }
     }

@@ -8,10 +8,20 @@ class FreesoundMatchTest {
   assertFalse(FreesoundMatch.event("door_open", "door closing", emptyList()))
   assertFalse(FreesoundMatch.event("car_horn", "Telephone ringtone", listOf("horn")))
  }
- @Test fun acceptsTagsButNeverDescriptionAnecdotes() {
-  assertTrue(FreesoundMatch.event("door_slam", "Take 4", listOf("door", "slamming")))
+ @Test fun incidentalTagsDoNotEstablishTheRecordedSubject() {
+  assertFalse(FreesoundMatch.event("door_slam", "Take 4", listOf("door", "slamming")))
   assertFalse(FreesoundMatch.event("abacus", "male vocal sample", listOf("music")))
   assertFalse(FreesoundMatch.event("door_slam", "Door slam synth remix", emptyList()))
+ }
+ @Test fun ambiguousLegacyNamesRequireTheirActualAction() {
+  assertFalse(FreesoundMatch.event("wine", "Wine bottle clink", emptyList()))
+  assertTrue(FreesoundMatch.event("wine", "Pouring wine", emptyList()))
+  assertFalse(FreesoundMatch.event("horn", "Car horn", emptyList()))
+  assertFalse(FreesoundMatch.event("typewriter", "Typewriter bell", emptyList()))
+  assertFalse(FreesoundMatch.event("phone", "phone conversation", emptyList()))
+  assertFalse(FreesoundMatch.event("arrow", "Felt tip pen drawing arrow", listOf("arrow", "flying")))
+  assertFalse(FreesoundMatch.event("hum", "Refrigerator hum", listOf("woman", "humming")))
+  assertFalse(FreesoundMatch.event("animal", "Cat Twit", listOf("cow", "lowing")))
  }
  @Test fun licensesAreWhitelistedByFullUrl() {
   assertTrue(FreesoundMatch.allowedLicense("https://creativecommons.org/licenses/by/4.0/"))

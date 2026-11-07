@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Real recordings are primary; legacy/generated sounds remain an independent fallback. */
 object OpenSoundBank {
-    private const val BASE = "https://github.com/davnozdu/supertonic-android/releases/download"
+    private const val BASE = "https://github.com/davnozdu/mytts-sound-banks/releases/download"
     private const val MAX_META = 8L * 1024 * 1024
     private const val RETRY_MS = 10 * 60_000L
     private data class Clip(val id: String, val file: String, val url: String, val sha: String, val bytes: Long,

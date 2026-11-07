@@ -228,14 +228,19 @@ internal object AmbiencePlayer {
             // «Накладывать звуки» разрешает наложение — но не больше [EventMix.MAX_SHOTS] сразу: дальше уже каша.
             val busy = shots.isNotEmpty() || android.os.SystemClock.elapsedRealtime() < shotUntil
             if (EventMix.blocked(mix, busy, shots.size)) {
-                AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} waits for the previous (${shots.size} sounding)")
+                if (mix) {
+                    // Resource ceiling only: preserve the event until a player slot becomes available.
+                    pending += run
+                    handler.postDelayed(run, 80L)
+                } else AmbienceScenes.trace(ctx, "one-shot skipped: ${file.name} previous sound active")
                 return@Runnable
             }
             // Наложение: каждый следующий звук тише на −1,4 дБ за каждый уже звучащий, иначе сумма даёт перегруз.
             val level = volume * EventMix.overlapGain(if (mix) shots.size else 0)
             val clip = variant(file)
+            var pendingPlayer: MediaPlayer? = null
             try {
-                val p = MediaPlayer()
+                val p = MediaPlayer().also { pendingPlayer = it }
                 p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 p.setDataSource(clip.path); p.prepare()
                 val v = Voice(p, Scene(clip.name, clip.name, listOf(clip)), 0, tameable = false, humanReaction = humanReaction)
@@ -276,7 +281,15 @@ internal object AmbiencePlayer {
                         if (shots.isEmpty()) shotUntil = 0L
                     }, limit + step)
                 }
-            } catch (e: Exception) { AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}") }
+                pendingPlayer = null // Ownership now belongs to shots/completion handlers.
+            } catch (e: Exception) {
+                pendingPlayer?.let { failed ->
+                    shots.removeAll { it.player === failed }
+                    runCatching { failed.release() }
+                }
+                if (shots.isEmpty()) shotUntil = 0L
+                AmbienceScenes.trace(ctx, "one-shot failed ${e.javaClass.simpleName}")
+            }
         }
         pending += run
         // Абзац у читалки бывает и на минуту: событие в его конце должно ждать свои секунды, а не сваливаться

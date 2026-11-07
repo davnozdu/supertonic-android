@@ -3,6 +3,15 @@ package com.brahmadeo.supertonic.tts.ambience
 /** Audited corrections to v1 metadata. Exact kinds only: a similar word is not the same action. */
 object OpenEventMatch {
     private val replacements = mapOf(
+        "wine" to emptySet(), // Bottle clink is not pouring wine.
+        "horn" to emptySet(), // Generic horns cannot stand in for the legacy hunting-horn event.
+        "bird" to emptySet(), // A nestling calling is not wing flutter.
+        "typewriter" to emptySet(), // Space key and carriage bell are not typing.
+        "door_grind" to emptySet(), // A creaking doorknob is not a heavy door forced open.
+        "box_open" to emptySet(), // Metal box is not the legacy wooden box.
+        "coin" to emptySet(), // A spinning coin is not counting coins.
+        "sneeze" to emptySet(), // Female sneezing is not the legacy male sneeze.
+        "saw" to setOf("0016", "0559"), // Hand saw, never motorized saws.
         "clock" to setOf("0007", "1567"),
         "clock_tick" to setOf("0007", "1567"),
         "computer_beeps" to emptySet(), // Truck reversing alarms, despite "made on computer" in description.
@@ -31,6 +40,7 @@ object OpenEventMatch {
     )
     fun matches(kind: String, id: String, catalogKinds: Set<String>): Boolean {
         val key = aliases[kind] ?: kind
+        if (id.startsWith("fs-")) return key in catalogKinds // independently checked Freesound object/action metadata
         return replacements[key]?.let { id in it } ?: (key in catalogKinds)
     }
 }

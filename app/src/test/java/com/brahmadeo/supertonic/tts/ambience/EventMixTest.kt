@@ -50,7 +50,8 @@ class EventMixTest {
     @Test
     fun mixingStopsAtThreeSoundsAndEachIsQuieter() {
         assertFalse(EventMix.blocked(mix = true, busy = true, sounding = 2))
-        assertTrue(EventMix.blocked(mix = true, busy = true, sounding = 3))
+        assertFalse(EventMix.blocked(mix = true, busy = true, sounding = 3))
+        assertTrue(EventMix.blocked(mix = true, busy = true, sounding = EventMix.MAX_SHOTS))
         assertTrue(EventMix.overlapGain(0) == 1f)
         assertTrue(EventMix.overlapGain(2) < EventMix.overlapGain(1))
     }

@@ -32,24 +32,15 @@ internal object SceneMarking {
     /** Most distinct event sounds of a book (one clip per kind of action); the moments themselves are unlimited. */
     const val MAX_EVENTS = 400
 
-    /** «Звуки событий · сколько»: 1 — only the sounds the text spells out; 2 — also the heroes' actions and what the
-     * talk is about; 3 — every audible detail, including what follows from the objects mentioned. Given as a target
-     * («about one per N characters»), not as a ceiling: a ceiling is what a model never reaches. */
+    /** Density selects prominence, never a per-paragraph quota or a target that encourages invented sounds. */
     const val EVENTS_DENSITY = "ambience_events_density"
     const val DEFAULT_DENSITY = 2
     private fun eventRule(density: Int, chars: Int = 0): String = when (density.coerceIn(1, 3)) {
-        // «Редко» and «Обычно» stay as they were: only «Часто» became denser (a denser reading is not for everyone).
-        1 -> "События — только прямо описанные звуки: выстрел, гром, хлопнула дверь, разбилось стекло. Примерно одно " +
-            "на 600–1000 знаков; то, о чём говорят, не событие"
-        2 -> "События — прямо описанные звуки и заметные действия героев: шаги, дверь, налили воду, посуда, сели, " +
-            "зажгли огонь, взяли бумаги. В среднем одно на 250–300 знаков; в абзаце, где что-то происходит, — хотя бы одно"
-        else -> "События — всё слышимое: названные звуки, действия героев и то, что они делают с предметами (бумаги, " +
-            "деньги, дверь, посуда, книга, листва); в среднем одно на 100–150 знаков, в абзаце с действием — 1–2 события. " +
-            "Считай и небольшие действия: встал, сел, подошёл, обернулся, взял, положил, открыл, закрыл, зажёг, погасил, " +
-            "написал, перелистнул, — каждое из них слышно." +
-            if (chars > 0) " В этом пакете ($chars знаков) слышимого хватает на ${maxOf(3, chars / 125)} событий; " +
-                "если получилось заметно меньше, часть слышимого пропущена — перечитай абзацы и добавь." else ""
-    }
+        1 -> "Отмечай только прямо описанные звуки. Упоминание предмета и разговор о действии не являются событием."
+        2 -> "Отмечай прямо описанные звуки и явно звучащие действия героев. Не придумывай звук по одному упоминанию предмета."
+        else -> "Отмечай также тихие, но однозначно слышимые действия. Если слышимость или само действие неясны, пропусти."
+    } + " Число событий в абзаце не ограничено: каждое отдельное слышимое действие — отдельная запись. " +
+        "Не добавляй события ради количества и не объединяй разные действия из-за длины абзаца."
 
     private val ACOUSTICS = setOf("outdoor", "room", "large_room", "hall", "corridor", "stairwell", "bathroom",
         "vehicle", "car", "cave", "tunnel")
@@ -91,7 +82,7 @@ internal object SceneMarking {
 
     fun prompt(numbered: List<String>, first: Int, before: String, previous: String?, known: List<Pair<String, String>>,
                moods: List<Pair<String, String>> = emptyList(), density: Int = DEFAULT_DENSITY,
-               /** Characters of this batch: the prompt asks for a number of events, a count is followed far better. */
+               /** Batch size retained for call compatibility; it does not impose an event quota. */
                batchChars: Int = 0) = buildString {
         appendLine("Определи, где и в какой обстановке происходит действие в каждом абзаце, — для фонового звука сцены.")
         appendLine("Все описания звука для генератора — СТРОГО ПО-АНГЛИЙСКИ (sound у обстановки, accents и sound у событий):")
@@ -184,9 +175,9 @@ internal object SceneMarking {
         appendLine("Звук события длится до 8 с — описывай действие целиком, а не один щелчок. ${eventRule(density, batchChars)}.")
         if (density >= 3) appendLine("Слышимое в репликах — тоже событие: усмехнулся, вздохнул, кашлянул, охнул, хлопнул по столу,")
         if (density >= 3) appendLine("поставил чашку, звякнул ложкой, скрипнул стулом, отодвинул кресло, шуршит одежда. Каждый такой звук отмечай.")
-        appendLine("В абзаце, где что-то происходит, обычно 1–2 события; абзац с несколькими действиями — 2–3.")
+        appendLine("Перечисли все явно слышимые действия; квоты на абзац нет. Неуверенные и неслышимые действия пропускай.")
         appendLine("Прогони абзацы ещё раз перед ответом: где герой входит, выходит, идёт, садится, берёт или ставит предмет,")
-        appendLine("пишет, открывает и закрывает — там есть событие. Пустой список — только если в тексте нет ни одного действия.")
+        appendLine("пишет, открывает и закрывает — проверь, есть ли слышимое действие. Если не уверен в звуке, оставь пустой список.")
         appendLine("Нет событий — [].")
         appendLine("tension — напряжение по ходу текста, для нагнетания музыки: список {from, level}, где from — номер абзаца,")
         appendLine("с которого начинается уровень, level — 0 спокойно (быт, отдых, ровный рассказ), 1 тревожно (что-то не так,")
@@ -250,7 +241,7 @@ internal object SceneMarking {
         appendLine("пересказ того, что случилось давно и в другом месте, и разговоры о предметах без действия с ними.")
         appendLine("at — номер абзаца; quote — 3–6 слов с глаголом действия из текста (действие с местоимением — бери глагол с")
         appendLine("соседним словом: «смазал их», «наточил»); kind — один ключ из списка ниже; sound — по-английски 6–20 слов,")
-        appendLine("что звучит, из какого материала, как долго. В абзаце с действиями обычно 1–2 события.")
+        appendLine("что звучит, из какого материала, как долго. Укажи все однозначно слышимые действия без квоты на абзац; сомнительное пропусти.")
         appendLine("Виды действий: " + com.brahmadeo.supertonic.tts.books.EventKinds.promptList())
         appendLine("Нет событий — пустой список.")
         appendLine("Абзацы:")

@@ -68,11 +68,33 @@ class AmbienceEventsTest {
         assertEquals("e1", index.hit(text, emptyList())!!.event.id)
     }
 
-    @Test fun rewordedQuoteStillFindsTheAction() {
+    @Test fun denseParagraphKeepsMoreThanEightDistinctEvents() {
+        val events = (1..12).map { EventIndex.Event("e$it", "sound $it") }
+        val quotes = (1..12).map { "событие$it прозвучало совсем отчётливо" }
+        val text = quotes.joinToString(". ") + "."
+        val builder = EventIndex.Companion.Builder(events)
+        builder.add(text, quotes.mapIndexed { i, q -> q to i })
+        assertEquals(12, builder.build().hitAll(text, emptyList()).size)
+    }
+
+    @Test fun separateNearbyOccurrencesOfOneKindRemainSeparate() {
+        val text = "Сначала он резко кашлянул. Затем он снова кашлянул."
+        val b = EventIndex.Companion.Builder(listOf(EventIndex.Event("e1", "cough")))
+        b.add(text, listOf("он резко кашлянул" to 0, "он снова кашлянул" to 0))
+        assertEquals(2, b.build().hitAll(text, emptyList()).size)
+    }
+    @Test fun unanchoredQuoteNeverMovesToParagraphStart() {
+        val text = "Он спокойно стоял и слушал тишину."
+        val b = EventIndex.Companion.Builder(listOf(EventIndex.Event("e1", "door slam")))
+        b.add(text, listOf("он захлопнул дверь" to 0))
+        assertTrue(b.build().hitAll(text, emptyList()).isEmpty())
+    }
+
+    @Test fun rewrittenQuoteIsRefusedInsteadOfGuessed() {
         val words = ReplyIndex.words("Он с треском захлопнул дверь.")
         assertEquals(1, EventIndex.anchorStart(words, ReplyIndex.words("с треском захлопнул дверь")))
-        // The model changed the beginning: the rest of the quote still places the event.
-        assertEquals(2, EventIndex.anchorStart(words, ReplyIndex.words("с громким треском захлопнул дверь")))
+        // A rewritten quote is refused instead of guessed at a neighbouring action.
+        assertNull(EventIndex.anchorStart(words, ReplyIndex.words("с громким треском захлопнул дверь")))
         assertNull(EventIndex.anchorStart(words, ReplyIndex.words("зелёный слоник прыгал")))
     }
 
