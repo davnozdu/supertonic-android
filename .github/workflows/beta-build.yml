@@ -1,0 +1,168 @@
+name: Beta build (encrypted)
+
+# Тестовая сборка для разработчика. Код НЕ хранится в этом репозитории: он забирается из приватного
+# репозитория разработки на время сборки (deploy key только для чтения). Готовый APK шифруется открытым
+# сертификатом (ниже), расшифровать его может только владелец закрытого ключа. Это не раздача сборки:
+# публичные релизы с исходниками выходят отдельно (release.yml).
+#
+# Запуск — только вручную/по команде владельца (workflow_dispatch); по pull request не запускается.
+# Журнал этого репозитория открыт, поэтому вывод сборки заглушен (-q, -PquietBuild).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit or branch of the development repository'
+        required: true
+        default: 'main'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beta-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'davnozdu/supertonic-android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Fetch sources
+        env:
+          DEPLOY_KEY: ${{ secrets.PRIVATE_DEPLOY_KEY }}
+          REF: ${{ github.event.inputs.ref }}
+        run: |
+          [ -n "$DEPLOY_KEY" ] || { echo "missing deploy key" >&2; exit 1; }
+          [[ "$REF" =~ ^[A-Za-z0-9._/-]{1,100}$ ]] || { echo "bad ref" >&2; exit 1; }
+          mkdir -p ~/.ssh && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/src && chmod 600 ~/.ssh/src
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/src -o IdentitiesOnly=yes"
+          git init -q src && cd src
+          git remote add origin git@github.com:davnozdu/mytts-private.git
+          git fetch -q --depth 1 origin "$REF" && git checkout -q FETCH_HEAD
+          rm -f ~/.ssh/src
+          echo "SRC=$GITHUB_WORKSPACE/src" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r29
+
+      - name: Toolchains
+        working-directory: src
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          echo "ndk.dir=${{ steps.setup-ndk.outputs.ndk-path }}" >> local.properties
+          echo "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+          mkdir -p rust/.cargo
+          cat <<'EOT' > rust/.cargo/config.toml
+          [target.aarch64-linux-android]
+          linker = "aarch64-linux-android34-clang"
+          [target.armv7-linux-androideabi]
+          linker = "armv7a-linux-androideabi34-clang"
+          [target.i686-linux-android]
+          linker = "i686-linux-android34-clang"
+          [target.x86_64-linux-android]
+          linker = "x86_64-linux-android34-clang"
+          EOT
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+
+      - name: Prepare runtimes
+        working-directory: src
+        run: |
+          chmod +x ./gradlew
+          python3 tools/verify_tera_styles.py > /dev/null
+          python3 tools/prepare_silero_runtime.py > /dev/null
+          bash tools/prepare_pocket_runtime.sh > /dev/null 2>&1 || { echo "pocket runtime failed" >&2; exit 1; }
+          bash tools/prepare_kokoro_runtime.sh > /dev/null 2>&1 || { echo "kokoro runtime failed" >&2; exit 1; }
+          bash tools/prepare_gemma_npu_runtime.sh > /dev/null 2>&1 || { echo "gemma runtime failed" >&2; exit 1; }
+
+      - name: Build
+        working-directory: src
+        run: |
+          ./gradlew -q assembleRelease -PquietBuild --parallel --max-workers=4 > /dev/null 2> "$RUNNER_TEMP/gradle.err" \
+            || { echo "build failed (details withheld from the public log)" >&2; tail -c 2000 "$RUNNER_TEMP/gradle.err" | grep -E "^e: |error:|FAILURE" | sed -E 's#/[^ ]*/private/#…/private/#g' | head -20 >&2; exit 1; }
+          python3 tools/verify_jni_mapping.py app/build/outputs/mapping/release/mapping.txt app/build/outputs/apk/release > /dev/null \
+            || { echo "JNI verification failed" >&2; exit 1; }
+          grep -oP 'versionName "\K[^"]+' app/build.gradle | head -1 > "$RUNNER_TEMP/version.txt"
+
+      - name: Sign and encrypt
+        working-directory: src
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RECIPIENT: |
+            -----BEGIN CERTIFICATE-----
+            MIIEujCCAqICCQCdoMGD3SjHJjANBgkqhkiG9w0BAQsFADAfMR0wGwYDVQQDDBRN
+            eVRUUyBiZXRhIHJlY2lwaWVudDAeFw0yNjExMDkxMjI3NTVaFw0zNjExMDYxMjI3
+            NTVaMB8xHTAbBgNVBAMMFE15VFRTIGJldGEgcmVjaXBpZW50MIICIjANBgkqhkiG
+            9w0BAQEFAAOCAg8AMIICCgKCAgEA6YOyKvUp/lu0eE9m/SE0+yUvpe6PPkcvmqRW
+            2AQ9ta4u9Z/PJJBVj3vJSx9/wGgUG8DDhUK5Nm+ori964J4mOeZyVdozCw44PWUg
+            lCJ0WrMbRJqszKWwCSwsceSmMoIDf7QypmUqkOaLBvqnQ4Osn33RunyGX1nGbJPW
+            mZngmKfzY4+kyNtxnT5emICyL4fAic6hI4oz+uZfBJ7zoliN1tF/ZTufaJGI23wE
+            ZOjVER5KjDBGZByn3GLsWk9dbyjHGMuTdb/adFCd5zR2+MDBmBpYihKR1c7TMUdW
+            zCHQK6gaIA7RXoVpcyf11/nt3wA8gti2M4mUKgXJPLc1OMgWRvWYj7sXkC0pxyNE
+            kNjHdP3tVED8i0ZmrwnKqBOYWyaq9VVbt3ZKsrRAkK2sOmmlvU6Izgd56m2UNdX+
+            xMzYjZW4XYknvw4U1uECweaslLMyOp8tZ7EOUoHb+WRSUagOMiL5jHg4CLDwucdG
+            MHbMZs/r3LXYLiv9EJ1V3zM5cuf1q/Xft8Vb7g+jOYiWnBwnCKvTdzNz/xbLJJce
+            KP7QvTrJcFE9YTEAX45fTxnYDh+7Uf768bYK4tV30ggXrDxwxRDwyvfSu/Bhy3+q
+            IZVrHyx8mlKApPCzG+tcljulOKk8tydA7A2nZDM7Ia5NECcKDUBYPPslge897mvc
+            oJJnj6UCAwEAATANBgkqhkiG9w0BAQsFAAOCAgEACe9CdtgSmF3hE3Cnyr9umLhr
+            DN3t1uITqc5POQ0JBKHBm6285bGy5CsAsrti4DJ8tc8dC4k/o4j4vKp38Ks5JTgw
+            ZRANzllpwvhKPZdjUkeBwxOiuIGrJlyZ09LEL/aNeavE1KTagZy5JKpieZeBcQZF
+            en4kyXkkeV/8Cxl1vjjL7Y6vHFWcnpAtA3B+Timj4KhIQwQimeRj5KRfJJyDODAO
+            rPpEz0FVjOv149m3w/HanmMAbsRnZ50O8K2DcZXhs5L+frROXo3epOcWaTpUAnU0
+            6+TRB6JYOZ0cuSEdOcQ95h3lQgBvQtR1+Jwtn8Vk2R9w3v/eRxEohzezynfL9CFL
+            dPcy6rbDox/klR36YkmuXOCxsxxflRue9lSKj34dEg3HCjNvgWO35WstzOIXSVFr
+            G5CK5fUTQpI4f0FjcUO125+bZ6mEr0B2Inaw1d0PkDUeUA80q0Y05A8WrSi5U8Fx
+            ROi8+sDqL7SnHOJ60YdvEwQTt8XmUTFqGDDUBnAktCwwIXUKpkBzYXU/nnctw3ys
+            /HJOskRB7VPSDVQ8DbYdSUr0kZ0fvCTY0RLBKtVuNivDbD+eW6M64+Aq10NBggC6
+            mtOh8/Ld54x9uHawHIi2wrAGqnkP7MpnHJa7G7l+lOGgpGDEQJ12NxCx7hbhouAk
+            XJJoK9UsoA82tPONz5I=
+            -----END CERTIFICATE-----
+        run: |
+          set -e
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -n1)
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/k.p12"
+          U=app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk
+          "$BT/zipalign" -p 4 "$U" "$RUNNER_TEMP/a.apk" > /dev/null
+          KP=KEY_PASSWORD; [ -n "$KEY_PASSWORD" ] || KP=KEYSTORE_PASSWORD
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/k.p12" --ks-type PKCS12 --ks-key-alias "${KEY_ALIAS:-supertonic}" \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass "env:$KP" \
+            --out "$RUNNER_TEMP/s.apk" "$RUNNER_TEMP/a.apk"
+          "$BT/apksigner" verify "$RUNNER_TEMP/s.apk"
+          rm -f "$RUNNER_TEMP/k.p12" "$RUNNER_TEMP/a.apk"
+          printf '%s\n' "$RECIPIENT" > "$RUNNER_TEMP/recipient.pem"
+          mkdir -p "$RUNNER_TEMP/out"
+          openssl cms -encrypt -binary -aes256 -outform DER -in "$RUNNER_TEMP/s.apk" -out "$RUNNER_TEMP/out/build.bin" "$RUNNER_TEMP/recipient.pem"
+          cp "$RUNNER_TEMP/version.txt" "$RUNNER_TEMP/out/version.txt"
+          rm -f "$RUNNER_TEMP/s.apk"
+          ls -la "$RUNNER_TEMP/out"
+
+      - name: Upload (encrypted)
+        uses: actions/upload-artifact@v5
+        with:
+          name: build
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+          retention-days: 3
